@@ -1,5 +1,8 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+
+import { Popover } from "@/shared/ui/Popover/Popover";
+import { Reveal } from "@/shared/ui/Reveal/Reveal";
 
 import type { RoomAwareStatus } from "../model/roomAware";
 
@@ -29,27 +32,28 @@ export function RoomAwareIndicator({ variant, status }: RoomAwareIndicatorProps)
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const panelId = useId();
-  const rootRef = useRef<HTMLDivElement>(null);
+  const chipRef = useRef<HTMLButtonElement>(null);
   const paused = status.state === "paused";
-
-  useEffect(() => {
-    if (!open || variant !== "popover") return;
-    const handleClick = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [open, variant]);
 
   const ariaLabel = paused
     ? t("roomMap:roomAware.pausedAriaLabel")
     : t("roomMap:roomAware.ariaLabel");
 
+  const panel = (
+    <div id={variant === "inline" ? panelId : undefined} className="lm-room-aware-panel">
+      {status.state === "paused" && <p>{t(PAUSED_REASON_KEYS[status.reason])}</p>}
+      <p className={paused ? "lm-room-aware-why" : undefined}>{t("roomMap:roomAware.body")}</p>
+      <p className="lm-room-aware-why">
+        {paused ? t("roomMap:roomAware.pausedWhy") : t("roomMap:roomAware.why")}
+      </p>
+    </div>
+  );
+
   return (
     <div
-      ref={rootRef}
       className={`lm-room-aware is-${variant}${paused ? " is-paused" : ""}`}
       onKeyDown={(e) => {
+        // Kept from the editor, whose Esc would clear the selection under the open panel.
         if (e.key === "Escape" && open) {
           e.stopPropagation();
           setOpen(false);
@@ -57,10 +61,11 @@ export function RoomAwareIndicator({ variant, status }: RoomAwareIndicatorProps)
       }}
     >
       <button
+        ref={chipRef}
         type="button"
         className="lm-room-aware-chip"
         aria-expanded={open}
-        aria-controls={panelId}
+        aria-controls={open ? panelId : undefined}
         aria-label={ariaLabel}
         title={ariaLabel}
         onClick={() => setOpen((v) => !v)}
@@ -72,13 +77,14 @@ export function RoomAwareIndicator({ variant, status }: RoomAwareIndicatorProps)
           </span>
         </span>
       </button>
-      <div id={panelId} className="lm-room-aware-panel" hidden={!open}>
-        {status.state === "paused" && <p>{t(PAUSED_REASON_KEYS[status.reason])}</p>}
-        <p className={paused ? "lm-room-aware-why" : undefined}>{t("roomMap:roomAware.body")}</p>
-        <p className="lm-room-aware-why">
-          {paused ? t("roomMap:roomAware.pausedWhy") : t("roomMap:roomAware.why")}
-        </p>
-      </div>
+      {/* It opens as the app's other popovers and rows do, rising in and settling out. */}
+      {variant === "popover" ? (
+        <Popover open={open} onClose={() => setOpen(false)} anchorRef={chipRef} side="below" width={248} id={panelId} label={ariaLabel} role="dialog">
+          {panel}
+        </Popover>
+      ) : (
+        <Reveal open={open}>{panel}</Reveal>
+      )}
     </div>
   );
 }

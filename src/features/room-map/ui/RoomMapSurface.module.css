@@ -14,25 +14,32 @@
   }
 
   /* Both faces draw the same room, handed across the switch, so the room holds still and only the
-     chrome arrives: the dock rises a few pixels into place, the corner drops into it. The one it
-     replaced is already gone, so nothing draws twice. The plan is a new surface and fades in. */
-  .arriving :global([data-room-dock]) {
-    animation: chrome-in var(--lm-dur-base) var(--lm-ease-out) backwards;
-    --chrome-from: 6px;
+     chrome arrives: the dock's box stays where it was and its content rises into it, the corner's
+     drops into place. The one it replaced is already gone, so nothing draws twice. The plan is a
+     new surface and fades in; so does the whole face back from the templates, whose pick may have
+     changed the room. Distances are in the keyframes: WebKit drops a var() read there. */
+  .arriving :global([data-room-dock] > *) {
+    animation: dock-in var(--lm-dur-base) var(--lm-ease-out) backwards;
   }
   .arriving :global([data-room-corner]) {
-    animation: chrome-in var(--lm-dur-base) var(--lm-ease-out) backwards;
-    --chrome-from: -4px;
+    animation: corner-in var(--lm-dur-base) var(--lm-ease-out) backwards;
   }
   .arriving :global([data-stage="plan"]:not([data-switched]) > :not([data-room-dock], [data-room-corner])),
-  .arriving :global([data-room-page]) {
+  .arriving :global([data-room-page]),
+  .whole {
     animation: face-in var(--lm-dur-base) var(--lm-ease-out) backwards;
   }
 
-  @keyframes chrome-in {
+  @keyframes dock-in {
     from {
       opacity: 0;
-      translate: 0 var(--chrome-from);
+      translate: 0 4px;
+    }
+  }
+  @keyframes corner-in {
+    from {
+      opacity: 0;
+      translate: 0 -4px;
     }
   }
   @keyframes face-in {
@@ -96,10 +103,11 @@
     color: var(--lm-ink-faint);
   }
 
-  :global(:root[data-reduced-motion]) .arriving :global([data-room-dock]),
+  :global(:root[data-reduced-motion]) .arriving :global([data-room-dock] > *),
   :global(:root[data-reduced-motion]) .arriving :global([data-room-corner]),
-  :global(:root[data-reduced-motion]) .arriving :global([data-stage="plan"] > *),
-  :global(:root[data-reduced-motion]) .arriving :global([data-room-page]) { animation: none; }
+  :global(:root[data-reduced-motion]) .arriving :global([data-stage="plan"]:not([data-switched]) > :not([data-room-dock], [data-room-corner])),
+  :global(:root[data-reduced-motion]) .arriving :global([data-room-page]),
+  :global(:root[data-reduced-motion]) .whole { animation: none; }
   :global(:root[data-reduced-motion]) .mark,
   :global(:root[data-reduced-motion]) .item { transition: none; }
 
@@ -118,5 +126,7 @@
       forced-color-adjust: none;
     }
     .item:focus-visible { outline: 2px solid Highlight; }
+    /* On the Highlight plate a Highlight ring could not be seen. */
+    .item[aria-checked="true"]:focus-visible { outline-color: CanvasText; }
   }
 }

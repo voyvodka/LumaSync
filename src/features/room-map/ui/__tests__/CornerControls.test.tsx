@@ -85,7 +85,7 @@ describe("CornerControls", () => {
     );
     const chip = screen.getByRole("button", { name: "roomMap:roomAware.ariaLabel" });
     expect(chip).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getByText("roomMap:roomAware.body")).not.toBeVisible();
+    expect(screen.queryByText("roomMap:roomAware.body")).toBeNull();
 
     fireEvent.click(chip);
     expect(chip).toHaveAttribute("aria-expanded", "true");
@@ -125,8 +125,8 @@ describe("CornerControls", () => {
     expect(screen.queryByRole("button", { name: "roomMap:zoomControl.fit" })).toBeNull();
     expect(screen.getByRole("button", { name: "roomMap:view.resetCamera" })).toBeInTheDocument();
     // One capsule, as on the plan, so undo stays put across a stage switch.
-    expect(screen.getByRole("button", { name: "roomMap:toolbar.undo" }).parentElement).toBe(
-      screen.getByRole("button", { name: "roomMap:view.resetCamera" }).parentElement?.parentElement,
+    expect(screen.getByRole("button", { name: "roomMap:toolbar.undo" }).parentElement).toContainElement(
+      screen.getByRole("button", { name: "roomMap:view.resetCamera" }),
     );
 
     fireEvent.click(screen.getByRole("button", { name: "roomMap:shortcuts.title" }));

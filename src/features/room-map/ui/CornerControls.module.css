@@ -122,5 +122,7 @@
       color: HighlightText;
       forced-color-adjust: none;
     }
+    /* On the Highlight plate a Highlight ring could not be seen. */
+    .button.stage[aria-checked="true"]:focus-visible { outline-color: CanvasText; }
   }
 }

@@ -127,9 +127,6 @@
   line-height: 1.45;
   color: var(--lm-ink-dim);
 }
-.lm-room-aware-panel[hidden] {
-  display: none;
-}
 .lm-room-aware-panel p {
   margin: 0;
 }
@@ -137,18 +134,8 @@
   margin-top: 6px;
   color: var(--lm-ink-faint);
 }
-.lm-room-aware.is-popover .lm-room-aware-panel {
-  position: absolute;
-  right: 0;
-  top: 100%;
-  margin-top: 2px;
-  width: 248px;
-  border-radius: 8px;
-  border: 1px solid var(--lm-line);
-  background: var(--lm-panel);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.45);
-  padding: 10px 12px;
-  z-index: 50;
+.lm-room-aware-panel {
+  padding: 2px 4px;
 }
 .lm-room-aware.is-inline .lm-room-aware-panel {
   padding: 2px 2px 4px;
@@ -170,9 +157,6 @@
   }
   .lm-room-aware-chip:focus-visible .lm-room-aware-pill {
     outline: 2px solid Highlight;
-  }
-  .lm-room-aware.is-popover .lm-room-aware-panel {
-    border-color: CanvasText;
   }
 }
 

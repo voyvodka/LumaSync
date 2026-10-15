@@ -3,13 +3,17 @@
     position: relative;
     height: 100%;
   }
-  /* The stage switched to fades in under a dock that stays; a keyframe name per stage restarts it
-     without a remount. */
-  .stage[data-switched][data-stage="room"] > :not([data-room-dock], [data-room-corner]) { animation: stage-in-room var(--lm-dur-base) var(--lm-ease-out) backwards; }
-  .stage[data-switched][data-stage="plan"] > :not([data-room-dock], [data-room-corner]) { animation: stage-in-plan var(--lm-dur-base) var(--lm-ease-out) backwards; }
-  @keyframes stage-in-room { from { opacity: 0; } }
-  @keyframes stage-in-plan { from { opacity: 0; } }
-  :global(:root[data-reduced-motion]) .stage > * { animation: none; }
+  /* The surface switched to — a new element either way — fades in under a dock, a corner and any
+     alert that stay; the corner's slot crossfades from the zoom to the camera. */
+  .stage[data-switched] > :not([data-room-dock], [data-room-corner], .alerts),
+  .stage[data-switched] :global([data-room-corner] [data-slot] > *) {
+    animation: stage-in var(--lm-dur-base) var(--lm-ease-out) backwards;
+  }
+  @keyframes stage-in { from { opacity: 0; } }
+  :global(:root[data-reduced-motion]) .stage[data-switched] > :not([data-room-dock], [data-room-corner], .alerts),
+  :global(:root[data-reduced-motion]) .stage[data-switched] :global([data-room-corner] [data-slot] > *) {
+    animation: none;
+  }
 
   /* What went wrong, just above the dock and over the plan, never pushing it. */
   .alerts {

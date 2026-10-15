@@ -243,6 +243,24 @@ describe("RoomView3D", () => {
       expect(onPick).not.toHaveBeenCalled();
     });
 
+    // A view handed to the next face must answer that face: the first one's handlers are gone.
+    it("reaches the face that adopted the view, not the one that parked it", async () => {
+      const first = vi.fn<(id: string | null) => void>();
+      const parked = render(<RoomView3D config={DEFAULT_ROOM_MAP} label="Room" onPick={first} onFail={() => {}} />);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+      parked.unmount();
+      const second = vi.fn<(id: string | null) => void>();
+      render(<RoomView3D config={DEFAULT_ROOM_MAP} label="Room" onPick={second} onFail={() => {}} />);
+      const canvas = gl.renderers[0]?.domElement as HTMLCanvasElement;
+      expect(gl.renderers).toHaveLength(1);
+      press(canvas, "pointerdown", 10);
+      press(canvas, "pointerup", 10);
+      expect(second).toHaveBeenCalledTimes(1);
+      expect(first).not.toHaveBeenCalled();
+    });
+
     it("is not a secondary button, nor a press the browser cancelled", () => {
       const { onPick, canvas } = open();
       press(canvas, "pointerdown", 10, 10, 2);

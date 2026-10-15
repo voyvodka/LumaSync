@@ -118,7 +118,7 @@ export function CornerControls({
           <span className={styles.rule} aria-hidden="true" />
           {(edit || view) && (
             <>
-              <div className={styles.slot}>
+              <div className={styles.slot} data-slot="">
                 {edit ? (
                   <ZoomControl
                     className={styles.group}
@@ -133,7 +133,11 @@ export function CornerControls({
                     isMac={IS_MAC}
                   />
                 ) : (
-                  view && <CameraButtons view={view} />
+                  view && (
+                    <div className={styles.group}>
+                      <CameraButtons view={view} />
+                    </div>
+                  )
                 )}
               </div>
               <span className={styles.rule} aria-hidden="true" />

@@ -68,8 +68,9 @@ export function RoomMapSurface({
   const [failed, setFailed] = useState(viewFailed);
   // Not stored: the map always opens on the room, and Edit is a step into it.
   const [face, setFace] = useState<RoomFace>(view3dAvailable && !viewFailed ? ROOM_FACES.VIEW : ROOM_FACES.EDIT);
-  // The first face appears as the map opens; only a switch fades one in.
-  const [switched, setSwitched] = useState(false);
+  // The first face appears as the map opens; a switch brings its chrome in, a return from the
+  // templates the whole face.
+  const [arrival, setArrival] = useState<"chrome" | "whole" | null>(null);
   const [picking, setPicking] = useState(false);
   // Edit opened from the light card takes the keys, or they would fall to the page with the card.
   const [editTakesFocus, setEditTakesFocus] = useState(false);
@@ -77,7 +78,7 @@ export function RoomMapSurface({
   const lampFamilies = useHueLampFamilies(doc.hue.areaChannels, view3dAvailable);
 
   const handleFace = useCallback((next: RoomFace) => {
-    setSwitched(true);
+    setArrival("chrome");
     setEditTakesFocus(false);
     setFace(next);
   }, []);
@@ -93,7 +94,7 @@ export function RoomMapSurface({
     (template: RoomMapConfig) => {
       const next = applyRoomTemplate(config, template);
       replace(next);
-      setSwitched(true);
+      setArrival("whole");
       setPicking(false);
       setEditTakesFocus(true);
       // A blank room has nothing to look at: it opens where it is drawn.
@@ -121,7 +122,7 @@ export function RoomMapSurface({
         <TemplateSelector
           onSelect={handleTemplateSelect}
           onBack={() => {
-            setSwitched(true);
+            setArrival("whole");
             setPicking(false);
             setEditTakesFocus(true);
           }}
@@ -139,7 +140,7 @@ export function RoomMapSurface({
   return (
     <div className={styles.surface}>
       {view3dAvailable && <FaceSwitch face={face} viewFailed={failed} onChange={handleFace} />}
-      <div key={face} className={cx(styles.face, switched && styles.arriving)} data-testid={`room-face-${face}`}>
+      <div key={face} className={cx(styles.face, arrival === "chrome" && styles.arriving, arrival === "whole" && styles.whole)} data-testid={`room-face-${face}`}>
         {face === ROOM_FACES.VIEW ? (
           <ViewStage
             doc={doc}

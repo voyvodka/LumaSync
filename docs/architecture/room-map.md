@@ -38,9 +38,12 @@ room. The room's WebGL view is not closed with it but parked for 20 s (`park` / 
 the other face, or Edit's 3D stage after the plan — adopts it with its scene and camera. A new
 context, its shaders and the scene took about half a second plus the fade on every switch, a pause
 the maintainer saw each time. The park ends early when the window is hidden or the view never
-finished compiling. So the room holds still across View | Edit, and only the chrome arrives — the
-dock rising a few pixels, the corner dropping into place — while a stage switch fades the surface
-under a dock that stays. The one thing a switch drops is the
+finished compiling. So the room holds still across View | Edit, and only the chrome arrives: the
+dock's box stays where it was while its content rises 4 px into it, and the corner drops 4 px into
+place. A stage switch fades the new surface, and the corner slot's zoom or camera, under a dock, a
+corner and any alert that stay. A return from the templates fades the whole face in, since a pick
+may have changed the room under it. The distances live in the keyframes, because WebKit drops a
+`var()` read inside one. The one thing a switch drops is the
 plan's zoom and pan, which fit the room again on return. The View | Edit switch is the surface's
 own, floating over both faces' top bars, so a keyboard switch keeps focus on it. The face is not
 stored: the map always opens on the room, and an empty map with no history opens on the templates

@@ -127,6 +127,7 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
       role="menu"
       onKeyDown={handleMenuKeyDown}
       className="lm-context-menu"
+      data-placed={pos ? "" : undefined}
       style={{
         // First-pass render is invisible at the raw cursor coords so
         // the layout effect can measure without a flash. Second pass
