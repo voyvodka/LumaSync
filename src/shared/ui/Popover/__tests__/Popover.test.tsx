@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { createRef } from "react";
+import { createRef, useRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { Popover } from "../Popover";
@@ -143,5 +143,36 @@ describe("Popover", () => {
     view.unmount();
     height.mockRestore();
     vi.unstubAllGlobals();
+  });
+
+  // The room's lights popover holds the effect list: a choice in the list closed both.
+  it("keeps an outer popover open for a press or Esc in one opened inside it", () => {
+    const outerClose = vi.fn<() => void>();
+    function Nested() {
+      const outerAnchor = useRef<HTMLButtonElement | null>(null);
+      const innerAnchor = useRef<HTMLButtonElement | null>(null);
+      const [inner, setInner] = useState(true);
+      return (
+        <>
+          <button ref={outerAnchor} type="button">outer anchor</button>
+          <Popover open onClose={outerClose} anchorRef={outerAnchor} role="dialog" label="outer">
+            <button ref={innerAnchor} type="button">field</button>
+            <Popover open={inner} onClose={() => setInner(false)} anchorRef={innerAnchor} role="listbox" label="inner">
+              <span>choice</span>
+            </Popover>
+          </Popover>
+        </>
+      );
+    }
+    render(<Nested />);
+    fireEvent.pointerDown(screen.getByText("choice"));
+    expect(outerClose).not.toHaveBeenCalled();
+    act(() => {
+      fireEvent.keyDown(document, { key: "Escape" });
+    });
+    expect(outerClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("listbox", { hidden: true })).toHaveAttribute("aria-hidden", "true");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(outerClose).toHaveBeenCalledOnce();
   });
 });

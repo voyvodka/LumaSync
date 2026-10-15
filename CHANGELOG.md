@@ -593,6 +593,9 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Choosing from a list inside a popover — an effect in the 3D view's lights — no longer closes the
+  popover around it too, and Esc closes the inner list first.
+
 - The room's dock is wider (up to 920 px) and its furniture row scrolls sideways with whole names,
   so the palette no longer cuts every name to a few letters ("Kan…", "Sand…").
 

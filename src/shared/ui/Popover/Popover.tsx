@@ -1,4 +1,15 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { createPortal } from "react-dom";
 
 import { prefersReducedMotion } from "@/shared/lib/motion";
@@ -19,6 +30,13 @@ interface PopoverProps {
   children: ReactNode;
 }
 
+/** What a popover opened inside another (a list from a field in it) registers with: portalled to the
+ *  body, its presses were outside the outer one, and a choice there closed both. */
+interface PopoverNest {
+  add(node: HTMLElement): () => void;
+}
+const NestContext = createContext<PopoverNest | null>(null);
+
 /**
  * A small surface next to its anchor, portalled with a fixed position so no
  * scrolling parent clips it. Outside press, Esc or the anchor scrolling away
@@ -27,6 +45,17 @@ interface PopoverProps {
  */
 export function Popover({ open, onClose, anchorRef, side = "above", width = 240, id, label, role, children }: PopoverProps) {
   const ref = useRef<HTMLDivElement | null>(null);
+  const parent = useContext(NestContext);
+  const nested = useRef(new Set<HTMLElement>());
+  const nest = useMemo<PopoverNest>(
+    () => ({
+      add(node) {
+        nested.current.add(node);
+        return () => nested.current.delete(node);
+      },
+    }),
+    [],
+  );
   const [pos, setPos] = useState<{
     left: number;
     top: number;
@@ -124,13 +153,21 @@ export function Popover({ open, onClose, anchorRef, side = "above", width = 240,
   }, [open, anchorRef, side, width]);
 
   useEffect(() => {
+    const node = ref.current;
+    if (!open || !parent || !node) return;
+    return parent.add(node);
+  }, [open, parent]);
+
+  useEffect(() => {
     if (!open) return;
     const onDown = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (!ref.current?.contains(target) && !anchorRef.current?.contains(target)) onClose();
+      const inside = ref.current?.contains(target) || anchorRef.current?.contains(target);
+      if (!inside && ![...nested.current].some((node) => node.contains(target))) onClose();
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      // Esc closes the innermost popover only; every one listens on the document.
+      if (event.key !== "Escape" || nested.current.size > 0) return;
       event.stopPropagation();
       onClose();
       anchorRef.current?.focus();
@@ -171,7 +208,9 @@ export function Popover({ open, onClose, anchorRef, side = "above", width = 240,
       }}
     >
       {/* The scroller is inside, so a capped popover keeps its notch: overflow would clip it. */}
-      <div className={styles.content}>{children}</div>
+      <div className={styles.content}>
+        <NestContext.Provider value={nest}>{children}</NestContext.Provider>
+      </div>
     </div>,
     document.body,
   );
