@@ -15,6 +15,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 const light = (over: Partial<ViewLight> & Pick<ViewLight, "id" | "kind" | "name">): ViewLight => ({
+  glow: null,
   zone: null,
   family: null,
   lightCount: null,
@@ -48,6 +49,7 @@ function Harness({
   onEdit = vi.fn<(id: string) => void>(),
   hueIdentify = identify(),
   canIdentify = true,
+  hueStreaming = false,
 }: {
   initial?: string | null;
   pickRef?: { current: (id: string | null) => void };
@@ -55,6 +57,7 @@ function Harness({
   onEdit?: (id: string) => void;
   hueIdentify?: HueIdentify;
   canIdentify?: boolean;
+  hueStreaming?: boolean;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(initial);
   if (pickRef) pickRef.current = setSelectedId;
@@ -67,6 +70,7 @@ function Harness({
       stripStatus={() => ({ status: "connected", port: "COM3" })}
       identify={hueIdentify}
       canIdentify={canIdentify}
+      hueStreaming={hueStreaming}
       onSelect={setSelectedId}
       onBack={() => setSelectedId(null)}
       onEdit={onEdit}
@@ -159,6 +163,17 @@ describe("RoomViewDock", () => {
     expect(button.getAttribute("aria-disabled")).toBe("true");
     fireEvent.click(button);
     expect(none.identify).not.toHaveBeenCalled();
+  });
+
+  // It used to be offered while Hue streamed and then fail on the press.
+  it("holds Blink while Hue streams and says why before the press", () => {
+    const hueIdentify = identify();
+    render(<Harness initial="hue-0" hueIdentify={hueIdentify} hueStreaming />);
+    const button = liveButton("view-card-identify");
+    expect(button.getAttribute("aria-disabled")).toBe("true");
+    expect(button.getAttribute("title")).toBe("hue:channelMap.identifyBlocked");
+    fireEvent.click(button);
+    expect(hueIdentify.identify).not.toHaveBeenCalled();
   });
 
   it("says why identify failed, and that a stream holds the lights", () => {

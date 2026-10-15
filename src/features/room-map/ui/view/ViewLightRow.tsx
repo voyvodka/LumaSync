@@ -90,7 +90,8 @@ function Chip({
     >
       <span className={styles.mark} aria-hidden="true">
         {light.kind === "hue" ? (
-          <Disc ghost={light.ghost} />
+          // Filled with the colour its lamp glows in the room, so the chip and the lamp read as one.
+          <Disc ghost={light.ghost} fill={light.glow ?? undefined} />
         ) : (
           <span style={{ color: light.kind === "tv" ? TYPE_DOT_COLOR.tv : TYPE_DOT_COLOR.usb, display: "grid" }}>
             {light.kind === "tv" ? <IconTv /> : <IconLed />}

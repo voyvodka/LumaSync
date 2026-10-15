@@ -24,6 +24,8 @@ export interface RoomViewDockProps {
   stripStatus: UsbStripStatus["stripStatus"];
   identify: HueIdentify;
   canIdentify: boolean;
+  /** Hue is streaming: the bridge will not blink a light, so the card says so before the press. */
+  hueStreaming?: boolean;
   onSelect: (id: string) => void;
   onBack: () => void;
   onEdit: (id: string) => void;
@@ -45,6 +47,7 @@ export function RoomViewDock({
   stripStatus,
   identify,
   canIdentify,
+  hueStreaming = false,
   onSelect,
   onBack,
   onEdit,
@@ -130,7 +133,7 @@ export function RoomViewDock({
           key={selected.id}
           light={selected}
           strip={strip ? stripStatus(strip) : undefined}
-          canIdentify={canIdentify && selected.lightIds.length > 0 && !selected.ghost}
+          canIdentify={canIdentify && !hueStreaming && selected.lightIds.length > 0 && !selected.ghost}
           identifying={identify.busyId === selected.id}
           identifyFailure={
             failure === null
@@ -146,9 +149,11 @@ export function RoomViewDock({
               ? t("roomMap:inspector.hueGhostShort")
               : selected.lightIds.length === 0
                 ? t("roomMap:view.identifyUnmatched")
-                : canIdentify
-                  ? null
-                  : t("roomMap:view.identifyUnavailable")
+                : !canIdentify
+                  ? t("roomMap:view.identifyUnavailable")
+                  : hueStreaming
+                    ? t("hue:channelMap.identifyBlocked")
+                    : null
           }
           onBack={(event) => back(event.detail === 0)}
           onIdentify={() => identify.identify(selected.id, selected.lightIds)}

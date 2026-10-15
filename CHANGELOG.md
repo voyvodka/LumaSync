@@ -168,6 +168,10 @@ https://keepachangelog.com/en/1.1.0/
     (it said "Edit", like the switch above it), and someone without Hue is no longer told their area
     has no Hue lights. Storage longer than a sideboard reads as a run of wardrobes, with doors about
     half a metre wide.
+  - In the 3D view each light's chip is filled with the colour its lamp glows in the room, the inner
+    walls of a U- or T-shaped room drop when they stand between the camera and the room, Blink waits
+    with its reason while Hue streams instead of failing on the press, a table lamp stays on what is
+    under it and a pendant hangs at least to head height.
   - The template list says what the room map is for, a blank room opens on Edit rather than an
     empty 3D view, a second piece added lands beside the first instead of on it, the TV snaps like
     the furniture does, the cut's width, depth and offset fields carry drawn marks instead of the

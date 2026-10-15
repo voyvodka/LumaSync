@@ -2,6 +2,7 @@
 // strips and the screen. Pure, so the dock and its tests read the same list.
 import type { TFunction } from "i18next";
 
+import { lampColourCss } from "@/features/room-view/model/lampColours";
 import type { LampFamily } from "@/features/room-view/model/lampFamily";
 import type { HueAreaChannelInfo } from "@/shared/contracts/hue";
 import type { HueChannelPlacement, HueZone, RoomMapConfig } from "@/shared/contracts/roomMap";
@@ -32,6 +33,8 @@ export interface ViewLight {
   unmatched: boolean;
   /** USB only: the strip's own id. */
   stripId: string | null;
+  /** Hue only: the colour its lamp glows in the 3D room, so its chip can be told from the others. */
+  glow: string | null;
 }
 
 export interface ViewLightSources {
@@ -44,7 +47,7 @@ export interface ViewLightSources {
 }
 
 function hueLight(channel: HueChannelPlacement, sources: ViewLightSources, t: TFunction): ViewLight {
-  const { zones, areaChannels, liveChannelIds, families } = sources;
+  const { config, zones, areaChannels, liveChannelIds, families } = sources;
   const zoneIndex = channel.zoneId ? zones.findIndex((z) => z.id === channel.zoneId) : -1;
   const zone = zoneIndex >= 0 ? zones[zoneIndex] : undefined;
   const info = channel.channelId == null ? undefined : areaChannels.find((c) => c.channelId === channel.channelId);
@@ -59,6 +62,7 @@ function hueLight(channel: HueChannelPlacement, sources: ViewLightSources, t: TF
     ghost: liveChannelIds !== null && channel.channelId != null && !liveChannelIds.has(channel.channelId),
     unmatched: channel.channelId == null,
     stripId: null,
+    glow: lampColourCss(config.hueChannels.indexOf(channel)),
   };
 }
 
@@ -77,6 +81,7 @@ export function buildViewLights(sources: ViewLightSources, t: TFunction): ViewLi
     ghost: false,
     unmatched: false,
     stripId: strip.stripId,
+    glow: null,
   }));
   const tv: ViewLight[] = config.tvAnchor
     ? [
@@ -91,6 +96,7 @@ export function buildViewLights(sources: ViewLightSources, t: TFunction): ViewLi
           ghost: false,
           unmatched: false,
           stripId: null,
+          glow: null,
         },
       ]
     : [];

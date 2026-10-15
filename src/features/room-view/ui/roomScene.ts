@@ -1,6 +1,7 @@
 // The 3D room's scene, built from the room map. Everything here runs only while the view is on
 // screen and is torn down with it (`disposeScene`). Lamp colours are placeholders until the live
 // feed reaches the view.
+import { lampColour } from "../model/lampColours";
 import {
   AdditiveBlending,
   type BufferGeometry,
@@ -37,7 +38,6 @@ import { lampFixture } from "./scene/lamps";
 import { buildScreen } from "./scene/screen";
 import { buildSelectionMark } from "./scene/selection";
 
-const LAMP_COLOURS = [0xffb347, 0x4fd1c5, 0xb388ff, 0xff7a59, 0x7aa2ff];
 /** A wall between the camera and the room drops to this, so the room reads as a cutaway. */
 const WALL_CUT_HEIGHT = 0.2;
 /** Parts in these colours are metal or glass: a satin finish instead of the matte one. */
@@ -183,7 +183,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
       half: [rx, ry, rz],
       angle: 0,
     });
-    return { at: fixture.glow.at, radii: fixture.glow.radii, color: LAMP_COLOURS[i % LAMP_COLOURS.length] ?? 0xffb347 };
+    return { at: fixture.glow.at, radii: fixture.glow.radii, color: lampColour(i) };
   });
 
   const screen = buildScreen(config, models);
@@ -286,7 +286,10 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     cutWalls(direction: Vector3) {
       let changed = false;
       const cut = walls.map(({ mesh, outward }) => {
-        const isCut = outward.dot(direction) > 0.05;
+        // Its outer side faces the camera, or it stands on the camera's side of the room's middle:
+        // a U's or T's inner wall faces away from the camera yet still hid the room behind it.
+        const nearSide = mesh.position.x * direction.x + mesh.position.z * direction.z > 0.15;
+        const isCut = outward.dot(direction) > 0.05 || (nearSide && outward.dot(direction) < -0.05);
         const height = isCut ? WALL_CUT_HEIGHT : H;
         if (mesh.scale.y !== height) {
           mesh.scale.y = height;

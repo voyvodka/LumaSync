@@ -59,14 +59,16 @@ export function lampFixture(family: LampFamily, at: ScenePoint, surface: number,
       };
     }
     case "tableLamp": {
-      const shadeY = Math.max(y, surface + 0.28);
+      // A table lamp stands on what is under it: placed high, its stem ran up to the ceiling.
+      const shadeY = Math.min(Math.max(y, surface + 0.28), surface + 0.55);
       return {
         body: [rod(0.055, 0.075, Math.max(shadeY - surface - 0.1, 0.05), x, surface, z, CANOPY, 16)],
         glow: { at: { x, y: shadeY, z }, radii: [0.13, 0.1, 0.13] },
       };
     }
     case "pendant": {
-      const shadeY = Math.min(y, ceiling - 0.3);
+      // Hung at least to head height: placed on the floor, its cord ran the room's height.
+      const shadeY = Math.min(Math.max(y, 1.2), ceiling - 0.3);
       return {
         body: [
           rod(0.004, 0.004, Math.max(ceiling - shadeY - 0.06, 0.02), x, shadeY + 0.06, z, BAR, 6),

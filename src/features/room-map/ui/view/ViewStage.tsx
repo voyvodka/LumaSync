@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { LampFamily } from "@/features/room-view/model/lampFamily";
 import type { CameraCommand } from "@/features/room-view/ui/RoomView3D";
 import { RoomView3DHost } from "@/features/room-view/ui/RoomView3DHost";
+import { type HueShellStatus, useHueShellStatus } from "@/features/hue/state/hueShellStatus";
 
 import { deriveHueAreaState } from "../../model/hueAreaState";
 import { parseObjectId } from "../../model/objectId";
@@ -15,6 +16,8 @@ import { useUsbStripStatus } from "../../state/useUsbStripStatus";
 import { CornerControls } from "../CornerControls";
 import { ROOM_MAP_FIT_INSETS } from "../dock/dockGeometry";
 import { RoomViewDock } from "./RoomViewDock";
+
+const selectHueStreaming = (status: HueShellStatus) => status.streaming;
 
 export interface ViewStageProps {
   doc: RoomMapDocument;
@@ -36,6 +39,7 @@ export function ViewStage({ doc, lampFamilies, roomAware, hueReachable, onEdit, 
   const { scopedConfig, selectedId, select, selectHueZone, hue, hueAreaId, hueBridgeConfigured, hueBridgeIp } = doc;
   const { stripStatus } = useUsbStripStatus(hueReachable);
   const identify = useHueIdentify(hueBridgeIp);
+  const hueStreaming = useHueShellStatus(selectHueStreaming);
 
   const zones = useMemo(
     () => (hueAreaId ? scopedConfig.zones.filter((zone) => zone.entertainmentAreaId === hueAreaId) : scopedConfig.zones),
@@ -113,6 +117,7 @@ export function ViewStage({ doc, lampFamilies, roomAware, hueReachable, onEdit, 
         stripStatus={stripStatus}
         identify={identify}
         canIdentify={hueBridgeConfigured && hueBridgeIp !== null}
+        hueStreaming={hueStreaming}
         onSelect={selectLight}
         onBack={() => select(null)}
         onEdit={(id) => {
