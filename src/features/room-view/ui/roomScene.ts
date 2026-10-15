@@ -51,6 +51,7 @@ const STRIP_HEIGHT = 0.08;
 const STRIP_GLOW = 0xffc46b;
 /** The backlight's spill against the wall, past 1 so the glow pass picks it up. */
 const BACKLIGHT_GAIN = 0.8;
+const UNLIT_STRIP = new Color(0x2a2a2e);
 const WALL_CUT_HEIGHT = 0.2;
 /** The walls the camera looks over stop short of the ceiling, as a dollhouse's do: at full height
  *  they read as a box and hid the far half of the floor from a raised view. */
@@ -220,6 +221,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   }
   // The USB strips: one behind the screen is its backlight, picked there; one along a wall or the
   // floor runs as a thin lit line at skirting height. A strip was listed in the dock and drawn nowhere.
+  const stripMaterials: MeshBasicMaterial[] = [];
   for (const strip of config.usbStrips) {
     const mx = (strip.startX + strip.endX) / 2;
     const my = (strip.startY + strip.endY) / 2;
@@ -233,7 +235,10 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     if (length < 0.05) continue;
     const angle = Math.atan2(strip.endY - strip.startY, strip.endX - strip.startX);
     const centre = roomToScene(mx, my, STRIP_HEIGHT, dims);
-    const bar = new Mesh(new BoxGeometry(length, 0.018, 0.018), new MeshBasicMaterial({ color: STRIP_GLOW }));
+    const barMaterial = new MeshBasicMaterial({ color: STRIP_GLOW, toneMapped: false });
+    stripMaterials.push(barMaterial);
+    const bar = new Mesh(new BoxGeometry(length, 0.018, 0.018), barMaterial);
+    bar.layers.enable(BLOOM_LAYER);
     bar.position.set(centre.x, centre.y, centre.z);
     bar.rotation.y = -angle;
     scene.add(bar);
@@ -349,6 +354,8 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     real?.paint(lampColour, level);
     glow?.paint(lampColour, level);
     spill?.color.set(lampColour ?? STRIP_GLOW).multiplyScalar(level * BACKLIGHT_GAIN);
+    // A strip along a wall is lit as the lamps are: off with them, in their colour.
+    for (const material of stripMaterials) material.color.set(lampColour ?? STRIP_GLOW).lerp(UNLIT_STRIP, 1 - level);
   };
   setMood(null, 1);
 

@@ -1,4 +1,4 @@
-import { BoxGeometry, type BufferGeometry, DirectionalLight, InstancedMesh, type Material, Matrix4, Mesh, type Texture, Vector3 } from "three";
+import { BoxGeometry, type BufferGeometry, DirectionalLight, InstancedMesh, type Material, Matrix4, Mesh, type MeshBasicMaterial, type Texture, Vector3 } from "three";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_ROOM_MAP, type RoomMapConfig } from "@/shared/contracts/roomMap";
@@ -238,5 +238,27 @@ describe("buildRoomScene — picking and the selection mark", () => {
     const dispose = vi.spyOn(outlines[0]!, "dispose");
     disposeScene(room.scene);
     expect(dispose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("buildRoomScene — mood", () => {
+  // The TV's backlight went dark with the lights while a strip along a wall stayed lit.
+  it("puts a strip along a wall out with the lamps, and lights it in their colour", () => {
+    const config: RoomMapConfig = {
+      ...DEFAULT_ROOM_MAP,
+      tvAnchor: undefined,
+      usbStrips: [{ stripId: "wall", startX: 0.5, startY: 3.5, endX: 3.5, endY: 3.5, ledCount: 60 }],
+    };
+    const room = buildRoomScene(config, OPTIONS);
+    const bar = room.scene.children.find(
+      (object): object is Mesh => object instanceof Mesh && object.geometry instanceof BoxGeometry && object.geometry.parameters.height === 0.018,
+    );
+    expect(bar).toBeDefined();
+    const colour = () => (bar!.material as MeshBasicMaterial).color;
+    room.setMood(0xff0000, 1);
+    expect(colour().getHex()).toBe(0xff0000);
+    room.setMood(0xff0000, 0);
+    expect(colour().r).toBeLessThan(0.1);
+    disposeScene(room.scene);
   });
 });

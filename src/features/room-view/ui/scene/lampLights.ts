@@ -8,7 +8,8 @@ import type { Lamp } from "./glow";
 
 export const LAMP_LIGHTS = 6;
 /** Lamps whose light casts a shadow. Each is a cube map drawn only when the shadows are, which is
- *  when the walls cut, so the cost is memory: kept small. */
+ *  when the walls cut, so the cost is memory: kept small. The caster count is part of the shader
+ *  programs, so a room going from one lamp to three recompiles once; the light count does not. */
 const SHADOW_LAMPS = 3;
 const SHADOW_MAP = 256;
 /** Candela of a lamp at full: a room this size reads lamp-lit without the walls burning out. */
@@ -28,7 +29,8 @@ export function lampLights(lamps: Lamp[], roomReach: number, shadows: boolean): 
   const lights = Array.from({ length: LAMP_LIGHTS }, (_, i) => {
     const lamp = lit[i];
     const light = new PointLight(0xffffff, 0, roomReach, 2);
-    light.castShadow = shadows && i < SHADOW_LAMPS;
+    // Only a lamp's light: a spare one casting would draw a cube of shadow from under the floor.
+    light.castShadow = shadows && i < SHADOW_LAMPS && lamp !== undefined;
     if (light.castShadow) {
       light.shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
       light.shadow.radius = 8;
