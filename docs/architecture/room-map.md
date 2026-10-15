@@ -235,6 +235,22 @@ or reshaped `shell-state.json` must not read as "no image is used". And a copy y
 is spared, because a dev and a release build share the app data dir and the other may be in the
 middle of an import.
 
+**A press is a click until it has moved 6 px, and only then a drag; Esc puts a drag back.** One
+rule for every handle on the plan and in the 3D room (`CLICK_SLOP_PX` in `snapGeometry.ts`, read
+through `ui/objects/dragIntent.ts`). At 3 px a trackpad click's wobble moved what was only being
+selected — for a Hue light that meant a write-back to the bridge — and the strip, the zone centre,
+the frame's handles and the image layer had no threshold at all. Once a press passes the slop the
+carried element takes `data-dragging`, which the plan's stylesheet lifts with a shadow (no size
+change: nothing moves under the pointer but the piece), and it stays a drag even if it comes back
+near its start. Esc mid-drag restores the start and writes nothing, caught on the window ahead of
+the editor's own Esc so the selection survives. A drag also stops at the room's walls, the same
+`keepPlacedInside` / `keepStripInside` that typed positions and arrow nudges go through.
+
+In the 3D room only the selected piece is carried (`pressStartsCarry` in
+`room-view/model/carryIntent.ts`); a drag that starts on anything else turns the room. Carrying from
+any press made turning the room from over the sofa move the sofa — most of the view is furniture.
+The cost is one click before a move, and the camera hint says so.
+
 ## Gotchas
 
 - **Several writers store `roomMap`, and every one of them goes through `shellStore.update`.** The editor, the USB roster (a strip on a connect), LED Setup's count sync and the Devices channel map all write it. The editor used to save the whole config from its reducer — loaded once, saved again on unmount, never listening — so a strip the roster added or a count LED Setup synced while it was open was taken away by its next save; only `SettingsLayout` mounting one section at a time kept that from happening. Now the editor keeps a baseline (the map as it last loaded or saved it) and writes only what changed since, through `mergeEditorSave` (`model/roomMapMerge.ts`): top-level fields by reference, and `usbStrips` and `hueChannels` record by record — keyed by `stripId` and by area plus `channelIndex` — because the other writers write those two. What the editor added or changed wins, what it deleted goes, everything else stays as stored. A record the editor changed takes only the fields it changed, so a `portName` the roster stamped or an `ledCount` LED Setup synced on the same strip stays. The first baseline is the stored map before the legacy-background conversion, so that conversion reaches the file. Saves run one after another, the first at once so the unmount flush is under way before the editor goes, and each reads the baseline when it runs rather than when it was asked for: a save queued behind one that failed then writes the whole map, where it once wrote only its own change and lost the failed one's. Two writers changing the same field of the same record is still last-writer-wins. `verify:shell-contracts` fails on a `shellStore.save` or `saveShellState` that names `roomMap` or `hueBridgeSyncedPositions`. `roomMapVersion` was retired at schema 10 — everyone bumped it, nobody read it.

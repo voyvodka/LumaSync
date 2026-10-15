@@ -7,6 +7,7 @@ import { hueChannelObjectId } from "../model/objectId";
 import { findBoundZone, hueToMetres, resolveHueChannelWorld } from "../model/hueChannelPosition";
 import { hueChannelDotText, hueChannelName } from "../model/hueChannelLabel";
 import { fanOutStacked } from "../model/stackFan";
+import { markDragging, pastSlop, useEscapeCancels } from "./objects/dragIntent";
 import { cx } from "@/shared/lib/cx";
 
 interface HueChannelOverlayProps {
@@ -115,6 +116,11 @@ interface DragState {
   currentRelX: number | null;
   currentRelY: number | null;
   element: HTMLDivElement | null;
+  /** Past the slop: a press that never got there is a click and moves nothing. */
+  moved: boolean;
+  /** Where the dot's wrapper was drawn at the press, for Esc to put it back. */
+  homeLeft: string;
+  homeTop: string;
 }
 
 const EMPTY_DRAG: DragState = {
@@ -129,6 +135,9 @@ const EMPTY_DRAG: DragState = {
   currentRelX: null,
   currentRelY: null,
   element: null,
+  moved: false,
+  homeLeft: "",
+  homeTop: "",
 };
 
 /** Which walls the zone box is flush against. Exported for tests: the drag path
@@ -262,6 +271,9 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
         currentRelX: ch.zoneRelativePosition?.x ?? null,
         currentRelY: ch.zoneRelativePosition?.y ?? null,
         element: el,
+        moved: false,
+        homeLeft: el.parentElement?.style.left ?? "",
+        homeTop: el.parentElement?.style.top ?? "",
       };
     },
     [onSelect, panMode],
@@ -270,6 +282,12 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const dr = dragRef.current;
     if (!dr.active) return;
+    // A click's wobble moved the light and wrote it back to the bridge.
+    if (!dr.moved && !pastSlop(dr.startClientX, dr.startClientY, e.clientX, e.clientY)) return;
+    if (!dr.moved) {
+      dr.moved = true;
+      markDragging(dr.element?.parentElement, true);
+    }
 
     const effectivePpm = ppmRef.current * zoomRef.current;
     const dxPx = e.clientX - dr.startClientX;
@@ -323,9 +341,10 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
     if (!dr.active) return;
 
     e.currentTarget.releasePointerCapture(e.pointerId);
+    markDragging(dr.element?.parentElement, false);
 
     const ch = findHueChannel(channelsRef.current, dr.channelIndex);
-    if (ch && (dr.currentX !== dr.startX || dr.currentY !== dr.startY)) {
+    if (ch && dr.moved && (dr.currentX !== dr.startX || dr.currentY !== dr.startY)) {
       // Write-back is zone-relative for ANY bound channel, not just the active
       // one — the third of the three paths that must agree on the parent zone.
       // `handlePointerMove` already clamped the values into `dragRef`.
@@ -351,6 +370,20 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
 
     dragRef.current = { ...EMPTY_DRAG };
   }, []);
+
+  // Esc, or the system taking the pointer, puts the dot back where it was drawn and writes nothing.
+  const cancelDrag = useCallback(() => {
+    const dr = dragRef.current;
+    if (!dr.active) return;
+    const wrapper = dr.element?.parentElement;
+    markDragging(wrapper, false);
+    if (wrapper && dr.moved) {
+      wrapper.style.left = dr.homeLeft;
+      wrapper.style.top = dr.homeTop;
+    }
+    dragRef.current = { ...EMPTY_DRAG };
+  }, []);
+  useEscapeCancels(() => dragRef.current.active, cancelDrag);
 
   // ── Zone bounds + center marker (rendered behind channels) ──
   // Factored into a helper so we can render bounds for *any*
@@ -540,7 +573,14 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
                 top: parseFloat(el.style.top || "0"),
               }));
 
+              // A press left over from the last drag must not read as this one's end.
+              delete target.dataset.cx;
+              delete target.dataset.cy;
+              const markerStart = { left: target.style.left, top: target.style.top };
+              let moved = false;
               const moveHandler = (mv: PointerEvent) => {
+                if (!moved && !pastSlop(startClientX, startClientY, mv.clientX, mv.clientY)) return;
+                moved = true;
                 const dxPx = mv.clientX - startClientX;
                 const dyPx = mv.clientY - startClientY;
                 const dxHue = (dxPx / effectivePpm) / widthRef.current * 2;
@@ -582,12 +622,41 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
                   c.el.style.top = `${c.top + deltaTopPx}px`;
                 }
               };
-              const upHandler = (uv: PointerEvent) => {
+              const stop = (pointerId: number) => {
                 if (boundsEl) delete boundsEl.dataset.zonePinned;
-                target.releasePointerCapture(uv.pointerId);
+                if (target.hasPointerCapture?.(pointerId)) target.releasePointerCapture(pointerId);
                 target.removeEventListener("pointermove", moveHandler);
                 target.removeEventListener("pointerup", upHandler);
-                target.removeEventListener("pointercancel", upHandler);
+                target.removeEventListener("pointercancel", cancelHandler);
+                window.removeEventListener("keydown", escHandler, true);
+              };
+              // Esc or a pointer the system took: the zone and its lights go back, nothing is written.
+              const restore = () => {
+                target.style.left = markerStart.left;
+                target.style.top = markerStart.top;
+                if (boundsEl && boundsStart) {
+                  boundsEl.style.left = `${boundsStart.left}px`;
+                  boundsEl.style.top = `${boundsStart.top}px`;
+                }
+                for (const c of channelStarts) {
+                  c.el.style.left = `${c.left}px`;
+                  c.el.style.top = `${c.top}px`;
+                }
+              };
+              const cancelHandler = (cv: PointerEvent) => {
+                stop(cv.pointerId);
+                restore();
+              };
+              const escHandler = (kv: KeyboardEvent) => {
+                if (kv.key !== "Escape") return;
+                kv.preventDefault();
+                kv.stopPropagation();
+                stop(e.pointerId);
+                restore();
+              };
+              const upHandler = (uv: PointerEvent) => {
+                stop(uv.pointerId);
+                if (!moved) return;
                 const finalCx = parseFloat(target.dataset.cx ?? String(startCx));
                 const finalCy = parseFloat(target.dataset.cy ?? String(startCy));
                 if (finalCx !== startCx || finalCy !== startCy) {
@@ -596,7 +665,8 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
               };
               target.addEventListener("pointermove", moveHandler);
               target.addEventListener("pointerup", upHandler);
-              target.addEventListener("pointercancel", upHandler);
+              target.addEventListener("pointercancel", cancelHandler);
+              window.addEventListener("keydown", escHandler, true);
             }}
           />
         </>
@@ -682,6 +752,8 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
               }}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
+              onPointerCancel={cancelDrag}
+              onLostPointerCapture={cancelDrag}
               onClick={(e) => {
                 e.stopPropagation();
                 onSelect(ch.channelIndex);

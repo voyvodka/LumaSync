@@ -130,6 +130,50 @@ describe("HueChannelOverlay — a drag starts where the dot is drawn", () => {
   });
 });
 
+// A click's 1–3 px wobble moved the light and wrote it back to the bridge.
+describe("HueChannelOverlay — a click is not a drag", () => {
+  const renderOne = () => {
+    const onChange = vi.fn<(updated: HueChannelPlacement) => void>();
+    const onSelect = vi.fn<(channelIndex: number) => void>();
+    const { container } = render(
+      <HueChannelOverlay
+        channels={[{ channelIndex: 0, x: 0, y: 0, z: 0 }]}
+        pxPerMeter={80}
+        roomWidthM={5}
+        roomDepthM={4}
+        zoom={1}
+        selectedId={null}
+        onSelect={onSelect}
+        onChange={onChange}
+      />,
+    );
+    return { onChange, onSelect, dot: container.querySelector<HTMLDivElement>('[role="button"]')! };
+  };
+
+  it("selects on a press that wobbles a few pixels, and writes nothing", () => {
+    const { onChange, onSelect, dot } = renderOne();
+    fireEvent.pointerDown(dot, { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(dot, { clientX: 103, clientY: 102, pointerId: 1 });
+    fireEvent.pointerUp(dot, { clientX: 103, clientY: 102, pointerId: 1 });
+    expect(onSelect).toHaveBeenCalledWith(0);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("puts the light back on Esc mid-drag and writes nothing", () => {
+    const { onChange, dot } = renderOne();
+    const wrapper = dot.parentElement!;
+    const home = { left: wrapper.style.left, top: wrapper.style.top };
+    fireEvent.pointerDown(dot, { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(dot, { clientX: 160, clientY: 100, pointerId: 1 });
+    expect(wrapper.hasAttribute("data-dragging")).toBe(true);
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.pointerUp(dot, { clientX: 160, clientY: 100, pointerId: 1 });
+    expect(onChange).not.toHaveBeenCalled();
+    expect({ left: wrapper.style.left, top: wrapper.style.top }).toEqual(home);
+    expect(wrapper.hasAttribute("data-dragging")).toBe(false);
+  });
+});
+
 describe("HueChannelOverlay — W4-J #3 simultaneous zone visibility", () => {
   it("renders bounds for every zone in allHueZones (passive zones besides the active one)", () => {
     const passive: HueZone = {

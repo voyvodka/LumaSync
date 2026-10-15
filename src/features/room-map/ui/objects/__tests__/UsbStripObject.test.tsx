@@ -8,7 +8,7 @@
  * the SVG line element is present and the two circular handle divs are
  * positioned at the start and end pixel coordinates.
  */
-import { render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 
 import { UsbStripObject } from "../UsbStripObject";
@@ -99,5 +99,37 @@ describe("UsbStripObject", () => {
     const input = container.querySelector("input[type=number]");
     expect(input).not.toBeNull();
     expect((input as HTMLInputElement).value).toBe(String(PLACEMENT.ledCount));
+  });
+});
+
+describe("UsbStripObject — dragging", () => {
+  const renderStrip = () => {
+    const onChange = vi.fn<(updated: UsbStripPlacement) => void>();
+    const { container } = render(
+      <UsbStripObject placement={PLACEMENT} pxPerMeter={PX_PER_METER} selected room={{ width: 4, depth: 3 }} onSelect={vi.fn<(id: string) => void>()} onChange={onChange} />,
+    );
+    const line = container.querySelectorAll("line")[0]!;
+    return { onChange, line };
+  };
+
+  // The strip had no stop at the walls and could be dragged off the room.
+  it("keeps both ends inside the room when the whole strip is dragged past a wall", () => {
+    const { onChange, line } = renderStrip();
+    fireEvent.pointerDown(line, { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(line, { clientX: 900, clientY: 100, pointerId: 1 });
+    fireEvent.pointerUp(line, { clientX: 900, clientY: 100, pointerId: 1 });
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ startX: 2, endX: 4 }));
+  });
+
+  it("moves nothing on a click's wobble or after Esc", () => {
+    const { onChange, line } = renderStrip();
+    fireEvent.pointerDown(line, { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(line, { clientX: 103, clientY: 101, pointerId: 1 });
+    fireEvent.pointerUp(line, { clientX: 103, clientY: 101, pointerId: 1 });
+    fireEvent.pointerDown(line, { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(line, { clientX: 160, clientY: 100, pointerId: 1 });
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.pointerUp(line, { clientX: 160, clientY: 100, pointerId: 1 });
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

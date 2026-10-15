@@ -22,6 +22,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 
 import type { LampFamily } from "../model/lampFamily";
+import { pressStartsCarry } from "../model/carryIntent";
 import { lightPickHalf, pickObject } from "../model/picking";
 import { prefersReducedMotion } from "@/shared/lib/motion";
 
@@ -88,8 +89,9 @@ const easeOut = (t: number) => 1 - (1 - t) ** 3;
 
 const POLAR = 0.95;
 /** A press that moves further than this turns the room; one that stays within it is a click (the
- *  plan's rule, so a nudge while clicking a lamp does not throw the selection away). */
-const CLICK_SLOP_PX = 3;
+ *  plan's rule, `CLICK_SLOP_PX` in snapGeometry.ts, so a nudge while clicking a lamp does not throw
+ *  the selection away). */
+const CLICK_SLOP_PX = 6;
 
 /** The renderer, camera and controls live as long as the view; a room-map change swaps only the
  *  scene. Throws when no WebGL context can be had. */
@@ -287,6 +289,19 @@ function openRoomView(
     window.addEventListener(
       "keydown",
       (event) => {
+        if (!carry || event.key !== "Escape") return;
+        // Put down where it was picked up: nothing is written.
+        event.preventDefault();
+        event.stopPropagation();
+        if (press && canvas.hasPointerCapture(press.id)) canvas.releasePointerCapture(press.id);
+        press = null;
+        drop(false);
+      },
+      { signal: listening.signal, capture: true },
+    );
+    window.addEventListener(
+      "keydown",
+      (event) => {
         if (!carry || (event.key !== "r" && event.key !== "R")) return;
         event.preventDefault();
         turnCarry(event.shiftKey ? -15 : 15);
@@ -301,7 +316,7 @@ function openRoomView(
         const ray = rayAt(event.clientX, event.clientY);
         const id = pickObject(ray, room.pickables, lightPickHalf(pixelsPerMetre));
         const item = id ? room.pickables.find((p) => p.id === id) : undefined;
-        if (!id || !item || item.kind !== "furniture" || !ray.intersectPlane(floor, onFloor)) return;
+        if (!id || !item || !pressStartsCarry(item, selected) || !ray.intersectPlane(floor, onFloor)) return;
         const [hx, hy, hz] = item.half;
         const ghost = new LineSegments(
           new EdgesGeometry(new BoxGeometry(hx * 2, Math.max(hy * 2, 0.05), hz * 2)),
@@ -320,6 +335,13 @@ function openRoomView(
     canvas.addEventListener(
       "pointermove",
       (event) => {
+        if (!carry && !press && room && onMovePiece) {
+          // The selected piece says it can be picked up; nothing else changes the cursor.
+          const hovered = pickObject(rayAt(event.clientX, event.clientY), room.pickables, lightPickHalf(pixelsPerMetre));
+          const item = hovered ? room.pickables.find((p) => p.id === hovered) : undefined;
+          canvas.style.cursor = pressStartsCarry(item, selected) ? "grab" : "";
+          return;
+        }
         if (!carry || !press) return;
         if (!carry.moved && Math.hypot(event.clientX - press.x, event.clientY - press.y) <= CLICK_SLOP_PX) return;
         if (!rayAt(event.clientX, event.clientY).intersectPlane(floor, onFloor)) return;

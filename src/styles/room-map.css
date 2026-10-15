@@ -293,3 +293,15 @@
     color: CanvasText;
   }
 }
+
+/* What a drag carries, once the press has left its spot: lifted off the floor by a shadow and
+   dimmed a touch, so carrying reads apart from selecting. No size change — nothing moves under
+   the pointer but the piece itself. */
+[data-room-map-object-layer] [data-dragging] {
+  filter: drop-shadow(0 8px 14px rgb(0 0 0 / 55%));
+  opacity: 0.9;
+  cursor: grabbing !important;
+}
+:root[data-reduced-motion] [data-room-map-object-layer] [data-dragging] {
+  transition: none;
+}

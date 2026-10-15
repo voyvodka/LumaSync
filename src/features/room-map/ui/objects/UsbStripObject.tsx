@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import type { UsbStripPlacement } from "@/shared/contracts/roomMap";
 import { clamp } from "@/shared/lib/math";
 import { usbStripObjectId } from "../../model/objectId";
+import { keepStripInside, type RoomBox } from "../../model/pieceGeometry";
+import { markDragging, stillAClick, useEscapeCancels } from "./dragIntent";
 
 interface UsbStripObjectProps {
   placement: UsbStripPlacement;
@@ -18,6 +20,8 @@ interface UsbStripObjectProps {
    *  before the parent has read the local-output registry.
    */
   connectionStatus?: "connected" | "disconnected" | "unknown";
+  /** The room's box: a drag keeps both ends inside it. */
+  room?: RoomBox;
   onSelect: (id: string) => void;
   /** `continuous` marks the LED-count field, which writes per keystroke. */
   onChange: (updated: UsbStripPlacement, continuous?: boolean) => void;
@@ -35,6 +39,7 @@ export const UsbStripObject = memo(function UsbStripObject({
   zoom = 1,
   panMode = false,
   connectionStatus = "unknown",
+  room,
   onSelect,
   onChange,
 }: UsbStripObjectProps) {
@@ -136,29 +141,55 @@ export const UsbStripObject = memo(function UsbStripObject({
       startEX: localEX,
       startEY: localEY,
     };
+    grabbedRef.current = e.currentTarget;
   };
+  const grabbedRef = useRef<Element | null>(null);
+  const clampPoint = (x: number, y: number) =>
+    room ? { x: clamp(x, 0, room.width), y: clamp(y, 0, room.depth) } : { x, y };
+
+  const cancelDrag = () => {
+    if (!dragRef.current.active) return;
+    dragRef.current.active = false;
+    markDragging(grabbedRef.current, false);
+    setAxisSnap(null);
+    setLocalSX(placement.startX);
+    setLocalSY(placement.startY);
+    setLocalEX(placement.endX);
+    setLocalEY(placement.endY);
+  };
+  useEscapeCancels(() => dragRef.current.active, cancelDrag);
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement | SVGLineElement>) => {
     if (!dragRef.current.active || !dragRef.current.handle) return;
+    if (stillAClick(grabbedRef.current, dragRef.current.startClientX, dragRef.current.startClientY, e.clientX, e.clientY)) return;
+    markDragging(grabbedRef.current, true);
     const effectivePpm = pxPerMeter * zoom;
     const dx = (e.clientX - dragRef.current.startClientX) / effectivePpm;
     const dy = (e.clientY - dragRef.current.startClientY) / effectivePpm;
     const handle = dragRef.current.handle;
 
     if (handle === "line") {
-      setLocalSX(dragRef.current.startSX + dx);
-      setLocalSY(dragRef.current.startSY + dy);
-      setLocalEX(dragRef.current.startEX + dx);
-      setLocalEY(dragRef.current.startEY + dy);
+      const moved = {
+        startX: dragRef.current.startSX + dx,
+        startY: dragRef.current.startSY + dy,
+        endX: dragRef.current.startEX + dx,
+        endY: dragRef.current.startEY + dy,
+      };
+      const kept = room ? keepStripInside(moved, room) : moved;
+      setLocalSX(kept.startX);
+      setLocalSY(kept.startY);
+      setLocalEX(kept.endX);
+      setLocalEY(kept.endY);
       setAxisSnap(null);
     } else {
       let rawSX = localSX, rawSY = localSY, rawEX = localEX, rawEY = localEY;
+      const p = clampPoint(dragRef.current.startPosX + dx, dragRef.current.startPosY + dy);
       if (handle === "start") {
-        rawSX = dragRef.current.startPosX + dx;
-        rawSY = dragRef.current.startPosY + dy;
+        rawSX = p.x;
+        rawSY = p.y;
       } else {
-        rawEX = dragRef.current.startPosX + dx;
-        rawEY = dragRef.current.startPosY + dy;
+        rawEX = p.x;
+        rawEY = p.y;
       }
       const snapped = applyAxisSnap(rawSX, rawSY, rawEX, rawEY, handle);
       setLocalSX(snapped.sx);
@@ -172,6 +203,7 @@ export const UsbStripObject = memo(function UsbStripObject({
   const handlePointerUp = () => {
     if (!dragRef.current.active) return;
     dragRef.current.active = false;
+    markDragging(grabbedRef.current, false);
     setAxisSnap(null);
     if (
       localSX !== placement.startX ||
@@ -229,6 +261,8 @@ export const UsbStripObject = memo(function UsbStripObject({
           onPointerDown={(e) => handlePointerDown(e, "line")}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
+          onPointerCancel={cancelDrag}
+          onLostPointerCapture={cancelDrag}
           onClick={(e) => {
             e.stopPropagation();
             onSelect(placement.stripId);
@@ -340,6 +374,8 @@ export const UsbStripObject = memo(function UsbStripObject({
         onPointerDown={(e) => handlePointerDown(e, "start")}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+          onPointerCancel={cancelDrag}
+          onLostPointerCapture={cancelDrag}
       />
 
       {/* End handle */}
@@ -360,6 +396,8 @@ export const UsbStripObject = memo(function UsbStripObject({
         onPointerDown={(e) => handlePointerDown(e, "end")}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+          onPointerCancel={cancelDrag}
+          onLostPointerCapture={cancelDrag}
       />
 
       {/* LED count input shown when selected */}

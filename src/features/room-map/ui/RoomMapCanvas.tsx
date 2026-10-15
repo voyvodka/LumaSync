@@ -6,6 +6,8 @@ import { type RoomMapConfig, type ImageLayer, resolveRoomFootprint } from "@/sha
 import { clamp } from "@/shared/lib/math";
 import { prefersReducedMotion } from "@/shared/lib/motion";
 import { imageLayerObjectId } from "../model/objectId";
+import { CLICK_SLOP_PX } from "../model/snapGeometry";
+import { pastSlop } from "./objects/dragIntent";
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "../state/useRoomMapViewport";
 import { readRoomMapImage } from "../roomMapFilesApi";
 
@@ -87,6 +89,9 @@ const ImageLayerView = memo(function ImageLayerView({
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
 
+  // Latched once a press leaves its spot, so coming back near it still follows the pointer.
+  const movedRef = useRef(false);
+
   // --- Drag handlers ---
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (panMode) return;
@@ -95,10 +100,13 @@ const ImageLayerView = memo(function ImageLayerView({
     if (!canDrag) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     dragRef.current = { active: true, startX: e.clientX, startY: e.clientY, ox: localOx, oy: localOy };
+    movedRef.current = false;
   }, [localOx, localOy, canDrag, panMode, onSelect, layer.id]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (!dragRef.current.active) return;
+    if (!movedRef.current && !pastSlop(dragRef.current.startX, dragRef.current.startY, e.clientX, e.clientY)) return;
+    movedRef.current = true;
     const dx = (e.clientX - dragRef.current.startX) / zoomRef.current;
     const dy = (e.clientY - dragRef.current.startY) / zoomRef.current;
     setLocalOx(dragRef.current.ox + dx);
@@ -108,6 +116,8 @@ const ImageLayerView = memo(function ImageLayerView({
   const handlePointerUp = useCallback(() => {
     if (!dragRef.current.active) return;
     dragRef.current.active = false;
+    // A click selects; only a move is a step to undo.
+    if (localOx === dragRef.current.ox && localOy === dragRef.current.oy) return;
     onTransformChange?.(layer.id, localOx, localOy, layer.scale, localSx, localSy);
   }, [layer.id, layer.scale, localOx, localOy, localSx, localSy, onTransformChange]);
 
@@ -121,11 +131,14 @@ const ImageLayerView = memo(function ImageLayerView({
       initSx: localSx, initSy: localSy, initOx: localOx, initOy: localOy,
       imgW: naturalSize?.w ?? 100, imgH: naturalSize?.h ?? 100,
     };
+    movedRef.current = false;
   }, [panMode, canDrag, localSx, localSy, localOx, localOy, naturalSize]);
 
   const handleResizePointerMove = useCallback((e: React.PointerEvent) => {
     const r = resizeRef.current;
     if (!r.active) return;
+    if (!movedRef.current && !pastSlop(r.startX, r.startY, e.clientX, e.clientY)) return;
+    movedRef.current = true;
     const dx = (e.clientX - r.startX) / zoomRef.current;
     const dy = (e.clientY - r.startY) / zoomRef.current;
 
@@ -438,7 +451,7 @@ export function RoomMapCanvas({
         if (!rect) return;
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
-        if (Math.hypot(x - m.x, y - m.y) < 4 && marquee === null) return;
+        if (Math.hypot(x - m.x, y - m.y) < CLICK_SLOP_PX && marquee === null) return;
         setMarquee({ left: Math.min(m.x, x), top: Math.min(m.y, y), width: Math.abs(x - m.x), height: Math.abs(y - m.y) });
         return;
       }
@@ -605,6 +618,7 @@ export function RoomMapCanvas({
       <div
         ref={objectLayerRef}
         data-testid="room-map-object-layer"
+        data-room-map-object-layer=""
         className="relative z-10 w-full h-full"
         style={{
           transform: layerTransform(panOffset.x, panOffset.y, zoom),

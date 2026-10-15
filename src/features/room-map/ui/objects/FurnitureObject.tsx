@@ -7,7 +7,7 @@ import styles from "./FurnitureObject.module.css";
 import { type FrameHandle, handleSigns, SelectionFrame } from "./SelectionFrame";
 import { furnitureObjectId } from "../../model/objectId";
 import { clampInsideRoom, resizeFromHandle, snapToStep } from "../../model/pieceGeometry";
-import { isClick } from "../../model/snapGeometry";
+import { markDragging, stillAClick, useEscapeCancels } from "./dragIntent";
 import type { SnapResult } from "../../state/useSnapGuides";
 
 const MIN_SIZE_PX = 24;
@@ -93,6 +93,12 @@ export const FurnitureObject = memo(function FurnitureObject({
   const gridStepM = gridStepPx / pxPerMeter;
   const room = { width: roomWidth, depth: roomDepth };
 
+  const pieceRef = useRef<HTMLDivElement | null>(null);
+  useEscapeCancels(
+    () => dragRef.current.active,
+    () => finishDrag(null),
+  );
+
   /** Where a drag puts the piece: inside the room, on the guide it meets, else on the grid (⌥ free). */
   const dragTarget = (clientX: number, clientY: number, free: boolean) => {
     const ppm = pxPerMeter * zoom;
@@ -121,11 +127,13 @@ export const FurnitureObject = memo(function FurnitureObject({
     if (placement.locked || e.shiftKey) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     dragRef.current = { active: true, startClientX: e.clientX, startClientY: e.clientY, startX: local.x, startY: local.y };
+    pieceRef.current = e.currentTarget;
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragRef.current.active) return;
-    if (isClick(dragRef.current.startClientX, dragRef.current.startClientY, e.clientX, e.clientY)) return;
+    if (stillAClick(pieceRef.current, dragRef.current.startClientX, dragRef.current.startClientY, e.clientX, e.clientY)) return;
+    markDragging(pieceRef.current, true);
     const next = dragTarget(e.clientX, e.clientY, e.altKey);
     setLocal((current) => ({ ...current, x: next.x, y: next.y }));
     onGroupDragMove?.(next.x - dragRef.current.startX, next.y - dragRef.current.startY);
@@ -134,8 +142,10 @@ export const FurnitureObject = memo(function FurnitureObject({
   const finishDrag = (commit: { clientX: number; clientY: number; free: boolean } | null) => {
     if (!dragRef.current.active) return;
     dragRef.current.active = false;
+    const carried = !!pieceRef.current?.hasAttribute("data-dragging");
+    markDragging(pieceRef.current, false);
     const d = dragRef.current;
-    if (commit === null || isClick(d.startClientX, d.startClientY, commit.clientX, commit.clientY)) {
+    if (commit === null || !carried) {
       onSnapDragEnd?.();
       setLocal((current) => ({ ...current, x: placement.x, y: placement.y }));
       onGroupDragEnd?.(0, 0);

@@ -1,5 +1,7 @@
 import { useRef } from "react";
 
+import { pastSlop } from "./dragIntent";
+
 type Corner = "nw" | "ne" | "sw" | "se";
 
 interface ResizeHandleProps {
@@ -17,17 +19,19 @@ const CORNER_CLASSES: Record<Corner, string> = {
 };
 
 export function ResizeHandle({ corner, onDragStart, onDragMove, onDragEnd }: ResizeHandleProps) {
-  const startRef = useRef<{ x: number; y: number } | null>(null);
+  const startRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
-    startRef.current = { x: e.clientX, y: e.clientY };
+    startRef.current = { x: e.clientX, y: e.clientY, moved: false };
     onDragStart(e);
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!startRef.current) return;
+    if (!startRef.current.moved && !pastSlop(startRef.current.x, startRef.current.y, e.clientX, e.clientY)) return;
+    startRef.current.moved = true;
     const dx = e.clientX - startRef.current.x;
     const dy = e.clientY - startRef.current.y;
     onDragMove(dx, dy);
@@ -35,8 +39,10 @@ export function ResizeHandle({ corner, onDragStart, onDragMove, onDragEnd }: Res
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     e.currentTarget.releasePointerCapture(e.pointerId);
+    const moved = startRef.current?.moved ?? false;
     startRef.current = null;
-    onDragEnd();
+    // A press that never left the handle resizes nothing.
+    if (moved) onDragEnd();
   };
 
   return (

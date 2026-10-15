@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { cx } from "@/shared/lib/cx";
 
 import styles from "./SelectionFrame.module.css";
+import { pastSlop } from "./dragIntent";
 import { useSelectionLayer } from "./selectionLayer";
 
 /** A side or corner of the frame: which way its handle grows the piece, in the piece's own axes. */
@@ -82,20 +83,23 @@ export function SelectionFrame({
   const { t } = useTranslation();
   const layer = useSelectionLayer();
   const frameRef = useRef<HTMLDivElement | null>(null);
-  const press = useRef<{ kind: "resize" | "rotate"; handle?: FrameHandle; x: number; y: number } | null>(null);
+  const press = useRef<{ kind: "resize" | "rotate"; handle?: FrameHandle; x: number; y: number; moved: boolean } | null>(null);
   if (!layer) return null;
 
   const begin = (event: ReactPointerEvent<HTMLElement>, kind: "resize" | "rotate", handle?: FrameHandle) => {
     if (event.button !== 0) return;
     event.stopPropagation();
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    press.current = { kind, handle, x: event.clientX, y: event.clientY };
+    press.current = { kind, handle, x: event.clientX, y: event.clientY, moved: false };
     if (kind === "resize" && handle) onResizeStart(handle);
     else onRotateStart();
   };
   const move = (event: ReactPointerEvent<HTMLElement>) => {
     const p = press.current;
     if (!p) return;
+    // A press on a handle that never left it changes nothing: the knob snapped a 7° piece to 0°.
+    if (!p.moved && !pastSlop(p.x, p.y, event.clientX, event.clientY)) return;
+    p.moved = true;
     if (p.kind === "resize" && p.handle) {
       onResizeMove(p.handle, event.clientX - p.x, event.clientY - p.y, event.shiftKey);
       return;
@@ -108,6 +112,7 @@ export function SelectionFrame({
     const p = press.current;
     if (!p) return;
     press.current = null;
+    if (!p.moved) return;
     if (p.kind === "resize") onResizeEnd();
     else onRotateEnd();
   };

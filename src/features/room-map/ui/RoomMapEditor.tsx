@@ -187,6 +187,8 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
   const { handleAddImage, imageError, imageErrorCode } = useRoomMapImageLayers({ apply, select });
 
   const { widthMeters, depthMeters } = config.dimensions;
+  // One object per size, so the memoised TV and strips do not redraw on every editor render.
+  const roomBox = useMemo(() => ({ width: widthMeters, depth: depthMeters }), [widthMeters, depthMeters]);
 
   const pxPerMeter = ROOM_MAP_PX_PER_METER;
   const gridStepM = widthMeters < 4 ? 0.5 : 1.0;
@@ -371,7 +373,10 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
   );
   const handleUsbStripSelect = useCallback((id: string) => pick(usbStripObjectId(id), shiftHeld.current), [pick]);
   const handleTvSelect = useCallback(() => pick(TV_ANCHOR_OBJECT_ID, shiftHeld.current), [pick]);
-  const handleTvChange = useCallback((updated: TvAnchorPlacement) => apply({ tvAnchor: updated }), [apply]);
+  const handleTvChange = useCallback(
+    (updated: TvAnchorPlacement) => apply({ tvAnchor: keepPlacedInside(updated, roomBoxOf(config)) }),
+    [apply, config],
+  );
   const handleHueChannelSelect = useCallback(
     (channelIndex: number) => pick(hueChannelObjectId(channelIndex), shiftHeld.current),
     [pick],
@@ -695,6 +700,7 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
               zoom={zoom}
               panMode={spaceHeld}
               connectionStatus={stripStatus(strip).status}
+              room={roomBox}
               onSelect={handleUsbStripSelect}
               onChange={handleUsbStripChange}
             />
@@ -741,6 +747,7 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
               snapEnabled={showGrid}
               zoom={zoom}
               panMode={spaceHeld}
+              room={roomBox}
               onSelect={handleTvSelect}
               onChange={handleTvChange}
               onSnapDragMove={snapDragMove}

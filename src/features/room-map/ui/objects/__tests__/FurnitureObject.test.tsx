@@ -106,6 +106,23 @@ describe("FurnitureObject", () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ x: 4 }));
   });
 
+  it("lifts while carried, and Esc puts it back with nothing written", () => {
+    const onChange = vi.fn<(updated: FurniturePlacement) => void>();
+    const { container } = render(<FurnitureObject {...BASE_PROPS} onChange={onChange} />);
+    const piece = container.querySelector("[data-furniture-id]") as HTMLElement;
+    fireEvent.pointerDown(piece, { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(piece, { clientX: 104, clientY: 100, pointerId: 1 });
+    // Inside the slop it is still a click: nothing lifts.
+    expect(piece.hasAttribute("data-dragging")).toBe(false);
+    fireEvent.pointerMove(piece, { clientX: 180, clientY: 100, pointerId: 1 });
+    expect(piece.hasAttribute("data-dragging")).toBe(true);
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.pointerUp(piece, { clientX: 180, clientY: 100, pointerId: 1 });
+    expect(piece.hasAttribute("data-dragging")).toBe(false);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(piece.style.left).toBe(`${BASE_PLACEMENT.x * PX_PER_METER}px`);
+  });
+
   it("holds the grid on the axis a guide did not catch", () => {
     const onChange = vi.fn<(updated: FurniturePlacement) => void>();
     const onSnapDragMove = vi.fn(() => ({ snapX: 2.2, snapY: null, guides: [] }));

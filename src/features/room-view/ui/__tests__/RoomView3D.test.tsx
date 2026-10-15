@@ -162,10 +162,11 @@ describe("RoomView3D", () => {
       expect(onPick).toHaveBeenCalledTimes(1);
     });
 
-    it("is not a drag of 3 px or more, which turns the room", () => {
+    // The plan's slop: a trackpad click wobbles a few pixels and is still a click.
+    it("is not a drag past 6 px, which turns the room", () => {
       const { onPick, canvas } = open();
       press(canvas, "pointerdown", 10);
-      press(canvas, "pointerup", 14);
+      press(canvas, "pointerup", 17);
       expect(onPick).not.toHaveBeenCalled();
     });
 

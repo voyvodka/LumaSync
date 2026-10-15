@@ -2,7 +2,8 @@ import { memo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TvAnchorPlacement } from "@/shared/contracts/roomMap";
 import { ResizeHandle } from "./ResizeHandle";
-import { isClick } from "../../model/snapGeometry";
+import { clampInsideRoom, type RoomBox } from "../../model/pieceGeometry";
+import { markDragging, stillAClick, useEscapeCancels } from "./dragIntent";
 import type { SnapResult } from "../../state/useSnapGuides";
 
 const MIN_SIZE_PX = 24;
@@ -15,6 +16,8 @@ interface TvAnchorObjectProps {
   snapEnabled: boolean;
   zoom?: number;
   panMode?: boolean;
+  /** The room's box: a drag stops at its walls. */
+  room?: RoomBox;
   onSelect: () => void;
   onChange: (updated: TvAnchorPlacement) => void;
   onSnapDragMove?: (id: string, x: number, y: number, w: number, h: number) => SnapResult;
@@ -37,6 +40,7 @@ export const TvAnchorObject = memo(function TvAnchorObject({
   onSnapDragEnd,
   zoom = 1,
   panMode = false,
+  room,
   grouped = false,
   onGroupDragMove,
   onGroupDragEnd,
@@ -88,20 +92,29 @@ export const TvAnchorObject = memo(function TvAnchorObject({
       startX: localX,
       startY: localY,
     };
+    tvRef.current = e.currentTarget;
+  };
+  const tvRef = useRef<HTMLDivElement | null>(null);
+  const inRoom = (x: number, y: number) => {
+    if (!room) return { x, y };
+    const box = clampInsideRoom({ x, y, w: localW, h: localH, r: 0 }, room);
+    return { x: box.x, y: box.y };
   };
 
   const snapResultRef = useRef<SnapResult | null>(null);
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragRef.current.active) return;
+    if (stillAClick(tvRef.current, dragRef.current.startClientX, dragRef.current.startClientY, e.clientX, e.clientY)) return;
+    markDragging(tvRef.current, true);
     const effectivePpm = pxPerMeter * zoom;
-    const dx = (e.clientX - dragRef.current.startClientX) / effectivePpm;
-    const dy = (e.clientY - dragRef.current.startClientY) / effectivePpm;
-    const newX = dragRef.current.startX + dx;
-    const newY = dragRef.current.startY + dy;
+    const { x: newX, y: newY } = inRoom(
+      dragRef.current.startX + (e.clientX - dragRef.current.startClientX) / effectivePpm,
+      dragRef.current.startY + (e.clientY - dragRef.current.startClientY) / effectivePpm,
+    );
     setLocalX(newX);
     setLocalY(newY);
-    onGroupDragMove?.(dx, dy);
+    onGroupDragMove?.(newX - dragRef.current.startX, newY - dragRef.current.startY);
     if (onSnapDragMove) {
       snapResultRef.current = onSnapDragMove("tv", newX, newY, localW, localH);
     }
@@ -115,18 +128,23 @@ export const TvAnchorObject = memo(function TvAnchorObject({
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragRef.current.active) return;
     dragRef.current.active = false;
-    if (isClick(dragRef.current.startClientX, dragRef.current.startClientY, e.clientX, e.clientY)) {
+    const carried = !!tvRef.current?.hasAttribute("data-dragging");
+    markDragging(tvRef.current, false);
+    if (!carried) {
       snapResultRef.current = null;
       onSnapDragEnd?.();
       setLocalX(placement.x);
       setLocalY(placement.y);
+      onGroupDragEnd?.(0, 0);
       return;
     }
     const effectivePpm = pxPerMeter * zoom;
-    const dx = (e.clientX - dragRef.current.startClientX) / effectivePpm;
-    const dy = (e.clientY - dragRef.current.startClientY) / effectivePpm;
-    let newX = dragRef.current.startX + dx;
-    let newY = dragRef.current.startY + dy;
+    const unsnapped = inRoom(
+      dragRef.current.startX + (e.clientX - dragRef.current.startClientX) / effectivePpm,
+      dragRef.current.startY + (e.clientY - dragRef.current.startClientY) / effectivePpm,
+    );
+    let newX = unsnapped.x;
+    let newY = unsnapped.y;
     const snap = snapResultRef.current;
     snapResultRef.current = null;
     // Per axis: a guide wins where it caught, the grid holds the other.
@@ -149,11 +167,14 @@ export const TvAnchorObject = memo(function TvAnchorObject({
   const cancelDrag = () => {
     if (!dragRef.current.active) return;
     dragRef.current.active = false;
+    markDragging(tvRef.current, false);
     snapResultRef.current = null;
     onSnapDragEnd?.();
     setLocalX(placement.x);
     setLocalY(placement.y);
+    onGroupDragEnd?.(0, 0);
   };
+  useEscapeCancels(() => dragRef.current.active, cancelDrag);
 
   // Resize handlers
   const handleResizeDragStart = (_e: React.PointerEvent) => {
