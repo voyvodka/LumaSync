@@ -104,7 +104,14 @@ output (`for_plan`: a stop, a test calling the transition directly) gets that ou
 runtime owner keeps what each run actually started (`active_strips`, `active_ports`), not what it
 asked for: a strip beside the mode's that would not open or take its first frame is left out with a
 warning and the run goes on, while the mode's own strip failing still fails the run. A retune keeps
-the worker only when the next apply would ask for the same strips beside it, in the same order.
+the worker only when the next apply would ask for the same strips beside it, in the same order. A strip
+that was asked for but dropped at start therefore stays out through a plain refresh — a reconnect of
+the same port included — until the strip or the mode changes; toggling the mode brings it back. A run
+on the mode's strip alone by its kind (an effect, a test pattern, a scene, a latency run) paints the
+strips beside it black but keeps their sessions, so the Ambilight it hands back to finds them warm
+instead of reopening each port and resetting its board; a Solid lets them go. Known gap, older than
+the fan-out: a switch from a serial strip to a WLED device or to Hue alone keeps the old serial
+sessions held.
 
 **One registry holds what is connected: `LocalOutputRegistry` (`local_outputs.rs`).** It keeps a
 status per serial port that passed admission (connected, failed, lost, let go of) and the bound WLED

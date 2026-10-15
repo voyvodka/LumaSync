@@ -138,27 +138,32 @@ pub(super) fn set_active_ports(
         if new_ports.contains(&old_port) {
             continue;
         }
-        let plan = UsbOutputPlan::Serial(old_port.clone());
-        let output = match outgoing.strips.iter().find(|strip| strip.plan == plan) {
-            Some(strip) => Some(SolidUsbOutput::for_strip(&owner.output_bridge, strip)),
-            None => (outgoing.plan.as_ref() == Some(&plan)).then(|| {
-                SolidUsbOutput::for_mode(&owner.output_bridge, plan.clone(), &outgoing.mode)
-            }),
-        };
-        if let Some(output) = output {
-            let started = std::time::Instant::now();
-            match output.blank() {
-                Ok(()) => info!(
-                    "[set_active_ports] {old_port} blanked on release in {}ms led_count={}",
-                    started.elapsed().as_millis(),
-                    output.led_count
-                ),
-                Err(reason) => warn!("[set_active_ports] {old_port} kept its last frame: {reason}"),
-            }
-        }
+        blank_if_lit(owner, &old_port, outgoing, "release");
         owner.output_bridge.disconnect_session(&old_port);
     }
     owner.active_ports = new_ports;
+}
+
+/// Paints `port` black through its cached session when the outgoing run lit it, from that strip's
+/// own record, or the outgoing mode's for a run recorded without one.
+fn blank_if_lit(owner: &LightingRuntimeOwner, port: &str, outgoing: &Outgoing, why: &str) {
+    let plan = UsbOutputPlan::Serial(port.to_string());
+    let output = match outgoing.strips.iter().find(|strip| strip.plan == plan) {
+        Some(strip) => Some(SolidUsbOutput::for_strip(&owner.output_bridge, strip)),
+        None => (outgoing.plan.as_ref() == Some(&plan))
+            .then(|| SolidUsbOutput::for_mode(&owner.output_bridge, plan.clone(), &outgoing.mode)),
+    };
+    if let Some(output) = output {
+        let started = std::time::Instant::now();
+        match output.blank() {
+            Ok(()) => info!(
+                "[set_active_ports] {port} blanked on {why} in {}ms led_count={}",
+                started.elapsed().as_millis(),
+                output.led_count
+            ),
+            Err(reason) => warn!("[set_active_ports] {port} kept its last frame: {reason}"),
+        }
+    }
 }
 
 /// A worker kind's start, as a literal per kind so the contract verifier finds each code.
@@ -492,9 +497,10 @@ fn apply_mode_change_inner(
         strips: std::mem::take(&mut owner.active_strips),
     };
     owner.requested_extras.clear();
-    // Kept past the stop for the Off that may follow, which paints each of them black; an apply
-    // after a run that drove nothing leaves the last record standing.
-    if !outgoing.strips.is_empty() {
+    // Kept past the stop for the Off that may follow, which paints each of them black. Every run
+    // leaves its own record, an empty one when it drove no strip, so an Off never blanks — and
+    // reopens — ports an earlier run held; an Off after an Off keeps the one before.
+    if outgoing.mode.kind != LightingModeKind::Off {
         owner.ended_run = outgoing.strips.clone();
     }
     stop_previous(owner, &mut trace);
@@ -840,6 +846,26 @@ fn apply_mode_change_inner(
                             UsbOutputPlan::Serial(port) => Some(port.clone()),
                             UsbOutputPlan::Wled(_) => None,
                         }));
+                        // A run on the mode's strip alone by its kind — an effect, a test pattern,
+                        // a scene, a latency run — paints the strips beside it black but keeps
+                        // their sessions: the Ambilight it hands back to finds them warm, instead
+                        // of a reopen that resets each board and waits out its settle.
+                        let alone_by_kind = owner.active_mode.kind == LightingModeKind::Effect
+                            || owner.preview.active_test_pattern.is_some()
+                            || owner.preview.scene_worker
+                            || owner.preview.latency_worker;
+                        if alone_by_kind {
+                            let kept: Vec<String> = owner
+                                .active_ports
+                                .iter()
+                                .filter(|held| !ports.contains(held))
+                                .cloned()
+                                .collect();
+                            for held in &kept {
+                                blank_if_lit(owner, held, &outgoing, "hand-over");
+                            }
+                            ports.extend(kept);
+                        }
                         set_active_ports(owner, ports, &outgoing);
                     }
                     let mut active_strips: Vec<ActiveStrip> = usb_plan_for_worker

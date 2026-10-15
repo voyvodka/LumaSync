@@ -172,6 +172,8 @@ struct StripOutput {
     sink: ActiveUsbSink,
     /// Its own colour order, or `None` to follow the live one.
     color_order: Option<LedColorOrder>,
+    /// A serial link's top frame rate and whether it holds the effect back; `None` for WLED.
+    link: Option<(f32, bool)>,
     gate: AmbilightWorkerQualityState,
     /// This output step's send time, for its gate's cost on a new frame.
     send_ms: f32,
@@ -248,8 +250,6 @@ pub(super) fn start_ambilight_worker(
     let mut stages = Vec::with_capacity(strips.len());
     let mut initial_sampled = Vec::with_capacity(strips.len());
     let mut outputs: Vec<StripOutput> = Vec::new();
-    // The link the slowest strip leaves: what the telemetry reports for the run.
-    let mut worst_budget: Option<(f32, bool)> = None;
     for (stage, spec) in strips.iter().enumerate() {
         // Per-LED calibration: build the strip sequence once at worker start. Each iteration calls
         // sample_frame_for_sequence to produce per-LED colours from edge regions of the captured frame.
@@ -288,15 +288,7 @@ pub(super) fn start_ambilight_worker(
         // Deliberately gated on `serial_budget`, not on the plan -- a WLED-only
         // session must report `link_max_fps: 0.0` / unconstrained, the same as
         // a Hue-only session (see contract note on `RuntimeTelemetrySnapshot`).
-        if let Some(budget) = serial_budget {
-            worst_budget = Some(match worst_budget {
-                None => (budget.link_max_fps, budget.is_link_constrained()),
-                Some((fps, constrained)) => (
-                    fps.min(budget.link_max_fps),
-                    constrained || budget.is_link_constrained(),
-                ),
-            });
-        }
+
         // Built once at worker start; brightness and colour order are synced each
         // output step via `set_brightness` / `set_color_order` before `send_frame`.
         let mut sink = match plan {
@@ -323,14 +315,12 @@ pub(super) fn start_ambilight_worker(
             stage,
             sink,
             color_order: spec.color_order,
+            link: serial_budget.map(|budget| (budget.link_max_fps, budget.is_link_constrained())),
             gate: AmbilightWorkerQualityState::new(quality_config),
             send_ms: 0.0,
             send_count: 0,
             fail_count: 0,
         });
-    }
-    if let Some((fps, constrained)) = worst_budget {
-        telemetry_window.set_link_budget(fps, constrained);
     }
     telemetry_window.record_capture();
     // With no strip output, a Hue-only gate keeps the capture cost for the latency report.
@@ -371,6 +361,14 @@ pub(super) fn start_ambilight_worker(
     }
     // The strips whose outputs run, by their place in `strips`.
     let started: Vec<usize> = outputs.iter().map(|output| output.stage).collect();
+    // The link the slowest strip that runs leaves: what the telemetry reports for the run.
+    let worst_link = outputs
+        .iter()
+        .filter_map(|output| output.link)
+        .reduce(|(fps, constrained), (other, tight)| (fps.min(other), constrained || tight));
+    if let Some((fps, constrained)) = worst_link {
+        telemetry_window.set_link_budget(fps, constrained);
+    }
     if warmed {
         telemetry_window.record_send();
     }

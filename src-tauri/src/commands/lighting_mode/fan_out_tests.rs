@@ -404,3 +404,64 @@ fn the_runtime_drives_and_holds_the_strip_beside_the_mode_s() {
     assert!(owner.active_ports.contains(&"COM-B".to_string()));
     stop(&mut owner);
 }
+
+fn red_test_pattern() -> crate::commands::test_pattern::TestPatternConfig {
+    crate::commands::test_pattern::TestPatternConfig {
+        kind: crate::commands::test_pattern::TestPatternKind::Solid { r: 255, g: 0, b: 0 },
+        brightness: 1.0,
+        speed: Default::default(),
+        display_aspect: 1.78,
+    }
+}
+
+#[test]
+fn an_off_after_a_run_that_drove_nothing_blanks_no_earlier_strip() {
+    let _guard = WORKER_TEST_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+    let (mut owner, _recorder, _) = two_strips();
+    assert_eq!(apply(&mut owner, ambilight(30)), "AMBILIGHT_MODE_STARTED");
+    // A preview-only test with no device drives no strip.
+    owner.preview.pending_test_pattern = Some(red_test_pattern());
+    let mut preview_only = ambilight(30);
+    preview_only.targets = Some(Vec::new());
+    let code = apply_mode_change(
+        &mut owner,
+        preview_only,
+        false,
+        None,
+        None,
+        None,
+        Some(SharedRuntimeTelemetry::default()),
+        None,
+        None,
+    )
+    .status
+    .code;
+    assert_eq!(code, "AMBILIGHT_MODE_STARTED");
+    assert_eq!(
+        apply(&mut owner, LightingModeConfig::default()),
+        "LIGHTING_MODE_STOPPED"
+    );
+    assert!(
+        owner.ended_run.is_empty(),
+        "the Off must not paint the ports the run before held"
+    );
+}
+
+#[test]
+fn a_test_pattern_on_the_mode_s_strip_keeps_the_strip_beside_it_warm() {
+    let _guard = WORKER_TEST_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+    let (mut owner, recorder, _) = two_strips();
+    assert_eq!(apply(&mut owner, ambilight(30)), "AMBILIGHT_MODE_STARTED");
+    thread::sleep(Duration::from_millis(40));
+    owner.preview.pending_test_pattern = Some(red_test_pattern());
+    assert_eq!(apply(&mut owner, ambilight(30)), "AMBILIGHT_MODE_STARTED");
+    // B was painted black and its session kept, so the Ambilight after finds it without a reopen.
+    let last_b = recorder.to("COM-B").pop().expect("B written");
+    assert!(last_b[5..last_b.len() - 1].iter().all(|&byte| byte == 0));
+    assert!(recorder.disconnected.lock().unwrap().is_empty());
+    assert_eq!(
+        owner.active_ports,
+        vec!["COM-A".to_string(), "COM-B".to_string()]
+    );
+    stop(&mut owner);
+}
