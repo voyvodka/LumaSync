@@ -599,6 +599,8 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- An icon-only button draws its icon in the middle of its hover plate: the 3D view's light card
+  (Back to the lights, Blink) and Lights' Add output drew it against the left edge.
 - In the 3D room a monitor stands on its desk at the desk's real height, on its stand near the back,
   instead of sinking a wide screen into the top or floating a small one on a long pole. The
   Showroom template gives each piece its own id, so the dining chair and table no longer select
