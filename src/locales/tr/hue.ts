@@ -55,6 +55,7 @@ const hue: Catalogue<typeof enHue> = {
   },
   areas: {
     selectLabel: "Eğlence alanı seç",
+    hint: "Eğlence alanı, Hue uygulamasında Ayarlar → Eğlence alanları altında oluşturulan bir Hue ışık grubudur. LumaSync burada seçileni yakar.",
     empty: "Eğlence alanı bulunamadı. Önce Hue uygulamasından bir tane oluştur.",
     channels: "{{count}} kanal",
     activeStreamer: "Aktif",
@@ -97,7 +98,7 @@ const hue: Catalogue<typeof enHue> = {
     sync: {
       inSyncShort: "Hue Bridge'de de aynı",
       localAheadShort: "Hue Bridge'de farklı",
-      unknownShort: "Hue Bridge henüz okunmadı",
+      unknownShort: "Hue Bridge ile karşılaştırılmadı",
       localAhead: "Işıkların bu düzene göre yanıyor. Hue Bridge'de başka bir düzen kayıtlı; Hue uygulamasında da aynısını görmek istersen Hue Bridge'e kaydet.",
       heldByZone: "Bazı kanallar oda haritasında bölgelerinin dışına düşüyor, bu yüzden bölgenin kenarında duruyor. Hue Bridge'deki düzenle tek farkı bu.",
     },
@@ -105,7 +106,7 @@ const hue: Catalogue<typeof enHue> = {
       emptyHeading: "Kanal yok",
       emptyBody: "Bu eğlence alanında kanal yok. Hue uygulamasından ışık ekle.",
       unreachableHeading: "Hue Bridge yanıt vermedi",
-      unreachableBody: "Hue Bridge'e ulaşılamadı, kanal listesi bilinmiyor.",
+      unreachableBody: "Hue Bridge'e ulaşılamadı. Açık ve bu bilgisayarla aynı ağda olduğunu kontrol et.",
       staleBody: "Son bilinen kanallar gösteriliyor — Hue Bridge şu an yanıt vermiyor.",
       failedHeading: "Kanallar okunamadı",
       failedBody: "Hue Bridge beklenmeyen bir yanıt verdi. Alanı doğrulayıp tekrar dene.",

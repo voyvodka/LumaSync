@@ -168,11 +168,21 @@ interface WledAddressRowProps {
   blocked?: boolean;
   /** Told when this row's add starts and ends, so the page can hold the others. */
   onBusyChange?: (busy: boolean) => void;
+  /** The device already bound: its address opens its strip instead of binding it a second time. */
+  boundIp?: string | null;
   deps?: WledConnectDeps;
 }
 
 /** A WLED device by the address WLED shows: Add asks it what it is and binds it. */
-export function WledAddressRow({ onBound, onAdded, primary, blocked = false, onBusyChange, deps }: WledAddressRowProps) {
+export function WledAddressRow({
+  onBound,
+  onAdded,
+  primary,
+  blocked = false,
+  onBusyChange,
+  boundIp = null,
+  deps,
+}: WledAddressRowProps) {
   const { t } = useTranslation();
   const errorId = useId();
   const [address, setAddress] = useState("");
@@ -196,6 +206,11 @@ export function WledAddressRow({ onBound, onAdded, primary, blocked = false, onB
       return;
     }
     const ip = address.trim();
+    if (ip === boundIp) {
+      setFailure(null);
+      onAdded({ kind: "wled", ip });
+      return;
+    }
     const status = await wled.connect(ip, onBound);
     if (status.code === WLED_STATUS.CONNECT_OK) {
       setFailure(null);

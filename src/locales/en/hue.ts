@@ -52,6 +52,7 @@ export default {
   },
   areas: {
     selectLabel: "Select entertainment area",
+    hint: "An entertainment area is a group of Hue lights made in the Hue app, under Settings → Entertainment areas. LumaSync lights the one chosen here.",
     empty: "No entertainment areas found. Create one in the Hue app first.",
     channels: "{{count}} channels",
     activeStreamer: "Active",
@@ -94,7 +95,7 @@ export default {
     sync: {
       inSyncShort: "Same on the bridge",
       localAheadShort: "Different on the bridge",
-      unknownShort: "Bridge not read yet",
+      unknownShort: "Not compared with the bridge",
       localAhead: "Your lights follow this arrangement. The bridge holds a different one; save yours to the bridge if the Hue app should show the same.",
       heldByZone: "Some channels sit outside their zone on the room map, so they stay at its edge. That is the whole difference from the bridge.",
     },
@@ -102,7 +103,7 @@ export default {
       emptyHeading: "No channels",
       emptyBody: "This entertainment area has no channels. Add lights to it in the Hue app.",
       unreachableHeading: "Bridge did not answer",
-      unreachableBody: "The bridge could not be reached, so its channel list is unknown.",
+      unreachableBody: "The bridge could not be reached. Check that it is powered and on the same network as this computer.",
       staleBody: "Showing the last known channels — the bridge is not answering right now.",
       failedHeading: "Channels could not be read",
       failedBody: "The bridge answered with something unexpected. Validate the area and try again.",

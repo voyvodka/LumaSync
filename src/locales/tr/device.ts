@@ -43,7 +43,7 @@ const device: Catalogue<typeof enDevice> = {
       connecting: "Bağlanıyor…",
       connected: "Bağlı",
       unlit: "Yanmıyor",
-      reconnecting: "Yeniden bağlanıyor…",
+      reconnecting: "Çıkarıldı",
       disconnected: "Bağlı değil",
       busy: "Meşgul",
       replug: "Kabloyu çıkarıp tak",
@@ -131,6 +131,7 @@ const device: Catalogue<typeof enDevice> = {
       addNamed: "{{name}} ekle",
       network: "Ağda",
       searching: "Aranıyor…",
+      noneFound: "Henüz bulunamadı — adresini aşağıya yaz",
       foundWled_one: "{{ip}} · 1 LED",
       foundWled_other: "{{ip}} · {{count}} LED",
       replaces: "{{name}} düzeni ve ayarlarıyla buraya geçer: şimdilik bir seferde tek şerit sürülür.",
@@ -255,7 +256,7 @@ const device: Catalogue<typeof enDevice> = {
     },
     wled: {
       manualIp: "WLED IP",
-      manualIpPlaceholder: "192.168.1.42",
+      manualIpPlaceholder: "örn. 192.168.1.50",
       invalidIp: "192.168.1.42 gibi bir IPv4 adresi gir.",
       ipRequired: "Cihazı bulmak için WLED cihazının IP adresini gir.",
       forgetConfirm: {
@@ -268,9 +269,9 @@ const device: Catalogue<typeof enDevice> = {
       },
       status: {
         discoveryOk: "Tarama tamamlandı.",
-        discoveryTimeout: "Tarama süresi içinde hiçbir cihaz yanıt vermedi.",
-        discoveryUnreachable: "WLED cihazına ağ üzerinden ulaşılamadı.",
-        bridgeUnreachable: "WLED cihazına erişilemiyor.",
+        discoveryTimeout: "Bu adreste yanıt veren olmadı. Cihazın açık ve aynı ağda olduğunu kontrol et.",
+        discoveryUnreachable: "Bu adrese ulaşılamadı. Cihazın açık ve bu bilgisayarla aynı ağda olduğunu kontrol et.",
+        bridgeUnreachable: "WLED cihazına erişilemiyor. Açık ve bu ağda olduğunu kontrol et.",
         protocolMismatch: "Bu adres yanıt verdi ama bir WLED cihazı gibi değil. IP'nin WLED denetleyicine ait olduğunu kontrol et.",
         ledCountMismatch: "Cihaz farklı bir LED sayısı bildiriyor.",
         invalidIp: "Bu adres kullanılamaz: loopback, multicast ya da broadcast değil, cihazın kendi IPv4 adresini gir.",

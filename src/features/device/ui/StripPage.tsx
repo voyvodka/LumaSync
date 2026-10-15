@@ -5,6 +5,7 @@ import {
   DEFAULT_LED_COLOR_ORDER,
   FIRMWARE_PROFILE,
   LED_CHIP_TYPE,
+  DEVICE_ERROR_CODES,
   SERIAL_CONNECT_STATUS,
   SERIAL_DISCONNECT_STATUS,
   SERIAL_OUTPUT_STATUS,
@@ -193,11 +194,12 @@ export function StripPage({
     ) : null;
 
   // Why it is not lighting: the user's own failed connect first, else what Rust recorded for the port.
-  // A port let go of (DISCONNECTED) is not a failure.
+  // A port let go of (DISCONNECTED) is not a failure, nor one unplugged: the state word says that.
   const entryFailed =
     entry !== null &&
     !entry.connected &&
     entry.status.code !== SERIAL_OUTPUT_STATUS.DISCONNECTED &&
+    entry.status.code !== DEVICE_ERROR_CODES.PORT_NOT_FOUND &&
     entry.status.code !== SERIAL_CONNECT_STATUS.OK;
   const userFailed = !connected && connectFailedOn(device, port);
   // Held through a retry: the note stays where it is rather than closing and reopening on the same words.

@@ -219,6 +219,8 @@ describe("StripPage — the strip's state and its one action", () => {
     expect(screen.getByTestId("strip-state")).toHaveTextContent("device:strip.state.reconnecting");
     expect(screen.queryByTestId("strip-connect")).toBeNull();
     expect(screen.queryByTestId("strip-flash")).toBeNull();
+    // The word says it; a red "Port not found" under it grew the row and read as a fault.
+    expect(screen.queryByTestId("strip-connect-error")).toBeNull();
   });
 
   it("a port another app holds reads as busy and offers Try again", async () => {

@@ -2,6 +2,7 @@ import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { WledDeviceInfo } from "@/shared/contracts/device";
+import { useLateFlag } from "@/shared/lib/useHeldFlag";
 import { Reveal } from "@/shared/ui/Reveal/Reveal";
 import { RevealList } from "@/shared/ui/Reveal/RevealList";
 import { RowButton, RowNote, SettingRow } from "@/shared/ui/SettingRow/SettingRow";
@@ -32,6 +33,8 @@ interface AddStripPageProps {
   onAdded: (added: AddedOutput) => void;
 }
 
+const NOTHING_FOUND_AFTER_MS = 8000;
+
 /**
  * Adding a strip: a controller plugged in, listed as it appears, a WLED device found on the network,
  * or one by address.
@@ -51,6 +54,8 @@ export function AddStripPage({
   const headingId = useId();
   const browse = useWledBrowse(isActive);
   const found = browse.devices.filter((wled) => wled.ip !== boundWledIp);
+  // A browse finds a device within a second or two; past that "Searching…" reads as stuck.
+  const nothingFound = useLateFlag(browse.browsing && found.length === 0, NOTHING_FOUND_AFTER_MS);
   // Which WLED rows are adding, by row: one add at a time across the page.
   const [wledBusy, setWledBusy] = useState<ReadonlySet<string>>(() => new Set());
   // One callback per row for good: a row's effect runs again whenever its callback changes.
@@ -91,7 +96,7 @@ export function AddStripPage({
         <Reveal open={browse.browsing && found.length === 0}>
           <SettingRow
             label={t("device:strip.add.network")}
-            value={t("device:strip.add.searching")}
+            value={t(nothingFound ? "device:strip.add.noneFound" : "device:strip.add.searching")}
             testId="wled-browse-searching"
           />
         </Reveal>
@@ -114,6 +119,7 @@ export function AddStripPage({
             primary={ports.length === 0 && found.length === 0}
             blocked={wledBlocked("address")}
             onBusyChange={busyFor("address")}
+            boundIp={boundWledIp}
           />
         </Reveal>
         <Reveal open={otherPorts.length > 0}>

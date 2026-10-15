@@ -43,7 +43,7 @@ export default {
       connecting: "Connecting…",
       connected: "Connected",
       unlit: "Didn't light",
-      reconnecting: "Reconnecting…",
+      reconnecting: "Unplugged",
       disconnected: "Not connected",
       busy: "Busy",
       replug: "Replug the cable",
@@ -131,6 +131,7 @@ export default {
       addNamed: "Add {{name}}",
       network: "On the network",
       searching: "Searching…",
+      noneFound: "None found yet — enter its address below",
       foundWled_one: "{{ip}} · 1 LED",
       foundWled_other: "{{ip}} · {{count}} LEDs",
       replaces: "{{name}} moves here, with its layout and settings: one strip is driven at a time for now.",
@@ -256,7 +257,7 @@ export default {
     },
     wled: {
       manualIp: "WLED IP",
-      manualIpPlaceholder: "192.168.1.42",
+      manualIpPlaceholder: "e.g. 192.168.1.50",
       invalidIp: "Enter an IPv4 address, such as 192.168.1.42.",
       ipRequired: "Enter your WLED device's IP address to discover it.",
       forgetConfirm: {
@@ -269,9 +270,9 @@ export default {
       },
       status: {
         discoveryOk: "Discovery completed.",
-        discoveryTimeout: "Discovery timed out before any device responded.",
-        discoveryUnreachable: "Could not reach the WLED device on the network.",
-        bridgeUnreachable: "WLED device is not reachable.",
+        discoveryTimeout: "Nothing answered at this address. Check that the device is on and on the same network.",
+        discoveryUnreachable: "Could not reach this address. Check that the device is on and on the same network as this computer.",
+        bridgeUnreachable: "The WLED device is not reachable. Check that it is on and on this network.",
         protocolMismatch: "This address answered, but not as a WLED device. Check that the IP belongs to your WLED controller.",
         ledCountMismatch: "Device reports a different LED count than expected.",
         invalidIp: "This address cannot be used: enter the device's own IPv4 address, not a loopback, multicast or broadcast one.",

@@ -140,6 +140,11 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- The Lights page's outputs say what they are in plain words: "USB strip" (not the CH340 chip name
+  for every controller), "Hue lights", "Bridge · ready" / "live · 20 Hz" instead of "standby" /
+  "DTLS 20 Hz", and "Not set up". The Hue area row explains in its ⓘ what an entertainment area is
+  and where the Hue app makes one, and the channel list's sync line says "Not compared with the
+  bridge" instead of "Bridge not read yet".
 - One word for each thing across the app, in English and Turkish: making a real strip or Hue light
   show itself is "Blink" / "Yanıp söndür" everywhere (it was Flash, Identify, Tanıt and Tanımla),
   working out a strip's colour order is "Find order" / "Sırayı bul", firmware is "bellenim" in
@@ -486,6 +491,13 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- An unplugged strip reads "Unplugged" with a still dot instead of a spinner that never stopped,
+  and without a red "Port not found" under it that grew the row; it still reconnects by itself.
+- Typing the address of the WLED device already added opens its strip instead of adding it a
+  second time as "WLED … 2". The address field's example now reads "e.g. 192.168.1.50" so it is
+  not taken for a filled-in value, and a search that finds nothing says so after a few seconds
+  and points at the address field. An address that does not answer says to check that the
+  device is on and on the same network; so does a Hue Bridge that cannot be reached.
 - A fresh install's Lights page no longer offers an amber "Turn on Ambilight" that does nothing: with
   no light connected the dimmed stage says so and offers "Add a light", which opens Devices (from the
   compact window, the full one); a turn-on that cannot run is grey. "No lights connected" in the

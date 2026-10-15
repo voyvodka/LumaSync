@@ -122,6 +122,20 @@ describe("AddStripPage", () => {
     expect(screen.getByTestId("wled-address-input")).toBeInTheDocument();
   });
 
+  // "Searching…" with no end read as stuck; after a while it says what to do instead.
+  it("says none were found once the browse has run a while with nothing", async () => {
+    vi.useFakeTimers();
+    let answer: (found: WledDiscoveryResponse) => void = () => {};
+    browse.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    await renderPage([], []);
+    expect(screen.getByTestId("wled-browse-searching")).toHaveTextContent("device:strip.add.searching");
+    await act(async () => vi.advanceTimersByTime(8000));
+    expect(screen.getByTestId("wled-browse-searching")).toHaveTextContent("device:strip.add.noneFound");
+    // Ends the browse, which the next test would otherwise join.
+    await act(async () => answer(browsed()));
+    vi.useRealTimers();
+  });
+
   it("a browse that could not run leaves only the address row", async () => {
     browse.mockResolvedValue({ status: { code: "WLED_BROWSE_UNSUPPORTED", message: "", details: null }, devices: [] });
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
