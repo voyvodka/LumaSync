@@ -609,6 +609,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
             // handler can imperatively translate them by the same delta
             // as the dashed bounds box.
             data-zone-channel-id={isInActiveHueZone ? activeHueZone?.id : undefined}
+            data-object-id={hueChannelObjectId(ch.channelIndex)}
             className="absolute"
             style={{
               left: leftPx,

@@ -19,6 +19,10 @@ interface TvAnchorObjectProps {
   onChange: (updated: TvAnchorPlacement) => void;
   onSnapDragMove?: (id: string, x: number, y: number, w: number, h: number) => SnapResult;
   onSnapDragEnd?: () => void;
+  /** In a selection with others: dragging the TV moves them all, and they follow it meanwhile. */
+  grouped?: boolean;
+  onGroupDragMove?: (dx: number, dy: number) => void;
+  onGroupDragEnd?: (dx: number, dy: number) => void;
 }
 
 export const TvAnchorObject = memo(function TvAnchorObject({
@@ -33,6 +37,9 @@ export const TvAnchorObject = memo(function TvAnchorObject({
   onSnapDragEnd,
   zoom = 1,
   panMode = false,
+  grouped = false,
+  onGroupDragMove,
+  onGroupDragEnd,
 }: TvAnchorObjectProps) {
   const { t } = useTranslation();
   const [localX, setLocalX] = useState(placement.x);
@@ -94,6 +101,7 @@ export const TvAnchorObject = memo(function TvAnchorObject({
     const newY = dragRef.current.startY + dy;
     setLocalX(newX);
     setLocalY(newY);
+    onGroupDragMove?.(dx, dy);
     if (onSnapDragMove) {
       snapResultRef.current = onSnapDragMove("tv", newX, newY, localW, localH);
     }
@@ -128,6 +136,10 @@ export const TvAnchorObject = memo(function TvAnchorObject({
     newX = Math.round(newX * 100) / 100;
     newY = Math.round(newY * 100) / 100;
     onSnapDragEnd?.();
+    if (onGroupDragEnd) {
+      onGroupDragEnd(newX - dragRef.current.startX, newY - dragRef.current.startY);
+      return;
+    }
     if (newX !== placement.x || newY !== placement.y) {
       onChange({ ...placement, x: newX, y: newY });
     }
@@ -205,7 +217,8 @@ export const TvAnchorObject = memo(function TvAnchorObject({
 
   return (
     <div
-      className={`absolute border-2 bg-violet-500/40 ${
+      data-object-id="tv"
+      className={`absolute border-2 bg-violet-500/40 ${grouped && !selected ? "outline-dashed outline-[1.5px] outline-offset-2 outline-amber" : ""} ${
         selected
           ? placement.locked ? "border-white/40" : "border-white"
           : "border-violet-500"

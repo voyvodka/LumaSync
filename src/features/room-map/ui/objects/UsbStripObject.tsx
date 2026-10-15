@@ -2,6 +2,7 @@ import { memo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { UsbStripPlacement } from "@/shared/contracts/roomMap";
 import { clamp } from "@/shared/lib/math";
+import { usbStripObjectId } from "../../model/objectId";
 
 interface UsbStripObjectProps {
   placement: UsbStripPlacement;
@@ -212,6 +213,7 @@ export const UsbStripObject = memo(function UsbStripObject({
     <>
       {/* SVG line + arrow + invisible wide hit area for line drag */}
       <svg
+        data-object-id={usbStripObjectId(placement.stripId)}
         className="absolute inset-0 w-full h-full"
         style={{ zIndex: 1, pointerEvents: "none", overflow: "visible" }}
       >

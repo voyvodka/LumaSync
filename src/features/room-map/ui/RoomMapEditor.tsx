@@ -214,7 +214,6 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
   // stable: an inline closure would re-render all of them on a pan commit.
   // Empty ground lets go of both: `select(null)` alone left a zone selected under the palette.
   const handleCanvasClick = clearSelection;
-  const handleUsbStripSelect = useCallback((id: string) => select(usbStripObjectId(id)), [select]);
   const handleUsbStripChange = useCallback(
     (updated: UsbStripPlacement, continuous?: boolean) => {
       apply(
@@ -226,66 +225,135 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
     },
     [apply],
   );
-  // Several pieces at once: ⇧-click adds or takes one away, a box on the floor takes what it covers.
-  // The one last pressed is the selection the inspector shows; dragging any of them moves them all.
+  // Several objects at once — furniture, the TV, Hue lights, strips: ⇧-click adds or takes one away,
+  // a box on the floor takes what it covers. The one last pressed is what the inspector shows;
+  // dragging a piece or the TV moves them all, so a desk carries its monitor and its lamps.
   const [group, setGroup] = useState<readonly string[]>([]);
   const groupSet = useMemo(() => new Set(group), [group]);
   const grouped = group.length > 1;
+  const shiftHeld = useRef(false);
   useEffect(() => {
-    if (selectedId === null || !selectedId.startsWith("furniture-")) setGroup((current) => (current.length === 0 ? current : []));
-  }, [selectedId]);
-  const handleFurnitureSelect = useCallback(
-    (id: string, additive = false) => {
+    const track = (e: KeyboardEvent) => {
+      shiftHeld.current = e.shiftKey;
+    };
+    window.addEventListener("keydown", track);
+    window.addEventListener("keyup", track);
+    return () => {
+      window.removeEventListener("keydown", track);
+      window.removeEventListener("keyup", track);
+    };
+  }, []);
+  useEffect(() => {
+    if (selectedId === null || (grouped && !groupSet.has(selectedId))) setGroup((current) => (current.length === 0 ? current : []));
+  }, [selectedId, grouped, groupSet]);
+  const pick = useCallback(
+    (objectId: string, additive: boolean) => {
       if (additive) {
         setGroup((current) => {
-          const primary = selectedId?.startsWith("furniture-") ? selectedId.slice("furniture-".length) : null;
-          const base = current.length > 0 ? current : primary ? [primary] : [];
-          return base.includes(id) ? base.filter((member) => member !== id) : [...base, id];
+          const base = current.length > 0 ? current : selectedId && selectedId !== objectId ? [selectedId] : [];
+          return base.includes(objectId) ? base.filter((member) => member !== objectId) : [...base, objectId];
         });
-      } else if (!groupSet.has(id)) {
-        setGroup([]);
+      } else if (!groupSet.has(objectId)) {
+        setGroup((current) => (current.length === 0 ? current : []));
       }
-      select(furnitureObjectId(id));
+      select(objectId);
     },
     [select, selectedId, groupSet],
   );
+  const handleFurnitureSelect = useCallback(
+    (id: string, additive = false) => pick(furnitureObjectId(id), additive || shiftHeld.current),
+    [pick],
+  );
   const handleMarquee = useCallback(
     (box: { x0: number; y0: number; x1: number; y1: number }, additive: boolean) => {
-      const inside = config.furniture
-        .filter((f) => {
-          const cx = f.x + f.width / 2;
-          const cy = f.y + f.height / 2;
-          return cx >= box.x0 && cx <= box.x1 && cy >= box.y0 && cy <= box.y1;
-        })
-        .map((f) => f.id);
+      const within = (x: number, y: number) => x >= box.x0 && x <= box.x1 && y >= box.y0 && y <= box.y1;
+      const inside = [
+        ...config.furniture.filter((f) => within(f.x + f.width / 2, f.y + f.height / 2)).map((f) => furnitureObjectId(f.id)),
+        ...(config.tvAnchor && within(config.tvAnchor.x + config.tvAnchor.width / 2, config.tvAnchor.y + config.tvAnchor.height / 2)
+          ? [TV_ANCHOR_OBJECT_ID]
+          : []),
+        ...visibleHueChannels
+          .filter((ch) => within(((ch.x + 1) / 2) * widthMeters, ((1 - ch.y) / 2) * depthMeters))
+          .map((ch) => hueChannelObjectId(ch.channelIndex)),
+        ...config.usbStrips
+          .filter((st) => within((st.startX + st.endX) / 2, (st.startY + st.endY) / 2))
+          .map((st) => usbStripObjectId(st.stripId)),
+      ];
       const next = additive ? [...new Set([...group, ...inside])] : inside;
       setGroup(next);
-      const last = next[next.length - 1];
-      select(last ? furnitureObjectId(last) : null);
+      select(next[next.length - 1] ?? null);
     },
-    [config.furniture, group, select],
+    [config.furniture, config.tvAnchor, config.usbStrips, visibleHueChannels, widthMeters, depthMeters, group, select],
   );
-  const [groupOffset, setGroupOffset] = useState<{ dx: number; dy: number } | null>(null);
+  // Followers move with the drag by a CSS `translate` on their own element, which composes with
+  // their placement and rotation and costs no render per move; the drop writes them all at once.
+  const followers = useCallback(
+    (except: string) =>
+      group
+        .filter((id) => id !== except)
+        .map((id) => rootRef.current?.querySelector<HTMLElement>(`[data-object-id="${CSS.escape(id)}"]`))
+        .filter((el): el is HTMLElement => !!el),
+    [group],
+  );
+  const handleGroupDragMove = useCallback(
+    (dragger: string, dx: number, dy: number) => {
+      for (const el of followers(dragger)) el.style.translate = `${dx * pxPerMeter}px ${dy * pxPerMeter}px`;
+    },
+    [followers],
+  );
   const handleGroupDragEnd = useCallback(
-    (dx: number, dy: number) => {
-      setGroupOffset(null);
+    (dragger: string, dx: number, dy: number) => {
+      for (const el of followers(dragger)) el.style.translate = "";
       if (dx === 0 && dy === 0) return;
       const round = (v: number) => Math.round(v * 100) / 100;
-      apply((cfg) => ({
-        furniture: cfg.furniture.map((f) => (groupSet.has(f.id) && !f.locked ? { ...f, x: round(f.x + dx), y: round(f.y + dy) } : f)),
-      }));
+      const clampCube = (v: number) => Math.min(1, Math.max(-1, v));
+      apply((cfg) => {
+        let hueChannels = cfg.hueChannels;
+        for (const ch of visibleHueChannels) {
+          if (!groupSet.has(hueChannelObjectId(ch.channelIndex)) || ch.locked) continue;
+          hueChannels = replaceHueChannel(hueChannels, {
+            ...ch,
+            x: clampCube(ch.x + (2 * dx) / widthMeters),
+            y: clampCube(ch.y - (2 * dy) / depthMeters),
+          });
+        }
+        const tv = cfg.tvAnchor;
+        return {
+          furniture: cfg.furniture.map((f) =>
+            groupSet.has(furnitureObjectId(f.id)) && !f.locked ? { ...f, x: round(f.x + dx), y: round(f.y + dy) } : f,
+          ),
+          ...(tv && groupSet.has(TV_ANCHOR_OBJECT_ID) && !tv.locked ? { tvAnchor: { ...tv, x: round(tv.x + dx), y: round(tv.y + dy) } } : {}),
+          usbStrips: cfg.usbStrips.map((st) =>
+            groupSet.has(usbStripObjectId(st.stripId)) && !st.locked
+              ? { ...st, startX: round(st.startX + dx), startY: round(st.startY + dy), endX: round(st.endX + dx), endY: round(st.endY + dy) }
+              : st,
+          ),
+          hueChannels,
+        };
+      });
     },
-    [apply, groupSet],
+    [apply, followers, groupSet, visibleHueChannels, widthMeters, depthMeters],
   );
   const handleDeleteSelection = useCallback(() => {
     if (!grouped) {
       handleDelete();
       return;
     }
-    apply((cfg) => ({ furniture: cfg.furniture.filter((f) => !groupSet.has(f.id) || f.locked) }));
+    // One patch folded over every member: removing them one by one wrote each from the same stale
+    // map, so only the last removal stuck. Hue lights are the bridge's and are only deselected.
+    apply((cfg) => {
+      let next = cfg;
+      for (const id of group) {
+        const ref = parseObjectId(id);
+        const adapter = ref ? roomObjectAdapter(ref) : null;
+        if (!ref || !adapter?.remove || adapter.isLocked(next, ref, { hueAreaId })) continue;
+        next = { ...next, ...adapter.remove(next, ref) };
+      }
+      return { furniture: next.furniture, usbStrips: next.usbStrips, tvAnchor: next.tvAnchor, imageLayers: next.imageLayers };
+    });
     setGroup([]);
     select(null);
-  }, [grouped, handleDelete, apply, groupSet, select]);
+  }, [grouped, group, handleDelete, apply, hueAreaId, select]);
   const handleFurnitureChange = useCallback(
     (updated: FurniturePlacement) => {
       apply((cfg) => ({
@@ -294,9 +362,13 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
     },
     [apply],
   );
-  const handleTvSelect = useCallback(() => select(TV_ANCHOR_OBJECT_ID), [select]);
+  const handleUsbStripSelect = useCallback((id: string) => pick(usbStripObjectId(id), shiftHeld.current), [pick]);
+  const handleTvSelect = useCallback(() => pick(TV_ANCHOR_OBJECT_ID, shiftHeld.current), [pick]);
   const handleTvChange = useCallback((updated: TvAnchorPlacement) => apply({ tvAnchor: updated }), [apply]);
-  const handleHueChannelSelect = useCallback((channelIndex: number) => select(hueChannelObjectId(channelIndex)), [select]);
+  const handleHueChannelSelect = useCallback(
+    (channelIndex: number) => pick(hueChannelObjectId(channelIndex), shiftHeld.current),
+    [pick],
+  );
   const handleHueChannelChange = useCallback(
     (updated: HueChannelPlacement) => {
       apply((cfg) => ({ hueChannels: replaceHueChannel(cfg.hueChannels, updated) }));
@@ -626,10 +698,17 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
               model={furnitureModels.get(f.id) ?? BOX_MODEL}
               pxPerMeter={pxPerMeter}
               selected={selectedId === furnitureObjectId(f.id)}
-              grouped={grouped && groupSet.has(f.id)}
-              groupOffset={grouped && groupSet.has(f.id) ? groupOffset : null}
-              onGroupDragMove={grouped && groupSet.has(f.id) ? (dx, dy) => setGroupOffset({ dx, dy }) : undefined}
-              onGroupDragEnd={grouped && groupSet.has(f.id) ? handleGroupDragEnd : undefined}
+              grouped={grouped && groupSet.has(furnitureObjectId(f.id))}
+              onGroupDragMove={
+                grouped && groupSet.has(furnitureObjectId(f.id))
+                  ? (dx, dy) => handleGroupDragMove(furnitureObjectId(f.id), dx, dy)
+                  : undefined
+              }
+              onGroupDragEnd={
+                grouped && groupSet.has(furnitureObjectId(f.id))
+                  ? (dx, dy) => handleGroupDragEnd(furnitureObjectId(f.id), dx, dy)
+                  : undefined
+              }
               outside={outsideOutline(f.x + f.width / 2, f.y + f.height / 2, outline)}
               roomWidth={widthMeters}
               roomDepth={depthMeters}
@@ -657,6 +736,13 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
               onChange={handleTvChange}
               onSnapDragMove={snapDragMove}
               onSnapDragEnd={snapDragEnd}
+              grouped={grouped && groupSet.has(TV_ANCHOR_OBJECT_ID)}
+              onGroupDragMove={
+                grouped && groupSet.has(TV_ANCHOR_OBJECT_ID) ? (dx, dy) => handleGroupDragMove(TV_ANCHOR_OBJECT_ID, dx, dy) : undefined
+              }
+              onGroupDragEnd={
+                grouped && groupSet.has(TV_ANCHOR_OBJECT_ID) ? (dx, dy) => handleGroupDragEnd(TV_ANCHOR_OBJECT_ID, dx, dy) : undefined
+              }
             />
           )}
 

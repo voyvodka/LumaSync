@@ -168,9 +168,10 @@ https://keepachangelog.com/en/1.1.0/
     (it said "Edit", like the switch above it), and someone without Hue is no longer told their area
     has no Hue lights. Storage longer than a sideboard reads as a run of wardrobes, with doors about
     half a metre wide.
-  - Several pieces at once: ⇧-click adds a piece to the selection or takes it out, a box dragged
-    across empty floor selects what it covers, dragging any of them moves them all as one undo
-    step, and Delete removes them all. The shortcuts list names these, and ⌥-drag for moving
+  - Several objects at once — furniture, the TV, Hue lights and strips: ⇧-click adds one to the
+    selection or takes it out, a box dragged across empty floor selects what it covers, dragging a
+    piece or the TV moves them all as one undo step (a desk carries its monitor and its lamps), and
+    Delete removes them all. The shortcuts list names these, and ⌥-drag for moving
     without snapping.
   - Camera moves ease in about a third of a second instead of jumping: the 3D view's zoom buttons,
     "Whole room" and a double-click's focus, and the plan's zoom buttons, fit and arrow-key pans.

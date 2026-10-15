@@ -34,8 +34,6 @@ interface FurnitureObjectProps {
   panMode?: boolean;
   /** One of several selected pieces: dragging it moves them all, through `onGroupDrag*`. */
   grouped?: boolean;
-  /** How far the group is being dragged now, for the members not under the pointer. */
-  groupOffset?: { dx: number; dy: number } | null;
   onGroupDragMove?: (dx: number, dy: number) => void;
   onGroupDragEnd?: (dx: number, dy: number) => void;
   /** `additive`: ⇧ was held, so the piece joins or leaves the selection. */
@@ -62,7 +60,6 @@ export const FurnitureObject = memo(function FurnitureObject({
   zoom = 1,
   panMode = false,
   grouped = false,
-  groupOffset = null,
   onGroupDragMove,
   onGroupDragEnd,
 }: FurnitureObjectProps) {
@@ -180,11 +177,9 @@ export const FurnitureObject = memo(function FurnitureObject({
     if (r !== (placement.rotation ?? 0)) onChange({ ...placement, rotation: r });
   };
 
-  // A member the pointer is not on follows the one it is on.
-  const follow = groupOffset && !dragRef.current.active ? groupOffset : { dx: 0, dy: 0 };
   const px = {
-    left: (local.x + follow.dx) * pxPerMeter,
-    top: (local.y + follow.dy) * pxPerMeter,
+    left: local.x * pxPerMeter,
+    top: local.y * pxPerMeter,
     width: local.w * pxPerMeter,
     height: local.h * pxPerMeter,
   };
@@ -199,6 +194,7 @@ export const FurnitureObject = memo(function FurnitureObject({
           grouped && !selected && styles.grouped,
         )}
         data-furniture-id={placement.id}
+        data-object-id={furnitureObjectId(placement.id)}
         data-selected={selected || undefined}
         data-outside={outside || undefined}
         style={{ ...px, transform: `rotate(${local.r}deg)` }}

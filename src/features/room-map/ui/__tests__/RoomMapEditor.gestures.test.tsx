@@ -302,6 +302,35 @@ describe("RoomMapEditor — several pieces at once", () => {
     expect(sofa!.x).toBeGreaterThan(SOFA.x);
   });
 
+  // A desk dragged with its monitor and its strip left both behind: only furniture grouped.
+  it("carries the TV and a strip in the selection along with the piece dragged", async () => {
+    const TV = { x: 1, y: 0.1, width: 1.2, height: 0.1 };
+    const STRIP = { stripId: "s1", startX: 1, startY: 0.2, endX: 2, endY: 0.2, ledCount: 60 };
+    stored({ furniture: [SOFA], tvAnchor: TV, usbStrips: [STRIP] });
+    await renderEditor();
+    const tv = document.querySelector('[data-object-id="tv"]') as HTMLElement;
+    fireEvent.pointerDown(piece("sofa"), { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerUp(piece("sofa"), { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.keyDown(window, { key: "Shift", shiftKey: true });
+    fireEvent.pointerDown(tv, { clientX: 200, clientY: 20, pointerId: 2 });
+    fireEvent.pointerUp(tv, { clientX: 200, clientY: 20, pointerId: 2 });
+    fireEvent.keyUp(window, { key: "Shift", shiftKey: false });
+    await flush();
+
+    fireEvent.pointerDown(piece("sofa"), { clientX: 100, clientY: 100, pointerId: 3 });
+    fireEvent.pointerMove(piece("sofa"), { clientX: 180, clientY: 100, pointerId: 3, altKey: true });
+    fireEvent.pointerUp(piece("sofa"), { clientX: 180, clientY: 100, pointerId: 3, altKey: true });
+    await flush();
+
+    const saves = roomMapSaves();
+    const last = saves[saves.length - 1]!;
+    const moved = last.furniture[0]!.x - SOFA.x;
+    expect(moved).toBeGreaterThan(0);
+    expect(last.tvAnchor!.x - TV.x).toBeCloseTo(moved);
+    // The strip was not in the selection: it stays.
+    expect(last.usbStrips[0]!.startX).toBe(STRIP.startX);
+  });
+
   it("deletes the whole selection with Delete", async () => {
     stored({ furniture: [SOFA, CHAIR] });
     const { root } = await renderEditor();
