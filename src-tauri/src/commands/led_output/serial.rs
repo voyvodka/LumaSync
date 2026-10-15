@@ -2,7 +2,7 @@
 //! bridge, the per-port writer thread that keeps the worker off the port, and
 //! `LedOutputBridge`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
@@ -335,8 +335,20 @@ fn run_writer(mut port: Box<dyn Write + Send>, shared: &WriterShared, pacing: Wr
     shared.changed.notify_all();
 }
 
+/// The writers by port, and the ports being opened right now by a caller that let go of the lock
+/// to do it.
+#[derive(Default)]
+struct Sessions {
+    live: HashMap<String, WriterSession>,
+    opening: HashSet<String>,
+    /// Ports disconnected while their open was in flight: the open's handle is closed, not kept.
+    dropped_while_opening: HashSet<String>,
+}
+
 pub(super) struct SerialLedPacketSender {
-    sessions: Mutex<HashMap<String, WriterSession>>,
+    sessions: Mutex<Sessions>,
+    /// Woken when an open finishes, for callers waiting on the same port.
+    opened: Condvar,
     port_factory: Arc<PortFactory>,
     /// How long a newly opened handle's writer holds its first byte back.
     settle: Duration,
@@ -346,7 +358,8 @@ pub(super) struct SerialLedPacketSender {
 impl SerialLedPacketSender {
     fn new(port_factory: Arc<PortFactory>, settle: Duration, pacing: WriterPacing) -> Self {
         Self {
-            sessions: Mutex::new(HashMap::new()),
+            sessions: Mutex::new(Sessions::default()),
+            opened: Condvar::new(),
             port_factory,
             settle,
             pacing,
@@ -377,12 +390,51 @@ impl SerialLedPacketSender {
         Self::new(Arc::new(factory), Duration::ZERO, pacing)
     }
 
-    fn lock_sessions(
+    fn lock_sessions(&self) -> Result<std::sync::MutexGuard<'_, Sessions>, LedOutputError> {
+        self.sessions.lock().map_err(lock_failed)
+    }
+
+    /// The sessions with `port_name`'s writer in them, opening the port first if needed. The
+    /// open runs with the lock let go: a CH340 or FTDI port takes over 100 ms to open, and every
+    /// other port's frames would wait behind it. A second caller for the same port waits for that
+    /// open instead of starting its own.
+    fn ensure_open(
         &self,
-    ) -> Result<std::sync::MutexGuard<'_, HashMap<String, WriterSession>>, LedOutputError> {
-        self.sessions.lock().map_err(|error| {
-            LedOutputError::new("LED_OUTPUT_SESSION_LOCK_FAILED", Some(error.to_string()))
-        })
+        port_name: &str,
+    ) -> Result<std::sync::MutexGuard<'_, Sessions>, LedOutputError> {
+        let mut sessions = self.lock_sessions()?;
+        loop {
+            if sessions.live.contains_key(port_name) {
+                return Ok(sessions);
+            }
+            if sessions.opening.contains(port_name) {
+                sessions = self.opened.wait(sessions).map_err(lock_failed)?;
+                continue;
+            }
+            sessions.opening.insert(port_name.to_string());
+            drop(sessions);
+            let session = (self.port_factory)(port_name)
+                .and_then(|opened| WriterSession::spawn(opened, self.pacing, self.settle));
+            let mut relocked = self.lock_sessions()?;
+            relocked.opening.remove(port_name);
+            let dropped = relocked.dropped_while_opening.remove(port_name);
+            self.opened.notify_all();
+            match session {
+                Ok(session) if dropped => {
+                    drop(relocked);
+                    drop(session);
+                    return Err(LedOutputError::new(
+                        "LED_OUTPUT_PORT_UNAVAILABLE",
+                        Some("The port was disconnected while it was being opened.".to_string()),
+                    ));
+                }
+                Ok(session) => {
+                    relocked.live.insert(port_name.to_string(), session);
+                    return Ok(relocked);
+                }
+                Err(error) => return Err(error),
+            }
+        }
     }
 
     /// Queue `packet` on the port's writer, opening the port first if needed.
@@ -396,15 +448,9 @@ impl SerialLedPacketSender {
         packet: &[u8],
         drain: bool,
     ) -> Result<(Arc<WriterShared>, u64), LedOutputError> {
-        let mut sessions = self.lock_sessions()?;
+        let mut sessions = self.ensure_open(port_name)?;
 
-        if !sessions.contains_key(port_name) {
-            let opened = (self.port_factory)(port_name)?;
-            let session = WriterSession::spawn(opened, self.pacing, self.settle)?;
-            sessions.insert(port_name.to_string(), session);
-        }
-
-        let Some(session) = sessions.get(port_name) else {
+        let Some(session) = sessions.live.get(port_name) else {
             return Err(LedOutputError::new(
                 "LED_OUTPUT_PORT_UNAVAILABLE",
                 Some("Port session could not be created for output write.".to_string()),
@@ -414,7 +460,7 @@ impl SerialLedPacketSender {
         match session.queue(packet, drain) {
             Ok(seq) => Ok((Arc::clone(&session.shared), seq)),
             Err(error) => {
-                let dead = sessions.remove(port_name);
+                let dead = sessions.live.remove(port_name);
                 drop(sessions);
                 // On the caller, once per failure: it waits (at most `WRITER_EXIT_TIMEOUT`) for
                 // the port to close, so the next send's reopen does not find it still held.
@@ -428,9 +474,10 @@ impl SerialLedPacketSender {
     fn remove_if_current(&self, port_name: &str, shared: &Arc<WriterShared>) {
         let removed = self.lock_sessions().ok().and_then(|mut sessions| {
             let current = sessions
+                .live
                 .get(port_name)
                 .is_some_and(|session| Arc::ptr_eq(&session.shared, shared));
-            current.then(|| sessions.remove(port_name)).flatten()
+            current.then(|| sessions.live.remove(port_name)).flatten()
         });
         drop(removed);
     }
@@ -474,16 +521,18 @@ impl LedPacketSender for SerialLedPacketSender {
     #[cfg(test)]
     fn wait_idle(&self, port_name: &str) {
         let sessions = self.sessions.lock().expect("sessions lock");
-        if let Some(session) = sessions.get(port_name) {
+        if let Some(session) = sessions.live.get(port_name) {
             session.wait_idle();
         }
     }
 
     fn disconnect_session(&self, port_name: &str) {
-        let removed = self
-            .lock_sessions()
-            .ok()
-            .and_then(|mut sessions| sessions.remove(port_name));
+        let removed = self.lock_sessions().ok().and_then(|mut sessions| {
+            if sessions.opening.contains(port_name) {
+                sessions.dropped_while_opening.insert(port_name.to_string());
+            }
+            sessions.live.remove(port_name)
+        });
         drop(removed);
     }
 }
@@ -589,4 +638,8 @@ impl Default for LedOutputBridge {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn lock_failed<T>(error: std::sync::PoisonError<T>) -> LedOutputError {
+    LedOutputError::new("LED_OUTPUT_SESSION_LOCK_FAILED", Some(error.to_string()))
 }

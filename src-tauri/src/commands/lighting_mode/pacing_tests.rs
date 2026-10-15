@@ -2,7 +2,10 @@
 
 use std::time::{Duration, Instant};
 
-use super::pacing::{AmbilightWorkerQualityState, SerialSendBudget};
+use super::pacing::{
+    capture_interval_for, AmbilightWorkerQualityState, SerialSendBudget, StripRate,
+};
+use crate::commands::ambilight_capture::DEFAULT_CAPTURE_INTERVAL;
 use crate::commands::led_output::{FirmwareProfile, LedChipType};
 use crate::commands::runtime_quality::RuntimeQualityConfig;
 
@@ -172,4 +175,123 @@ fn quality_runtime_adapts_send_interval_under_high_cost() {
     let adapted = quality.current_send_interval();
 
     assert!(adapted > baseline);
+}
+
+// -----------------------------------------------------------------------
+// capture_interval_for — one capture for every strip
+// -----------------------------------------------------------------------
+
+/// The single-strip rule as it stood before strips fanned out, kept as the oracle.
+fn one_strip_interval(serial_wire_ms: Option<Option<u64>>) -> Duration {
+    const STRIP: Duration = Duration::from_millis(33);
+    match serial_wire_ms {
+        None => DEFAULT_CAPTURE_INTERVAL,
+        Some(budget) => budget
+            .map(Duration::from_millis)
+            .map_or(STRIP, |wire| wire.max(STRIP))
+            .min(DEFAULT_CAPTURE_INTERVAL),
+    }
+}
+
+#[test]
+fn one_strip_captures_exactly_as_before() {
+    assert_eq!(capture_interval_for(&[]), one_strip_interval(None));
+    assert_eq!(
+        capture_interval_for(&[StripRate::Unpaced]),
+        one_strip_interval(Some(None))
+    );
+    for wire_ms in 0..=200 {
+        assert_eq!(
+            capture_interval_for(&[StripRate::Wire { wire_ms }]),
+            one_strip_interval(Some(Some(wire_ms))),
+            "wire {wire_ms} ms"
+        );
+    }
+}
+
+#[test]
+fn the_fastest_strip_sets_the_pace_and_a_slow_one_does_not_hold_it_back() {
+    // A: 54 GRB LEDs on a v1 link, 15 ms on the wire. B: 227 GRB LEDs, about 60 ms.
+    let a = StripRate::Wire {
+        wire_ms: SerialSendBudget::for_strip(
+            54,
+            FirmwareProfile::LumaSyncV1,
+            LedChipType::Ws2812bGrb,
+        )
+        .wire_ms,
+    };
+    let b = StripRate::Wire {
+        wire_ms: SerialSendBudget::for_strip(
+            227,
+            FirmwareProfile::LumaSyncV1,
+            LedChipType::Ws2812bGrb,
+        )
+        .wire_ms,
+    };
+    assert_eq!(capture_interval_for(&[a]), Duration::from_millis(33));
+    assert_eq!(capture_interval_for(&[b]), Duration::from_millis(50));
+    assert_eq!(capture_interval_for(&[a, b]), Duration::from_millis(33));
+    assert_eq!(capture_interval_for(&[b, a]), Duration::from_millis(33));
+    assert_eq!(
+        capture_interval_for(&[b, StripRate::Unpaced]),
+        Duration::from_millis(33)
+    );
+}
+
+/// Ten minutes of one capture feeding two strips, each through its own send gate: the long strip
+/// never sends faster than its wire, the short one is not held to the long one's pace.
+#[test]
+fn two_strips_keep_their_own_send_gates_for_ten_minutes() {
+    let a_budget =
+        SerialSendBudget::for_strip(54, FirmwareProfile::LumaSyncV1, LedChipType::Ws2812bGrb);
+    let b_budget =
+        SerialSendBudget::for_strip(227, FirmwareProfile::LumaSyncV1, LedChipType::Ws2812bGrb);
+    let interval = capture_interval_for(&[
+        StripRate::Wire {
+            wire_ms: a_budget.wire_ms,
+        },
+        StripRate::Wire {
+            wire_ms: b_budget.wire_ms,
+        },
+    ]);
+    let mut gates = [
+        AmbilightWorkerQualityState::new(a_budget.into_quality_config()),
+        AmbilightWorkerQualityState::new(b_budget.into_quality_config()),
+    ];
+    let wires = [a_budget.wire_ms as f32, b_budget.wire_ms as f32];
+    let mut sends: [Vec<Instant>; 2] = [Vec::new(), Vec::new()];
+    let start = Instant::now();
+    let mut now = start;
+    while now - start < Duration::from_secs(600) {
+        for (i, gate) in gates.iter_mut().enumerate() {
+            if gate.should_send_now(now) {
+                sends[i].push(now);
+                gate.observe_capture_and_send_cost(4.0, wires[i]);
+            }
+        }
+        now += interval;
+    }
+    let gaps = |times: &[Instant]| -> Vec<u128> {
+        times
+            .windows(2)
+            .map(|w| (w[1] - w[0]).as_millis())
+            .collect()
+    };
+    let (a_gaps, b_gaps) = (gaps(&sends[0]), gaps(&sends[1]));
+    assert!(
+        b_gaps.iter().all(|&g| g >= u128::from(b_budget.wire_ms)),
+        "B sent faster than its wire"
+    );
+    let a_mean = a_gaps.iter().sum::<u128>() as f64 / a_gaps.len() as f64;
+    let b_mean = b_gaps.iter().sum::<u128>() as f64 / b_gaps.len() as f64;
+    assert!(
+        a_mean < b_mean * 0.75,
+        "A was held to B's pace: A {a_mean:.1} ms, B {b_mean:.1} ms"
+    );
+    assert!(
+        sends[0].len() > sends[1].len() * 3 / 2,
+        "A {} sends, B {}",
+        sends[0].len(),
+        sends[1].len()
+    );
 }

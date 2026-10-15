@@ -17,7 +17,7 @@ use super::effect_source::worker_ambilight;
 use super::effects::EffectDraw;
 use super::hydrate::hydrate_mode_payload;
 use super::live::{retune_ambilight_live, AmbilightLiveSettings, RoomGeometryLive};
-use super::pacing::{capture_interval_for, SerialSendBudget};
+use super::pacing::{capture_interval_for, SerialSendBudget, StripRate};
 use super::preview::{build_preview_emit_context, build_twin_sink, TwinFrameSink};
 use super::runtime::{AmbilightCaptureRequest, LightingRuntimeOwner, LightingRuntimeState};
 use super::snapshot;
@@ -621,19 +621,19 @@ fn apply_mode_change_inner(
                 .as_ref()
                 .map(|cfg| Arc::new(Mutex::new(TestPatternLive::from_config(cfg))));
 
-            let strip_plan = usb_plan.as_ref().filter(|_| needs_usb);
-            let strip_budget_ms = match strip_plan {
-                Some(UsbOutputPlan::Serial(_)) => Some(
-                    SerialSendBudget::for_strip(
+            let strip_rates: Vec<StripRate> = match usb_plan.as_ref().filter(|_| needs_usb) {
+                Some(UsbOutputPlan::Serial(_)) => vec![StripRate::Wire {
+                    wire_ms: SerialSendBudget::for_strip(
                         frame_led_count_for(&normalized_next),
                         normalized_next.firmware_profile.unwrap_or_default(),
                         normalized_next.chip_type.unwrap_or_default(),
                     )
                     .wire_ms,
-                ),
-                _ => None,
+                }],
+                Some(UsbOutputPlan::Wled(_)) => vec![StripRate::Unpaced],
+                None => Vec::new(),
             };
-            let capture_interval = capture_interval_for(strip_plan, strip_budget_ms);
+            let capture_interval = capture_interval_for(&strip_rates);
             let frame_source = {
                 let req = AmbilightCaptureRequest {
                     display_id: normalized_next.display_id.clone(),

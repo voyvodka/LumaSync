@@ -582,3 +582,85 @@ fn a_failed_write_is_reported_even_to_a_waiter_woken_while_the_port_closes() {
         "a failed write must not read as done: {result:?}"
     );
 }
+
+/// A port slow to open (CH340, FTDI) holds back only its own frames.
+#[test]
+fn a_slow_port_open_does_not_hold_back_another_ports_frames() {
+    let sender = Arc::new(
+        super::serial::SerialLedPacketSender::with_port_factory_for_tests(|port_name| {
+            if port_name == "COM-B" {
+                std::thread::sleep(Duration::from_millis(300));
+            }
+            Ok(Box::new(FakePort::default()) as Box<dyn Write + Send>)
+        }),
+    );
+    sender.send("COM-A", &[1]).expect("A opens");
+
+    let slow = Arc::clone(&sender);
+    let opening = std::thread::spawn(move || slow.send("COM-B", &[2]).expect("B opens"));
+    std::thread::sleep(Duration::from_millis(30));
+
+    let mut worst = Duration::ZERO;
+    for _ in 0..5 {
+        let started = Instant::now();
+        sender.send("COM-A", &[3]).expect("A sends");
+        worst = worst.max(started.elapsed());
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    opening.join().expect("B's thread");
+    assert!(
+        worst < Duration::from_millis(50),
+        "A waited {worst:?} behind B's open"
+    );
+}
+
+/// Two callers for a port no one has opened yet open it once between them.
+#[test]
+fn callers_racing_for_one_port_open_it_once() {
+    let opens = Arc::new(AtomicUsize::new(0));
+    let counted = Arc::clone(&opens);
+    let sender = Arc::new(
+        super::serial::SerialLedPacketSender::with_port_factory_for_tests(move |_| {
+            counted.fetch_add(1, Ordering::SeqCst);
+            std::thread::sleep(Duration::from_millis(100));
+            Ok(Box::new(FakePort::default()) as Box<dyn Write + Send>)
+        }),
+    );
+    let threads: Vec<_> = (0..2)
+        .map(|i| {
+            let sender = Arc::clone(&sender);
+            std::thread::spawn(move || sender.send("COM42", &[i]).expect("send"))
+        })
+        .collect();
+    for thread in threads {
+        thread.join().expect("sender thread");
+    }
+    assert_eq!(opens.load(Ordering::SeqCst), 1);
+}
+
+/// A disconnect that lands while the port is still opening closes what that open returns.
+#[test]
+fn a_port_disconnected_while_opening_is_not_kept() {
+    let opens = Arc::new(AtomicUsize::new(0));
+    let counted = Arc::clone(&opens);
+    let sender = Arc::new(
+        super::serial::SerialLedPacketSender::with_port_factory_for_tests(move |_| {
+            counted.fetch_add(1, Ordering::SeqCst);
+            std::thread::sleep(Duration::from_millis(150));
+            Ok(Box::new(FakePort::default()) as Box<dyn Write + Send>)
+        }),
+    );
+    let slow = Arc::clone(&sender);
+    let opening = std::thread::spawn(move || slow.send("COM42", &[1]));
+    std::thread::sleep(Duration::from_millis(40));
+    sender.disconnect_session("COM42");
+    let first = opening.join().expect("opening thread");
+    assert_eq!(
+        first.map_err(|e| e.code),
+        Err("LED_OUTPUT_PORT_UNAVAILABLE")
+    );
+    sender
+        .send("COM42", &[2])
+        .expect("the next send opens afresh");
+    assert_eq!(opens.load(Ordering::SeqCst), 2);
+}
