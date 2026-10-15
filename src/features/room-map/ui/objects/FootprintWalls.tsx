@@ -1,4 +1,4 @@
-import { type PointerEvent, useRef } from "react";
+import { type PointerEvent, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { RoomCorner, RoomDimensions } from "@/shared/contracts/roomMap";
@@ -8,7 +8,7 @@ import {
   type FootprintSide,
   moveShapeTo,
   movableWalls,
-  moveFootprintWall,
+  moveFootprintWallClamped,
   notchAt,
   shapeGrip,
 } from "../../model/roomFootprint";
@@ -87,7 +87,7 @@ export function FootprintWalls({
     if (!d) return;
     if (d.kind === "inner") {
       const now = d.axis === "x" ? event.clientX : event.clientY;
-      const next = moveFootprintWall(d.from, dimensions, d.index, (now - d.start) / ppm);
+      const next = moveFootprintWallClamped(d.from, dimensions, d.index, (now - d.start) / ppm);
       if (next) onMove(next, `footprint-wall:${d.id}`);
     } else if (d.kind === "outer") {
       const out = OUTWARD[d.side];
@@ -101,6 +101,26 @@ export function FootprintWalls({
   const end = () => {
     drag.current = null;
   };
+  // Esc puts back what the drag started from, as it does for a piece; the press stays one undo step.
+  const cancel = useRef<() => void>(() => {});
+  cancel.current = () => {
+    const d = drag.current;
+    if (!d) return;
+    drag.current = null;
+    if (d.kind === "inner") onMove([...d.from], `footprint-wall:${d.id}`);
+    else if (d.kind === "outer") onResize(d.side, 0, `room-wall:${d.id}`);
+    else onShapeChange(d.from, `room-shape:${d.id}`);
+  };
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !drag.current) return;
+      event.preventDefault();
+      event.stopPropagation();
+      cancel.current();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
   const handlers = { onPointerMove: move, onPointerUp: end, onPointerCancel: end, onLostPointerCapture: end };
 
   const { widthMeters: w, depthMeters: h } = dimensions;

@@ -26,12 +26,15 @@ export function TvAnchorInspector({
   roomHeightMeters,
   autoKind,
   modelChoices,
+  outside = false,
   onUpdate,
   onToggleLock,
   onDelete,
   onClose,
 }: {
   tv: TvAnchorPlacement;
+  /** Its middle sits outside the room's outline. */
+  outside?: boolean;
   roomHeightMeters: number;
   /** What the screen reads as with no pick. */
   autoKind: ScreenKind;
@@ -71,6 +74,11 @@ export function TvAnchorInspector({
               ]}
               onChange={(next) => onUpdate({ screenKind: next === AUTO ? undefined : (next as ScreenKind) })}
             />
+          )}
+          {outside && (
+            <Note tone="warning" fit title={t("roomMap:inspector.outsideShapeHint")}>
+              {t("roomMap:inspector.outsideShape")}
+            </Note>
           )}
           {mountAboveCeiling ? (
             <Note tone="warning" title={t("roomMap:inspector.tvMountHeightAboveCeiling")}>

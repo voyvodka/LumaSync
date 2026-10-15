@@ -50,6 +50,17 @@ describe("FootprintWalls", () => {
     ]);
   });
 
+  it("puts the room back on Esc in the middle of a wall drag, in the same gesture", () => {
+    const { onResize } = renderWalls(resolveRoomFootprint({ dimensions: dims }));
+    const left = screen.getByTestId("room-wall-left");
+    fireEvent.pointerDown(left, { button: 0, clientX: 300, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(left, { clientX: 200, clientY: 100, pointerId: 1 });
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.pointerMove(left, { clientX: 100, clientY: 100, pointerId: 1 });
+    expect(onResize.mock.calls.map(([, delta]) => delta)).toEqual([0.5, 0]);
+    expect(onResize.mock.calls[0]![2]).toBe(onResize.mock.calls[1]![2]);
+  });
+
   // The room's size was a number field only; its walls did not move.
   it("pulls an outer wall out by the drag in metres, as one gesture", () => {
     const { onResize, onResizeStart } = renderWalls(resolveRoomFootprint({ dimensions: dims }));
@@ -86,12 +97,14 @@ describe("FootprintWalls", () => {
     expect(new Set(onMove.mock.calls.map((c) => c[1])).size).toBe(1);
   });
 
-  it("stops at the last good place rather than break the outline", () => {
+  // A fast drag past the limit froze the wall at the last event that still fitted, short of it.
+  it("lands on the limit rather than break the outline or stop short of it", () => {
     const { onMove } = renderWalls(L);
     const wall = screen.getByTestId("room-wall-2");
     fireEvent.pointerDown(wall, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
     fireEvent.pointerMove(wall, { clientX: 0, clientY: 300, pointerId: 1 });
-    expect(onMove).not.toHaveBeenCalled();
+    expect(onMove).toHaveBeenCalledTimes(1);
+    expect(onMove.mock.calls[0]![0]).toContainEqual({ x: 3, y: 3.9 });
   });
 
   it("does nothing while the plan is being panned", () => {

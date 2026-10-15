@@ -288,6 +288,28 @@ export function moveFootprintWall(
   return resolved.length === n ? resolved : null;
 }
 
+/** The outline with wall `index` moved as far toward `delta` as the contract allows: a fast drag past
+ *  the limit lands on it instead of freezing at the last pointer event that still fitted. */
+export function moveFootprintWallClamped(
+  corners: readonly RoomCorner[],
+  dims: RoomDimensions,
+  index: number,
+  delta: number,
+): RoomCorner[] | null {
+  const whole = moveFootprintWall(corners, dims, index, delta);
+  if (whole) return whole;
+  // Valid moves form one run from 0, so the furthest good centimetre is found by halving.
+  let good = 0;
+  let bad = Math.round(Math.abs(delta) * 100);
+  const sign = Math.sign(delta);
+  while (bad - good > 1) {
+    const mid = Math.floor((good + bad) / 2);
+    if (moveFootprintWall(corners, dims, index, (sign * mid) / 100)) good = mid;
+    else bad = mid;
+  }
+  return good === 0 ? null : moveFootprintWall(corners, dims, index, (sign * good) / 100);
+}
+
 /** A notch cut into one wall of a plain rectangle where it was double-clicked: 60 cm wide (or what
  *  fits) and 40 cm deep, centred on the point. Undefined when the room is already shaped. */
 export function notchAt(

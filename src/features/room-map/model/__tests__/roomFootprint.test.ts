@@ -13,6 +13,7 @@ import {
   footprintMinimumSize,
   movableWalls,
   moveFootprintWall,
+  moveFootprintWallClamped,
   notchAt,
   outsideOutline,
   resizeFootprint,
@@ -149,6 +150,15 @@ describe("dragging and notching the outline", () => {
     expect(moveFootprintWall(L, dims, level!.index, 0.504)).toContainEqual({ x: 3, y: 3 });
     // Down onto the back wall would leave a zero-length wall.
     expect(moveFootprintWall(L, dims, level!.index, 1.5)).toBeNull();
+  });
+
+  it("lands a drag past the limit on the last good centimetre instead of freezing short of it", () => {
+    const [level] = movableWalls(L, dims);
+    const landed = moveFootprintWallClamped(L, dims, level!.index, 1.5);
+    const y = landed!.find((c) => c.x === 5 && c.y > 2.5 && c.y < 4)!.y;
+    // A wall keeps 10 cm, so the cut's floor stops 10 cm short of the back wall.
+    expect(y).toBeCloseTo(3.9, 5);
+    expect(moveFootprintWallClamped(L, dims, level!.index, 0.5)).toEqual(moveFootprintWall(L, dims, level!.index, 0.5));
   });
 
   it("cuts a notch into a rectangle where it was double-clicked, and not into a shaped room", () => {

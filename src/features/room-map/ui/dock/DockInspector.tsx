@@ -124,6 +124,7 @@ export function DockInspector({
           roomHeightMeters={config.dimensions.heightMeters}
           autoKind={autoScreenKind(config)}
           modelChoices={modelChoices}
+          outside={outsideOutline(target.tv.x + target.tv.width / 2, target.tv.y + target.tv.height / 2, resolveRoomFootprint(config))}
           onUpdate={actions.onUpdateTvAnchor}
           onToggleLock={() => actions.onToggleLock(TV_ANCHOR_OBJECT_ID)}
           onDelete={() => actions.onDelete(TV_ANCHOR_OBJECT_ID)}

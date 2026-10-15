@@ -4,6 +4,7 @@ import { findHueChannel, replaceHueChannel } from "@/shared/contracts/roomMap";
 import { moveHueChannelToWorld, nudgeHueChannel } from "./hueChannelPosition";
 import { findScopedHueChannel, updateScopedHueChannel } from "./hueChannelScope";
 import { furnitureObjectId, usbStripObjectId, type RoomObjectKind, type RoomObjectRef } from "./objectId";
+import { keepPlacedInside, keepStripInside, roomBoxOf } from "./pieceGeometry";
 import type { InspectorTarget } from "./resolveInspectorTarget";
 
 type Patch = Partial<RoomMapConfig>;
@@ -64,10 +65,13 @@ export const ROOM_OBJECT_KINDS = {
       config.tvAnchor ? { tvAnchor: { ...config.tvAnchor, locked: !config.tvAnchor.locked } } : null,
     remove: () => ({ tvAnchor: undefined }),
     duplicate: null,
-    moveTo: (config, _ref, x, y) => (config.tvAnchor ? { tvAnchor: { ...config.tvAnchor, x, y } } : null),
+    moveTo: (config, _ref, x, y) =>
+      config.tvAnchor ? { tvAnchor: keepPlacedInside({ ...config.tvAnchor, x, y }, roomBoxOf(config)) } : null,
     nudge: (cfg, _ref, direction) => {
       const { dx, dy } = worldStep(direction);
-      return cfg.tvAnchor ? { tvAnchor: { ...cfg.tvAnchor, x: cfg.tvAnchor.x + dx, y: cfg.tvAnchor.y + dy } } : {};
+      return cfg.tvAnchor
+        ? { tvAnchor: keepPlacedInside({ ...cfg.tvAnchor, x: cfg.tvAnchor.x + dx, y: cfg.tvAnchor.y + dy }, roomBoxOf(cfg)) }
+        : {};
     },
     rotateBy: null,
     rename: null,
@@ -87,12 +91,14 @@ export const ROOM_OBJECT_KINDS = {
       return { patch: { furniture: [...config.furniture, dup] }, objectId: furnitureObjectId(dup.id) };
     },
     moveTo: (config, ref, x, y) => ({
-      furniture: config.furniture.map((f) => (f.id === ref.furnitureId ? { ...f, x, y } : f)),
+      furniture: config.furniture.map((f) => (f.id === ref.furnitureId ? keepPlacedInside({ ...f, x, y }, roomBoxOf(config)) : f)),
     }),
     nudge: (cfg, ref, direction) => {
       const { dx, dy } = worldStep(direction);
       return {
-        furniture: cfg.furniture.map((f) => (f.id === ref.furnitureId ? { ...f, x: f.x + dx, y: f.y + dy } : f)),
+        furniture: cfg.furniture.map((f) =>
+          f.id === ref.furnitureId ? keepPlacedInside({ ...f, x: f.x + dx, y: f.y + dy }, roomBoxOf(cfg)) : f,
+        ),
       };
     },
     rotateBy: (config, ref, degrees) => ({
@@ -134,7 +140,7 @@ export const ROOM_OBJECT_KINDS = {
         if (s.stripId !== ref.stripId) return s;
         const dx = x - s.startX;
         const dy = y - s.startY;
-        return { ...s, startX: x, startY: y, endX: s.endX + dx, endY: s.endY + dy };
+        return keepStripInside({ ...s, startX: x, startY: y, endX: s.endX + dx, endY: s.endY + dy }, roomBoxOf(config));
       }),
     }),
     nudge: (cfg, ref, direction) => {
@@ -142,7 +148,10 @@ export const ROOM_OBJECT_KINDS = {
       return {
         usbStrips: cfg.usbStrips.map((s) =>
           s.stripId === ref.stripId
-            ? { ...s, startX: s.startX + dx, startY: s.startY + dy, endX: s.endX + dx, endY: s.endY + dy }
+            ? keepStripInside(
+                { ...s, startX: s.startX + dx, startY: s.startY + dy, endX: s.endX + dx, endY: s.endY + dy },
+                roomBoxOf(cfg),
+              )
             : s,
         ),
       };

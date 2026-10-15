@@ -87,3 +87,63 @@ export function landCarriedPiece<T extends { x: number; y: number; width: number
   );
   return { ...piece, x: Math.round(box.x * 100) / 100, y: Math.round(box.y * 100) / 100, rotation };
 }
+
+export interface RoomBox {
+  width: number;
+  depth: number;
+}
+
+export function roomBoxOf(config: { dimensions: { widthMeters: number; depthMeters: number } }): RoomBox {
+  return { width: config.dimensions.widthMeters, depth: config.dimensions.depthMeters };
+}
+
+const mm = (v: number) => Math.round(v * 1000) / 1000;
+
+/**
+ * A placed rectangle (furniture, the TV) kept inside the room whatever put it there — a typed X of
+ * −5 sent a sofa off the plan, out of reach of the pointer. A square-turned piece longer than the
+ * room is cut to it first; at any other angle one too big is centred.
+ */
+export function keepPlacedInside<T extends { x: number; y: number; width: number; height: number; rotation?: number }>(
+  piece: T,
+  room: RoomBox,
+): T {
+  const r = (((piece.rotation ?? 0) % 360) + 360) % 360;
+  let { width, height } = piece;
+  if (r % 180 === 0) {
+    width = Math.min(width, room.width);
+    height = Math.min(height, room.depth);
+  } else if (r % 180 === 90) {
+    width = Math.min(width, room.depth);
+    height = Math.min(height, room.width);
+  }
+  const box = clampInsideRoom({ x: piece.x, y: piece.y, w: width, h: height, r }, room);
+  const next = { ...piece, x: mm(box.x), y: mm(box.y), width: mm(width), height: mm(height) };
+  return next.x === piece.x && next.y === piece.y && next.width === piece.width && next.height === piece.height
+    ? piece
+    : next;
+}
+
+/** A strip slid, whole, so both its ends are inside the room; one longer than the room starts at
+ *  its near wall. */
+export function keepStripInside<T extends { startX: number; startY: number; endX: number; endY: number }>(
+  strip: T,
+  room: RoomBox,
+): T {
+  const shift = (a: number, b: number, span: number) => {
+    const lo = Math.min(a, b);
+    const hi = Math.max(a, b);
+    if (lo < 0 || hi - lo > span) return -lo;
+    return hi > span ? span - hi : 0;
+  };
+  const dx = shift(strip.startX, strip.endX, room.width);
+  const dy = shift(strip.startY, strip.endY, room.depth);
+  if (dx === 0 && dy === 0) return strip;
+  return {
+    ...strip,
+    startX: mm(strip.startX + dx),
+    endX: mm(strip.endX + dx),
+    startY: mm(strip.startY + dy),
+    endY: mm(strip.endY + dy),
+  };
+}

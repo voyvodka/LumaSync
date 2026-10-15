@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { clampInsideRoom, landCarriedPiece, resizeFromHandle } from "../pieceGeometry";
+import { clampInsideRoom, keepPlacedInside, keepStripInside, landCarriedPiece, resizeFromHandle } from "../pieceGeometry";
 
 const room = { width: 5, depth: 4 };
 
@@ -48,5 +48,29 @@ describe("landCarriedPiece", () => {
     expect(landed.y + landed.height / 2).toBeCloseTo(2, 1);
     const pushed = landCarriedPiece(sofa, 9, 2, 0, room);
     expect(pushed.x + pushed.width).toBeLessThanOrEqual(room.width + 0.01);
+  });
+});
+
+describe("keepPlacedInside", () => {
+  // A typed X of −5 sent the sofa off the plan, where no pointer could reach it.
+  it("brings a typed position back inside the room", () => {
+    expect(keepPlacedInside({ x: -5, y: 2.5, width: 2, height: 0.9 }, room)).toMatchObject({ x: 0, y: 2.5 });
+  });
+
+  it("cuts a square-turned piece longer than the room to it, across the turn", () => {
+    expect(keepPlacedInside({ x: 0, y: 0, width: 9, height: 1, rotation: 90 }, room)).toMatchObject({ width: 4 });
+    expect(keepPlacedInside({ x: 0, y: 0, width: 9, height: 1 }, room)).toMatchObject({ x: 0, width: 5 });
+  });
+
+  it("hands back the same piece when it already fits", () => {
+    const piece = { x: 1, y: 1, width: 1, height: 1 };
+    expect(keepPlacedInside(piece, room)).toBe(piece);
+  });
+});
+
+describe("keepStripInside", () => {
+  it("slides a strip whole until both its ends are inside", () => {
+    expect(keepStripInside({ startX: 4.5, startY: 1, endX: 5.5, endY: 1 }, room)).toEqual({ startX: 4, startY: 1, endX: 5, endY: 1 });
+    expect(keepStripInside({ startX: 1, startY: -1, endX: 1, endY: 0.5 }, room)).toEqual({ startX: 1, startY: 0, endX: 1, endY: 1.5 });
   });
 });

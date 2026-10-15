@@ -66,6 +66,14 @@ describe("ROOM_OBJECT_KINDS", () => {
     expect(ROOM_OBJECT_KINDS.furniture.rotateBy(config, ref, 15).furniture?.[0]?.rotation).toBe(5);
   });
 
+  it("stops a nudged or typed piece at the room's walls", () => {
+    const ref = parseObjectId(furnitureObjectId("f1")) as RoomObjectRef<"furniture">;
+    const far = ROOM_OBJECT_KINDS.furniture.moveTo(config, ref, -5, 0);
+    expect(far?.furniture?.[0]?.x).toBeGreaterThanOrEqual(0);
+    const atWall = { ...config, furniture: config.furniture.map((f) => ({ ...f, x: 0, rotation: 0 })) };
+    expect(ROOM_OBJECT_KINDS.furniture.nudge(atWall, ref, { x: -1, y: 0, coarse: true }).furniture?.[0]?.x).toBe(0);
+  });
+
   it("nudges world objects by 10 cm or a metre, and Hue channels by 0.05 with y up", () => {
     const tv = { kind: "tv" } as const;
     expect(ROOM_OBJECT_KINDS.tv.nudge(config, tv, { x: 1, y: 0, coarse: false }).tvAnchor?.x).toBeCloseTo(1.1);
