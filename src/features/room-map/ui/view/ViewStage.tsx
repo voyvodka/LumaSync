@@ -7,7 +7,7 @@ import { RoomView3DHost } from "@/features/room-view/ui/RoomView3DHost";
 
 import { deriveHueAreaState } from "../../model/hueAreaState";
 import { parseObjectId } from "../../model/objectId";
-import { clampInsideRoom } from "../../model/pieceGeometry";
+import { landCarriedPiece } from "../../model/pieceGeometry";
 import type { RoomAwareStatus } from "../../model/roomAware";
 import { buildViewLights, resolveViewSelection } from "../../model/viewLights";
 import { useHueIdentify } from "../../state/useHueIdentify";
@@ -89,19 +89,16 @@ export function ViewStage({
 
   // A piece carried across the floor in the room lands there on the plan, inside the walls.
   const handleMovePiece = useCallback(
-    (objectId: string, sceneX: number, sceneZ: number) => {
+    (objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => {
       const ref = parseObjectId(objectId);
       if (!ref || ref.kind !== "furniture") return;
       const { widthMeters, depthMeters } = scopedConfig.dimensions;
       apply((cfg) => ({
-        furniture: cfg.furniture.map((f) => {
-          if (f.id !== ref.furnitureId || f.locked) return f;
-          const box = clampInsideRoom(
-            { x: sceneX + widthMeters / 2 - f.width / 2, y: sceneZ + depthMeters / 2 - f.height / 2, w: f.width, h: f.height, r: f.rotation ?? 0 },
-            { width: widthMeters, depth: depthMeters },
-          );
-          return { ...f, x: Math.round(box.x * 100) / 100, y: Math.round(box.y * 100) / 100 };
-        }),
+        furniture: cfg.furniture.map((f) =>
+          f.id !== ref.furnitureId || f.locked
+            ? f
+            : landCarriedPiece(f, sceneX + widthMeters / 2, sceneZ + depthMeters / 2, turnDeg, { width: widthMeters, depth: depthMeters }),
+        ),
       }));
     },
     [apply, scopedConfig.dimensions],

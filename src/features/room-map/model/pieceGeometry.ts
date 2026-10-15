@@ -70,3 +70,20 @@ export function resizeFromHandle(
   const cy = anchorY - (bx * sin + by * cos);
   return { ...start, x: cx - w / 2, y: cy - h / 2, w, h };
 }
+
+/** A piece carried in the 3D room and put down with its middle at (`centreX`, `centreY`) on the
+ *  plan, turned `turnDeg` more: it lands inside the room, to the centimetre. */
+export function landCarriedPiece<T extends { x: number; y: number; width: number; height: number; rotation?: number }>(
+  piece: T,
+  centreX: number,
+  centreY: number,
+  turnDeg: number,
+  room: { width: number; depth: number },
+): T {
+  const rotation = ((((piece.rotation ?? 0) + turnDeg) % 360) + 360) % 360;
+  const box = clampInsideRoom(
+    { x: centreX - piece.width / 2, y: centreY - piece.height / 2, w: piece.width, h: piece.height, r: rotation },
+    room,
+  );
+  return { ...piece, x: Math.round(box.x * 100) / 100, y: Math.round(box.y * 100) / 100, rotation };
+}

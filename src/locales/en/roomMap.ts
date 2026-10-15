@@ -42,7 +42,7 @@ export default {
     },
     back: "Back to the lights",
     resetCamera: "Whole room",
-    cameraHint: "Drag to turn · right-drag to move · scroll to zoom · double-click to look at something",
+    cameraHint: "Drag to turn · right-drag to move · scroll to zoom · double-click to look at something · drag a piece to carry it, R or scroll to turn it",
     identify: "Blink",
     identifyHint: "Make the real light blink for a few seconds",
     identifyUnavailable: "Pair a Hue Bridge in Devices to blink this light",

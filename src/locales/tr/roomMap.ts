@@ -45,7 +45,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     },
     back: "Işıklara dön",
     resetCamera: "Tüm oda",
-    cameraHint: "Döndürmek için sürükle · taşımak için sağ tıkla sürükle · yakınlaştırmak için kaydır · bakmak için çift tıkla",
+    cameraHint: "Döndürmek için sürükle · taşımak için sağ tıkla sürükle · yakınlaştırmak için kaydır · bakmak için çift tıkla · eşyayı taşımak için sürükle, çevirmek için R ya da kaydır",
     identify: "Yanıp söndür",
     identifyHint: "Gerçek ışığı birkaç saniye yanıp söndür",
     identifyUnavailable: "Bu ışığı yanıp söndürmek için Cihazlar'da bir Hue Bridge eşle",

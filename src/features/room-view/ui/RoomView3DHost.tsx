@@ -26,7 +26,7 @@ export function RoomView3DHost(props: {
   bottomInset?: number;
   cameraCommand?: CameraCommand;
   onPick?: (objectId: string | null) => void;
-  onMovePiece?: (objectId: string, sceneX: number, sceneZ: number) => void;
+  onMovePiece?: (objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => void;
   onFail: (error: unknown) => void;
 }) {
   const visible = useWindowVisible();

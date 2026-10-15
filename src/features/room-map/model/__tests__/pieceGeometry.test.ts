@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { clampInsideRoom, resizeFromHandle } from "../pieceGeometry";
+import { clampInsideRoom, landCarriedPiece, resizeFromHandle } from "../pieceGeometry";
 
 const room = { width: 5, depth: 4 };
 
@@ -36,5 +36,17 @@ describe("resizeFromHandle", () => {
   it("keeps the proportions from a corner with ⇧", () => {
     const box = resizeFromHandle(start, { sx: 1, sy: 1 }, 1, 0, { ...options, keepRatio: true });
     expect(box.w / box.h).toBeCloseTo(2);
+  });
+});
+
+describe("landCarriedPiece", () => {
+  it("puts the piece's middle where it was dropped, turned, inside the room", () => {
+    const sofa = { id: "s", x: 0, y: 0, width: 2, height: 1, rotation: 350 };
+    const landed = landCarriedPiece(sofa, 2.5, 2, 30, room);
+    expect(landed.rotation).toBe(20);
+    expect(landed.x + landed.width / 2).toBeCloseTo(2.5, 1);
+    expect(landed.y + landed.height / 2).toBeCloseTo(2, 1);
+    const pushed = landCarriedPiece(sofa, 9, 2, 0, room);
+    expect(pushed.x + pushed.width).toBeLessThanOrEqual(room.width + 0.01);
   });
 });

@@ -97,7 +97,7 @@ function openRoomView(
   host: HTMLElement,
   onFail: (error: unknown) => void,
   onPick: (objectId: string | null) => void,
-  onMovePiece: ((objectId: string, sceneX: number, sceneZ: number) => void) | null,
+  onMovePiece: ((objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => void) | null,
 ): RoomView {
   const options: SpikeOptions = window.__roomViewSpikeOptions ?? {};
   const started = performance.now();
@@ -264,7 +264,34 @@ function openRoomView(
     };
     // A piece pressed on is carried over the floor: a frame shows where it will stand, and it is
     // put there on release. A press on anything else turns the room as before.
-    let carry: { id: string; dx: number; dz: number; ghost: LineSegments; moved: boolean } | null = null;
+    let carry: { id: string; dx: number; dz: number; ghost: LineSegments; moved: boolean; turn: number; angle: number } | null = null;
+    // While a piece is carried, the wheel or R turns it in 15° steps (⇧ turns the other way).
+    const turnCarry = (by: number) => {
+      if (!carry) return;
+      carry.turn = (((carry.turn + by) % 360) + 360) % 360;
+      carry.moved = true;
+      carry.ghost.visible = true;
+      carry.ghost.rotation.y = -(carry.angle + (carry.turn * Math.PI) / 180);
+      request();
+    };
+    canvas.addEventListener(
+      "wheel",
+      (event) => {
+        if (!carry) return;
+        event.preventDefault();
+        turnCarry(event.deltaY > 0 ? 15 : -15);
+      },
+      { signal: listening.signal, passive: false },
+    );
+    window.addEventListener(
+      "keydown",
+      (event) => {
+        if (!carry || (event.key !== "r" && event.key !== "R")) return;
+        event.preventDefault();
+        turnCarry(event.shiftKey ? -15 : 15);
+      },
+      { signal: listening.signal },
+    );
     canvas.addEventListener(
       "pointerdown",
       (event) => {
@@ -283,7 +310,7 @@ function openRoomView(
         ghost.rotation.y = -item.angle;
         ghost.visible = false;
         room.scene.add(ghost);
-        carry = { id, dx: item.centre.x - onFloor.x, dz: item.centre.z - onFloor.z, ghost, moved: false };
+        carry = { id, dx: item.centre.x - onFloor.x, dz: item.centre.z - onFloor.z, ghost, moved: false, turn: 0, angle: item.angle };
         orbit.enabled = false;
         canvas.setPointerCapture(event.pointerId);
       },
@@ -314,7 +341,7 @@ function openRoomView(
       c.ghost.geometry.dispose();
       (c.ghost.material as LineBasicMaterial).dispose();
       request();
-      if (commit && c.moved) onMovePiece?.(c.id, c.ghost.position.x, c.ghost.position.z);
+      if (commit && c.moved) onMovePiece?.(c.id, c.ghost.position.x, c.ghost.position.z, c.turn);
       return c.moved;
     };
     canvas.addEventListener(
@@ -510,7 +537,7 @@ export default function RoomView3D({
   bottomInset?: number;
   cameraCommand?: CameraCommand;
   /** A piece carried to a new place on the floor: its centre there, in the scene frame. */
-  onMovePiece?: (objectId: string, sceneX: number, sceneZ: number) => void;
+  onMovePiece?: (objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => void;
   /** A click in the room: the object it landed on, or null for empty ground. */
   onPick?: (objectId: string | null) => void;
   /** No view could be drawn — no WebGL context, or the scene failed to build. */
@@ -537,7 +564,7 @@ export default function RoomView3D({
         host,
         fail,
         (objectId) => onPickRef.current?.(objectId),
-        (objectId, x, z) => onMoveRef.current?.(objectId, x, z),
+        (objectId, x, z, turn) => onMoveRef.current?.(objectId, x, z, turn),
       );
     } catch (error) {
       fail(error);
