@@ -4,7 +4,6 @@
 import { lampColour } from "../model/lampColours";
 import {
   AdditiveBlending,
-  BoxGeometry,
   type BufferGeometry,
   Color,
   DoubleSide,
@@ -53,11 +52,8 @@ import { lampFixture } from "./scene/lamps";
 import { lampLights } from "./scene/lampLights";
 import { buildScreen } from "./scene/screen";
 import { buildSelectionMark } from "./scene/selection";
-import { BLOOM_LAYER } from "./scene/bloom";
+import { type LedTape, ledTape, TAPE_DEPTH as STRIP_DEPTH, TAPE_WIDTH as STRIP_WIDTH } from "./scene/ledTape";
 
-/** An LED strip's tape is about a centimetre wide and a few millimetres deep. */
-const STRIP_WIDTH = 0.012;
-const STRIP_DEPTH = 0.004;
 const STRIP_GLOW = 0xffc46b;
 const BACKLIGHT_GAIN = 1.6;
 const UNLIT_STRIP = new Color(0x2a2a2e);
@@ -239,6 +235,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   // The USB strips: one behind the screen is its backlight, picked there; any other runs as a lit line
   // a centimetre wide at its height. A strip was listed in the dock and drawn nowhere.
   const stripMaterials: MeshBasicMaterial[] = [];
+  const tapes: LedTape[] = [];
   for (const strip of config.usbStrips) {
     const mx = (strip.startX + strip.endX) / 2;
     const my = (strip.startY + strip.endY) / 2;
@@ -258,11 +255,11 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     const centre = roomToScene(mx, my, lying ? STRIP_DEPTH / 2 + 0.001 : height, dims);
     const barMaterial = new MeshBasicMaterial({ color: STRIP_GLOW, toneMapped: false });
     stripMaterials.push(barMaterial);
-    const bar = new Mesh(new BoxGeometry(half[0] * 2, half[1] * 2, half[2] * 2), barMaterial);
-    bar.layers.enable(BLOOM_LAYER);
-    bar.position.set(centre.x, centre.y, centre.z);
-    bar.rotation.y = -angle;
-    scene.add(bar);
+    const tape = ledTape(length, strip.ledCount, lying, barMaterial);
+    tape.group.position.set(centre.x, centre.y, centre.z);
+    tape.group.rotation.y = -angle;
+    scene.add(tape.group);
+    tapes.push(tape);
     pickables.push({ id, kind: "light", centre, half, angle, line: true });
   }
 
@@ -403,6 +400,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     },
     setPixelsPerMetre(ppm: number) {
       mark.setPixelsPerMetre(ppm);
+      for (const tape of tapes) tape.setPixelsPerMetre(ppm);
     },
   };
 }

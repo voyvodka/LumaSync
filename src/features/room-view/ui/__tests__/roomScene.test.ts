@@ -268,7 +268,7 @@ describe("buildRoomScene — mood", () => {
       );
       const bar = stripBar(room.scene)!;
       const { height, depth } = (bar.geometry as BoxGeometry).parameters;
-      const result = { y: bar.position.y, thickest: Math.max(height, depth) };
+      const result = { y: bar.getWorldPosition(new Vector3()).y, thickest: Math.max(height, depth) };
       disposeScene(room.scene);
       return result;
     };
@@ -279,8 +279,14 @@ describe("buildRoomScene — mood", () => {
   });
 });
 
+/** The strip's lit line, the far view's whole strip. */
 function stripBar(scene: Scene): Mesh | undefined {
-  return scene.children.find(
-    (object): object is Mesh => object instanceof Mesh && object.geometry instanceof BoxGeometry && object.geometry.parameters.width >= 1 && object.geometry.parameters.height <= 0.02,
-  );
+  let found: Mesh | undefined;
+  scene.updateMatrixWorld(true);
+  scene.traverse((object) => {
+    if (found || !(object instanceof Mesh) || object instanceof InstancedMesh || !(object.geometry instanceof BoxGeometry)) return;
+    const { width, height } = object.geometry.parameters;
+    if (width >= 1 && height <= 0.02 && (object.material as MeshBasicMaterial).toneMapped === false) found = object;
+  });
+  return found;
 }
