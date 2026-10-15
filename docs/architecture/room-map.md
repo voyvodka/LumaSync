@@ -368,6 +368,11 @@ backlight drawn as a stray line along the wall.
   sizes, including a 3.81 × 0.17 m piece a user really drew. The reading lives in the three-free
   `room-view/model/furnitureModel.ts`, so the inspector can say what "Auto" reads as without the 3D
   chunk.
+- **A monitor stands on its desk.** With no mount height of its own, a monitor over a desk is drawn
+  on the desk's top (its stored height, else `DESK_TOP`) on a 10 cm stand, near the desk's back —
+  the room's 40% default sank a wide monitor into the top and floated a small one on a pole. A set
+  height is kept but never goes through the top. This is drawing only: room-aware sampling still
+  reads `tvMountHeight`, so a monitor's light zones can sit a few centimetres off the drawn screen.
 - **A user's pick overrides the reading; it never replaces it.** `FurniturePlacement.variant` (a
   table's desk/coffee/dining/side, a chair's dining/office/armchair/bench/stool/beanbag, a sofa's
   straight or corner, storage's sideboard/bookshelf/wardrobe/nightstand/TV unit/dresser, a kitchen's

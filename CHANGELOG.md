@@ -593,6 +593,11 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- In the 3D room a monitor stands on its desk at the desk's real height, on its stand near the back,
+  instead of sinking a wide screen into the top or floating a small one on a long pole. The
+  Showroom template gives each piece its own id, so the dining chair and table no longer select
+  together (apply it again to fix a room laid out from it before).
+
 - Choosing from a list inside a popover — an effect in the 3D view's lights — no longer closes the
   popover around it too, and Esc closes the inner list first.
 

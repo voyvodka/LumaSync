@@ -29,7 +29,7 @@ function makeTemplate(
 /** A showroom piece, named by its model so each one can be told apart in the list. */
 function shown(t: TFunction, type: FurnitureType, variant: FurnitureVariant | null, x: number, y: number, width: number, height: number): FurniturePlacement {
   return {
-    id: `show-${variant ?? type}`,
+    id: `show-${type}-${variant ?? "plain"}`,
     type,
     x,
     y,

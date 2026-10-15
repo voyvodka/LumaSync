@@ -40,6 +40,9 @@ describe("TemplateSelector", () => {
       if (variants.length === 0) expect(shown.has(`${type}:`), type).toBe(true);
       for (const variant of variants) expect(shown.has(`${type}:${variant}`), `${type}:${variant}`).toBe(true);
     }
+    // The dining chair and the dining table shared an id, so picking one selected both.
+    const ids = room.furniture.map((f) => f.id);
+    expect(new Set(ids).size).toBe(ids.length);
     const { widthMeters, depthMeters } = room.dimensions;
     const standing = room.furniture.filter((f) => f.type !== "rug");
     for (const f of room.furniture) {

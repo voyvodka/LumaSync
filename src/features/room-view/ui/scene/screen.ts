@@ -2,7 +2,14 @@
 // over a low unit with a soundbar when it hangs on the wall.
 import { BufferAttribute, Color, PlaneGeometry } from "three";
 
-import { type RoomMapConfig, resolveScreenKind, SCREEN_KINDS, stripCentre, stripPoints } from "@/shared/contracts/roomMap";
+import {
+  type RoomMapConfig,
+  resolveFurnitureTop,
+  resolveScreenKind,
+  SCREEN_KINDS,
+  stripCentre,
+  stripPoints,
+} from "@/shared/contracts/roomMap";
 
 import { DESK_TOP, type FurnitureModel } from "../../model/furnitureModel";
 import { roomToScene, type ScenePoint, tvMountHeight } from "../../model/roomSpace";
@@ -15,6 +22,9 @@ const WALL_REACH = 0.4;
 const BACKLIGHT_REACH = 1.0;
 const TV_UNIT_HEIGHT = 0.46;
 const TV_UNIT_DEPTH = 0.42;
+/** A monitor's stand: the panel's foot this far over the desk, the panel this far in from its back. */
+const MONITOR_STAND = 0.1;
+const MONITOR_SETBACK = 0.14;
 
 export interface ScreenLayout {
   centre: ScenePoint;
@@ -39,15 +49,31 @@ export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, F
   const dims = config.dimensions;
   const width = tv.width;
   const height = width * 0.5625;
-  const mount = tvMountHeight(tv, dims);
-  const centre = roomToScene(tv.x + tv.width / 2, tv.y + tv.height / 2, mount, dims);
+  const desk = config.furniture.find((f) => {
+    const model = models.get(f.id);
+    return model?.kind === "desk" && model.screenX !== null;
+  });
+  const deskUnder = desk !== undefined;
+  // The user's pick wins; absent, a desk under the screen makes it a monitor.
+  const kind = resolveScreenKind(tv.screenKind) ?? (deskUnder ? SCREEN_KINDS.MONITOR : SCREEN_KINDS.TV);
+  const monitor = kind === SCREEN_KINDS.MONITOR;
+  const deskTop = desk ? (resolveFurnitureTop(desk) ?? DESK_TOP) : DESK_TOP;
+  let mount = tvMountHeight(tv, dims);
+  let planY = tv.y + tv.height / 2;
+  if (monitor && desk) {
+    // The room's 40% default sank a wide monitor into the desk and floated a small one on a pole:
+    // with no height of its own it stands on the desk, and a set height never goes through the top.
+    const resting = deskTop + MONITOR_STAND + height / 2;
+    mount = tv.mountHeightMeters == null ? resting : Math.max(mount, deskTop + 0.02 + height / 2);
+    // On the top, near its back, where a desk's monitor stands; a turned desk keeps the plan's spot.
+    if ((desk.rotation ?? 0) % 180 === 0 && desk.height > MONITOR_SETBACK * 2) {
+      planY = Math.min(Math.max(planY, desk.y + MONITOR_SETBACK), desk.y + desk.height - MONITOR_SETBACK);
+    }
+  }
+  const centre = roomToScene(tv.x + tv.width / 2, planY, mount, dims);
   const bottom = mount - height / 2;
   const wallZ = -dims.depthMeters / 2;
   const onWall = centre.z - wallZ <= WALL_REACH;
-  // The user's pick wins; absent, a desk under the screen makes it a monitor.
-  const deskUnder = [...models.values()].some((m) => m.kind === "desk" && m.screenX !== null);
-  const kind = resolveScreenKind(tv.screenKind) ?? (deskUnder ? SCREEN_KINDS.MONITOR : SCREEN_KINDS.TV);
-  const monitor = kind === SCREEN_KINDS.MONITOR;
   const depth = monitor ? 0.022 : 0.035;
 
   const parts: Part[] = [block(width, height, depth, centre.x, bottom, centre.z, PALETTE.bezel, monitor ? 0.006 : 0.01)];
@@ -61,9 +87,9 @@ export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, F
   });
 
   if (onDesk) {
-    const neck = Math.max(bottom - DESK_TOP, 0) + 0.08;
-    parts.push(block(Math.min(0.26, width * 0.4), 0.012, 0.18, centre.x, DESK_TOP, centre.z - 0.02, PALETTE.metal, 0.006));
-    parts.push(block(0.05, neck, 0.03, centre.x, DESK_TOP, centre.z - depth / 2 - 0.015, PALETTE.metal, 0.008));
+    const neck = Math.max(bottom - deskTop, 0) + 0.08;
+    parts.push(block(Math.min(0.26, width * 0.4), 0.012, 0.18, centre.x, deskTop, centre.z - 0.02, PALETTE.metal, 0.006));
+    parts.push(block(0.05, neck, 0.03, centre.x, deskTop, centre.z - depth / 2 - 0.015, PALETTE.metal, 0.008));
   } else if (!monitor && bottom >= TV_UNIT_HEIGHT + 0.04 && !covered) {
     const unitW = Math.min(Math.max(width * 1.15, 0.9), dims.widthMeters - 0.1);
     const unitZ = onWall ? wallZ + TV_UNIT_DEPTH / 2 + 0.02 : centre.z + TV_UNIT_DEPTH / 2 - 0.1;
