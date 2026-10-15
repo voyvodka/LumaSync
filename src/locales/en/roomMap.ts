@@ -40,6 +40,8 @@ export default {
     rotate: "Drag to turn — 15° steps, ⇧ for any angle",
   },
   view: {
+    lightsControl: "Lights: {{mode}}",
+    allLights: "All lights",
     dock: "Lights in the room",
     lights: {
       label: "Lights",

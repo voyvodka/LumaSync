@@ -9,6 +9,7 @@ import type { RoomAwareStatus } from "../model/roomAware";
 import styles from "./CornerControls.module.css";
 import { RoomAwareIndicator } from "./RoomAwareIndicator";
 import { ShortcutsHelp } from "./ShortcutsHelp";
+import { RoomLights } from "./view/RoomLights";
 import { ZoomControl } from "./ZoomControl";
 
 const IS_MAC = typeof navigator !== "undefined" && navigator.platform.includes("Mac");
@@ -57,17 +58,19 @@ export function CornerControls({
   history,
   view,
   stage,
+  lights = false,
 }: {
   roomAware: RoomAwareStatus | null;
   edit?: CornerEditControls;
   history?: CornerHistoryControls;
   view?: CornerViewControls;
   stage?: CornerStageControls;
+  lights?: boolean;
 }) {
   const { t } = useTranslation();
   const mod = IS_MAC ? "⌘" : "Ctrl+";
   const shift = IS_MAC ? "⇧" : "Shift+";
-  if (!edit && !history && !view && !stage && !roomAware) return null;
+  if (!edit && !history && !view && !stage && !lights && !roomAware) return null;
   const steps = edit ?? history;
   return (
     <div className={styles.corner}>
@@ -84,6 +87,7 @@ export function CornerControls({
           ]}
         />
       )}
+      {lights && <RoomLights buttonClassName={cx(styles.capsule, styles.button, styles.lights)} />}
       {view && !steps && (
         <div className={styles.capsule}>
           <CameraButtons view={view} />

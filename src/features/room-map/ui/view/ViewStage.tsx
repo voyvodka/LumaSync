@@ -184,6 +184,7 @@ export function ViewStage({
       />
       <CornerControls
         roomAware={roomAware}
+        lights
         view={{
           onZoomIn: () => setCameraCommand((c) => ({ kind: "in", seq: (c?.seq ?? 0) + 1 })),
           onZoomOut: () => setCameraCommand((c) => ({ kind: "out", seq: (c?.seq ?? 0) + 1 })),

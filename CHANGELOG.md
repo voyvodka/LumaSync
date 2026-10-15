@@ -166,6 +166,9 @@ https://keepachangelog.com/en/1.1.0/
     of jumping half a metre at a time; sizes land on 5 cm. A turned piece's side handles show the
     cursor along the way they drag. The name field edits as the number fields do, with a soft tint
     and an amber line instead of a framed box.
+  - The 3D view has the lights' everyday controls: a button in its corner names the running mode,
+    and opens the modes, the brightness, Solid's colour and white, and the effect for every light at
+    once, as the tray window does.
   - The room can be laid out in 3D: Edit opens on the 3D room, with a 3D | Plan switch in its
     corner, and the dock works there as on the plan — add a piece from the palette, pick anything
     in the room to edit it in its card, carry and turn it, delete it, undo. The walls, a strip's ends

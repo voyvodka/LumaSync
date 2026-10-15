@@ -43,6 +43,8 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     rotate: "Döndürmek için sürükle — 15° adım, ⇧ ile serbest",
   },
   view: {
+    lightsControl: "Işıklar: {{mode}}",
+    allLights: "Tüm ışıklar",
     dock: "Odadaki ışıklar",
     lights: {
       label: "Işıklar",

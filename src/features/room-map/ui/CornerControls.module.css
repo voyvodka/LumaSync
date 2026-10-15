@@ -67,6 +67,15 @@
     background: var(--lm-line-2);
   }
 
+  /* A lone button standing as a capsule: `.button` comes later and would clear the panel. */
+  .lights {
+    display: flex;
+    gap: 6px;
+    padding: 0 10px;
+    background: var(--lm-panel);
+  }
+  .lights:hover:not(:disabled) { background: var(--lm-panel-2); }
+
   /* The stage shown carries the face switch's plate, so it is never marked by colour alone. */
   .button.stage[aria-checked="true"] {
     color: var(--lm-amber);

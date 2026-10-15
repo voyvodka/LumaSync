@@ -41,6 +41,13 @@ before either face. Empty means nothing the user placed: the strip a connect on 
 Hue channels the bridge sync seeds do not count, since the sync lands a moment after the map opens
 and once took the picker away under a first-time Hue user's pointer; a template keeps both.
 
+**View changes every light at once, never one.** The corner's lights button (`view/RoomLights.tsx`)
+opens `QuickLights` — the column the tray window draws — in a popover: mode, brightness, Solid's
+colour and white, the effect. It writes through the same lighting control as Lights, so the room's
+mood follows on the next frame. A single light's colour is not offered: the running mode drives every
+output, and a per-light override would need a contract the modes do not have. Scenes stay off it;
+they are a page's choice, and the popover keeps to what the room changes as you watch.
+
 **Edit draws the room in 3D or as the plan, and the dock is the same for both.** The editor's stage
 — 3D | Plan in its corner — swaps only what the room is drawn as: `RoomView3DHost` or
 `RoomMapCanvas` in the same slot, under the same dock, history, keys and save. So everything the dock
