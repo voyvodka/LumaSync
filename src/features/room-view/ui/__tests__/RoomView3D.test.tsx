@@ -127,4 +127,41 @@ describe("RoomView3D", () => {
     expect(() => render(<RoomView3D config={DEFAULT_ROOM_MAP} label="Room" onFail={onFail} />)).not.toThrow();
     expect(onFail).toHaveBeenCalledWith(expect.objectContaining({ message: "no WebGL context" }));
   });
+
+  describe("a click in the room", () => {
+    const press = (canvas: HTMLCanvasElement, type: string, x: number, y = 10, button = 0) =>
+      canvas.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, button, pointerId: 1, bubbles: true }));
+
+    const open = () => {
+      const onPick = vi.fn<(id: string | null) => void>();
+      render(<RoomView3D config={DEFAULT_ROOM_MAP} label="Room" onPick={onPick} onFail={() => {}} />);
+      const canvas = gl.renderers[0]?.domElement as HTMLCanvasElement;
+      return { onPick, canvas };
+    };
+
+    it("is a press that moves less than 3 px", () => {
+      const { onPick, canvas } = open();
+      press(canvas, "pointerdown", 10);
+      press(canvas, "pointerup", 12, 12);
+      expect(onPick).toHaveBeenCalledTimes(1);
+    });
+
+    it("is not a drag of 3 px or more, which turns the room", () => {
+      const { onPick, canvas } = open();
+      press(canvas, "pointerdown", 10);
+      press(canvas, "pointerup", 14);
+      expect(onPick).not.toHaveBeenCalled();
+    });
+
+    it("is not a secondary button, nor a press the browser cancelled", () => {
+      const { onPick, canvas } = open();
+      press(canvas, "pointerdown", 10, 10, 2);
+      press(canvas, "pointerup", 10, 10, 2);
+      press(canvas, "pointerdown", 10);
+      press(canvas, "pointercancel", 10);
+      press(canvas, "pointerup", 10);
+      expect(onPick).not.toHaveBeenCalled();
+    });
+  });
 });
+
