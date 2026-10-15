@@ -113,61 +113,74 @@ export function SelectionFrame({
   };
 
   const scale = 1 / zoom;
+  // The name sits under what the turned piece covers, outside the turned frame: inside it, a piece
+  // turned 180° carried its name up over its top handle.
+  const turn = (rotation * Math.PI) / 180;
+  const coveredHalfY = (Math.abs(width * Math.sin(turn)) + Math.abs(height * Math.cos(turn))) / 2;
   return createPortal(
-    <div
-      ref={frameRef}
-      className={cx(styles.frame, !editable && styles.locked)}
-      style={{
-        left,
-        top,
-        width,
-        height,
-        transform: `rotate(${rotation}deg)`,
-        ["--frame-scale" as string]: scale,
-      }}
-      data-testid="selection-frame"
-    >
-      {label ? (
-        <span className={styles.label} style={{ transform: `translate(-50%, 0) rotate(${-rotation}deg) scale(${scale})` }}>
-          {label}
-        </span>
-      ) : null}
-      {editable ? (
-        <>
-          <span className={styles.stem} aria-hidden="true" />
-          <button
-            type="button"
-            tabIndex={-1}
-            aria-hidden="true"
-            className={styles.knob}
-            title={t("roomMap:frame.rotate")}
-            data-testid="frame-rotate"
-            onPointerDown={(event) => begin(event, "rotate")}
-            onPointerMove={move}
-            onPointerUp={end}
-            onPointerCancel={end}
-            onLostPointerCapture={end}
-          >
-            <svg viewBox="0 0 12 12" aria-hidden="true">
-              <path d="M6 2.5 9 6.5H3Z" fill="currentColor" />
-            </svg>
-          </button>
-          {FRAME_HANDLES.map((handle) => (
-            <span
-              key={handle}
-              className={cx(styles.handle, styles[handle])}
-              style={{ cursor: handleCursor(handle, rotation) }}
-              data-testid={`frame-handle-${handle}`}
-              onPointerDown={(event) => begin(event, "resize", handle)}
+    <>
+      <div
+        ref={frameRef}
+        className={cx(styles.frame, !editable && styles.locked)}
+        style={{
+          left,
+          top,
+          width,
+          height,
+          transform: `rotate(${rotation}deg)`,
+          ["--frame-scale" as string]: scale,
+        }}
+        data-testid="selection-frame"
+      >
+        {editable ? (
+          <>
+            <span className={styles.stem} aria-hidden="true" />
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-hidden="true"
+              className={styles.knob}
+              title={t("roomMap:frame.rotate")}
+              data-testid="frame-rotate"
+              onPointerDown={(event) => begin(event, "rotate")}
               onPointerMove={move}
               onPointerUp={end}
               onPointerCancel={end}
               onLostPointerCapture={end}
-            />
-          ))}
-        </>
+            >
+              <svg viewBox="0 0 12 12" aria-hidden="true">
+                <path d="M6 2.5 9 6.5H3Z" fill="currentColor" />
+              </svg>
+            </button>
+            {FRAME_HANDLES.map((handle) => (
+              <span
+                key={handle}
+                className={cx(styles.handle, styles[handle])}
+                style={{ cursor: handleCursor(handle, rotation) }}
+                data-testid={`frame-handle-${handle}`}
+                onPointerDown={(event) => begin(event, "resize", handle)}
+                onPointerMove={move}
+                onPointerUp={end}
+                onPointerCancel={end}
+                onLostPointerCapture={end}
+              />
+            ))}
+          </>
+        ) : null}
+      </div>
+      {label ? (
+        <span
+          className={styles.label}
+          style={{
+            left: left + width / 2,
+            top: top + height / 2 + coveredHalfY + 8 * scale,
+            transform: `translate(-50%, 0) scale(${scale})`,
+          }}
+        >
+          {label}
+        </span>
       ) : null}
-    </div>,
+    </>,
     layer,
   );
 }
