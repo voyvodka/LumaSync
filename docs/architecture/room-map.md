@@ -333,7 +333,8 @@ backlight drawn as a stray line along the wall.
   runs from the lighting control state: Off leaves the lamps dark — the rig falls to a cool night,
   the bulbs to frosted glass, the TV's backlight out — under a navy sky; Solid lights every lamp in
   its colour at its brightness, never below a floor so 1% still glows; an effect holds its palette's
-  middle; Ambilight keeps the warm lamps under a cinema violet. The sky is two registered custom
+  middle; Ambilight dims the room to a cinema violet, its lamps low and cool — what a screen throws
+  into a dark room — until the live colours reach the view. The sky is two registered custom
   properties on the stage (`--lm-room-sky-top`, `--lm-room-sky-mid`), so a change eases the CSS
   gradient, and the lamps ease over 900 ms without rebuilding the scene (`RoomScene.setMood`). The
   colours stay placeholders where the live feed is the truth (Ambilight, an effect's motion) until it

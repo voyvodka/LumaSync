@@ -45,9 +45,11 @@ describe("roomMood", () => {
     expect(mood.lamp).toBe(0x00ff00);
   });
 
-  it("keeps the warm lamps under a cinema sky in Ambilight, and with no mode known", () => {
+  it("dims the lamps to a cool cinema light in Ambilight, and keeps them warm with no mode known", () => {
     const ambilight = roomMood({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
-    expect(ambilight.lamp).toBe(LAMP_COLOURS[0]);
+    const [r, , b] = channels(ambilight.lamp);
+    expect(b).toBeGreaterThan(r!);
+    expect(ambilight.level).toBeLessThan(0.7);
     expect(ambilight.sky).not.toEqual(roomMood(null).sky);
     expect(roomMood(null)).toMatchObject({ level: 1, lamp: LAMP_COLOURS[0] });
   });

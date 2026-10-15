@@ -1,8 +1,8 @@
 // What the running mode does to the 3D room: whether its lamps are lit, in what colour and how
 // bright, and the sky behind the room. Off leaves the room in the night; Solid lights every lamp in
-// its colour, an effect in its palette's middle; Ambilight dims the sky to a cinema violet, the
-// lamps keeping their warm placeholder until the live colours reach the view. The sky is a top
-// colour fading down to the night.
+// its colour, an effect in its palette's middle; Ambilight dims the room to a cinema violet, its
+// lamps low and cool until the live colours reach the view. The sky is a top colour fading down to
+// the night.
 import { type LightingModeConfig, LIGHTING_MODE_KIND } from "@/shared/contracts/mode";
 import { kelvinToRgb } from "@/shared/lib/color";
 import { paletteOf, paletteStops } from "@/features/mode/model/effectSwatch";
@@ -23,6 +23,8 @@ export interface RoomMood {
 const WARM = LAMP_COLOURS[0];
 const SKY_WARM = { top: 0x6e5a4c, mid: 0x2a211e };
 const SKY_CINEMA = { top: 0x2a2052, mid: 0x130e2b };
+const CINEMA_LAMP = 0xa99bff;
+const CINEMA_SHARE = 0.55;
 const SKY_NIGHT = { top: 0x121d3d, mid: 0x0a1024 };
 /** The floor a dim lamp keeps: at 1% a Hue light still glows, it does not read as off. */
 const LEVEL_FLOOR = 0.12;
@@ -79,7 +81,9 @@ function moodOf(mode: LightingModeConfig | null): Omit<RoomMood, "brightness"> {
       return { level: level(effect.brightness), lamp, sky: skyOf(lamp) };
     }
     default:
-      return { level: level(mode.ambilight?.brightness), lamp: WARM, sky: SKY_CINEMA };
+      // The lamps follow the screen; until its colours reach the view they hold what a screen
+      // throws into a dark room, dim and cool.
+      return { level: level(mode.ambilight?.brightness) * CINEMA_SHARE, lamp: CINEMA_LAMP, sky: SKY_CINEMA };
   }
 }
 
