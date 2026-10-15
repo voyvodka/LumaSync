@@ -110,6 +110,8 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     resizeNotchHint: "Odayı boyutlandırmak için sürükle · girinti için çift tıkla",
     moveHint: "Girintiyi duvarlar boyunca kaydırmak için sürükle",
     removeHint: "Girintiyi kaldır — dikdörtgene dön",
+    planHintRect: "Planda bir duvarı sürükleyerek odayı boyutlandır; girinti için duvara çift tıkla.",
+    planHintShaped: "Planda duvarı sürükleyerek boyutlandır ya da şekillendir; girintiyi ✥ ile kaydır, × ile kaldır.",
   },
   furniture: {
     type: {
@@ -182,6 +184,8 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     resetCancel: "İptal",
   },
   persistError: "Harita kaydedilemedi. Değişiklikler yeniden başlatmada kaybolabilir.",
+  persistRetry: "Tekrar dene",
+  frontWall: "TV duvarı",
   imageImportError: "Görsel eklenemedi. Ayrıntılar için günlüğe bak.",
   imageTooLarge: "Görsel {{maxMb}} MB'tan büyük. Daha küçük bir dosya seç.",
   usbStrip: {

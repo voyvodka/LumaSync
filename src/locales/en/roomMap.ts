@@ -107,6 +107,8 @@ export default {
     resizeNotchHint: "Drag to resize the room · double-click to cut a notch",
     moveHint: "Drag to slide the cut along the walls",
     removeHint: "Remove the cut — back to a rectangle",
+    planHintRect: "On the plan, drag a wall to resize the room; double-click one to cut a notch.",
+    planHintShaped: "On the plan, drag a wall to resize or reshape; drag ✥ to slide the cut, × removes it.",
   },
   furniture: {
     type: {
@@ -179,6 +181,8 @@ export default {
     resetCancel: "Cancel",
   },
   persistError: "Map could not be saved. Changes may be lost on restart.",
+  persistRetry: "Try again",
+  frontWall: "TV wall",
   imageImportError: "Image could not be added. Check the log for details.",
   imageTooLarge: "Image is larger than {{maxMb}} MB. Choose a smaller file.",
   usbStrip: {

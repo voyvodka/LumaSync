@@ -1,5 +1,6 @@
 import type React from "react";
 import { memo, useRef, useState, useEffect, useCallback, useId, useLayoutEffect, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { SelectionLayerContext } from "./objects/selectionLayer";
 import { type RoomMapConfig, type ImageLayer, resolveRoomFootprint } from "@/shared/contracts/roomMap";
 import { clamp } from "@/shared/lib/math";
@@ -301,6 +302,7 @@ export function RoomMapCanvas({
   onMarquee,
   children,
 }: RoomMapCanvasProps) {
+  const { t } = useTranslation();
   const canvasRef = useRef<HTMLDivElement>(null);
   const objectLayerRef = useRef<HTMLDivElement>(null);
   const [selectionLayer, setSelectionLayer] = useState<HTMLDivElement | null>(null);
@@ -563,6 +565,11 @@ export function RoomMapCanvas({
 
   // The walls, whether or not the grid shows: turning the grid off took the room's outline with it.
   // Grey, not red — red read as an error on a line that is always there.
+  // The Hue cube's +y is the canvas top, so the top wall is always where the screen is.
+  const frontWall = outline.find((a, i) => a.y === 0 && outline[(i + 1) % outline.length]!.y === 0);
+  const frontLeft = frontWall
+    ? Math.min(frontWall.x, outline[(outline.indexOf(frontWall) + 1) % outline.length]!.x)
+    : null;
   const wallLines = outline.map((a, i) => {
     const b = outline[(i + 1) % outline.length]!;
     return (
@@ -624,9 +631,11 @@ export function RoomMapCanvas({
           </svg>
         )}
 
+        {/* Above the furniture (10), under strips and lights (20): a piece pushed against a wall
+            or into the cut is drawn behind it, as a plan draws walls. */}
         <svg
           className="absolute pointer-events-none"
-          style={{ zIndex: 2, left: 0, top: 0, overflow: "visible" }}
+          style={{ zIndex: 12, left: 0, top: 0, overflow: "visible" }}
           width={1}
           height={1}
           aria-hidden="true"
@@ -635,11 +644,28 @@ export function RoomMapCanvas({
           {wallLines}
         </svg>
 
+        {frontLeft !== null && (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.08em] text-ink-faint"
+            style={{
+              left: frontLeft * pxPerMeter,
+              top: 0,
+              zIndex: 12,
+              transform: `translateY(calc(-100% - 6px / ${zoom})) scale(${1 / zoom})`,
+              transformOrigin: "0 100%",
+            }}
+            data-testid="room-front-wall"
+          >
+            {t("roomMap:frontWall")}
+          </span>
+        )}
+
         {/* What the outline cuts out of the room's box: hatched, so it reads as not the room. */}
         {outline.length > 4 && (
           <svg
             className="absolute pointer-events-none text-ink-faint"
-            style={{ zIndex: 1, left: 0, top: 0, overflow: "visible" }}
+            style={{ zIndex: 11, left: 0, top: 0, overflow: "visible" }}
             width={1}
             height={1}
             aria-hidden="true"
@@ -650,6 +676,14 @@ export function RoomMapCanvas({
                 <line x1="0" y1="0" x2="0" y2="8" stroke="currentColor" strokeWidth="1" opacity="0.35" />
               </pattern>
             </defs>
+            {/* A wash first, so what lies in the cut reads as out of the room, then the hatch. */}
+            <path
+              fillRule="evenodd"
+              style={{ fill: "var(--lm-bg)", opacity: 0.6 }}
+              d={`M0 0H${widthMeters * pxPerMeter}V${depthMeters * pxPerMeter}H0Z M${outline
+                .map((c) => `${c.x * pxPerMeter} ${c.y * pxPerMeter}`)
+                .join(" L")}Z`}
+            />
             <path
               fillRule="evenodd"
               fill={`url(#${cutPatternId})`}

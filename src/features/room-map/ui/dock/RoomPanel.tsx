@@ -109,6 +109,8 @@ export function RoomPanel({
         <FieldHint id={`${hintId}-height`}>{t("roomMap:settings.roomHeightHint")}</FieldHint>
 
         <RoomShapeField shape={settings.shape} dimensions={dimensions} onChange={settings.onShapeChange} />
+        {/* The plan's walls are handles with no mark of their own until hovered; this is where that is said. */}
+        <FieldHint>{settings.shape.kind === "rect" ? t("roomMap:shape.planHintRect") : t("roomMap:shape.planHintShaped")}</FieldHint>
 
         {settings.surfaces ? <SurfaceFields {...settings.surfaces} /> : null}
 

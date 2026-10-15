@@ -435,9 +435,12 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
               border is faint or partially off-screen. */}
           <div
             className="lm-room-zone-chip"
+            // Screen-sized like the dots: at a high zoom the chip grew with the plan.
             style={{
-              left: Math.max(8, zoneBoundsBox.leftPx + 6),
-              top: Math.max(8, zoneBoundsBox.topPx - 22),
+              left: Math.max(8 / zoom, zoneBoundsBox.leftPx + 6 / zoom),
+              top: Math.max(8 / zoom, zoneBoundsBox.topPx - 22 / zoom),
+              transform: `scale(${1 / zoom})`,
+              transformOrigin: "0 0",
             }}
             aria-hidden
           >

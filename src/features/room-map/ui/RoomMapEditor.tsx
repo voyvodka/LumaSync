@@ -118,6 +118,7 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
     canUndo,
     canRedo,
     error,
+    retrySave,
     hueAreaId,
     hueBridgeConfigured,
     visibleHueChannels,
@@ -801,7 +802,11 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
 
         {(error || imageError || hueZoneRejection) && (
           <div className={styles.alerts}>
-            {error && <Callout tone="error">{t("roomMap:persistError")}</Callout>}
+            {error && (
+              <Callout tone="error" action={{ label: t("roomMap:persistRetry"), onClick: retrySave }}>
+                {t("roomMap:persistError")}
+              </Callout>
+            )}
             {imageError && (
               <Callout tone="error">
                 {imageErrorCode === ROOM_MAP_BACKGROUND_ERROR.TOO_LARGE

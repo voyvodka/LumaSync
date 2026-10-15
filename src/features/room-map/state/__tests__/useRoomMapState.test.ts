@@ -172,6 +172,23 @@ describe("useRoomMapState — saving", () => {
     consoleError.mockRestore();
   });
 
+  // The alert said the map was not saved and offered nothing to do about it.
+  it("writes the map again on a retry, and clears the error when it lands", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockLoad.mockResolvedValue({ roomMap: makePersistedConfig() } as ShellState);
+    mockSave.mockRejectedValueOnce(new Error("disk full"));
+    const { result } = renderHook(() => useRoomMapState());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => result.current.reset());
+    await waitFor(() => expect(result.current.error).toContain("disk full"));
+
+    act(() => result.current.retrySave());
+    await waitFor(() => expect(result.current.error).toBeNull());
+    expect(roomMapSaves()[roomMapSaves().length - 1]?.[0]).toMatchObject({ roomMap: result.current.config });
+    consoleError.mockRestore();
+  });
+
   it("adopt saves but leaves nothing to undo", async () => {
     mockLoad.mockResolvedValue({ roomMap: makePersistedConfig() } as ShellState);
     const { result } = renderHook(() => useRoomMapState());

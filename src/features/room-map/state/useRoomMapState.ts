@@ -40,6 +40,8 @@ export interface UseRoomMapStateReturn {
   canRedo: boolean;
   loading: boolean;
   error: string | null;
+  /** Writes the map as it is now again, after a save failed. */
+  retrySave: () => void;
 }
 
 /** Config, undo history and selection for the room-map editor, in one reducer.
@@ -127,6 +129,12 @@ export function useRoomMapState(): UseRoomMapStateReturn {
     return saving;
   }, []);
 
+  const configRef = useRef(state.config);
+  configRef.current = state.config;
+  const retrySave = useCallback(() => {
+    void persist(configRef.current);
+  }, [persist]);
+
   const pendingRef = useRef<RoomMapConfig | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handledSeqRef = useRef(0);
@@ -213,5 +221,6 @@ export function useRoomMapState(): UseRoomMapStateReturn {
     canRedo: state.future.length > 0,
     loading,
     error,
+    retrySave,
   };
 }
