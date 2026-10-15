@@ -7,7 +7,7 @@ import type {
   TvAnchorPlacement,
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
-import { fitStripLength, resolveRoomFootprint, stripLengthFromDensity } from "@/shared/contracts/roomMap";
+import { fitStripLength, MAX_STRIP_CORNERS, resolveRoomFootprint, resolveStripCorners } from "@/shared/contracts/roomMap";
 import { autoScreenKind, classifyFurniture } from "@/features/room-view/model/furnitureModel";
 import type { LampFamily } from "@/features/room-view/model/lampFamily";
 
@@ -18,6 +18,8 @@ import { outsideOutline } from "../../model/roomFootprint";
 import { autoHueFacing } from "../../model/hueFacing";
 import { pieceUnder } from "../../model/lightSeat";
 import { isBacklightStrip } from "../../model/backlight";
+import { addStripCorner } from "../../model/stripCorners";
+import { stripFitOffer } from "../../model/stripFit";
 import { defaultStripHeight, stickStripToWall } from "../../model/stripWall";
 import { FurnitureInspector } from "../objects/FurnitureInspector";
 import { HueChannelInspector } from "../objects/HueChannelInspector";
@@ -176,9 +178,8 @@ export function DockInspector({
       // Behind the screen a strip is drawn as its backlight, at the screen and by no height of its own.
       const backlight = config.tvAnchor !== undefined && isBacklightStrip(strip, config.tvAnchor);
       const stuck = strip.locked || backlight ? null : stickStripToWall(strip, config);
-      const fitTo = stripLengthFromDensity(strip);
-      const run = Math.hypot(strip.endX - strip.startX, strip.endY - strip.startY);
-      const offFit = fitTo !== undefined && !strip.locked && Math.abs(run - fitTo) > 0.01;
+      const fitTo = stripFitOffer(strip, config);
+      const bends = resolveStripCorners(strip).length;
       return (
         <UsbStripInspector
           key={key}
@@ -198,8 +199,17 @@ export function DockInspector({
               : undefined
           }
           onStickToWall={stuck ? () => actions.onUpdateUsbStrip(strip.stripId, stuck) : undefined}
-          fitTo={offFit ? fitTo : undefined}
-          onFitLength={offFit ? () => actions.onUpdateUsbStrip(strip.stripId, fitStripLength(strip)) : undefined}
+          fitTo={fitTo}
+          onFitLength={fitTo === undefined ? undefined : () => actions.onUpdateUsbStrip(strip.stripId, fitStripLength(strip))}
+          onAddCorner={
+            strip.locked || backlight || bends >= MAX_STRIP_CORNERS
+              ? undefined
+              : () => {
+                  const bent = addStripCorner(strip);
+                  if (bent) actions.onUpdateUsbStrip(strip.stripId, { corners: bent.corners });
+                }
+          }
+          onStraighten={strip.locked || bends === 0 ? undefined : () => actions.onUpdateUsbStrip(strip.stripId, { corners: null })}
         />
       );
     }

@@ -1,4 +1,4 @@
-import { type RoomMapConfig, resolveRoomFootprint, type UsbStripPlacement } from "@/shared/contracts/roomMap";
+import { type RoomMapConfig, resolveRoomFootprint, resolveStripCorners, stripCentre, type UsbStripPlacement } from "@/shared/contracts/roomMap";
 
 /** A strip stuck to a wall runs this far in from it: the strip's own depth and its tape. */
 export const WALL_INSET_M = 0.01;
@@ -42,9 +42,10 @@ export function nearestWall(config: Pick<RoomMapConfig, "footprint" | "dimension
 /**
  * The strip laid along its nearest wall, just inside it: kept at its length (cut to the wall's when
  * longer), centred where it was along the wall, running the way it ran. `null` when there is no wall
- * in front of it or it is already there.
+ * in front of it, it is already there, or it is bent: its corners are where the user put it.
  */
 export function stickStripToWall<T extends UsbStripPlacement>(strip: T, config: Pick<RoomMapConfig, "footprint" | "dimensions">): T | null {
+  if (resolveStripCorners(strip).length > 0) return null;
   const mx = (strip.startX + strip.endX) / 2;
   const my = (strip.startY + strip.endY) / 2;
   const wall = nearestWall(config, mx, my);
@@ -69,6 +70,7 @@ export function stickStripToWall<T extends UsbStripPlacement>(strip: T, config: 
 
 /** The height a strip with none of its own is drawn at: the skirting along a wall, else the floor. */
 export function defaultStripHeight(config: Pick<RoomMapConfig, "footprint" | "dimensions">, strip: UsbStripPlacement): number {
-  const wall = nearestWall(config, (strip.startX + strip.endX) / 2, (strip.startY + strip.endY) / 2);
+  const { x, y } = stripCentre(strip);
+  const wall = nearestWall(config, x, y);
   return wall && wall.distance <= NEAR_WALL_M ? SKIRTING_M : 0;
 }

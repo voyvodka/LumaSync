@@ -17,7 +17,11 @@ export interface Pickable {
   angle: number;
   /** A strip: long and a centimetre thick. */
   line?: boolean;
+  /** A bent strip's straight runs, picked and marked one by one; the box above is round them all. */
+  legs?: readonly PickLeg[];
 }
+
+export type PickLeg = Pick<Pickable, "centre" | "half" | "angle">;
 
 export interface PickRay {
   origin: ScenePoint;
@@ -75,11 +79,13 @@ export function pickObject(ray: PickRay, items: readonly Pickable[], minLightHal
   let light: { id: string; t: number } | null = null;
   let other: { id: string; t: number } | null = null;
   for (const item of items) {
-    const box =
-      item.kind === "light"
-        ? { ...item, half: item.half.map((h) => Math.max(h, minLightHalf)) as [number, number, number] }
-        : item;
-    const t = rayBoxDistance(ray, box);
+    const grow = (half: Pickable["half"]) =>
+      item.kind === "light" ? (half.map((h) => Math.max(h, minLightHalf)) as [number, number, number]) : half;
+    let t: number | null = null;
+    for (const leg of item.legs ?? [item]) {
+      const d = rayBoxDistance(ray, { ...item, ...leg, half: grow(leg.half) });
+      if (d !== null && (t === null || d < t)) t = d;
+    }
     if (t === null) continue;
     if (item.kind === "light") {
       if (!light || t < light.t) light = { id: item.id, t };

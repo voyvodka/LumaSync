@@ -1,7 +1,7 @@
 // The selection's mark in the room: an amber outline on the floor around what is selected, and for
 // a light a second ring around the lit part itself. Built once per scene and moved, never rebuilt,
 // so a new selection costs one draw.
-import { DoubleSide, Group, Mesh, MeshBasicMaterial, Path, type Quaternion, RingGeometry, Shape, ShapeGeometry } from "three";
+import { DoubleSide, Group, Mesh, MeshBasicMaterial, type Object3D, Path, type Quaternion, RingGeometry, Shape, ShapeGeometry } from "three";
 
 import type { Pickable } from "../../model/picking";
 
@@ -71,7 +71,7 @@ export function buildSelectionMark(pickables: readonly Pickable[]): SelectionMar
   through.depthTest = false;
   through.opacity = 0.35;
 
-  let floor: Mesh | null = null;
+  let floor: Object3D | null = null;
   const halo = new Mesh(new RingGeometry(0.84, 1, 64), material);
   const haloThrough = new Mesh(halo.geometry, through);
   haloThrough.renderOrder = 10;
@@ -103,7 +103,9 @@ export function buildSelectionMark(pickables: readonly Pickable[]): SelectionMar
       current = next;
       if (floor) {
         group.remove(floor);
-        floor.geometry.dispose();
+        floor.traverse((o) => {
+          if (o instanceof Mesh) o.geometry.dispose();
+        });
         floor = null;
       }
       if (!item) {
@@ -113,14 +115,20 @@ export function buildSelectionMark(pickables: readonly Pickable[]): SelectionMar
       group.visible = true;
       const [hx, hy, hz] = item.half;
       if (item.line) {
-        // A ring sized to a strip's length circled half the room.
+        // A ring sized to a strip's length circled half the room. A bent strip is framed leg by leg.
         halo.visible = false;
         haloThrough.visible = false;
-        const lying = hy < hz;
-        floor = new Mesh(outline(hx * 2, Math.max(hy, hz) * 2, STRIP_MARGIN, STRIP_LINE), material);
-        if (lying) floor.rotation.set(-Math.PI / 2, -item.angle, 0, "YXZ");
-        else floor.rotation.set(0, -item.angle, 0);
-        floor.position.set(item.centre.x, lying ? FLOOR_LIFT : item.centre.y, item.centre.z);
+        const legs = new Group();
+        for (const leg of item.legs ?? [item]) {
+          const [lx, ly, lz] = leg.half;
+          const lying = ly < lz;
+          const frame = new Mesh(outline(lx * 2, Math.max(ly, lz) * 2, STRIP_MARGIN, STRIP_LINE), material);
+          if (lying) frame.rotation.set(-Math.PI / 2, -leg.angle, 0, "YXZ");
+          else frame.rotation.set(0, -leg.angle, 0);
+          frame.position.set(leg.centre.x, lying ? FLOOR_LIFT : leg.centre.y, leg.centre.z);
+          legs.add(frame);
+        }
+        floor = legs;
       } else if (item.kind === "light") {
         const radius = Math.max(hx, hy, hz) + MARGIN;
         haloRadius = radius;

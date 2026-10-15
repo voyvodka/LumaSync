@@ -1,5 +1,5 @@
 import type { HueChannelPlacement, RoomMapConfig } from "@/shared/contracts/roomMap";
-import { findHueChannel, replaceHueChannel } from "@/shared/contracts/roomMap";
+import { findHueChannel, replaceHueChannel, translateStrip } from "@/shared/contracts/roomMap";
 
 import { moveHueChannelToWorld, nudgeHueChannel } from "./hueChannelPosition";
 import { seatMovedLight } from "./lightSeat";
@@ -125,23 +125,14 @@ export const ROOM_OBJECT_KINDS = {
     duplicate: (config, ref, offset) => {
       const src = config.usbStrips.find((s) => s.stripId === ref.stripId);
       if (!src) return null;
-      const dup = {
-        ...src,
-        stripId: crypto.randomUUID(),
-        startX: src.startX + offset,
-        startY: src.startY + offset,
-        endX: src.endX + offset,
-        endY: src.endY + offset,
-      };
+      const dup = { ...translateStrip(src, offset, offset), stripId: crypto.randomUUID() };
       return { patch: { usbStrips: [...config.usbStrips, dup] }, objectId: usbStripObjectId(dup.stripId) };
     },
     // A strip moves by its start point; the end keeps the same offset from it.
     moveTo: (config, ref, x, y) => ({
       usbStrips: config.usbStrips.map((s) => {
         if (s.stripId !== ref.stripId) return s;
-        const dx = x - s.startX;
-        const dy = y - s.startY;
-        return keepStripInside({ ...s, startX: x, startY: y, endX: s.endX + dx, endY: s.endY + dy }, roomBoxOf(config));
+        return keepStripInside(translateStrip(s, x - s.startX, y - s.startY), roomBoxOf(config));
       }),
     }),
     nudge: (cfg, ref, direction) => {
@@ -149,10 +140,7 @@ export const ROOM_OBJECT_KINDS = {
       return {
         usbStrips: cfg.usbStrips.map((s) =>
           s.stripId === ref.stripId
-            ? keepStripInside(
-                { ...s, startX: s.startX + dx, startY: s.startY + dy, endX: s.endX + dx, endY: s.endY + dy },
-                roomBoxOf(cfg),
-              )
+            ? keepStripInside(translateStrip(s, dx, dy), roomBoxOf(cfg))
             : s,
         ),
       };

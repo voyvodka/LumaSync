@@ -31,6 +31,8 @@ export function UsbStripInspector({
   onStickToWall,
   fitTo,
   onFitLength,
+  onAddCorner,
+  onStraighten,
 }: {
   strip: UsbStripPlacement;
   connectionStatus: UsbStripConnectionStatus;
@@ -51,6 +53,10 @@ export function UsbStripInspector({
   /** The length its LEDs at its density make, in metres, when the drawn run is not that long. */
   fitTo?: number;
   onFitLength?: () => void;
+  /** Bends the strip in the middle of its longest leg; absent at the cap or when it cannot move. */
+  onAddCorner?: () => void;
+  /** Takes its corners out; absent when it has none. */
+  onStraighten?: () => void;
 }) {
   const { t } = useTranslation();
   const locked = !!strip.locked;
@@ -79,6 +85,8 @@ export function UsbStripInspector({
             <RowLink onClick={onFitLength}>{t("roomMap:inspector.usbFitLength", { metres: fitTo.toFixed(2) })}</RowLink>
           )}
           {onStickToWall && <RowLink onClick={onStickToWall}>{t("roomMap:inspector.usbStickToWall")}</RowLink>}
+          {onAddCorner && <RowLink onClick={onAddCorner}>{t("roomMap:inspector.usbAddCorner")}</RowLink>}
+          {onStraighten && <RowLink onClick={onStraighten}>{t("roomMap:inspector.usbStraighten")}</RowLink>}
           {onManage && <RowLink onClick={onManage}>{t("roomMap:inspector.usbManage")}</RowLink>}
           <Spacer />
           <Actions locked={locked} onToggleLock={onToggleLock} onDuplicate={onDuplicate} onDelete={onDelete} onClose={onClose} />
@@ -144,7 +152,7 @@ export function UsbStripInspector({
             )}
           </FieldRow>
           <InfoTip label={t("common:hintFor", { label: t("roomMap:inspector.usbLedCountLabel") })}>
-            {[t("roomMap:inspector.usbHint"), t("roomMap:inspector.usbDensityHint"), height ? t("roomMap:inspector.usbHeightHint") : null].filter(Boolean).join(" ")}
+            {[t("roomMap:inspector.usbHint"), t("roomMap:inspector.usbDensityHint"), t("roomMap:inspector.usbCornerHint"), height ? t("roomMap:inspector.usbHeightHint") : null].filter(Boolean).join(" ")}
           </InfoTip>
         </>
       }

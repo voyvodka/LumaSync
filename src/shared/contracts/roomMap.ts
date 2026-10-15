@@ -241,10 +241,62 @@ export interface UsbStripPlacement {
   /** The tape's LEDs per metre; set, the strip's drawn length follows `ledCount` (`fitStripLength`).
    *  Drawing-only, read through `resolveStripDensity`. */
   ledsPerMeter?: number | null;
+  /** Where the strip turns between its start and end, in room metres, at most `MAX_STRIP_CORNERS`:
+   *  bent round a corner or a desk edge, or folded into a small space. Drawing-only, read through
+   *  `resolveStripCorners`; a strip moves through `translateStrip`, which carries them. */
+  corners?: RoomCorner[] | null;
 }
 
-/** The densities tape is sold in, offered first. */
-export const STRIP_DENSITIES = [30, 60, 96, 144] as const;
+export const MAX_STRIP_CORNERS = 8;
+
+/** The stored corners when every one is a finite point and there are no more than the cap; any bad
+ *  entry reads the strip as straight rather than half-bent. */
+export function resolveStripCorners(strip: UsbStripPlacement): RoomCorner[] {
+  const stored: unknown = strip.corners;
+  if (!Array.isArray(stored) || stored.length === 0 || stored.length > MAX_STRIP_CORNERS) return [];
+  const corners: RoomCorner[] = [];
+  for (const corner of stored as unknown[]) {
+    const { x, y } = (corner ?? {}) as { x?: unknown; y?: unknown };
+    if (typeof x !== "number" || typeof y !== "number" || !Number.isFinite(x) || !Number.isFinite(y)) return [];
+    corners.push({ x, y });
+  }
+  return corners;
+}
+
+/** The strip's run as points: its start, each corner, its end. */
+export function stripPoints(strip: UsbStripPlacement): RoomCorner[] {
+  return [{ x: strip.startX, y: strip.startY }, ...resolveStripCorners(strip), { x: strip.endX, y: strip.endY }];
+}
+
+export function stripRunLength(strip: UsbStripPlacement): number {
+  const points = stripPoints(strip);
+  let length = 0;
+  for (let i = 1; i < points.length; i++) length += Math.hypot(points[i]!.x - points[i - 1]!.x, points[i]!.y - points[i - 1]!.y);
+  return length;
+}
+
+/** The middle of the box round the strip's run: where a straight strip's midpoint was. */
+export function stripCentre(strip: UsbStripPlacement): RoomCorner {
+  const points = stripPoints(strip);
+  const xs = points.map((p) => p.x);
+  const ys = points.map((p) => p.y);
+  return { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 };
+}
+
+/** The strip moved whole, its corners with it, each point to the millimetre. */
+export function translateStrip<T extends UsbStripPlacement>(strip: T, dx: number, dy: number): T {
+  const mm = (v: number) => Math.round(v * 1000) / 1000;
+  const corners = resolveStripCorners(strip);
+  return {
+    ...strip,
+    startX: mm(strip.startX + dx),
+    startY: mm(strip.startY + dy),
+    endX: mm(strip.endX + dx),
+    endY: mm(strip.endY + dy),
+    ...(corners.length > 0 ? { corners: corners.map((c) => ({ x: mm(c.x + dx), y: mm(c.y + dy) })) } : {}),
+  };
+}
+
 const MAX_STRIP_DENSITY = 300;
 
 /** The stored density when it is a usable one (finite, 1 to 300 LEDs per metre), else none. */
@@ -259,17 +311,44 @@ export function stripLengthFromDensity(strip: UsbStripPlacement): number | undef
   return density === undefined ? undefined : strip.ledCount / density;
 }
 
-/** The strip with its end moved along its run so it is as long as its LEDs at its density; one
- *  with no density, or no run to follow, comes back as it was. */
+/** The strip with its end moved along its run so it is as long as its LEDs at its density: past its
+ *  last corner the last leg grows, short of it the corners beyond the new end go. One with no
+ *  density, or no run to follow, comes back as it was. */
 export function fitStripLength<T extends UsbStripPlacement>(strip: T): T {
   const length = stripLengthFromDensity(strip);
-  const dx = strip.endX - strip.startX;
-  const dy = strip.endY - strip.startY;
-  const run = Math.hypot(dx, dy);
-  if (length === undefined || run < 1e-6) return strip;
-  const k = length / run;
+  const points = stripPoints(strip);
+  if (length === undefined || stripRunLength(strip) < 1e-6) return strip;
   const round = (v: number) => Math.round(v * 1000) / 1000;
-  return { ...strip, endX: round(strip.startX + dx * k), endY: round(strip.startY + dy * k) };
+  let walked = 0;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!;
+    const b = points[i]!;
+    const leg = Math.hypot(b.x - a.x, b.y - a.y);
+    const last = i === points.length - 1;
+    if (leg < 1e-6 && !last) continue;
+    if (walked + leg >= length || last) {
+      // An end left on its last corner has no way of its own; it carries on the way the run came in.
+      let from = a;
+      for (let j = i - 1; leg < 1e-6 && j > 0; j--) {
+        const p = points[j - 1]!;
+        if (Math.hypot(a.x - p.x, a.y - p.y) >= 1e-6) {
+          from = p;
+          break;
+        }
+      }
+      const way = Math.hypot(a.x - from.x, a.y - from.y);
+      const dir = leg >= 1e-6 ? { x: (b.x - a.x) / leg, y: (b.y - a.y) / leg } : way >= 1e-6 ? { x: (a.x - from.x) / way, y: (a.y - from.y) / way } : { x: 0, y: 0 };
+      const corners = points.slice(1, i);
+      return {
+        ...strip,
+        endX: round(a.x + dir.x * (length - walked)),
+        endY: round(a.y + dir.y * (length - walked)),
+        ...(resolveStripCorners(strip).length > 0 ? { corners: corners.length > 0 ? corners : null } : {}),
+      };
+    }
+    walked += leg;
+  }
+  return strip;
 }
 
 /** The stored height when it is a usable one (finite, not below the floor), else none. No cap: a

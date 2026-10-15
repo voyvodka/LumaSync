@@ -1,12 +1,11 @@
-import type { TvAnchorPlacement, UsbStripPlacement } from "@/shared/contracts/roomMap";
+import { stripCentre, translateStrip, type TvAnchorPlacement, type UsbStripPlacement } from "@/shared/contracts/roomMap";
 
 /** A strip whose middle is this close to the screen's is its backlight, drawn and picked there. */
 export const BACKLIGHT_REACH_M = 1.0;
 
 export function isBacklightStrip(strip: UsbStripPlacement, tv: TvAnchorPlacement): boolean {
-  const mx = (strip.startX + strip.endX) / 2;
-  const my = (strip.startY + strip.endY) / 2;
-  return Math.hypot(mx - (tv.x + tv.width / 2), my - (tv.y + tv.height / 2)) <= BACKLIGHT_REACH_M;
+  const { x, y } = stripCentre(strip);
+  return Math.hypot(x - (tv.x + tv.width / 2), y - (tv.y + tv.height / 2)) <= BACKLIGHT_REACH_M;
 }
 
 /** The TV put at `next`, its backlight strips carried by the same move so they stay its backlight.
@@ -24,7 +23,7 @@ export function moveTvWithBacklight(
   const moved = strips.map((s) => {
     if (s.locked || !isBacklightStrip(s, tv)) return s;
     changed = true;
-    return keepInside({ ...s, startX: s.startX + dx, startY: s.startY + dy, endX: s.endX + dx, endY: s.endY + dy });
+    return keepInside(translateStrip(s, dx, dy));
   });
   return changed ? moved : null;
 }

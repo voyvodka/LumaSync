@@ -46,6 +46,23 @@ describe("pickObject", () => {
     expect(pickObject(down(-0.5, 0), [rug, sofa, lampOnSofa])).toBe("furniture-sofa");
   });
 
+  // An L-shaped strip was picked by the box round both legs, so a click in the L's open corner took it.
+  it("picks a bent strip on its legs, not in the box round them", () => {
+    const leg = (x: number, z: number, angle: number) => ({ centre: { x, y: 0.003, z }, half: [1, 0.002, 0.006] as const, angle });
+    const bent: Pickable = {
+      id: "usb-l",
+      kind: "light",
+      centre: { x: 0, y: 0.003, z: 0 },
+      half: [1, 0.002, 1],
+      angle: 0,
+      line: true,
+      legs: [leg(0, -1, 0), leg(-1, 0, Math.PI / 2)],
+    };
+    expect(pickObject(down(0.5, -1), [bent], 0.05)).toBe("usb-l");
+    expect(pickObject(down(-1, 0.5), [bent], 0.05)).toBe("usb-l");
+    expect(pickObject(down(0.5, 0.5), [bent], 0.05)).toBeNull();
+  });
+
   it("picks nothing on empty ground", () => {
     expect(pickObject(down(5, 5), [sofa, lampOnSofa])).toBeNull();
   });

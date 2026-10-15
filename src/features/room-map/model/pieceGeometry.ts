@@ -1,3 +1,5 @@
+import { stripPoints, translateStrip, type UsbStripPlacement } from "@/shared/contracts/roomMap";
+
 // A piece on the plan as its box: `x`/`y` the unrotated top-left, `w` across and `h` deep, turned `r`
 // degrees about its centre, all in room metres.
 export interface PieceBox {
@@ -124,28 +126,20 @@ export function keepPlacedInside<T extends { x: number; y: number; width: number
     : next;
 }
 
-/** A strip slid, whole, so both its ends are inside the room; one longer than the room starts at
- *  its near wall. */
-export function keepStripInside<T extends { startX: number; startY: number; endX: number; endY: number }>(
-  strip: T,
-  room: RoomBox,
-): T {
-  const shift = (a: number, b: number, span: number) => {
-    const lo = Math.min(a, b);
-    const hi = Math.max(a, b);
+/** A strip slid, whole, so its ends and corners are inside the room; one longer than the room
+ *  starts at its near wall. */
+export function keepStripInside<T extends UsbStripPlacement>(strip: T, room: RoomBox): T {
+  const points = stripPoints(strip);
+  const shift = (values: number[], span: number) => {
+    const lo = Math.min(...values);
+    const hi = Math.max(...values);
     if (lo < 0 || hi - lo > span) return -lo;
     return hi > span ? span - hi : 0;
   };
-  const dx = shift(strip.startX, strip.endX, room.width);
-  const dy = shift(strip.startY, strip.endY, room.depth);
+  const dx = shift(points.map((p) => p.x), room.width);
+  const dy = shift(points.map((p) => p.y), room.depth);
   if (dx === 0 && dy === 0) return strip;
-  return {
-    ...strip,
-    startX: mm(strip.startX + dx),
-    endX: mm(strip.endX + dx),
-    startY: mm(strip.startY + dy),
-    endY: mm(strip.endY + dy),
-  };
+  return translateStrip(strip, dx, dy);
 }
 
 interface Footprint {

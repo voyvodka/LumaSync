@@ -295,6 +295,25 @@ backlight drawn as a stray line along the wall.
   way the strip runs. Dragging an end changes the run, never `ledCount`, and LED Setup's count sync
   writes `ledCount` alone — refitting there would write the geometry the editor writes and lose a
   drag to last-writer-wins — so a run that no longer matches shows "Fit to … m" in the card instead.
+  A refit happens when the count or density *changes*, not when a patch names them: "Onto the wall"
+  sends the whole strip, and keying on the field's presence resized a strip it only moved. The TV's
+  backlight never refits and is offered no fit — its LED count is the screen's perimeter, and the
+  run grown to it carried the strip's middle off the screen, so it stopped being the backlight. A
+  fit longer than the room is not cut: `keepStripInside` only slides, so the strip starts at its near
+  wall and runs out past the far one.
+- **A strip bends at its `corners`, absolute room points between its start and end.** Optional,
+  drawing-only and at most eight (`MAX_STRIP_CORNERS`); `resolveStripCorners` reads any bad entry as
+  a straight strip rather than a half-bent one. The array is one value: a patch replaces it whole
+  and `null` clears it, and the record merge takes it from one writer like any other field. Every
+  move goes through `translateStrip`, which carries the corners — moving only the ends once left a
+  strip's corners where it had been. Versions before corners do exactly that, and draw a bent strip
+  straight from start to end. The run, its centre (the middle of the box round its points) and the
+  density fit all walk the legs: a fit grows the last leg, or drops the corners past its new end.
+  On the plan a double-click on a leg adds a corner there and one on a corner removes it; corners
+  snap level or plumb with their neighbours like the ends. In the 3D room each leg is its own tape
+  with the LEDs shared out by length, so the pitch holds round a corner, and the strip stays one
+  pickable whose legs are what a click hits and what the selection frames. "Onto the wall" is not
+  offered for a bent strip; its corners are where the user put it.
 - **Editor shortcuts stand aside for form fields.** The editor root owns Delete/Backspace, Cmd+Z,
   arrows and the rest, and the dock's fields sit inside it: Backspace in the on-canvas LED count
   deleted the strip, and Cmd+Z in a field ran the editor's undo instead of the field's own.

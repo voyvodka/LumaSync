@@ -228,6 +228,21 @@ function studio(): RoomMapConfig {
       ...base.usbStrips,
       // Under the wall cabinets a counter would have: a strip on its own height, off the skirting.
       { stripId: "strip-kitchen", startX: 4.65, startY: 4.59, endX: 6.95, endY: 4.59, ledCount: 90, mountHeightMeters: 1.45 },
+      // Round three sides of the island's kick, bent at its two corners.
+      {
+        stripId: "strip-island",
+        startX: 4.88,
+        startY: 3.12,
+        corners: [
+          { x: 4.88, y: 2.18 },
+          { x: 6.72, y: 2.18 },
+        ],
+        endX: 6.72,
+        endY: 3.12,
+        ledCount: 223,
+        ledsPerMeter: 60,
+        mountHeightMeters: 0.1,
+      },
     ],
     furniture: [
       ...FURNITURE,

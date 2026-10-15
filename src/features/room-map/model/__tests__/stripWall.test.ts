@@ -22,6 +22,10 @@ describe("nearestWall", () => {
 });
 
 describe("stickStripToWall", () => {
+  it("leaves a bent strip where its corners put it", () => {
+    expect(stickStripToWall({ ...strip(1, 0.6, 3, 0.9), corners: [{ x: 2, y: 1.5 }] }, room)).toBeNull();
+  });
+
   // The maintainer's strip ran across the middle of the floor, a metre off the wall it was meant for.
   it("lays a strip along its nearest wall, just inside it, at its length", () => {
     const stuck = stickStripToWall(strip(1, 0.6, 3, 0.9), room);

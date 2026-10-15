@@ -172,6 +172,17 @@ describe("syncStripLedCount", () => {
     expect(saveMock).not.toHaveBeenCalled();
   });
 
+  // A new count from LED Setup is only a count: refitting the strip there would write the geometry
+  // the editor writes.
+  it("writes the count alone, leaving a bent strip's run and density as they were", () => {
+    const corners = [{ x: 2, y: 1 }];
+    const bent = strip({ portName: PORT, corners, ledsPerMeter: 60 });
+    const next = withStripLedCount(roomMap([bent]), 120, PORT);
+    const written = next.roomMap.usbStrips[0]!;
+    expect(written).toEqual({ ...bent, ledCount: 120 });
+    expect(written.corners).toBe(corners);
+  });
+
   it("leaves the rest of the map, Hue channels included, as it was", () => {
     const map = {
       ...roomMap([strip({ portName: PORT })]),

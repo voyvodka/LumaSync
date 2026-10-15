@@ -1,4 +1,4 @@
-import type { RoomMapConfig } from "@/shared/contracts/roomMap";
+import { type RoomMapConfig, stripCentre } from "@/shared/contracts/roomMap";
 import { clamp } from "@/shared/lib/math";
 
 import { moveTvWithBacklight } from "./backlight";
@@ -43,8 +43,9 @@ export function landCarried(
     case "usb": {
       const strip = config.usbStrips.find((s) => s.stripId === ref.stripId);
       if (!strip || strip.locked) return null;
-      const dx = cx - (strip.startX + strip.endX) / 2;
-      const dy = cy - (strip.startY + strip.endY) / 2;
+      const centre = stripCentre(strip);
+      const dx = cx - centre.x;
+      const dy = cy - centre.y;
       return ROOM_OBJECT_KINDS.usb.moveTo(config, ref, strip.startX + dx, strip.startY + dy);
     }
     case "hue": {

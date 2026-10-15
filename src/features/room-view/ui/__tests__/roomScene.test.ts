@@ -279,6 +279,24 @@ describe("buildRoomScene — mood", () => {
   });
 });
 
+describe("buildRoomScene — bent strips", () => {
+  // A strip folded round a desk corner was drawn straight from its start to its end.
+  it("draws a tape per leg with the LEDs shared out by length, and picks it as one strip on its legs", () => {
+    const strip: UsbStripPlacement = { stripId: "bent", startX: 1, startY: 2, endX: 2, endY: 3, corners: [{ x: 3, y: 2 }], ledCount: 90 };
+    const room = buildRoomScene({ ...DEFAULT_ROOM_MAP, tvAnchor: undefined, usbStrips: [strip] }, OPTIONS);
+    const chips: InstancedMesh[] = [];
+    room.scene.traverse((o) => {
+      if (o instanceof InstancedMesh && (o.material as MeshBasicMaterial).toneMapped === false) chips.push(o);
+    });
+    // 2 m then √2 m: 90 LEDs at a 3.41 m run fall 53 and 37.
+    expect(chips.map((c) => c.count)).toEqual([53, 37]);
+    const picked = room.pickables.filter((p) => p.id === "usb-bent");
+    expect(picked).toHaveLength(1);
+    expect(picked[0]!.legs).toHaveLength(2);
+    disposeScene(room.scene);
+  });
+});
+
 /** The strip's lit line, the far view's whole strip. */
 function stripBar(scene: Scene): Mesh | undefined {
   let found: Mesh | undefined;

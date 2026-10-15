@@ -31,13 +31,14 @@ describe("RoomPreview", () => {
     ]);
     // A rotated piece turns about its own centre, as on the plan.
     expect(placed[1]?.parentElement?.getAttribute("transform")).toBe("rotate(45 0.6499999999999999 2.85)");
-    expect(root.querySelectorAll(":scope > line")).toHaveLength(2);
+    expect(root.querySelectorAll(":scope > line")).toHaveLength(1);
+    expect(root.querySelector(":scope > polyline")?.getAttribute("points")).toBe("1.8,0.15 3.2,0.15");
   });
 
   it("draws an empty room as its outline alone", () => {
     const { container } = render(<RoomPreview config={DEFAULT_ROOM_MAP} />);
     const root = container.querySelector("svg") as SVGSVGElement;
     expect(root.querySelectorAll(":scope > rect")).toHaveLength(1);
-    expect(root.querySelectorAll(":scope > g, :scope > line")).toHaveLength(0);
+    expect(root.querySelectorAll(":scope > g, :scope > line, :scope > polyline")).toHaveLength(0);
   });
 });

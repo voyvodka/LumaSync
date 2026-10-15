@@ -218,7 +218,12 @@ https://keepachangelog.com/en/1.1.0/
     furniture in every model it comes in, side by side, in a 10 × 8 m room.
   - A strip's card takes its tape's LEDs per metre: with it set, the strip's length follows its LED
     count (90 LEDs at 60 a metre is 1.5 m), and a strip drawn longer or shorter offers "Fit to … m".
-    Close up in the 3D view a strip shows each of its LEDs.
+  - A strip can bend: double-click its line on the plan to put a corner there, drag the corner to run
+    the strip round a desk or a room corner (up to eight), and double-click a corner to take it out;
+    its card offers "Add a corner" and "Straighten". A bent strip moves, copies and fits its length
+    along its corners, and the 3D room draws it leg by leg. Versions before this one draw it straight
+    and leave its corners behind when it is moved.
+  - Close up in the 3D view a strip shows each of its LEDs; from afar it is one unbroken lit line.
   - A USB strip is drawn at its real width, about a centimetre, flat on its wall or the floor, and
     its card takes a height for the 3D room (empty runs it at the skirting along a wall, on the floor
     elsewhere) and offers "Onto the wall" to lay it along the nearest wall.

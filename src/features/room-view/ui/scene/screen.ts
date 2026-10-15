@@ -2,7 +2,7 @@
 // over a low unit with a soundbar when it hangs on the wall.
 import { BufferAttribute, Color, PlaneGeometry } from "three";
 
-import { type RoomMapConfig, resolveScreenKind, SCREEN_KINDS } from "@/shared/contracts/roomMap";
+import { type RoomMapConfig, resolveScreenKind, SCREEN_KINDS, stripCentre, stripPoints } from "@/shared/contracts/roomMap";
 
 import { DESK_TOP, type FurnitureModel } from "../../model/furnitureModel";
 import { roomToScene, type ScenePoint, tvMountHeight } from "../../model/roomSpace";
@@ -112,9 +112,9 @@ export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, F
   const sx = tv.x + tv.width / 2;
   const sy = tv.y + tv.height / 2;
   const lit = config.usbStrips.some((s) => {
-    const mx = (s.startX + s.endX) / 2;
-    const my = (s.startY + s.endY) / 2;
-    const overlaps = Math.max(s.startX, s.endX) >= tv.x && Math.min(s.startX, s.endX) <= tv.x + tv.width;
+    const { x: mx, y: my } = stripCentre(s);
+    const xs = stripPoints(s).map((p) => p.x);
+    const overlaps = Math.max(...xs) >= tv.x && Math.min(...xs) <= tv.x + tv.width;
     return Math.hypot(mx - sx, my - sy) <= BACKLIGHT_REACH || (overlaps && Math.abs(my - sy) <= BACKLIGHT_REACH);
   });
   const backlight = lit

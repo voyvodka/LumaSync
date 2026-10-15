@@ -9,8 +9,10 @@
  * positioned at the start and end pixel coordinates.
  */
 import { fireEvent, render } from "@testing-library/react";
+import { useState } from "react";
 import { describe, it, expect, vi } from "vitest";
 
+import { refitRetapedStrip } from "../../../model/stripFit";
 import { UsbStripObject } from "../UsbStripObject";
 import type { UsbStripPlacement } from "@/shared/contracts/roomMap";
 
@@ -43,10 +45,9 @@ describe("UsbStripObject", () => {
       />,
     );
 
-    // SVG line element must be present
-    const lines = container.querySelectorAll("line");
-    // There are two <line> elements: invisible wide hit area + visible dashed line
-    expect(lines.length).toBeGreaterThanOrEqual(2);
+    // The invisible wide hit area for its one leg, and the visible dashed line.
+    expect(container.querySelectorAll("line")).toHaveLength(1);
+    expect(container.querySelector("polyline")?.getAttribute("points")).toBe("80,80 240,80");
 
     // Two circular handle divs (start + end) — they are absolute-positioned
     // rounded-full divs with inline style left/top derived from pixel coordinates.
@@ -131,5 +132,100 @@ describe("UsbStripObject — dragging", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     fireEvent.pointerUp(line, { clientX: 160, clientY: 100, pointerId: 1 });
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("UsbStripObject — corners", () => {
+  const BENT: UsbStripPlacement = { ...PLACEMENT, corners: [{ x: 3, y: 2 }], endX: 2, endY: 2.5 };
+  const renderStrip = (placement: UsbStripPlacement, selected = true, bendable = true) => {
+    const onChange = vi.fn<(updated: UsbStripPlacement) => void>();
+    const { container } = render(
+      <UsbStripObject
+        placement={placement}
+        pxPerMeter={PX_PER_METER}
+        selected={selected}
+        room={{ width: 4, depth: 3 }}
+        bendable={bendable}
+        onSelect={vi.fn<(id: string) => void>()}
+        onChange={onChange}
+      />,
+    );
+    return { onChange, container };
+  };
+
+  it("draws a bent strip through its corners, a hit area per leg and a handle on each corner", () => {
+    const { container } = renderStrip(BENT);
+    expect(container.querySelector("polyline")?.getAttribute("points")).toBe("80,80 240,160 160,200");
+    expect(container.querySelectorAll("line")).toHaveLength(2);
+    expect(container.querySelectorAll("[data-strip-corner]")).toHaveLength(1);
+    expect(renderStrip(BENT, false).container.querySelectorAll("[data-strip-corner]")).toHaveLength(0);
+  });
+
+  // A strip folded round a desk corner came back straight when it was dragged: only its ends moved.
+  it("carries its corners when the whole strip is dragged", () => {
+    const { onChange, container } = renderStrip(BENT);
+    const leg = container.querySelectorAll("line")[0]!;
+    fireEvent.pointerDown(leg, { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(leg, { clientX: 60, clientY: 100, pointerId: 1 });
+    fireEvent.pointerUp(leg, { clientX: 60, clientY: 100, pointerId: 1 });
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ startX: 0.5, endX: 1.5, corners: [{ x: 2.5, y: 2 }] }));
+  });
+
+  it("moves a corner on its own, snapping level with the point beside it", () => {
+    const { onChange, container } = renderStrip(BENT);
+    const corner = container.querySelector("[data-strip-corner]")!;
+    fireEvent.pointerDown(corner, { clientX: 240, clientY: 160, pointerId: 1 });
+    fireEvent.pointerMove(corner, { clientX: 260, clientY: 88, pointerId: 1 });
+    fireEvent.pointerUp(corner, { clientX: 260, clientY: 88, pointerId: 1 });
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ startX: 1, endX: 2, corners: [{ x: 3.25, y: 1 }] }));
+  });
+
+  it("leaves the corners out of an end's drag when they did not move", () => {
+    const { onChange, container } = renderStrip(PLACEMENT);
+    const end = Array.from(container.querySelectorAll<HTMLElement>("div[style]")).find((el) => el.style.left === "234px")!;
+    fireEvent.pointerDown(end, { clientX: 240, clientY: 80, pointerId: 1 });
+    fireEvent.pointerMove(end, { clientX: 240, clientY: 160, pointerId: 1 });
+    fireEvent.pointerUp(end, { clientX: 240, clientY: 160, pointerId: 1 });
+    expect(onChange.mock.calls[0]![0]).not.toHaveProperty("corners");
+    expect(onChange.mock.calls[0]![0]).toMatchObject({ endX: 3, endY: 2 });
+  });
+
+  it("bends the line where it is double-clicked, and a double-click on a corner takes it out", () => {
+    const { onChange, container } = renderStrip(PLACEMENT);
+    fireEvent.doubleClick(container.querySelector("line")!, { clientX: 160, clientY: 80 });
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ corners: [{ x: 2, y: 1 }] }));
+    const bent = renderStrip(BENT);
+    fireEvent.doubleClick(bent.container.querySelector("[data-strip-corner]")!);
+    expect(bent.onChange).toHaveBeenLastCalledWith(expect.objectContaining({ corners: null }));
+  });
+
+  // Clearing the field to retype refit the bent strip to one LED and dropped its corners for good.
+  it("refits each keystroke in the LED field from the strip as it was when the field took focus", () => {
+    function Live() {
+      const [placement, setPlacement] = useState<UsbStripPlacement>({ ...BENT, ledsPerMeter: 60 });
+      return (
+        <UsbStripObject
+          placement={placement}
+          pxPerMeter={PX_PER_METER}
+          selected
+          onSelect={vi.fn<(id: string) => void>()}
+          onChange={(updated) => setPlacement((before) => refitRetapedStrip(before, updated, {}))}
+        />
+      );
+    }
+    const { container } = render(<Live />);
+    const input = container.querySelector<HTMLInputElement>("input[type=number]")!;
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.change(input, { target: { value: "240" } });
+    // 240 LEDs at 60 a metre is 4 m: past the corner, so the last leg grows and the corner stays.
+    expect(container.querySelector("polyline")?.getAttribute("points")?.split(" ")).toHaveLength(3);
+  });
+
+  it("does not bend a locked strip or the TV's backlight", () => {
+    for (const { onChange, container } of [renderStrip({ ...PLACEMENT, locked: true }), renderStrip(PLACEMENT, true, false)]) {
+      fireEvent.doubleClick(container.querySelector("line")!, { clientX: 160, clientY: 80 });
+      expect(onChange).not.toHaveBeenCalled();
+    }
   });
 });

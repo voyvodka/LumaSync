@@ -1,5 +1,5 @@
 import { classifyFurniture, furnitureColours } from "@/features/room-view/model/furnitureModel";
-import type { RoomMapConfig } from "@/shared/contracts/roomMap";
+import { type RoomMapConfig, stripPoints } from "@/shared/contracts/roomMap";
 import { cx } from "@/shared/lib/cx";
 
 import { FurnitureGlyph } from "./objects/FurnitureGlyph";
@@ -33,13 +33,13 @@ export function RoomPreview({ config, className }: { config: RoomMapConfig; clas
         );
       })}
       {config.usbStrips.map((strip) => (
-        <line
+        <polyline
           key={strip.stripId}
           className={styles.strip}
-          x1={strip.startX}
-          y1={strip.startY}
-          x2={strip.endX}
-          y2={strip.endY}
+          fill="none"
+          points={stripPoints(strip)
+            .map((p) => `${p.x},${p.y}`)
+            .join(" ")}
         />
       ))}
       {tv && <line className={styles.screen} x1={tv.x} y1={tv.y + tv.height / 2} x2={tv.x + tv.width} y2={tv.y + tv.height / 2} />}

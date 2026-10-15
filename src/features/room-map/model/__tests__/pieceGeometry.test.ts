@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import type { UsbStripPlacement } from "@/shared/contracts/roomMap";
+
 import { clampInsideRoom, freeSpotFor, keepPlacedInside, keepStripInside, landCarriedPiece, resizeFromHandle } from "../pieceGeometry";
 
 const room = { width: 5, depth: 4 };
@@ -69,9 +71,22 @@ describe("keepPlacedInside", () => {
 });
 
 describe("keepStripInside", () => {
+  const strip = (s: Partial<UsbStripPlacement>): UsbStripPlacement => ({ stripId: "s", ledCount: 60, startX: 0, startY: 0, endX: 1, endY: 0, ...s });
+
   it("slides a strip whole until both its ends are inside", () => {
-    expect(keepStripInside({ startX: 4.5, startY: 1, endX: 5.5, endY: 1 }, room)).toEqual({ startX: 4, startY: 1, endX: 5, endY: 1 });
-    expect(keepStripInside({ startX: 1, startY: -1, endX: 1, endY: 0.5 }, room)).toEqual({ startX: 1, startY: 0, endX: 1, endY: 1.5 });
+    expect(keepStripInside(strip({ startX: 4.5, startY: 1, endX: 5.5, endY: 1 }), room)).toMatchObject({ startX: 4, startY: 1, endX: 5, endY: 1 });
+    expect(keepStripInside(strip({ startX: 1, startY: -1, endX: 1, endY: 0.5 }), room)).toMatchObject({ startX: 1, startY: 0, endX: 1, endY: 1.5 });
+  });
+
+  // A bent strip whose corner poked out past the wall stayed there: only its ends were checked.
+  it("keeps a bent strip's corners inside too, moving them with it", () => {
+    const bent = strip({ startX: 1, startY: 1, endX: 2, endY: 1, corners: [{ x: 1.5, y: -0.5 }] });
+    expect(keepStripInside(bent, room)).toMatchObject({ startY: 1.5, endY: 1.5, corners: [{ x: 1.5, y: 0 }] });
+  });
+
+  it("hands back the same strip when it already fits", () => {
+    const inside = strip({ corners: [{ x: 0.5, y: 0.5 }] });
+    expect(keepStripInside(inside, room)).toBe(inside);
   });
 });
 

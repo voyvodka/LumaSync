@@ -15,7 +15,14 @@ function renderInspector(
   overrides: Partial<UsbStripPlacement> = {},
   connectionStatus: UsbStripConnectionStatus = "unknown",
   port: string | null = null,
-  extra: { height?: { placeholder: string; max: number }; onStickToWall?: () => void; fitTo?: number; onFitLength?: () => void } = {},
+  extra: {
+    height?: { placeholder: string; max: number };
+    onStickToWall?: () => void;
+    fitTo?: number;
+    onFitLength?: () => void;
+    onAddCorner?: () => void;
+    onStraighten?: () => void;
+  } = {},
 ) {
   const handlers = {
     onUpdate: vi.fn<(patch: Partial<UsbStripPlacement>) => void>(),
@@ -122,5 +129,19 @@ describe("UsbStripInspector", () => {
     expect(handlers.onDuplicate).toHaveBeenCalledTimes(1);
     expect(handlers.onManage).toHaveBeenCalledTimes(1);
     expect(handlers.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("bends and straightens the strip from its card, offering each only when it applies", () => {
+    renderInspector();
+    expect(screen.queryByText("roomMap:inspector.usbAddCorner")).toBeNull();
+    expect(screen.queryByText("roomMap:inspector.usbStraighten")).toBeNull();
+    cleanup();
+    const onAddCorner = vi.fn<() => void>();
+    const onStraighten = vi.fn<() => void>();
+    renderInspector({}, "unknown", null, { onAddCorner, onStraighten });
+    fireEvent.click(screen.getByText("roomMap:inspector.usbAddCorner"));
+    fireEvent.click(screen.getByText("roomMap:inspector.usbStraighten"));
+    expect(onAddCorner).toHaveBeenCalledOnce();
+    expect(onStraighten).toHaveBeenCalledOnce();
   });
 });

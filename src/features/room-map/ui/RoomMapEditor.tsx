@@ -16,8 +16,9 @@ import type {
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
 import {
-  fitStripLength,
   replaceHueChannel,
+  stripCentre,
+  translateStrip,
   resolveRoomFootprint,
   ROOM_MAP_BACKGROUND_ERROR,
   ROOM_MAP_BACKGROUND_MAX_MB,
@@ -51,8 +52,9 @@ import {
   resizeFootprint,
   type FootprintSide,
 } from "../model/roomFootprint";
-import { moveTvWithBacklight } from "../model/backlight";
+import { isBacklightStrip, moveTvWithBacklight } from "../model/backlight";
 import { keepPlacedInside, keepStripInside, roomBoxOf, snapToStep } from "../model/pieceGeometry";
+import { refitRetapedStrip } from "../model/stripFit";
 import { resizeRoomFromSide } from "../model/roomResize";
 import { useRoomMapHueZones } from "../state/useRoomMapHueZones";
 import { imageLayerGestureKey, useRoomMapImageLayers } from "../state/useRoomMapImageLayers";
@@ -247,7 +249,7 @@ export function RoomMapEditor({
         (cfg) => ({
           // A new LED count on tape of a known density is a new length.
           usbStrips: cfg.usbStrips.map((s) =>
-            s.stripId !== updated.stripId ? s : s.ledCount !== updated.ledCount ? keepStripInside(fitStripLength(updated), roomBoxOf(cfg)) : updated,
+            s.stripId !== updated.stripId ? s : keepStripInside(refitRetapedStrip(s, updated, cfg), roomBoxOf(cfg)),
           ),
         }),
         continuous ? { gesture: `usb:${updated.stripId}:ledCount` } : undefined,
@@ -312,7 +314,10 @@ export function RoomMapEditor({
           .filter((ch) => within(((ch.x + 1) / 2) * widthMeters, ((1 - ch.y) / 2) * depthMeters))
           .map((ch) => hueChannelObjectId(ch.channelIndex)),
         ...config.usbStrips
-          .filter((st) => within((st.startX + st.endX) / 2, (st.startY + st.endY) / 2))
+          .filter((st) => {
+            const centre = stripCentre(st);
+            return within(centre.x, centre.y);
+          })
           .map((st) => usbStripObjectId(st.stripId)),
       ];
       const next = additive ? [...new Set([...group, ...inside])] : inside;
@@ -361,7 +366,7 @@ export function RoomMapEditor({
           ...(tv && groupSet.has(TV_ANCHOR_OBJECT_ID) && !tv.locked ? { tvAnchor: { ...tv, x: round(tv.x + dx), y: round(tv.y + dy) } } : {}),
           usbStrips: cfg.usbStrips.map((st) =>
             groupSet.has(usbStripObjectId(st.stripId)) && !st.locked
-              ? { ...st, startX: round(st.startX + dx), startY: round(st.startY + dy), endX: round(st.endX + dx), endY: round(st.endY + dy) }
+              ? translateStrip(st, dx, dy)
               : st,
           ),
           hueChannels,
@@ -512,7 +517,7 @@ export function RoomMapEditor({
       if (from.tvAnchor) patch.tvAnchor = { ...from.tvAnchor, x: from.tvAnchor.x + dxM, y: from.tvAnchor.y + dyM };
       if (from.furniture.length > 0) patch.furniture = from.furniture.map((f) => ({ ...f, x: f.x + dxM, y: f.y + dyM }));
       if (from.usbStrips.length > 0) {
-        patch.usbStrips = from.usbStrips.map((s) => ({ ...s, startX: s.startX + dxM, startY: s.startY + dyM, endX: s.endX + dxM, endY: s.endY + dyM }));
+        patch.usbStrips = from.usbStrips.map((s) => translateStrip(s, dxM, dyM));
       }
       if (from.imageLayers.length > 0) {
         patch.imageLayers = from.imageLayers.map((l) => ({ ...l, offsetX: l.offsetX + dxM * pxPerMeter, offsetY: l.offsetY + dyM * pxPerMeter }));
@@ -651,7 +656,7 @@ export function RoomMapEditor({
         usbStrips: config.usbStrips.map((s) => {
           if (s.stripId !== stripId) return s;
           const next = { ...s, ...patch };
-          return keepStripInside("ledCount" in patch || "ledsPerMeter" in patch ? fitStripLength(next) : next, roomBoxOf(config));
+          return keepStripInside(refitRetapedStrip(s, next, config), roomBoxOf(config));
         }),
       });
     },
@@ -753,6 +758,7 @@ export function RoomMapEditor({
               panMode={spaceHeld}
               connectionStatus={stripStatus(strip).status}
               room={roomBox}
+              bendable={!(config.tvAnchor && isBacklightStrip(strip, config.tvAnchor))}
               onSelect={handleUsbStripSelect}
               onChange={handleUsbStripChange}
             />

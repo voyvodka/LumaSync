@@ -15,6 +15,10 @@ import {
   resolveStripMountHeight,
   resolveStripDensity,
   fitStripLength,
+  resolveStripCorners,
+  stripCentre,
+  stripRunLength,
+  translateStrip,
   type UsbStripPlacement,
   resolveFurnitureType,
   resolveFurnitureVariant,
@@ -169,6 +173,43 @@ describe("height and screen kind resolvers", () => {
     expect(fitStripLength(plain)).toBe(plain);
     const still = { ...strip, endY: 2 };
     expect(fitStripLength(still)).toBe(still);
+  });
+
+  describe("a bent strip", () => {
+    const bent: UsbStripPlacement = {
+      stripId: "s",
+      startX: 0,
+      startY: 0,
+      endX: 1,
+      endY: 1,
+      ledCount: 120,
+      corners: [{ x: 1, y: 0 }],
+    };
+
+    it("reads its corners, and reads a bad or overlong list as straight", () => {
+      expect(resolveStripCorners(bent)).toEqual([{ x: 1, y: 0 }]);
+      for (const corners of [null, [], [{ x: 1 }], [{ x: Number.NaN, y: 0 }], Array.from({ length: 9 }, () => ({ x: 0, y: 0 })), "x"]) {
+        expect(resolveStripCorners({ ...bent, corners } as UsbStripPlacement)).toEqual([]);
+      }
+    });
+
+    it("measures its run round the corner and centres on the box it covers", () => {
+      expect(stripRunLength(bent)).toBeCloseTo(2);
+      expect(stripCentre(bent)).toEqual({ x: 0.5, y: 0.5 });
+    });
+
+    it("moves its corners with it", () => {
+      expect(translateStrip(bent, 1, 2)).toMatchObject({ startX: 1, startY: 2, endX: 2, endY: 3, corners: [{ x: 2, y: 2 }] });
+      expect(translateStrip({ ...bent, corners: undefined }, 1, 0).corners).toBeUndefined();
+    });
+
+    it("fits its length along the last leg, or drops the corners past a shorter end", () => {
+      expect(fitStripLength({ ...bent, ledsPerMeter: 48 })).toMatchObject({ endX: 1, endY: 1.5, corners: [{ x: 1, y: 0 }] });
+      expect(fitStripLength({ ...bent, ledCount: 30, ledsPerMeter: 60 })).toMatchObject({ endX: 0.5, endY: 0, corners: null });
+      // An end dragged onto its last corner had no way to grow, and "Fit to" did nothing.
+      const onCorner = { ...bent, endX: 1, endY: 0, ledCount: 45, ledsPerMeter: 30 };
+      expect(fitStripLength(onCorner)).toMatchObject({ endX: 1.5, endY: 0, corners: [{ x: 1, y: 0 }] });
+    });
   });
 
   it("reads an unknown screen kind as Auto", () => {

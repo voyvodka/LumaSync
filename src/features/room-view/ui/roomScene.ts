@@ -24,6 +24,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
 import { furnitureObjectId, hueChannelObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "@/features/room-map/model/objectId";
 import { isBacklightStrip } from "@/features/room-map/model/backlight";
+import { ledsPerLeg, stripLegs } from "@/features/room-map/model/stripCorners";
 import { defaultStripHeight } from "@/features/room-map/model/stripWall";
 import { outsideOutline } from "@/features/room-map/model/roomFootprint";
 import {
@@ -33,10 +34,14 @@ import {
   resolveHueFixture,
   resolveRoomFootprint,
   resolveRoomSurfaces,
+  resolveStripCorners,
   resolveStripMountHeight,
+  stripCentre,
+  stripPoints,
+  stripRunLength,
 } from "@/shared/contracts/roomMap";
 
-import type { Pickable } from "../model/picking";
+import type { PickLeg, Pickable } from "../model/picking";
 import { nearestWallFacing, roomEdges } from "../model/roomOutline";
 import { hueChannelScenePoint, roomToScene, tvMountHeight } from "../model/roomSpace";
 import { contactShadow, floorParts, roomLights, WALL_THICKNESS, wallFootShade, wallGeometry } from "./scene/environment";
@@ -237,30 +242,49 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   const stripMaterials: MeshBasicMaterial[] = [];
   const tapes: LedTape[] = [];
   for (const strip of config.usbStrips) {
-    const mx = (strip.startX + strip.endX) / 2;
-    const my = (strip.startY + strip.endY) / 2;
     const id = usbStripObjectId(strip.stripId);
     if (config.tvAnchor && screen && isBacklightStrip(strip, config.tvAnchor)) {
       const { centre, width, height } = screen.layout;
       pickables.push({ id, kind: "light", centre, half: [width / 2 + 0.05, height / 2 + 0.05, 0.08], angle: 0 });
       continue;
     }
-    const length = Math.hypot(strip.endX - strip.startX, strip.endY - strip.startY);
-    if (length < 0.05) continue;
-    const angle = Math.atan2(strip.endY - strip.startY, strip.endX - strip.startX);
+    // A leg under a millimetre is a corner dragged onto its neighbour: nothing to draw, and no LEDs
+    // lost to it.
+    const legs = stripLegs(strip).filter((leg) => leg.length >= 1e-3);
+    if (stripRunLength(strip) < 0.05) continue;
     const height = Math.min(resolveStripMountHeight(strip) ?? defaultStripHeight(config, strip), dims.heightMeters - STRIP_WIDTH);
     // Away from a wall a strip lies taped flat to the floor; on one it stands flat against it.
     const lying = height < STRIP_WIDTH;
-    const half: [number, number, number] = lying ? [length / 2, STRIP_DEPTH / 2, STRIP_WIDTH / 2] : [length / 2, STRIP_WIDTH / 2, STRIP_DEPTH / 2];
-    const centre = roomToScene(mx, my, lying ? STRIP_DEPTH / 2 + 0.001 : height, dims);
+    const at = (x: number, y: number) => roomToScene(x, y, lying ? STRIP_DEPTH / 2 + 0.001 : height, dims);
     const barMaterial = new MeshBasicMaterial({ color: STRIP_GLOW, toneMapped: false });
     stripMaterials.push(barMaterial);
-    const tape = ledTape(length, strip.ledCount, lying, barMaterial);
-    tape.group.position.set(centre.x, centre.y, centre.z);
-    tape.group.rotation.y = -angle;
-    scene.add(tape.group);
-    tapes.push(tape);
-    pickables.push({ id, kind: "light", centre, half, angle, line: true });
+    // A bent strip is a tape per leg, its LEDs shared out by length so the pitch holds round a corner.
+    const counts = ledsPerLeg(legs, strip.ledCount);
+    const picked: PickLeg[] = [];
+    legs.forEach((leg, i) => {
+      if (counts[i]! < 1) return;
+      const angle = Math.atan2(leg.b.y - leg.a.y, leg.b.x - leg.a.x);
+      const centre = at((leg.a.x + leg.b.x) / 2, (leg.a.y + leg.b.y) / 2);
+      const tape = ledTape(leg.length, counts[i]!, lying, barMaterial);
+      tape.group.position.set(centre.x, centre.y, centre.z);
+      tape.group.rotation.y = -angle;
+      scene.add(tape.group);
+      tapes.push(tape);
+      const half: [number, number, number] = lying ? [leg.length / 2, STRIP_DEPTH / 2, STRIP_WIDTH / 2] : [leg.length / 2, STRIP_WIDTH / 2, STRIP_DEPTH / 2];
+      picked.push({ centre, half, angle });
+    });
+    // A bent strip is carried from the middle of the box round its points, as the plan moves it.
+    if (picked.length === 1 && resolveStripCorners(strip).length === 0) {
+      pickables.push({ id, kind: "light", ...picked[0]!, line: true });
+    } else if (picked.length > 0) {
+      const points = stripPoints(strip);
+      const xs = points.map((p) => p.x);
+      const ys = points.map((p) => p.y);
+      const middle = stripCentre(strip);
+      const across = lying ? STRIP_DEPTH / 2 : STRIP_WIDTH / 2;
+      const half: [number, number, number] = [(Math.max(...xs) - Math.min(...xs)) / 2, across, (Math.max(...ys) - Math.min(...ys)) / 2];
+      pickables.push({ id, kind: "light", centre: at(middle.x, middle.y), half, angle: 0, line: true, legs: picked });
+    }
   }
 
   // One mesh per material: a room is still a handful of draws.

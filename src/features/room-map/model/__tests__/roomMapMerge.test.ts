@@ -74,6 +74,16 @@ describe("mergeEditorSave", () => {
     expect(mergeEditorSave(stored, base, next).usbStrips[0]).toMatchObject({ mountHeightMeters: null, portName: "/dev/cu.usbserial-1" });
   });
 
+  // LED Setup writes a strip's count while the editor bends it: both land, the corners whole.
+  it("keeps the corners the editor drew and the LED count LED Setup wrote to the same strip", () => {
+    const base = map({ usbStrips: [{ ...strip("a"), corners: [{ x: 0.5, y: 0 }] }] });
+    const next = { ...base, usbStrips: [{ ...strip("a"), corners: [{ x: 0.5, y: 1 }, { x: 0.8, y: 1 }] }] };
+    const stored = { ...base, usbStrips: [{ ...strip("a", 144), corners: [{ x: 0.5, y: 0 }] }] };
+    expect(mergeEditorSave(stored, base, next).usbStrips[0]).toEqual({ ...strip("a", 144), corners: [{ x: 0.5, y: 1 }, { x: 0.8, y: 1 }] });
+    const straightened = { ...base, usbStrips: [{ ...strip("a"), corners: null }] };
+    expect(mergeEditorSave(stored, base, straightened).usbStrips[0]).toMatchObject({ ledCount: 144, corners: null });
+  });
+
   it("removes what the editor deleted and adds what it created", () => {
     const [a, b] = [strip("a"), strip("b")];
     const base = map({ usbStrips: [a, b] });
