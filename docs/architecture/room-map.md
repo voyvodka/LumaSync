@@ -41,6 +41,24 @@ before either face. Empty means nothing the user placed: the strip a connect on 
 Hue channels the bridge sync seeds do not count, since the sync lands a moment after the map opens
 and once took the picker away under a first-time Hue user's pointer; a template keeps both.
 
+**Edit draws the room in 3D or as the plan, and the dock is the same for both.** The editor's stage
+— 3D | Plan in its corner — swaps only what the room is drawn as: `RoomView3DHost` or
+`RoomMapCanvas` in the same slot, under the same dock, history, keys and save. So everything the dock
+does is done in 3D too: the palette adds a piece on free floor, a pick in the room opens its card,
+Delete, ⌘Z and the arrows work, and a selected piece or light is carried and turned as in View
+(`useLandCarried`, the one landing both 3D stages share). What only the plan draws stays there — the
+walls' handles, a strip's ends and corners, image layers and Hue zones — so picking or adding an image
+or a zone opens the plan for it (an image only once the file dialog returns one), and going back to 3D
+closes that card. The plan's own switches and keys step aside in 3D: the grid and zone-outline switches
+are hidden, ⌘0 is the camera's Whole room, the arrows with nothing selected do nothing, and the keys
+list drops panning and box selection. Edit opens on the 3D room where it is built; the stage picked
+is remembered for the session, like the face, and not stored. A room that cannot open in 3D falls back to the plan with
+no stage switch, through the same failure the View face reports. In 3D the camera's buttons take the
+plan's zoom slot in the same capsule, which keeps the zoom's width, so the stage switch and undo stay
+under the pointer when the stage changes. A second 3D stage instead of moving the dock into View
+was chosen because the editor's actions — some forty callbacks over the map, its zones and images —
+would otherwise be built twice.
+
 **The plan draws a piece the way the 3D room builds it.** `objects/FurnitureGlyph.tsx` draws each
 piece from above from the same `FurnitureModel` the room reads (`useFurnitureModels`, which keeps a
 model object while the piece's reading holds, so an edit re-renders only the pieces it changed), in

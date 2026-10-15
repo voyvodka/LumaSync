@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { CornerControls, type CornerEditControls } from "../CornerControls";
+import { CornerControls, type CornerEditControls, EDIT_STAGES, type EditStage } from "../CornerControls";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -103,5 +103,36 @@ describe("CornerControls", () => {
     const dialog = screen.getByRole("dialog", { name: "roomMap:shortcuts.title" });
     expect(dialog).toHaveTextContent("roomMap:shortcuts.undo");
     expect(Array.from(dialog.querySelectorAll("kbd"), (key) => key.textContent)).not.toContain("F");
+  });
+
+  // Editing in 3D: the plan's zoom means nothing to the room, but undo still does.
+  it("offers the stage, the camera and the history alone while the room is edited in 3D", () => {
+    const onChange = vi.fn<(stage: EditStage) => void>();
+    const onUndo = vi.fn<() => void>();
+    render(
+      <CornerControls
+        roomAware={null}
+        stage={{ value: EDIT_STAGES.ROOM, onChange }}
+        view={{ onZoomIn: vi.fn<() => void>(), onZoomOut: vi.fn<() => void>(), onReset: vi.fn<() => void>() }}
+        history={{ canUndo: true, canRedo: false, onUndo, onRedo: vi.fn<() => void>() }}
+      />,
+    );
+    expect(screen.getByRole("radio", { name: "roomMap:stage.room" })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(screen.getByRole("radio", { name: "roomMap:stage.plan" }));
+    expect(onChange).toHaveBeenCalledWith(EDIT_STAGES.PLAN);
+    fireEvent.click(screen.getByRole("button", { name: "roomMap:toolbar.undo" }));
+    expect(onUndo).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: "roomMap:zoomControl.fit" })).toBeNull();
+    expect(screen.getByRole("button", { name: "roomMap:view.resetCamera" })).toBeInTheDocument();
+    // One capsule, as on the plan, so undo stays put across a stage switch.
+    expect(screen.getByRole("button", { name: "roomMap:toolbar.undo" }).parentElement).toBe(
+      screen.getByRole("button", { name: "roomMap:view.resetCamera" }).parentElement?.parentElement,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "roomMap:shortcuts.title" }));
+    const keys = screen.getByRole("dialog", { name: "roomMap:shortcuts.title" });
+    expect(keys).toHaveTextContent("roomMap:view.resetCamera");
+    expect(keys).not.toHaveTextContent("roomMap:shortcuts.boxSelect");
+    expect(keys).not.toHaveTextContent("roomMap:shortcuts.pan");
   });
 });

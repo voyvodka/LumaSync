@@ -9,10 +9,10 @@ import { useRunningLightingMode } from "@/features/mode/state/lightingControl";
 
 import { deriveHueAreaState } from "../../model/hueAreaState";
 import { furnitureObjectId, parseObjectId } from "../../model/objectId";
-import { landCarried } from "../../model/carryLanding";
 import type { RoomAwareStatus } from "../../model/roomAware";
 import { buildViewLights, resolveViewSelection } from "../../model/viewLights";
 import { useHueIdentify } from "../../state/useHueIdentify";
+import { useLandCarried } from "../../state/useLandCarried";
 import type { RoomMapDocument } from "../../state/useRoomMapDocument";
 import { useUsbStripStatus } from "../../state/useUsbStripStatus";
 import { CornerControls } from "../CornerControls";
@@ -47,7 +47,7 @@ export function ViewStage({
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [cameraCommand, setCameraCommand] = useState<CameraCommand | undefined>(undefined);
-  const { scopedConfig, selectedId, select, selectHueZone, hue, hueAreaId, hueBridgeConfigured, hueBridgeIp, apply } = doc;
+  const { scopedConfig, selectedId, select, selectHueZone, hue, hueAreaId, hueBridgeConfigured, hueBridgeIp } = doc;
   const { stripStatus } = useUsbStripStatus(hueReachable);
   const identify = useHueIdentify(hueBridgeIp);
   const running = useRunningLightingMode();
@@ -117,18 +117,7 @@ export function ViewStage({
     [select, selectLight, viewSelectedId, selectedId, focusStage],
   );
 
-  // What is carried across the room lands there on the plan, inside the walls; the scene's origin
-  // is the room's middle, the plan's its top-left corner.
-  const handleMovePiece = useCallback(
-    (objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => {
-      const { widthMeters, depthMeters } = scopedConfig.dimensions;
-      const cx = sceneX + widthMeters / 2;
-      const cy = sceneZ + depthMeters / 2;
-      if (!landCarried(doc.config, objectId, cx, cy, turnDeg, { hueAreaId })) return;
-      apply((cfg) => landCarried(cfg, objectId, cx, cy, turnDeg, { hueAreaId }) ?? {});
-    },
-    [apply, doc.config, hueAreaId, scopedConfig.dimensions],
-  );
+  const handleMovePiece = useLandCarried(doc);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Escape" || event.target !== event.currentTarget || (viewSelectedId === null && pieceSelectedId === null)) return;

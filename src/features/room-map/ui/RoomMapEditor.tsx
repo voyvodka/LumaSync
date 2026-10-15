@@ -6,7 +6,10 @@ import { type FurnitureModel, modelTop } from "@/features/room-view/model/furnit
 import type { LampFamily } from "@/features/room-view/model/lampFamily";
 import { hueFacings } from "../model/hueFacing";
 import { seatMovedLight } from "../model/lightSeat";
-import { ROOM_VIEW_3D_AVAILABLE } from "@/features/room-view/ui/RoomView3DHost";
+import { ROOM_VIEW_3D_AVAILABLE, RoomView3DHost } from "@/features/room-view/ui/RoomView3DHost";
+import type { CameraCommand } from "@/features/room-view/ui/RoomView3D";
+import { roomMood } from "@/features/room-view/model/roomMood";
+import { useRunningLightingMode } from "@/features/mode/state/lightingControl";
 import type {
   FurniturePlacement,
   HueChannelPlacement,
@@ -39,6 +42,7 @@ import {
 import type { RoomAwareStatus } from "../model/roomAware";
 import { roomObjectAdapter } from "../model/roomObjectKinds";
 import { useFurnitureModels } from "../state/useFurnitureModels";
+import { useLandCarried } from "../state/useLandCarried";
 import type { RoomMapDocument } from "../state/useRoomMapDocument";
 import { useRoomMapGridSettings } from "../state/useRoomMapGridSettings";
 import { useUsbStripStatus } from "../state/useUsbStripStatus";
@@ -62,7 +66,7 @@ import { useRoomMapObjects } from "../state/useRoomMapObjects";
 import { ROOM_MAP_PX_PER_METER, ROOM_MAP_VIEWPORT_ATTR, useRoomMapViewport } from "../state/useRoomMapViewport";
 import { useSnapGuides } from "../state/useSnapGuides";
 import { ContextMenu, type ContextMenuAction } from "./ContextMenu";
-import { CornerControls } from "./CornerControls";
+import { CornerControls, EDIT_STAGES, type EditStage } from "./CornerControls";
 import { ROOM_MAP_FIT_INSETS } from "./dock/dockGeometry";
 import type { InspectorActions } from "./dock/DockInspector";
 import { RoomDock } from "./dock/RoomDock";
@@ -92,6 +96,18 @@ export interface RoomMapEditorProps {
   lampFamilies?: ReadonlyMap<number, LampFamily>;
   /** Opens the template picker over the room. */
   onTemplates?: () => void;
+  /** Whether the room can be edited in 3D; a WebGL failure reports through `onRoomFail`. */
+  room3d?: boolean;
+  onRoomFail?: (error: unknown) => void;
+}
+
+// What the editor drew the room as last, for the session: Edit opens on it again. Not stored —
+// opening on the room the first time is the point.
+let lastStage: EditStage = EDIT_STAGES.ROOM;
+
+/** Test seam — the next editor opens on the 3D room again. */
+export function __resetEditStage(): void {
+  lastStage = EDIT_STAGES.ROOM;
 }
 
 const IS_MAC = navigator.platform.includes("Mac");
@@ -122,6 +138,8 @@ export function RoomMapEditor({
   focusOnMount = false,
   lampFamilies = NO_FAMILIES,
   onTemplates,
+  room3d = false,
+  onRoomFail,
 }: RoomMapEditorProps) {
   const { t } = useTranslation();
   const {
@@ -148,6 +166,48 @@ export function RoomMapEditor({
   const { areaChannels, channelsStatus, isLoadingChannels, liveChannelIds, refreshChannels } = doc.hue;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; targetId: string } | null>(null);
+  const [stage, setStageState] = useState<EditStage>(room3d ? lastStage : EDIT_STAGES.PLAN);
+  const setStage = useCallback((next: EditStage) => {
+    lastStage = next;
+    setStageState(next);
+  }, []);
+  const inRoom = room3d && stage === EDIT_STAGES.ROOM;
+  // An image layer and a Hue zone are drawn on the plan alone: a card for one opens the plan with it.
+  const planFor = useCallback(
+    (objectId: string | null) => {
+      if (room3d && objectId !== null && parseObjectId(objectId)?.kind === "image") setStage(EDIT_STAGES.PLAN);
+    },
+    [room3d, setStage],
+  );
+  const selectShowingPlan = useCallback(
+    (objectId: string | null) => {
+      planFor(objectId);
+      select(objectId);
+    },
+    [planFor, select],
+  );
+  // The other way, the card of something the room does not draw closes with the plan.
+  const changeStage = useCallback(
+    (next: EditStage) => {
+      if (next === EDIT_STAGES.ROOM) {
+        if (activeHueZoneId !== null) selectHueZone(null);
+        if (selectedId !== null && parseObjectId(selectedId)?.kind === "image") select(null);
+      }
+      setStage(next);
+    },
+    [activeHueZoneId, selectedId, select, selectHueZone, setStage],
+  );
+  const selectZoneShowingPlan = useCallback(
+    (zoneId: string | null) => {
+      if (room3d && zoneId !== null) setStage(EDIT_STAGES.PLAN);
+      selectHueZone(zoneId);
+    },
+    [room3d, setStage, selectHueZone],
+  );
+  const [cameraCommand, setCameraCommand] = useState<CameraCommand | undefined>(undefined);
+  const running = useRunningLightingMode();
+  const mood = useMemo(() => roomMood(running), [running]);
+  const landCarriedPiece = useLandCarried(doc);
 
   const { showGrid, setShowGrid, gridStrokeWidth, setGridStrokeWidth, showHueZones, setShowHueZones } = useRoomMapGridSettings();
 
@@ -210,7 +270,7 @@ export function RoomMapEditor({
     handleRename,
   } = useRoomMapObjects({ config, hueAreaId, apply, selectedId, select });
 
-  const { handleAddImage, imageError, imageErrorCode } = useRoomMapImageLayers({ apply, select });
+  const { handleAddImage, imageError, imageErrorCode } = useRoomMapImageLayers({ apply, select: selectShowingPlan });
 
   const { widthMeters, depthMeters } = config.dimensions;
   // One object per size, so the memoised TV and strips do not redraw on every editor render.
@@ -228,10 +288,11 @@ export function RoomMapEditor({
   // A pick from the list leaves the zone: a zone kept active dims every light outside it.
   const selectFromList = useCallback(
     (id: string) => {
+      planFor(id);
       select(id);
       selectHueZone(null);
     },
-    [select, selectHueZone],
+    [planFor, select, selectHueZone],
   );
   // One step back: an object to the zone it was picked over, a zone to the palette.
   const popSelection = useCallback(() => {
@@ -243,6 +304,16 @@ export function RoomMapEditor({
   // stable: an inline closure would re-render all of them on a pan commit.
   // Empty ground lets go of both: `select(null)` alone left a zone selected under the palette.
   const handleCanvasClick = clearSelection;
+  // A pick in the 3D room is a pick from the list; OrbitControls takes the press, so the root is
+  // focused here for the editor's keys (Delete, ⌘Z, the arrows) to reach it.
+  const handleRoomPick = useCallback(
+    (objectId: string | null) => {
+      if (objectId) selectFromList(objectId);
+      else clearSelection();
+      focusEditor();
+    },
+    [selectFromList, clearSelection, focusEditor],
+  );
   const handleUsbStripChange = useCallback(
     (updated: UsbStripPlacement, continuous?: boolean) => {
       apply(
@@ -476,7 +547,8 @@ export function RoomMapEditor({
       // Fit to view: Cmd+0 (Mac) / Ctrl+0 (Win/Linux)
       if ((e.metaKey || e.ctrlKey) && (e.code === "Digit0" || e.code === "Numpad0")) {
         e.preventDefault();
-        fitToView(16);
+        if (inRoom) setCameraCommand((c) => ({ kind: "reset", seq: (c?.seq ?? 0) + 1 }));
+        else fitToView(16);
         return;
       }
       // Duplicate: Cmd+D (Mac) / Ctrl+D (Win/Linux)
@@ -500,13 +572,13 @@ export function RoomMapEditor({
         handleRotate();
       } else if (selectedId) {
         handleArrowNudge(e);
-      } else {
+      } else if (!inRoom) {
         // Arrows were a dead key with nothing selected, which left keyboard-only
         // users no way to move the viewport at all.
         handleArrowPan(e);
       }
     },
-    [handleDeleteSelection, handleRotate, handleArrowNudge, handleArrowPan, handleDuplicate, undo, redo, popSelection, selectedId, fitToView],
+    [handleDeleteSelection, handleRotate, handleArrowNudge, handleArrowPan, handleDuplicate, undo, redo, popSelection, selectedId, fitToView, inRoom],
   );
 
   /** Everything in the room moved by (`dxM`, `dyM`) metres, as a patch. Hue channels and zones live
@@ -711,147 +783,174 @@ export function RoomMapEditor({
   return (
     <div ref={rootRef} className="lm-room-editor relative h-full" onKeyDown={handleKeyDown} onContextMenu={handleContextMenu} tabIndex={0}>
       <div className={styles.stage} ref={setCanvasContainer} data-testid="room-map-stage">
-        <RoomMapCanvas
-          config={config}
-          pxPerMeter={pxPerMeter}
-          canvasSize={canvasSize}
-          showGrid={showGrid}
-          gridStrokeWidth={gridStrokeWidth}
-          selectedId={selectedId}
-          onCanvasClick={handleCanvasClick}
-          onImageLayerTransformChange={handleImageLayerTransformChange}
-          onImageLayerSelect={handleImageLayerSelect}
-          zoom={zoom}
-          panOffset={panOffset}
-          onZoomChange={setZoom}
-          onPanChange={setPanOffset}
-          panMode={spaceHeld}
-          dragging={pieceDragging}
-          onMarquee={handleMarquee}
-        >
-          <FootprintWalls
-            corners={outline}
-            dimensions={config.dimensions}
-            pxPerMeter={pxPerMeter}
-            zoom={zoom}
-            panMode={spaceHeld}
-            shape={roomShape}
-            onMove={(footprint, gesture) => apply({ footprint }, { gesture })}
-            onNotch={(footprint) => apply({ footprint })}
-            onResizeStart={handleWallResizeStart}
-            onResize={handleWallResize}
-            onShapeChange={(shape, gesture) =>
-              apply({ footprint: buildFootprint(shape, config.dimensions) }, gesture ? { gesture } : undefined)
-            }
+        {inRoom ? (
+          <RoomView3DHost
+            config={scopedConfig}
+            lampFamilies={lampFamilies}
+            label={t("roomMap:face.editLabel")}
+            selectedId={selectedId}
+            bottomInset={ROOM_MAP_FIT_INSETS.bottom}
+            topInset={ROOM_MAP_FIT_INSETS.top}
+            cameraCommand={cameraCommand}
+            mood={mood}
+            onPick={handleRoomPick}
+            onMovePiece={landCarriedPiece}
+            onFail={(failure) => onRoomFail?.(failure)}
           />
-
-          {/* Origin crosshair marker — always centered, extends to edges */}
-          <OriginMarker widthM={widthMeters} depthM={depthMeters} pxPerMeter={pxPerMeter} />
-
-          {config.usbStrips.map((strip) => (
-            <UsbStripObject
-              key={strip.stripId}
-              placement={strip}
+        ) : (
+          <RoomMapCanvas
+            config={config}
+            pxPerMeter={pxPerMeter}
+            canvasSize={canvasSize}
+            showGrid={showGrid}
+            gridStrokeWidth={gridStrokeWidth}
+            selectedId={selectedId}
+            onCanvasClick={handleCanvasClick}
+            onImageLayerTransformChange={handleImageLayerTransformChange}
+            onImageLayerSelect={handleImageLayerSelect}
+            zoom={zoom}
+            panOffset={panOffset}
+            onZoomChange={setZoom}
+            onPanChange={setPanOffset}
+            panMode={spaceHeld}
+            dragging={pieceDragging}
+            onMarquee={handleMarquee}
+          >
+            <FootprintWalls
+              corners={outline}
+              dimensions={config.dimensions}
               pxPerMeter={pxPerMeter}
-              selected={selectedId === usbStripObjectId(strip.stripId)}
               zoom={zoom}
               panMode={spaceHeld}
-              connectionStatus={stripStatus(strip).status}
-              room={roomBox}
-              bendable={!(config.tvAnchor && isBacklightStrip(strip, config.tvAnchor))}
-              onSelect={handleUsbStripSelect}
-              onChange={handleUsbStripChange}
-            />
-          ))}
-
-          {furnitureByHeight.map((f) => (
-            <FurnitureObject
-              key={f.id}
-              placement={f}
-              model={furnitureModels.get(f.id) ?? BOX_MODEL}
-              pxPerMeter={pxPerMeter}
-              selected={selectedId === furnitureObjectId(f.id)}
-              grouped={grouped && groupSet.has(furnitureObjectId(f.id))}
-              onGroupDragMove={
-                grouped && groupSet.has(furnitureObjectId(f.id))
-                  ? (dx, dy) => handleGroupDragMove(furnitureObjectId(f.id), dx, dy)
-                  : undefined
-              }
-              onGroupDragEnd={
-                grouped && groupSet.has(furnitureObjectId(f.id))
-                  ? (dx, dy) => handleGroupDragEnd(furnitureObjectId(f.id), dx, dy)
-                  : undefined
-              }
-              outside={outsideOutline(f.x + f.width / 2, f.y + f.height / 2, outline)}
-              roomWidth={widthMeters}
-              roomDepth={depthMeters}
-              gridStepPx={gridStepPx}
-              snapEnabled={showGrid}
-              zoom={zoom}
-              panMode={spaceHeld}
-              onSelect={handleFurnitureSelect}
-              onChange={handleFurnitureChange}
-              onSnapDragMove={snapDragMove}
-              onSnapDragEnd={snapDragEnd}
-            />
-          ))}
-
-          {config.tvAnchor && (
-            <TvAnchorObject
-              placement={config.tvAnchor}
-              pxPerMeter={pxPerMeter}
-              selected={selectedId === TV_ANCHOR_OBJECT_ID}
-              gridStepPx={gridStepPx}
-              snapEnabled={showGrid}
-              zoom={zoom}
-              panMode={spaceHeld}
-              room={roomBox}
-              onSelect={handleTvSelect}
-              onChange={handleTvChange}
-              onSnapDragMove={snapDragMove}
-              onSnapDragEnd={snapDragEnd}
-              grouped={grouped && groupSet.has(TV_ANCHOR_OBJECT_ID)}
-              onGroupDragMove={
-                grouped && groupSet.has(TV_ANCHOR_OBJECT_ID) ? (dx, dy) => handleGroupDragMove(TV_ANCHOR_OBJECT_ID, dx, dy) : undefined
-              }
-              onGroupDragEnd={
-                grouped && groupSet.has(TV_ANCHOR_OBJECT_ID) ? (dx, dy) => handleGroupDragEnd(TV_ANCHOR_OBJECT_ID, dx, dy) : undefined
+              shape={roomShape}
+              onMove={(footprint, gesture) => apply({ footprint }, { gesture })}
+              onNotch={(footprint) => apply({ footprint })}
+              onResizeStart={handleWallResizeStart}
+              onResize={handleWallResize}
+              onShapeChange={(shape, gesture) =>
+                apply({ footprint: buildFootprint(shape, config.dimensions) }, gesture ? { gesture } : undefined)
               }
             />
-          )}
 
-          {/* Hue channel dots + zone bounds — bug #53: bounds box must
-              render even when no channels exist yet so the user can
-              author a zone before the area is paired. Also
-              mount whenever the user has at least one Hue zone AND
-              the visibility toggle is on, so passive zones paint
-              without needing an active selection. */}
-          {(visibleHueChannels.length > 0 || activeHueZone !== null || (showHueZones && hueZones.length > 0)) && (
-            <HueChannelOverlay
-              channels={visibleHueChannels}
-              liveChannelIds={liveChannelIds}
-              pxPerMeter={pxPerMeter}
-              roomWidthM={widthMeters}
-              roomDepthM={depthMeters}
-              zoom={zoom}
-              selectedId={selectedId}
-              onSelect={handleHueChannelSelect}
-              onChange={handleHueChannelChange}
-              panMode={spaceHeld}
-              activeHueZone={activeHueZone}
-              onHueZoneCenterChange={handleHueZoneCenterChange}
-              allHueZones={hueZones}
-              hidePassiveZoneBounds={!showHueZones}
-              facings={facings}
-            />
-          )}
+            {/* Origin crosshair marker — always centered, extends to edges */}
+            <OriginMarker widthM={widthMeters} depthM={depthMeters} pxPerMeter={pxPerMeter} />
 
-          <SnapGuideOverlay guides={snapGuides} pxPerMeter={pxPerMeter} canvasWidth={canvasSize.w} canvasHeight={canvasSize.h} />
-        </RoomMapCanvas>
+            {config.usbStrips.map((strip) => (
+              <UsbStripObject
+                key={strip.stripId}
+                placement={strip}
+                pxPerMeter={pxPerMeter}
+                selected={selectedId === usbStripObjectId(strip.stripId)}
+                zoom={zoom}
+                panMode={spaceHeld}
+                connectionStatus={stripStatus(strip).status}
+                room={roomBox}
+                bendable={!(config.tvAnchor && isBacklightStrip(strip, config.tvAnchor))}
+                onSelect={handleUsbStripSelect}
+                onChange={handleUsbStripChange}
+              />
+            ))}
+
+            {furnitureByHeight.map((f) => (
+              <FurnitureObject
+                key={f.id}
+                placement={f}
+                model={furnitureModels.get(f.id) ?? BOX_MODEL}
+                pxPerMeter={pxPerMeter}
+                selected={selectedId === furnitureObjectId(f.id)}
+                grouped={grouped && groupSet.has(furnitureObjectId(f.id))}
+                onGroupDragMove={
+                  grouped && groupSet.has(furnitureObjectId(f.id))
+                    ? (dx, dy) => handleGroupDragMove(furnitureObjectId(f.id), dx, dy)
+                    : undefined
+                }
+                onGroupDragEnd={
+                  grouped && groupSet.has(furnitureObjectId(f.id))
+                    ? (dx, dy) => handleGroupDragEnd(furnitureObjectId(f.id), dx, dy)
+                    : undefined
+                }
+                outside={outsideOutline(f.x + f.width / 2, f.y + f.height / 2, outline)}
+                roomWidth={widthMeters}
+                roomDepth={depthMeters}
+                gridStepPx={gridStepPx}
+                snapEnabled={showGrid}
+                zoom={zoom}
+                panMode={spaceHeld}
+                onSelect={handleFurnitureSelect}
+                onChange={handleFurnitureChange}
+                onSnapDragMove={snapDragMove}
+                onSnapDragEnd={snapDragEnd}
+              />
+            ))}
+
+            {config.tvAnchor && (
+              <TvAnchorObject
+                placement={config.tvAnchor}
+                pxPerMeter={pxPerMeter}
+                selected={selectedId === TV_ANCHOR_OBJECT_ID}
+                gridStepPx={gridStepPx}
+                snapEnabled={showGrid}
+                zoom={zoom}
+                panMode={spaceHeld}
+                room={roomBox}
+                onSelect={handleTvSelect}
+                onChange={handleTvChange}
+                onSnapDragMove={snapDragMove}
+                onSnapDragEnd={snapDragEnd}
+                grouped={grouped && groupSet.has(TV_ANCHOR_OBJECT_ID)}
+                onGroupDragMove={
+                  grouped && groupSet.has(TV_ANCHOR_OBJECT_ID) ? (dx, dy) => handleGroupDragMove(TV_ANCHOR_OBJECT_ID, dx, dy) : undefined
+                }
+                onGroupDragEnd={
+                  grouped && groupSet.has(TV_ANCHOR_OBJECT_ID) ? (dx, dy) => handleGroupDragEnd(TV_ANCHOR_OBJECT_ID, dx, dy) : undefined
+                }
+              />
+            )}
+
+            {/* Hue channel dots + zone bounds — bug #53: bounds box must
+                render even when no channels exist yet so the user can
+                author a zone before the area is paired. Also
+                mount whenever the user has at least one Hue zone AND
+                the visibility toggle is on, so passive zones paint
+                without needing an active selection. */}
+            {(visibleHueChannels.length > 0 || activeHueZone !== null || (showHueZones && hueZones.length > 0)) && (
+              <HueChannelOverlay
+                channels={visibleHueChannels}
+                liveChannelIds={liveChannelIds}
+                pxPerMeter={pxPerMeter}
+                roomWidthM={widthMeters}
+                roomDepthM={depthMeters}
+                zoom={zoom}
+                selectedId={selectedId}
+                onSelect={handleHueChannelSelect}
+                onChange={handleHueChannelChange}
+                panMode={spaceHeld}
+                activeHueZone={activeHueZone}
+                onHueZoneCenterChange={handleHueZoneCenterChange}
+                allHueZones={hueZones}
+                hidePassiveZoneBounds={!showHueZones}
+                facings={facings}
+              />
+            )}
+
+            <SnapGuideOverlay guides={snapGuides} pxPerMeter={pxPerMeter} canvasWidth={canvasSize.w} canvasHeight={canvasSize.h} />
+          </RoomMapCanvas>
+        )}
 
         <CornerControls
           roomAware={roomAware}
-          edit={{
+          stage={room3d ? { value: inRoom ? EDIT_STAGES.ROOM : EDIT_STAGES.PLAN, onChange: changeStage } : undefined}
+          view={
+            inRoom
+              ? {
+                  onZoomIn: () => setCameraCommand((c) => ({ kind: "in", seq: (c?.seq ?? 0) + 1 })),
+                  onZoomOut: () => setCameraCommand((c) => ({ kind: "out", seq: (c?.seq ?? 0) + 1 })),
+                  onReset: () => setCameraCommand((c) => ({ kind: "reset", seq: (c?.seq ?? 0) + 1 })),
+                }
+              : undefined
+          }
+          history={inRoom ? { canUndo, canRedo, onUndo: undo, onRedo: redo } : undefined}
+          edit={inRoom ? undefined : {
             canUndo,
             canRedo,
             onUndo: undo,
@@ -908,7 +1007,10 @@ export function RoomMapEditor({
             onSelectTv: handleTvSelect,
             onAddStrip: handleAddUsb,
             onAddImage: () => void handleAddImage(),
-            onAddZone: handleAddHueZone,
+            onAddZone: () => {
+              if (room3d) setStage(EDIT_STAGES.PLAN);
+              handleAddHueZone();
+            },
           }}
           hue={
             hasHue
@@ -935,6 +1037,7 @@ export function RoomMapEditor({
             onGridStrokeWidthChange: setGridStrokeWidth,
             showHueZones,
             onShowHueZonesChange: setShowHueZones,
+            onPlan: !inRoom,
             // Spread over what is stored, so a value from a newer build survives a pick of the other.
             surfaces: ROOM_VIEW_3D_AVAILABLE
               ? {
@@ -953,7 +1056,7 @@ export function RoomMapEditor({
           onReset={reset}
           onTemplates={onTemplates}
           onSelect={selectFromList}
-          onSelectZone={selectHueZone}
+          onSelectZone={selectZoneShowingPlan}
           onPopSelection={popSelection}
           onFocusEditor={focusEditor}
         />

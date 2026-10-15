@@ -5,7 +5,8 @@ import type React from "react";
 import { render, act, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-import { RoomMapSurface, type RoomMapSurfaceProps } from "../RoomMapSurface";
+import { __resetEditStage } from "../RoomMapEditor";
+import { __resetRoomViewFailure, RoomMapSurface, type RoomMapSurfaceProps } from "../RoomMapSurface";
 
 // The editor on the surface that owns its map; the 3D face and its switch are RoomMapSurface's tests.
 const RoomMapEditor = (props: Omit<RoomMapSurfaceProps, "view3dAvailable">) => (
@@ -149,11 +150,15 @@ vi.mock("../dock/RoomDock", () => ({
   RoomDock: ({
     config,
     actions,
+    add,
     room,
     selectedId,
     activeHueZoneId,
     onSelectZone,
+    onSelect,
   }: {
+    onSelect: (id: string) => void;
+    add: { onAddZone: () => void };
     selectedId: string | null;
     activeHueZoneId: string | null;
     onSelectZone: (zoneId: string) => void;
@@ -167,6 +172,8 @@ vi.mock("../dock/RoomDock", () => ({
     <section data-testid="room-dock" data-room-dock="" data-selected={selectedId ?? ""} data-zone={activeHueZoneId ?? ""}>
       <button type="button" data-testid="dock-tab" />
       <button type="button" data-testid="pick-zone" onClick={() => onSelectZone("zone-1")} />
+      <button type="button" data-testid="add-zone" onClick={add.onAddZone} />
+      <button type="button" data-testid="pick-image" onClick={() => onSelect("img-layer-1")} />
       <input data-testid="dock-field" type="text" defaultValue={60} />
       <button
         type="button"
@@ -203,6 +210,33 @@ vi.mock("../ContextMenu", () => ({
 
 vi.mock("../TemplateSelector", () => ({
   TemplateSelector: () => null,
+}));
+
+// The 3D room as what it hands the editor: the pick, and a WebGL failure.
+const room3d = vi.hoisted(() => ({
+  pick: null as ((objectId: string | null) => void) | null,
+  fail: null as ((error: unknown) => void) | null,
+  camera: undefined as { kind: string } | undefined,
+}));
+
+vi.mock("@/features/room-view/ui/RoomView3DHost", () => ({
+  // False here so the inspector's model choice stays as the other tests expect; a test passes
+  // `view3dAvailable` itself.
+  ROOM_VIEW_3D_AVAILABLE: false,
+  RoomView3DHost: ({
+    onPick,
+    onFail,
+    cameraCommand,
+  }: {
+    onPick?: (objectId: string | null) => void;
+    onFail: (error: unknown) => void;
+    cameraCommand?: { kind: string };
+  }) => {
+    room3d.pick = onPick ?? null;
+    room3d.camera = cameraCommand;
+    room3d.fail = onFail;
+    return <div data-testid="room-view-3d" />;
+  },
 }));
 
 // ---------------------------------------------------------------------------
@@ -634,5 +668,90 @@ describe("RoomMapEditor — letting go of a selection", () => {
     // Not prevented: the plan's menu is the canvas's, and a popover's right-click bubbles here too.
     expect(fireEvent.contextMenu(getByTestId("dock-tab"))).toBe(true);
     expect(fireEvent.contextMenu(getByTestId("select-tv"))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Editing in 3D
+// ---------------------------------------------------------------------------
+
+describe("RoomMapEditor — the 3D room as the editing stage", () => {
+  const openEdit = async () => {
+    const view = render(<RoomMapSurface view3dAvailable />);
+    await act(async () => {});
+    // The editor reads its grid settings as it mounts; flushed here, they land inside act.
+    await act(async () => (view.getByRole("radio", { name: "roomMap:face.edit" }) as HTMLElement).click());
+    return view;
+  };
+  const stageRadio = (view: ReturnType<typeof render>, name: string) => view.getByRole("radio", { name }) as HTMLElement;
+
+  afterEach(() => {
+    __resetEditStage();
+    __resetRoomViewFailure();
+    room3d.pick = null;
+    room3d.fail = null;
+    room3d.camera = undefined;
+  });
+
+  // The maintainer wants the room laid out in 3D: Edit opened on the plan alone.
+  it("opens Edit on the 3D room with the dock, and the plan a switch away that the next Edit remembers", async () => {
+    const view = await openEdit();
+    expect(view.getByTestId("room-view-3d")).toBeInTheDocument();
+    expect(view.queryByTestId("room-map-canvas")).toBeNull();
+    expect(view.getByTestId("room-dock")).toBeInTheDocument();
+    expect(stageRadio(view, "roomMap:stage.room")).toHaveAttribute("aria-checked", "true");
+
+    await act(async () => stageRadio(view, "roomMap:stage.plan").click());
+    expect(view.getByTestId("room-map-canvas")).toBeInTheDocument();
+    expect(view.queryByTestId("room-view-3d")).toBeNull();
+
+    view.unmount();
+    const again = await openEdit();
+    expect(again.getByTestId("room-map-canvas")).toBeInTheDocument();
+  });
+
+  it("selects what is picked in the room for the dock's card, and lets go on empty floor", async () => {
+    const view = await openEdit();
+    act(() => room3d.pick?.("tv"));
+    expect(view.getByTestId("room-dock")).toHaveAttribute("data-selected", "tv");
+    act(() => room3d.pick?.(null));
+    expect(view.getByTestId("room-dock")).toHaveAttribute("data-selected", "");
+  });
+
+  it("opens the plan for a zone, which only the plan draws", async () => {
+    const view = await openEdit();
+    await act(async () => view.getByTestId("add-zone").click());
+    expect(view.getByTestId("room-map-canvas")).toBeInTheDocument();
+  });
+
+  it("opens the plan for a zone or an image picked from the list, and closes their card going back to 3D", async () => {
+    const view = await openEdit();
+    await act(async () => view.getByTestId("pick-zone").click());
+    expect(view.getByTestId("room-map-canvas")).toBeInTheDocument();
+    expect(view.getByTestId("room-dock")).toHaveAttribute("data-zone", "zone-1");
+    await act(async () => stageRadio(view, "roomMap:stage.room").click());
+    expect(view.getByTestId("room-dock")).toHaveAttribute("data-zone", "");
+
+    await act(async () => view.getByTestId("pick-image").click());
+    expect(view.getByTestId("room-map-canvas")).toBeInTheDocument();
+    expect(view.getByTestId("room-dock")).toHaveAttribute("data-selected", "img-layer-1");
+    await act(async () => stageRadio(view, "roomMap:stage.room").click());
+    expect(view.getByTestId("room-dock")).toHaveAttribute("data-selected", "");
+  });
+
+  // ⌘0 fitted the hidden plan: in 3D it is the camera's "Whole room".
+  it("sends ⌘0 to the camera in the 3D room", async () => {
+    const view = await openEdit();
+    const root = view.container.querySelector(".lm-room-editor") as HTMLElement;
+    await act(async () => fireEvent.keyDown(root, { key: "0", code: "Digit0", metaKey: true }));
+    expect(room3d.camera).toMatchObject({ kind: "reset" });
+  });
+
+  it("falls back to the plan with no stage switch when the 3D room cannot open", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const view = await openEdit();
+    await act(async () => room3d.fail?.(new Error("no WebGL")));
+    expect(view.getByTestId("room-map-canvas")).toBeInTheDocument();
+    expect(view.queryByRole("radio", { name: "roomMap:stage.plan" })).toBeNull();
   });
 });

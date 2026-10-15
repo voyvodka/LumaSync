@@ -9,8 +9,11 @@ import styles from "./ShortcutsHelp.module.css";
 
 const IS_MAC = typeof navigator !== "undefined" && navigator.platform.includes("Mac");
 
-/** The editor's keys, behind one button. */
-export function ShortcutsHelp({ buttonClassName }: { buttonClassName?: string }) {
+// The plan's own gestures, which the 3D stage's camera takes instead.
+const PLAN_ONLY = new Set(["panKeyboard", "pan", "addToSelection", "boxSelect", "freeDrag"]);
+
+/** The editor's keys, behind one button; in the 3D room, only those that work there. */
+export function ShortcutsHelp({ buttonClassName, room = false }: { buttonClassName?: string; room?: boolean }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement | null>(null);
@@ -23,7 +26,7 @@ export function ShortcutsHelp({ buttonClassName }: { buttonClassName?: string })
     { id: "undo", key: `${mod}Z`, desc: t("roomMap:shortcuts.undo") },
     { id: "redo", key: `${mod}${shift}Z`, desc: t("roomMap:shortcuts.redo") },
     { id: "duplicate", key: `${mod}D`, desc: t("roomMap:shortcuts.duplicate") },
-    { id: "fit", key: `${mod}0`, desc: t("roomMap:shortcuts.fitToView") },
+    { id: "fit", key: `${mod}0`, desc: room ? t("roomMap:view.resetCamera") : t("roomMap:shortcuts.fitToView") },
     { id: "delete", key: t("roomMap:shortcuts.keys.delete"), desc: t("roomMap:shortcuts.delete") },
     { id: "rotate", key: "R", desc: t("roomMap:shortcuts.rotate") },
     { id: "deselect", key: t("roomMap:shortcuts.keys.escape"), desc: t("roomMap:shortcuts.deselect") },
@@ -35,7 +38,7 @@ export function ShortcutsHelp({ buttonClassName }: { buttonClassName?: string })
     { id: "addToSelection", key: t("roomMap:shortcuts.keys.shiftClick", { shift }), desc: t("roomMap:shortcuts.addToSelection") },
     { id: "boxSelect", key: t("roomMap:shortcuts.keys.floorDrag"), desc: t("roomMap:shortcuts.boxSelect") },
     { id: "freeDrag", key: t("roomMap:shortcuts.keys.altDrag", { alt: IS_MAC ? "⌥" : "Alt+" }), desc: t("roomMap:shortcuts.freeDrag") },
-  ];
+  ].filter((s) => !room || !PLAN_ONLY.has(s.id));
 
   return (
     <>

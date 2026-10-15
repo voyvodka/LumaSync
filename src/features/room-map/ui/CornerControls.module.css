@@ -21,6 +21,14 @@
     box-shadow: inset 0 0 0 1px var(--lm-line-2);
   }
   .group { display: flex; align-items: center; }
+  /* The plan's zoom or the 3D camera, at the zoom's width (32 + 48 + 32), so the capsule is one
+     width on both stages. */
+  .slot {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-width: 112px;
+  }
 
   .button {
     display: grid;
@@ -59,6 +67,14 @@
     background: var(--lm-line-2);
   }
 
+  /* The stage shown carries the face switch's plate, so it is never marked by colour alone. */
+  .button.stage[aria-checked="true"] {
+    color: var(--lm-amber);
+    background: var(--lm-panel-2);
+    box-shadow: inset 0 0 0 1px var(--lm-amber);
+  }
+  .button.stage[aria-checked="true"]:focus-visible { box-shadow: var(--lm-focus-ring-inset); }
+
   :global(:root[data-reduced-motion]) .button { transition: none; }
 
   @media (forced-colors: active) {
@@ -68,5 +84,11 @@
     }
     .button:focus-visible { outline: 2px solid Highlight; }
     .rule { background: CanvasText; }
+    .button.stage[aria-checked="true"] {
+      color: HighlightText;
+      background: Highlight;
+      box-shadow: none;
+      forced-color-adjust: none;
+    }
   }
 }

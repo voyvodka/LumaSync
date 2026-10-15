@@ -166,6 +166,10 @@ https://keepachangelog.com/en/1.1.0/
     of jumping half a metre at a time; sizes land on 5 cm. A turned piece's side handles show the
     cursor along the way they drag. The name field edits as the number fields do, with a soft tint
     and an amber line instead of a framed box.
+  - The room can be laid out in 3D: Edit opens on the 3D room, with a 3D | Plan switch in its
+    corner, and the dock works there as on the plan — add a piece from the palette, pick anything
+    in the room to edit it in its card, carry and turn it, delete it, undo. The walls, a strip's ends
+    and corners, images and Hue zones are still drawn on the plan, which opens for them.
   - The 3D view can look at something other than the room's middle: a right drag moves it, the
     wheel zooms toward the pointer and further than before, a double-click turns the room about what
     it lands on and comes closer, and the corner has zoom buttons and "Whole room" to go back. A

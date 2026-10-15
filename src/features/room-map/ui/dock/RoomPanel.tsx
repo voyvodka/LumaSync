@@ -42,6 +42,8 @@ export interface RoomSettings {
   onGridStrokeWidthChange: (width: number) => void;
   showHueZones: boolean;
   onShowHueZonesChange: (show: boolean) => void;
+  /** The grid and the zones' outlines are the plan's; the 3D stage hides their switches. */
+  onPlan?: boolean;
   /** What the room is finished in; offered only where the 3D room draws it. */
   surfaces?: { value: RoomSurfaces | undefined; onChange: (patch: RoomSurfaces) => void };
 }
@@ -117,36 +119,40 @@ export function RoomPanel({
 
         {settings.surfaces ? <SurfaceFields {...settings.surfaces} /> : null}
 
-        <label className={styles.toggle}>
-          <span>{t("roomMap:settings.showGrid")}</span>
-          <Toggle checked={settings.showGrid} onChange={settings.onShowGridChange} label={t("roomMap:settings.showGrid")} />
-        </label>
-        <div className={styles.slider}>
-          <span className={styles.sliderLabel} aria-hidden="true">
-            {t("roomMap:settings.gridStrokeWidth")}
-          </span>
-          <DockSlider
-            label={t("roomMap:settings.gridStrokeWidth")}
-            min={0.5}
-            max={3}
-            step={0.1}
-            value={settings.gridStrokeWidth}
-            disabled={!settings.showGrid}
-            onChange={settings.onGridStrokeWidthChange}
-            readout={`${settings.gridStrokeWidth.toFixed(1)} px`}
-          />
-        </div>
+        {settings.onPlan !== false && (
+          <>
+            <label className={styles.toggle}>
+              <span>{t("roomMap:settings.showGrid")}</span>
+              <Toggle checked={settings.showGrid} onChange={settings.onShowGridChange} label={t("roomMap:settings.showGrid")} />
+            </label>
+            <div className={styles.slider}>
+              <span className={styles.sliderLabel} aria-hidden="true">
+                {t("roomMap:settings.gridStrokeWidth")}
+              </span>
+              <DockSlider
+                label={t("roomMap:settings.gridStrokeWidth")}
+                min={0.5}
+                max={3}
+                step={0.1}
+                value={settings.gridStrokeWidth}
+                disabled={!settings.showGrid}
+                onChange={settings.onGridStrokeWidthChange}
+                readout={`${settings.gridStrokeWidth.toFixed(1)} px`}
+              />
+            </div>
 
-        <label className={styles.toggle}>
-          <span>{t("roomMap:settings.showHueZones")}</span>
-          <Toggle
-            checked={settings.showHueZones}
-            onChange={settings.onShowHueZonesChange}
-            label={t("roomMap:settings.showHueZones")}
-            aria-describedby={`${hintId}-zones`}
-          />
-        </label>
-        <FieldHint id={`${hintId}-zones`}>{t("roomMap:settings.showHueZonesHint")}</FieldHint>
+            <label className={styles.toggle}>
+              <span>{t("roomMap:settings.showHueZones")}</span>
+              <Toggle
+                checked={settings.showHueZones}
+                onChange={settings.onShowHueZonesChange}
+                label={t("roomMap:settings.showHueZones")}
+                aria-describedby={`${hintId}-zones`}
+              />
+            </label>
+            <FieldHint id={`${hintId}-zones`}>{t("roomMap:settings.showHueZonesHint")}</FieldHint>
+          </>
+        )}
 
         <hr className={styles.rule} />
 

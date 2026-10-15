@@ -159,6 +159,8 @@ export function RoomMapSurface({
             focusOnMount={editTakesFocus}
             lampFamilies={lampFamilies}
             onTemplates={() => setPicking(true)}
+            room3d={view3dAvailable && !failed}
+            onRoomFail={handleViewFail}
           />
         )}
       </div>

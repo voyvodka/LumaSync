@@ -28,7 +28,13 @@ export default {
     view: "View",
     edit: "Edit",
     viewLabel: "The room in 3D. Drag to turn it, scroll to zoom. Every light is in the toolbar below.",
+    editLabel: "The room in 3D. Pick anything to edit it; add pieces from the toolbar below.",
     viewUnavailable: "View — the 3D room could not open on this computer",
+  },
+  stage: {
+    label: "Edit the room as",
+    room: "3D",
+    plan: "Plan",
   },
   frame: {
     rotate: "Drag to turn — 15° steps, ⇧ for any angle",

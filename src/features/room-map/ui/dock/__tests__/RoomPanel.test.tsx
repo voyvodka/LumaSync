@@ -123,3 +123,15 @@ describe("RoomPanel — the room's floor and walls", () => {
     expect(onChange).toHaveBeenLastCalledWith({ walls: "clay" });
   });
 });
+
+describe("RoomPanel — on the 3D stage", () => {
+  it("hides the plan's grid and zone switches, which the 3D room does not draw", () => {
+    renderPanel(settings({ onPlan: false }));
+    expect(screen.queryByLabelText("roomMap:settings.showGrid")).toBeNull();
+    expect(screen.queryByLabelText("roomMap:settings.showHueZones")).toBeNull();
+    expect(screen.getByLabelText("roomMap:settings.roomHeight")).toBeInTheDocument();
+    cleanup();
+    renderPanel();
+    expect(screen.getByLabelText("roomMap:settings.showGrid")).toBeInTheDocument();
+  });
+});

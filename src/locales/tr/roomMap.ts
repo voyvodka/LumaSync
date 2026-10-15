@@ -29,9 +29,15 @@ const roomMap: Catalogue<typeof enRoomMap> = {
   face: {
     label: "Oda haritası",
     view: "Görünüm",
-    edit: "Haritada konumla",
+    edit: "Düzenle",
     viewLabel: "Odanın 3D görünümü. Döndürmek için sürükle, yakınlaştırmak için kaydır. Tüm ışıklar aşağıdaki araç çubuğunda.",
+    editLabel: "Odanın 3D görünümü. Düzenlemek için bir şey seç; parçaları aşağıdaki araç çubuğundan ekle.",
     viewUnavailable: "Görünüm — 3D oda bu bilgisayarda açılamadı",
+  },
+  stage: {
+    label: "Odayı şöyle düzenle",
+    room: "3D",
+    plan: "Plan",
   },
   frame: {
     rotate: "Döndürmek için sürükle — 15° adım, ⇧ ile serbest",
