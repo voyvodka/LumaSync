@@ -88,14 +88,26 @@ export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, F
     }
   }
 
-  const panel = new PlaneGeometry(Math.max(width - 0.02, 0.01), Math.max(height - 0.02, 0.01));
-  // A faint top-to-bottom fall-off, the way a dark screen catches the room's light.
+  const panel = new PlaneGeometry(Math.max(width - 0.02, 0.01), Math.max(height - 0.02, 0.01), 12, 6);
+  // A faint top-to-bottom fall-off, the way a dark screen catches the room's light, and one soft
+  // diagonal sheen across the glass, so it reads as a screen rather than a painted board.
   const top = new Color(0x26324d);
   const low = new Color(PALETTE.panel);
-  const colours = new Float32Array(4 * 3);
-  [top, top, low, low].forEach((c, i) => colours.set([c.r, c.g, c.b], i * 3));
+  const sheen = new Color(0x3a4866);
+  const uv = panel.getAttribute("uv");
+  const colours = new Float32Array(uv.count * 3);
+  const c = new Color();
+  for (let i = 0; i < uv.count; i++) {
+    const u = uv.getX(i);
+    const v = uv.getY(i);
+    c.copy(low).lerp(top, v);
+    const band = Math.exp(-(((u * 0.8 + v * 0.6 - 0.62) / 0.11) ** 2));
+    c.lerp(sheen, band * 0.55);
+    colours.set([c.r, c.g, c.b], i * 3);
+  }
   panel.setAttribute("color", new BufferAttribute(colours, 3));
-  panel.translate(centre.x, mount, centre.z + depth / 2 + 0.001);
+  // Clear of the bezel's face: a millimetre z-fought across the subdivided glass as speckle.
+  panel.translate(centre.x, mount, centre.z + depth / 2 + 0.004);
 
   const sx = tv.x + tv.width / 2;
   const sy = tv.y + tv.height / 2;

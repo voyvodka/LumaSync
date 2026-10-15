@@ -12,10 +12,13 @@ import {
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
-/** One coloured piece of a model, in metres. */
+import type { FinishKind } from "./finishes";
+
+/** One coloured piece of a model, in metres, and what it is made of (unset: by its colour). */
 export interface Part {
   geometry: BufferGeometry;
   color: number;
+  finish?: FinishKind;
 }
 
 /** Below this a size is floored, so a squeezed model degrades instead of failing to build. */
@@ -65,6 +68,34 @@ export function rod(
 
 export function ball(r: number, x: number, y: number, z: number, color: number, detail = 10): Part {
   const geometry = new SphereGeometry(Math.max(r, MIN_SIZE), detail, Math.max(6, Math.round(detail * 0.75)));
+  geometry.translate(x, y, z);
+  return { geometry, color };
+}
+
+/** A leaf: a flattened, pointed ellipsoid `length` long, its tip along `dir` from `at`, tilted
+ *  `droop` towards the floor. */
+export function leaf(
+  length: number,
+  at: { x: number; y: number; z: number },
+  dir: { x: number; y: number; z: number },
+  droop: number,
+  color: number,
+): Part {
+  const geometry = new SphereGeometry(1, 7, 4);
+  geometry.scale(length / 2, 0.012, length * 0.2);
+  geometry.translate(length / 2, 0, 0);
+  const yaw = Math.atan2(-dir.z, dir.x);
+  const pitch = Math.atan2(dir.y, Math.hypot(dir.x, dir.z)) - droop;
+  geometry.rotateZ(pitch);
+  geometry.rotateY(yaw);
+  geometry.translate(at.x, at.y, at.z);
+  return { geometry, color, finish: "leaf" };
+}
+
+/** A soft dome over a cushion's top: a squashed half-ellipsoid `w` × `d`, rising `h` above `y`. */
+export function crown(w: number, d: number, h: number, x: number, y: number, z: number, color: number): Part {
+  const geometry = new SphereGeometry(1, 16, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+  geometry.scale(Math.max(w, MIN_SIZE) / 2, Math.max(h, MIN_SIZE), Math.max(d, MIN_SIZE) / 2);
   geometry.translate(x, y, z);
   return { geometry, color };
 }

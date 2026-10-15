@@ -36,6 +36,7 @@ import type { LampFamily } from "../model/lampFamily";
 import { furnitureParts } from "./scene/furniture";
 import { buildGlow, type Lamp, poolTexture, radialTexture, type WallPlane } from "./scene/glow";
 import { PALETTE } from "./scene/palette";
+import { type FinishKind, finishMaterial } from "./scene/finishes";
 import { mergeParts, type Part, transformParts } from "./scene/parts";
 import { lampFixture } from "./scene/lamps";
 import { buildScreen } from "./scene/screen";
@@ -133,13 +134,17 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   }
 
   const models = classifyFurniture(config);
-  const matte: Part[] = [];
-  const satin: Part[] = [];
+  const byFinish = new Map<FinishKind, Part[]>();
   const shadows: BufferGeometry[] = [wallFootShade(edges)];
   const surfaces: Surface[] = [];
   const pickables: Pickable[] = [];
   const sort = (parts: readonly Part[]) => {
-    for (const part of parts) (SATIN.has(part.color) ? satin : matte).push(part);
+    for (const part of parts) {
+      const kind = part.finish ?? (SATIN.has(part.color) ? "satin" : "matte");
+      const list = byFinish.get(kind);
+      if (list) list.push(part);
+      else byFinish.set(kind, [part]);
+    }
   };
   for (const item of config.furniture) {
     const model = models.get(item.id);
@@ -224,10 +229,12 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     pickables.push({ id, kind: "light", centre, half: [length / 2, 0.12, 0.12], angle });
   }
 
-  const matteMesh = mergeParts(matte, solid(0.82));
-  if (matteMesh) scene.add(matteMesh);
-  const satinMesh = mergeParts(satin, solid(0.38, 0.25));
-  if (satinMesh) scene.add(satinMesh);
+  // One mesh per material: a room is still a handful of draws.
+  const defines = options.coldKey !== undefined ? { SPIKE_COLD_KEY: options.coldKey } : undefined;
+  for (const [kind, parts] of byFinish) {
+    const mesh = mergeParts(parts, finishMaterial(kind, { lambert: options.lambert, defines }));
+    if (mesh) scene.add(mesh);
+  }
   {
     const merged = mergeGeometries(shadows);
     for (const g of shadows) g.dispose();

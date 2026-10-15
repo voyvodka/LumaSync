@@ -6,9 +6,18 @@ import { Color } from "three";
 
 import { type FurniturePlacement, resolveFurnitureTop } from "@/shared/contracts/roomMap";
 
-import { armWidth, cornerFits, DESK_TOP, type FurnitureModel, furnitureColours, modelTop } from "../../model/furnitureModel";
+import {
+  armWidth,
+  cornerFits,
+  DESK_TOP,
+  FURNITURE_TONE_COLORS,
+  type FurnitureModel,
+  furnitureColours,
+  modelTop,
+} from "../../model/furnitureModel";
 import { PALETTE } from "./palette";
-import { ball, block, hashString, type Part, rod, seeded } from "./parts";
+import type { FinishKind } from "./finishes";
+import { ball, block, crown, hashString, leaf, type Part, rod, seeded } from "./parts";
 
 /** The colours one piece is built from: its upholstery and its wood, each a base and two shades. */
 interface Finish {
@@ -44,12 +53,40 @@ export function furnitureParts(item: FurniturePlacement, model: FurnitureModel):
   const f = finishFor(item, model);
   const top = resolveFurnitureTop(item);
   const parts = build(w, d, model, f, rand, top);
+  tagFinishes(parts, f);
   // A stored height scales the model upright; the shelving kinds take it as a dimension instead.
   if (top !== undefined && model.kind !== "bookshelf" && model.kind !== "wardrobe" && model.kind !== "rug") {
     const scale = top / modelTop(model);
     for (const part of parts) part.geometry.scale(1, scale, 1);
   }
   return parts;
+}
+
+const METALS = new Set<number>([PALETTE.metal, PALETTE.metalSoft, PALETTE.handle]);
+const WOODS = new Set<number>([PALETTE.oak, PALETTE.oakDark, PALETTE.walnut]);
+const FABRICS = new Set<number>([PALETTE.pillowCamel, PALETTE.pillowCream, PALETTE.sage]);
+
+/** What each part is made of, read from the colour it was given: the piece's upholstery and its
+ *  wood are its own, the rest comes from the shared palette. */
+function tagFinishes(parts: Part[], f: Finish) {
+  const fabric = new Set([f.fabric, f.fabricDeep, f.cushion]);
+  // White and black are paint, not timber: a lacquer with no grain.
+  const painted = f.wood === FURNITURE_TONE_COLORS.white || f.wood === FURNITURE_TONE_COLORS.black;
+  const wood = new Set([f.wood, f.woodDark, shade(f.wood, 1.08)]);
+  for (const part of parts) {
+    if (part.finish) continue;
+    const c = part.color;
+    const finish: FinishKind | undefined = fabric.has(c) || FABRICS.has(c)
+      ? "fabric"
+      : wood.has(c) && painted
+        ? "satin"
+        : wood.has(c) || WOODS.has(c)
+        ? "wood"
+        : METALS.has(c)
+          ? "metal"
+          : undefined;
+    if (finish) part.finish = finish;
+  }
 }
 
 function build(w: number, d: number, model: FurnitureModel, f: Finish, rand: () => number, top: number | undefined): Part[] {
@@ -93,6 +130,16 @@ function build(w: number, d: number, model: FurnitureModel, f: Finish, rand: () 
   }
 }
 
+/** An arm's or a back's rounding: most of its thickness, so it reads as padded, not boxed. */
+function softEdge(thickness: number): number {
+  return Math.min(thickness * 0.46, 0.11);
+}
+
+/** The give of a seat cushion: a low dome over its top, so a sofa reads as soft, not as slabs. */
+function seatCrown(w: number, d: number, x: number, top: number, z: number, color: number): Part {
+  return crown(w - 0.05, d - 0.05, Math.min(0.03, w * 0.05), x, top - 0.006, z, color);
+}
+
 /** Frame, back, arms, cushions, leaning back cushions and two throw pillows on wider sofas. */
 function upholstered(w: number, d: number, seats: number, arms: boolean, f: Finish): Part[] {
   const legH = arms ? 0.06 : 0.12;
@@ -109,9 +156,9 @@ function upholstered(w: number, d: number, seats: number, arms: boolean, f: Fini
     for (const sz of [-1, 1]) parts.push(rod(0.016, 0.022, legH, sx * (w / 2 - inset), 0, sz * (d / 2 - inset), PALETTE.walnut, 10));
   }
   parts.push(block(w, baseTop - legH, d, 0, legH, 0, f.fabricDeep, 0.035));
-  parts.push(block(w, backTop - baseTop, backD, 0, baseTop, d / 2 - backD / 2, f.fabric, 0.06));
+  parts.push(block(w, backTop - baseTop, backD, 0, baseTop, d / 2 - backD / 2, f.fabric, softEdge(backD)));
   if (arms) {
-    for (const sx of [-1, 1]) parts.push(block(armW, armTop - baseTop, d, sx * (w / 2 - armW / 2), baseTop, 0, f.fabric, 0.07));
+    for (const sx of [-1, 1]) parts.push(block(armW, armTop - baseTop, d, sx * (w / 2 - armW / 2), baseTop, 0, f.fabric, softEdge(armW)));
   }
 
   const inner = w - 2 * armW;
@@ -120,6 +167,7 @@ function upholstered(w: number, d: number, seats: number, arms: boolean, f: Fini
   for (let i = 0; i < seats; i++) {
     const x = -inner / 2 + seatW * (i + 0.5);
     parts.push(block(seatW - 0.014, seatTop - baseTop + 0.012, seatD, x, baseTop - 0.006, -d / 2 + 0.01 + seatD / 2, f.cushion, 0.055));
+    parts.push(seatCrown(seatW - 0.014, seatD, x, seatTop, -d / 2 + 0.01 + seatD / 2, f.cushion));
   }
 
   if (d >= 0.45) {
@@ -174,7 +222,8 @@ function cornerSofa(w: number, d: number, side: "left" | "right", f: Finish): Pa
   const chaise: Part[] = [
     block(chaiseW, baseTop - legH, chaiseD, cx, legH, cz, f.fabricDeep, 0.035),
     block(chaiseW - 0.04, seatTop - baseTop + 0.012, chaiseD - 0.02, cx, baseTop - 0.006, cz, f.cushion, 0.055),
-    block(armW, 0.29, chaiseD, sx * (w / 2 - armW / 2), baseTop, cz, f.fabric, 0.07),
+    seatCrown(chaiseW - 0.04, chaiseD - 0.02, cx, seatTop, cz, f.cushion),
+    block(armW, 0.29, chaiseD, sx * (w / 2 - armW / 2), baseTop, cz, f.fabric, softEdge(armW)),
   ];
   for (const z of [-d / 2 + 0.07, d / 2 - sofaD - 0.02]) {
     chaise.push(rod(0.016, 0.022, legH, cx - sx * (chaiseW / 2 - 0.07), 0, z, PALETTE.walnut, 10));
@@ -197,8 +246,8 @@ function upholsteredRun(
   const backTop = seatTop + 0.4;
   const parts: Part[] = [
     block(w, baseTop - legH, d, 0, legH, 0, f.fabricDeep, 0.035),
-    block(w, backTop - baseTop, backD, 0, baseTop, d / 2 - backD / 2, f.fabric, 0.06),
-    block(armW, 0.29, d, -chaiseSide * (w / 2 - armW / 2), baseTop, 0, f.fabric, 0.07),
+    block(w, backTop - baseTop, backD, 0, baseTop, d / 2 - backD / 2, f.fabric, softEdge(backD)),
+    block(armW, 0.29, d, -chaiseSide * (w / 2 - armW / 2), baseTop, 0, f.fabric, softEdge(armW)),
   ];
   for (const sx of [-1, 1]) parts.push(rod(0.016, 0.022, legH, sx * (w / 2 - 0.07), 0, d / 2 - 0.07, PALETTE.walnut, 10));
   const inner = w - armW;
@@ -208,6 +257,7 @@ function upholsteredRun(
   const start = chaiseSide < 0 ? -w / 2 : -w / 2 + armW;
   for (let i = 0; i < seats; i++) {
     parts.push(block(seatW - 0.014, seatTop - baseTop + 0.012, seatD, start + seatW * (i + 0.5), baseTop - 0.006, -d / 2 + 0.01 + seatD / 2, f.cushion, 0.055));
+    parts.push(seatCrown(seatW - 0.014, seatD, start + seatW * (i + 0.5), seatTop, -d / 2 + 0.01 + seatD / 2, f.cushion));
   }
   return parts;
 }
@@ -497,13 +547,15 @@ function bed(w: number, d: number, f: Finish): Part[] {
   const parts: Part[] = [
     block(w, frameTop - legH, d - headD, 0, legH, -headD / 2, PALETTE.walnut, 0.02),
     block(w, Math.min(1.05, mattressTop + 0.45), headD, 0, 0, d / 2 - headD / 2, f.fabricDeep, 0.03),
-    block(w - 0.06, mattressTop - frameTop, mattressD, 0, frameTop, mattressZ, PALETTE.paper, 0.05),
+    { ...block(w - 0.06, mattressTop - frameTop, mattressD, 0, frameTop, mattressZ, PALETTE.paper, 0.07), finish: "fabric" },
   ];
   for (const sx of [-1, 1]) parts.push(block(0.05, legH, 0.05, sx * (w / 2 - 0.06), 0, -d / 2 + 0.06, PALETTE.walnut, 0.006));
   // The duvet covers the foot two thirds, its folded edge a soft roll.
   const duvetD = mattressD * 0.68;
   const duvetZ = -d / 2 + 0.02 + duvetD / 2;
   parts.push(block(w - 0.03, 0.05, duvetD + 0.01, 0, mattressTop - 0.02, duvetZ, f.fabric, 0.03));
+  // Its fill: a low dome, so the duvet lies soft over the mattress instead of as a board.
+  parts.push(crown(w - 0.08, duvetD - 0.06, 0.04, 0, mattressTop + 0.024, duvetZ, f.fabric));
   parts.push(block(w - 0.03, 0.07, 0.12, 0, mattressTop - 0.02, -d / 2 + 0.02 + duvetD - 0.04, f.cushion, 0.035));
   const sleepers = w >= 1.2 ? 2 : 1;
   const pillowW = Math.max(Math.min(0.62, (w - 0.18) / sleepers - 0.05), 0.05);
@@ -517,6 +569,23 @@ function bed(w: number, d: number, f: Finish): Part[] {
     parts.push(pillow);
   }
   return parts;
+}
+
+/** Squeezes `parts` across x and z, about the origin, until they lie within ±`hx` and ±`hz`. */
+function fitAcross(parts: readonly Part[], hx: number, hz: number) {
+  let reachX = 0;
+  let reachZ = 0;
+  for (const part of parts) {
+    part.geometry.computeBoundingBox();
+    const box = part.geometry.boundingBox;
+    if (!box) continue;
+    reachX = Math.max(reachX, -box.min.x, box.max.x);
+    reachZ = Math.max(reachZ, -box.min.z, box.max.z);
+  }
+  const sx = reachX > hx ? hx / reachX : 1;
+  const sz = reachZ > hz ? hz / reachZ : 1;
+  if (sx === 1 && sz === 1) return;
+  for (const part of parts) part.geometry.scale(sx, 1, sz);
 }
 
 const LEAF = 0x3f7a4a;
@@ -536,38 +605,61 @@ function plant(w: number, d: number, style: "topiary" | "leafy" | "palm", rand: 
     rod(potR, potR * 0.78, potH, 0, 0, 0, potColour, 20),
     rod(potR * 0.92, potR * 0.92, 0.02, 0, potH - 0.025, 0, PALETTE.floorGap, 20),
   ];
+  const greens = [LEAF, LEAF_DARK, LEAF_LIGHT];
+  const green = () => greens[Math.floor(rand() * greens.length)] ?? LEAF;
   if (style === "topiary") {
     parts.push(rod(0.015, 0.02, 0.28, 0, potH - 0.02, 0, PALETTE.walnut, 8));
     const balls = [Math.min(r * 0.82, 0.3), Math.min(r * 0.66, 0.24), Math.min(r * 0.48, 0.17)];
     let y = potH + 0.18;
-    balls.forEach((br, i) => {
+    for (const br of balls) {
       const radius = Math.min(br, r - 0.005);
       y += radius;
-      parts.push(ball(radius, 0, y, 0, i === 1 ? LEAF : LEAF_DARK, 12));
+      // A dark core for depth, clipped leaves all over it: a ball read as plastic.
+      parts.push({ ...ball(radius * 0.86, 0, y, 0, LEAF_DARK, 10), finish: "leaf" });
+      const count = Math.round(18 + radius * 90);
+      for (let i = 0; i < count; i++) {
+        // An even spread over the sphere (a golden-angle spiral), jittered.
+        const t = (i + 0.5) / count;
+        const polar = Math.acos(1 - 2 * t);
+        const az = i * 2.39996 + rand() * 0.5;
+        const dir = { x: Math.sin(polar) * Math.cos(az), y: Math.cos(polar), z: Math.sin(polar) * Math.sin(az) };
+        const at = { x: dir.x * radius * 0.78, y: y + dir.y * radius * 0.78, z: dir.z * radius * 0.78 };
+        parts.push(leaf(radius * (0.42 + rand() * 0.18), at, dir, 0.2 + rand() * 0.3, green()));
+      }
       y += radius * 0.82;
-    });
-  } else if (style === "leafy") {
-    for (let i = 0; i < 9; i++) {
-      const a = (i / 9) * Math.PI * 2 + rand() * 0.4;
-      const reach = Math.min(Math.max(r - 0.12, 0), 0.42) * (0.35 + rand() * 0.55);
-      const radius = Math.min(0.1 + rand() * 0.07, r - reach - 0.005);
-      parts.push(ball(radius, Math.cos(a) * reach, potH + 0.1 + rand() * 0.35, Math.sin(a) * reach, [LEAF, LEAF_DARK, LEAF_LIGHT][i % 3] ?? LEAF, 10));
     }
-    parts.push(ball(Math.min(0.16, r - 0.01), 0, potH + 0.45, 0, LEAF, 12));
+  } else if (style === "leafy") {
+    // Stems rising from the pot and arching out, each with leaves along it.
+    const reach = Math.min(Math.max(r - 0.05, 0.12), 0.5);
+    const stems = 9;
+    for (let i = 0; i < stems; i++) {
+      const a = (i / stems) * Math.PI * 2 + rand() * 0.5;
+      const rise = 0.25 + rand() * 0.35;
+      const out = reach * (0.45 + rand() * 0.45);
+      const leaves = 4;
+      for (let k = 0; k < leaves; k++) {
+        const t = (k + 1) / leaves;
+        const at = { x: Math.cos(a) * out * t * 0.7, y: potH + rise * (0.3 + t * 0.7), z: Math.sin(a) * out * t * 0.7 };
+        const side = k % 2 === 0 ? 0.6 : -0.6;
+        const dir = { x: Math.cos(a + side), y: 0.35 + rand() * 0.3, z: Math.sin(a + side) };
+        parts.push(leaf(Math.min(0.12 + rand() * 0.08, out * 0.9), at, dir, 0.25 + t * 0.35, green()));
+      }
+    }
+    parts.push({ ...ball(Math.min(0.09, r * 0.4), 0, potH + 0.05, 0, LEAF_DARK, 8), finish: "leaf" });
   } else {
     const trunkH = 1.05;
     parts.push(rod(0.03, 0.045, trunkH, 0, potH - 0.02, 0, PALETTE.oakDark, 10));
-    const fronds = 8;
+    const fronds = 9;
     const frondL = Math.min(Math.max(r - 0.02, 0.05), 0.75);
+    const crownAt = { x: 0, y: potH + trunkH - 0.02, z: 0 };
     for (let i = 0; i < fronds; i++) {
-      const a = (i / fronds) * Math.PI * 2;
-      const frond = block(frondL, 0.012, 0.09, frondL / 2, 0, 0, i % 2 === 0 ? LEAF : LEAF_LIGHT, 0.005);
-      frond.geometry.rotateZ(-0.45);
-      frond.geometry.rotateY(a);
-      frond.geometry.translate(0, potH + trunkH - 0.02, 0);
-      parts.push(frond);
+      const a = (i / fronds) * Math.PI * 2 + rand() * 0.3;
+      const dir = { x: Math.cos(a), y: 0.5, z: Math.sin(a) };
+      parts.push(leaf(frondL, crownAt, dir, 0.6 + rand() * 0.25, i % 2 === 0 ? LEAF : LEAF_LIGHT));
     }
   }
+  // Leaves reach where they like; the plant as a whole is drawn back inside its footprint.
+  fitAcross(parts, w / 2 - 0.0015, d / 2 - 0.0015);
   return parts;
 }
 

@@ -465,6 +465,7 @@ function openRoomView(
       const first = room === null;
       if (room) disposeScene(room.scene);
       room = buildRoomScene(config, { shadows, lambert: options.lambert ?? false, coldKey: options.coldKey, lampFamilies });
+
       // Only on opening, or when the room is resized: an edit (a piece carried, a light moved)
       // rebuilds the scene, and taking the target back to the middle threw the view across the room.
       if (first || roomKey(config) !== shownRoom) orbit.target.copy(room.target);
