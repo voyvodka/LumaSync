@@ -52,6 +52,10 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     identifyUnmatched: "Bu kanal bir Hue Bridge ışığıyla eşleşmemiş",
     edit: "Düzenle",
     selected: "{{name}} seçildi",
+    hover: {
+      on: "Açık · %{{percent}}",
+      off: "Kapalı",
+    },
     tvBacklight: "Ekran arka ışığı",
     strip: "LED şerit",
     lightCount_one: "{{count}} ışık",

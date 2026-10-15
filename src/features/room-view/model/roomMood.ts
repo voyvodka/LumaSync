@@ -10,8 +10,10 @@ import { paletteOf, paletteStops } from "@/features/mode/model/effectSwatch";
 import { LAMP_COLOURS } from "./lampColours";
 
 export interface RoomMood {
-  /** 0 dark, 1 at full: the lamps' level. */
+  /** 0 dark, 1 at full: the lamps' level as drawn, never below a floor while lit. */
   level: number;
+  /** The brightness the mode runs at, 0–1, as the user set it. */
+  brightness: number;
   /** The lamps' colour while lit. */
   lamp: number;
   /** The sky's top, and the colour it fades through before the night. */
@@ -48,6 +50,13 @@ const level = (brightness: number | undefined) => LEVEL_FLOOR + (1 - LEVEL_FLOOR
 
 /** `null` — no running mode known (a test, a window without one) — reads as lamps lit warm. */
 export function roomMood(mode: LightingModeConfig | null): RoomMood {
+  // The control state keeps every mode's last payload through a switch: read the running kind's.
+  const payload =
+    mode?.kind === LIGHTING_MODE_KIND.SOLID ? mode.solid : mode?.kind === LIGHTING_MODE_KIND.EFFECT ? mode.effect : mode?.ambilight;
+  return { ...moodOf(mode), brightness: mode?.kind === LIGHTING_MODE_KIND.OFF ? 0 : (payload?.brightness ?? 1) };
+}
+
+function moodOf(mode: LightingModeConfig | null): Omit<RoomMood, "brightness"> {
   if (!mode) return { level: 1, lamp: WARM, sky: SKY_WARM };
   switch (mode.kind) {
     case LIGHTING_MODE_KIND.OFF:

@@ -338,6 +338,15 @@ backlight drawn as a stray line along the wall.
   gradient, and the lamps ease over 900 ms without rebuilding the scene (`RoomScene.setMood`). The
   colours stay placeholders where the live feed is the truth (Ambilight, an effect's motion) until it
   reaches the view.
+- **The camera travels to what is picked.** A light or the screen picked in the room or the dock
+  draws the camera most of the way to it at once and then settles (760 ms, an exponential ease-out),
+  framed 1.55× closer with its middle 70% of the way from the room's centre to the light, so the
+  light sits in its corner of the room rather than alone. Clearing the pick travels back to where the
+  camera was; turning or zooming by hand in between (OrbitControls' `start`) forgets the way back, so
+  a view the user set is never taken from them. A piece of furniture picked to be carried does not
+  move the camera. Over a light or the screen the pointer shows a chip with its name and whether it
+  is lit (`HoverChip`), placed by transform so following the pointer re-renders nothing; it is
+  `aria-hidden`, the dock listing the same lights with their state.
 - **The glow comes from the bulbs alone.** `scene/bloom.ts` draws the room a second time at half
   resolution with every material black but the bulbs (`BLOOM_LAYER`), blurs that and adds it over
   the room, so a sofa in front of a lamp still hides its glow. A brightness threshold could not pick

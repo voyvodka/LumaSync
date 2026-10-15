@@ -50,7 +50,7 @@ import { BLOOM_LAYER } from "./scene/bloom";
 const STRIP_HEIGHT = 0.08;
 const STRIP_GLOW = 0xffc46b;
 /** The backlight's spill against the wall, past 1 so the glow pass picks it up. */
-const BACKLIGHT_GAIN = 1.6;
+const BACKLIGHT_GAIN = 0.8;
 const WALL_CUT_HEIGHT = 0.2;
 /** The walls the camera looks over stop short of the ceiling, as a dollhouse's do: at full height
  *  they read as a box and hid the far half of the floor from a raised view. */

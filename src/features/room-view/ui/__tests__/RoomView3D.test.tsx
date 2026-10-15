@@ -1,6 +1,7 @@
 import { act, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { hueChannelObjectId } from "@/features/room-map/model/objectId";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 
 import RoomView3D from "../RoomView3D";
@@ -50,6 +51,8 @@ vi.mock("three/addons/controls/OrbitControls.js", async () => {
       }
       update = () => false;
       addEventListener = vi.fn<() => void>();
+      maxZoom = 8;
+      minZoom = 0.6;
       dispose = vi.fn<() => void>();
     },
   };
@@ -152,6 +155,32 @@ describe("RoomView3D", () => {
 
     expect(() => render(<RoomView3D config={DEFAULT_ROOM_MAP} label="Room" onFail={onFail} />)).not.toThrow();
     expect(onFail).toHaveBeenCalledWith(expect.objectContaining({ message: "no WebGL context" }));
+  });
+
+  // The camera travels to a picked light and comes back when the pick is cleared.
+  it("frames a picked light and returns to the room when it is let go", async () => {
+    const config = { ...DEFAULT_ROOM_MAP, hueChannels: [{ channelIndex: 0, x: 0.8, y: 0.8, z: 0, zOrigin: "bridge" as const }] };
+    const onFail = vi.fn<(error: unknown) => void>();
+    const { rerender, unmount } = render(<RoomView3D config={config} label="Room" onFail={onFail} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    const orbit = gl.orbits[0]!;
+    const before = orbit.target.clone();
+
+    rerender(<RoomView3D config={config} label="Room" selectedId={hueChannelObjectId(0)} onFail={onFail} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    const picked = orbit.target.clone();
+    expect(picked.distanceTo(before)).toBeGreaterThan(0.3);
+
+    rerender(<RoomView3D config={config} label="Room" selectedId={null} onFail={onFail} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(orbit.target.distanceTo(before)).toBeLessThan(1e-3);
+    unmount();
   });
 
   describe("a click in the room", () => {

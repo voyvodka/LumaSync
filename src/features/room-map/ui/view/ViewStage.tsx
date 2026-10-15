@@ -17,6 +17,7 @@ import type { RoomMapDocument } from "../../state/useRoomMapDocument";
 import { useUsbStripStatus } from "../../state/useUsbStripStatus";
 import { CornerControls } from "../CornerControls";
 import { ROOM_MAP_FIT_INSETS } from "../dock/dockGeometry";
+import { HoverChip } from "./HoverChip";
 import { RoomViewDock } from "./RoomViewDock";
 
 export interface ViewStageProps {
@@ -72,6 +73,27 @@ export function ViewStage({
   const hasHue = hueBridgeConfigured || !!hueAreaId || scopedConfig.hueChannels.length > 0;
 
   const focusStage = useCallback(() => rootRef.current?.focus({ preventScroll: true }), []);
+
+  // The chip follows the pointer by transform; only a new object under it renders again.
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const chipRef = useRef<HTMLDivElement | null>(null);
+  const pointerRef = useRef({ x: 0, y: 0 });
+  const placeChip = useCallback(() => {
+    const root = rootRef.current;
+    const chip = chipRef.current;
+    if (!root || !chip) return;
+    const box = root.getBoundingClientRect();
+    chip.style.transform = `translate(${pointerRef.current.x - box.left + 14}px, ${pointerRef.current.y - box.top - 30}px)`;
+  }, []);
+  const handleHover = useCallback(
+    (objectId: string | null, x: number, y: number) => {
+      pointerRef.current = { x, y };
+      setHoveredId(objectId);
+      placeChip();
+    },
+    [placeChip],
+  );
+  const hovered = hoveredId ? lights.find((light) => light.id === hoveredId) ?? null : null;
   // A light is picked over no zone: one left active from Edit would dim every light outside it there.
   const selectLight = useCallback(
     (id: string) => {
@@ -125,9 +147,21 @@ export function ViewStage({
         cameraCommand={cameraCommand}
         mood={mood}
         onPick={handlePick}
+        onHover={handleHover}
         onMovePiece={handleMovePiece}
         onFail={onFail}
       />
+      {hovered && (
+        <HoverChip
+          chipRef={(node) => {
+            chipRef.current = node;
+            placeChip();
+          }}
+          name={hovered.name}
+          lit={mood.level > 0}
+          level={mood.brightness}
+        />
+      )}
       <RoomViewDock
         lights={lights}
         hue={

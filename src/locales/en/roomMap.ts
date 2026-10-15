@@ -49,6 +49,10 @@ export default {
     identifyUnmatched: "This channel is not matched to a bridge light",
     edit: "Place on map",
     selected: "{{name}} selected",
+    hover: {
+      on: "On · {{percent}}%",
+      off: "Off",
+    },
     tvBacklight: "Screen backlight",
     strip: "LED strip",
     lightCount_one: "{{count}} light",

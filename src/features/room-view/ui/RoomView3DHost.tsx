@@ -33,6 +33,7 @@ export function RoomView3DHost(props: {
   cameraCommand?: CameraCommand;
   mood?: RoomMood;
   onPick?: (objectId: string | null) => void;
+  onHover?: (objectId: string | null, clientX: number, clientY: number) => void;
   onMovePiece?: (objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => void;
   onFail: (error: unknown) => void;
 }) {

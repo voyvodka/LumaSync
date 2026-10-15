@@ -95,6 +95,14 @@ const CAMERA_MOVE_MS = 320;
 /** Lamps coming on or going off: slow enough to watch the room fill, as a dimmer does. */
 const MOOD_MS = 900;
 const easeOut = (t: number) => 1 - (1 - t) ** 3;
+/** Travelling to what was picked: most of the way at once, then a long settle, as a camera
+ *  operator lands a move. */
+const DOLLY_MS = 760;
+const easeOutExpo = (t: number) => (t >= 1 ? 1 : 1 - 2 ** (-10 * t));
+/** How much closer a picked light is framed than the room. */
+const DOLLY_ZOOM = 1.55;
+/** How far toward the picked light the view's middle goes: its corner of the room, with the room around it. */
+const DOLLY_REACH = 0.7;
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
 const POLAR = 0.8;
@@ -110,6 +118,7 @@ function openRoomView(
   onFail: (error: unknown) => void,
   onPick: (objectId: string | null) => void,
   onMovePiece: ((objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => void) | null,
+  onHover: (objectId: string | null, clientX: number, clientY: number) => void = () => {},
 ): RoomView {
   const options: SpikeOptions = window.__roomViewSpikeOptions ?? {};
   const started = performance.now();
@@ -246,7 +255,7 @@ function openRoomView(
     // One move at a time, from wherever the camera is now: a second press during a move carries on
     // from there instead of jumping to the end of the first.
     let move = 0;
-    const moveCamera = (to: { zoom: number; target?: Vector3; position?: Vector3 }) => {
+    const moveCamera = (to: { zoom: number; target?: Vector3; position?: Vector3 }, ms = CAMERA_MOVE_MS, ease = easeOut) => {
       if (move !== 0) cancelAnimationFrame(move);
       const zoom0 = camera.zoom;
       const target0 = orbit.target.clone();
@@ -265,11 +274,35 @@ function openRoomView(
       }
       const start = performance.now();
       const step = (now: number) => {
-        const t = Math.min((now - start) / CAMERA_MOVE_MS, 1);
-        apply(easeOut(t));
+        const t = Math.min((now - start) / ms, 1);
+        apply(ease(t));
         move = t < 1 && !closed ? requestAnimationFrame(step) : 0;
       };
       move = requestAnimationFrame(step);
+    };
+
+    // A light or the screen picked: the camera travels to it, and back to where it was when the pick
+    // is cleared. Turning or zooming by hand in between forgets the way back.
+    let home: { zoom: number; target: Vector3; position: Vector3 } | null = null;
+    orbit.addEventListener("start", () => {
+      home = null;
+    });
+    const focusOn = (objectId: string | null, previous: string | null) => {
+      if (!room || objectId === previous) return;
+      const item = objectId ? room.pickables.find((p) => p.id === objectId && (p.kind === "light" || p.kind === "tv")) : undefined;
+      if (!item) {
+        if (home) moveCamera(home, DOLLY_MS, easeOutExpo);
+        home = null;
+        return;
+      }
+      if (!home) home = { zoom: camera.zoom, target: orbit.target.clone(), position: camera.position.clone() };
+      const target = new Vector3(item.centre.x, Math.min(item.centre.y, room.target.y * 2) * 0.6, item.centre.z).lerp(
+        room.target,
+        1 - DOLLY_REACH,
+      );
+      const position = camera.position.clone().add(target.clone().sub(orbit.target));
+      const zoom = Math.min(Math.max(home.zoom * DOLLY_ZOOM, camera.zoom), orbit.maxZoom);
+      moveCamera({ zoom, target, position }, DOLLY_MS, easeOutExpo);
     };
 
     const raycaster = new Raycaster();
@@ -341,6 +374,7 @@ function openRoomView(
       "pointerdown",
       (event) => {
         press = event.button === 0 ? { x: event.clientX, y: event.clientY, id: event.pointerId } : null;
+        onHover(null, 0, 0);
         if (!press || !room || !onMovePiece) return;
         const ray = rayAt(event.clientX, event.clientY);
         // The selected one is carried when the press lands on it, even behind something nearer:
@@ -379,10 +413,14 @@ function openRoomView(
     canvas.addEventListener(
       "pointermove",
       (event) => {
-        if (!carry && !press && room && onMovePiece) {
+        if (!carry && !press && room) {
+          const ray = rayAt(event.clientX, event.clientY);
+          const lit = room.pickables.filter((p) => p.kind === "light" || p.kind === "tv");
+          onHover(pickObject(ray, lit, lightPickHalf(pixelsPerMetre)), event.clientX, event.clientY);
+          if (!onMovePiece) return;
           // The selected piece says it can be picked up; nothing else changes the cursor.
           const mine = room.pickables.find((p) => p.id === selected);
-          const over = mine !== undefined && pickObject(rayAt(event.clientX, event.clientY), [mine], lightPickHalf(pixelsPerMetre)) === mine.id;
+          const over = mine !== undefined && pickObject(ray, [mine], lightPickHalf(pixelsPerMetre)) === mine.id;
           canvas.style.cursor = over && pressStartsCarry(mine, selected) ? "grab" : "";
           return;
         }
@@ -426,6 +464,7 @@ function openRoomView(
       },
       { signal: listening.signal },
     );
+    canvas.addEventListener("pointerleave", () => onHover(null, 0, 0), { signal: listening.signal });
     canvas.addEventListener(
       "pointercancel",
       () => {
@@ -607,8 +646,10 @@ function openRoomView(
         fit();
       },
       select(objectId) {
+        const previous = selected;
         selected = objectId;
         if (room?.select(objectId)) request();
+        if (ready) focusOn(objectId, previous);
       },
       show(config, lampFamilies) {
         try {
@@ -637,6 +678,7 @@ export default function RoomView3D({
   cameraCommand,
   mood,
   onPick,
+  onHover,
   onMovePiece,
   onFail,
 }: {
@@ -657,6 +699,8 @@ export default function RoomView3D({
   onMovePiece?: (objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => void;
   /** A click in the room: the object it landed on, or null for empty ground. */
   onPick?: (objectId: string | null) => void;
+  /** The light or screen under the pointer, and where the pointer is; null when over neither. */
+  onHover?: (objectId: string | null, clientX: number, clientY: number) => void;
   /** No view could be drawn — no WebGL context, or the scene failed to build. */
   onFail: (error: unknown) => void;
 }) {
@@ -668,6 +712,8 @@ export default function RoomView3D({
   onPickRef.current = onPick;
   const onMoveRef = useRef(onMovePiece);
   onMoveRef.current = onMovePiece;
+  const onHoverRef = useRef(onHover);
+  onHoverRef.current = onHover;
   const selectedRef = useRef(selectedId);
   selectedRef.current = selectedId;
   const moodRef = useRef(mood);
@@ -684,6 +730,7 @@ export default function RoomView3D({
         fail,
         (objectId) => onPickRef.current?.(objectId),
         (objectId, x, z, turn) => onMoveRef.current?.(objectId, x, z, turn),
+        (objectId, x, y) => onHoverRef.current?.(objectId, x, y),
       );
     } catch (error) {
       fail(error);
