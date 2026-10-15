@@ -263,6 +263,12 @@ export async function resizeToMode(
   framedZoom = zoom;
 
   if (opts?.persist === false) return;
-  await saveShellState(partialUpdate);
-  await persistWindowState({ captureSize: false });
+  // The window already has the new size: a failed write must not throw out before the layout swaps,
+  // or a 320 px window keeps the full layout. The write-failing notice says it; the next write retries.
+  try {
+    await saveShellState(partialUpdate);
+    await persistWindowState({ captureSize: false });
+  } catch (err) {
+    console.error("[LumaSync] saving the window mode failed:", err);
+  }
 }

@@ -330,14 +330,15 @@ describe("buildShellNotices", () => {
     it.each(["compact", "full"] as const)(
       "grades no output and calibration as error conditions and checking as info (%s)",
       (uiMode) => {
-        for (const [input, id] of [
-          [{ availability: "none" as const }, SHELL_NOTICE_IDS.OUTPUT_NONE],
-          [{ calibrationRequired: true }, SHELL_NOTICE_IDS.CALIBRATION_REQUIRED],
+        // No output is amber: nothing failed, there is nothing to light yet.
+        for (const [input, id, severity] of [
+          [{ availability: "none" as const }, SHELL_NOTICE_IDS.OUTPUT_NONE, NOTICE_SEVERITY.WARNING],
+          [{ calibrationRequired: true }, SHELL_NOTICE_IDS.CALIBRATION_REQUIRED, NOTICE_SEVERITY.ERROR],
         ] as const) {
           const notice = byId({ ...input, uiMode }, id);
           expect([notice.tier, notice.severity, notice.kind, notice.dismissible]).toEqual([
             NOTICE_TIER.ERROR_CONDITION,
-            NOTICE_SEVERITY.ERROR,
+            severity,
             "condition",
             false,
           ]);

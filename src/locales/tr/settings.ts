@@ -64,8 +64,8 @@ const settings: Catalogue<typeof enSettings> = {
     license: "MIT lisansı",
   },
   nav: {
-    switchToCompact: "Kompakt görünüm",
-    switchToFull: "Tam ayarlar",
+    switchToCompact: "Kompakt pencere",
+    switchToFull: "Tam pencere",
     sections: {
       lights: "Işıklar",
       devices: "Cihazlar",
@@ -74,18 +74,18 @@ const settings: Catalogue<typeof enSettings> = {
     },
   },
   startupTray: {
-    launchAtLogin: "Girişte başlat",
+    launchAtLogin: "Oturum açılınca başlat",
     readError: "LumaSync'in girişte başlayıp başlamadığı okunamadı",
     writeError: "Girişte başlatma değiştirilemedi — tekrar dene",
   },
   launchLights: {
-    label: "Açılışta ışıklar",
+    label: "LumaSync açılınca",
     hint: "LumaSync başladığında, girişte başlama dahil, ışıkların ne yapacağı.",
-    resume: "Son modu sürdür",
-    off: "Kapalı başla",
+    resume: "Son mod",
+    off: "Işıklar kapalı",
   },
   awayLights: {
-    label: "Uzaktayken ışıkları kapat",
+    label: "Kilitliyken veya uykudayken kapat",
     hint: "Bilgisayar kilitlenince, uyuyunca ya da ekranı kapanınca ışıklar söner; dönünce çalışan mod geri gelir. macOS ve Windows.",
   },
   closeAction: {
@@ -111,7 +111,7 @@ const settings: Catalogue<typeof enSettings> = {
     hint: "Tüm LumaSync pencerelerinde animasyonları azaltır. Kapalıyken sisteminin ayarı geçerli olur.",
   },
   nerdStats: {
-    label: "Meraklısı için istatistikler",
+    label: "Canlı istatistikler",
     description: "Durum çubuğunda kare hızını ve canlı çıkış değerlerini gösterir. Kapalıyken uygulama biraz daha az iş yapar.",
   },
 };

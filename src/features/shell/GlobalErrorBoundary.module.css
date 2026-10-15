@@ -12,6 +12,7 @@
     color: var(--lm-ink);
     animation: arrive var(--lm-dur-slow) var(--lm-ease-out);
   }
+  .drag { position: fixed; inset: 0 0 auto; height: var(--lm-titlebar-h); }
   .panel {
     display: flex;
     flex-direction: column;

@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { usePresence } from "@/shared/lib/usePresence";
-import { IconPower } from "@/shared/ui/icons";
+import { IconPlus, IconPower } from "@/shared/ui/icons";
 
 import { useSceneEdit } from "@/features/scenes/state/scenesStore";
 
@@ -33,6 +33,11 @@ interface ModeStageProps {
   lastLit: LitModeKind;
   /** "Turn on" on the dimmed stage; absent where turning on is locked. */
   onTurnOn?: () => void;
+  /**
+   * Nothing is connected to light: the dimmed stage offers to add a light instead of a turn-on that
+   * cannot, which on a fresh install was an amber button that did nothing.
+   */
+  onAddLight?: () => void;
 }
 
 /**
@@ -50,6 +55,7 @@ export function ModeStage({
   onModeChange,
   lastLit,
   onTurnOn,
+  onAddLight,
 }: ModeStageProps) {
   const { t } = useTranslation();
   const off = mode.kind === LIGHTING_MODE_KIND.OFF;
@@ -112,9 +118,17 @@ export function ModeStage({
               <span className={styles.powerMark} aria-hidden>
                 <IconPower />
               </span>
-              <span className={styles.dormantText}>{t("lights:stage.dormant")}</span>
-              {/* Always there, disabled while it cannot: a button that went away mid-press read as a
-                  stall and moved what was under the pointer. */}
+              <span className={styles.dormantText}>
+                {t(onAddLight ? "lights:stage.noLights" : "lights:stage.dormant")}
+              </span>
+              {onAddLight ? (
+                <button type="button" className={styles.turnOn} onClick={onAddLight} data-testid="stage-add-light">
+                  <IconPlus />
+                  {t("lights:stage.addLight")}
+                </button>
+              ) : (
+              /* Always there, disabled while it cannot: a button that went away mid-press read as a
+                  stall and moved what was under the pointer. */
               <button
                 type="button"
                 className={styles.turnOn}
@@ -132,6 +146,7 @@ export function ModeStage({
                 <LitIcon />
                 {t("lights:power.turnOn", { mode: t(modeKind(lastLit).labelKey) })}
               </button>
+              )}
             </div>
           </div>
         ) : null}

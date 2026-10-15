@@ -171,6 +171,8 @@ export class GlobalErrorBoundary extends Component<Props, State> {
     return (
       // `lm-errboundary-root` is how e2e and the UI audit tell the fallback is up.
       <div className={`lm-errboundary-root ${styles.root}`} role="alert" aria-live="assertive">
+        {/* The title bar is gone with the app it belonged to; the window still moves by its top. */}
+        <div className={styles.drag} data-tauri-drag-region aria-hidden="true" />
         <section className={styles.panel} aria-labelledby="lm-errboundary-title">
           <h1 id="lm-errboundary-title" className={styles.title}>
             {copy.title}

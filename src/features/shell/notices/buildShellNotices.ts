@@ -462,7 +462,8 @@ export function buildShellNotices(
     notices.push({
       id: SHELL_NOTICE_IDS.OUTPUT_NONE,
       tier: NOTICE_TIER.ERROR_CONDITION,
-      severity: NOTICE_SEVERITY.ERROR,
+      // Amber, not red: nothing failed, there is simply nothing to light yet — the stage says the same.
+      severity: NOTICE_SEVERITY.WARNING,
       kind: "condition",
       message: input.hueProbeGaveUp
         ? t("shell:notices.messages.outputNoneStopped")

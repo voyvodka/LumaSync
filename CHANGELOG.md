@@ -140,6 +140,12 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- Plainer words in Settings and the notice line: "Compact window" / "Full window" for the title-bar
+  switch (it said "Full settings"), "Start at login", "When LumaSync starts: Last mode / Lights off",
+  "Off when locked or asleep", "Live stats", "LED setup needed" instead of "Calibration required",
+  "No lights connected" instead of "No reachable output", "Privacy settings" for the screen-recording
+  action (it read like the app's own Settings), and the Welcome line is shorter. Language is the
+  first row of General.
 - The room's overall colour in Ambilight keeps the screen's colour instead of greying it out. It was
   the plain average of the frame, so a picture with its colour in one part of the screen averaged to
   a washed-out tone — and that colour is most of what a lamp far from the screen, or a strip that can
@@ -475,6 +481,14 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- A fresh install's Lights page no longer offers an amber "Turn on Ambilight" that does nothing: with
+  no light connected the dimmed stage says so and offers "Add a light", which opens Devices (from the
+  compact window, the full one); a turn-on that cannot run is grey. "No lights connected" in the
+  notice line is amber rather than a red error, since nothing failed.
+- Switching between the compact and full window, or changing the interface size, while settings
+  cannot be saved left the full layout in a compact-sized window; the layout now follows the window
+  and the "settings can't be saved" notice says some changes won't stick.
+- The error screen can be dragged by its top edge again, as the title bar it replaced could.
 - In the compact window a notice's action — "Devices ›", "System Settings ›", its × — sat past the
   window's edge and could not be pressed; the line now ellipsizes and its arrow opens the rest.
 - Quiet text (navigation tabs, the status bar, captions, the room's light facts) is readable: its

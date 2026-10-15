@@ -187,6 +187,7 @@ export function LightsPage({
               lastLit={lastLit}
               // Kind only: Rust brings back that mode's saved settings, the ones the dimmed stage shows.
               onTurnOn={nonOffLocked || isModeTransitioning ? undefined : () => onModeChange({ kind: lastLit })}
+              onAddLight={availability === "none" ? onAddOutput : undefined}
             />
           </div>
         </div>

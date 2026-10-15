@@ -545,6 +545,7 @@ describe("LightsPage — output availability gate", () => {
       hueReachable: boolean;
       hueProbeVerdict: HueProbeVerdict | null;
       onModeChange: (next: LightingModeConfig) => void;
+      onAddOutput: () => void;
     }> = {},
   ) {
     // LightsPage hydrates from shellStore on mount; those
@@ -566,6 +567,7 @@ describe("LightsPage — output availability gate", () => {
         modeLockReason={null}
         onModeChange={props.onModeChange ?? vi.fn()}
         onOutputTargetsChange={vi.fn()}
+        onAddOutput={props.onAddOutput}
         />,
       );
     });
@@ -595,6 +597,16 @@ describe("LightsPage — output availability gate", () => {
     expect(screen.getByTestId("off-stage")).toBeInTheDocument();
     expect(screen.getByTestId("stage-turn-on")).toBeDisabled();
     expect(screen.getByTestId("stage-turn-on")).toHaveAccessibleName("lights:power.turnOn");
+  });
+
+  // A fresh install opened on an amber "Turn on Ambilight" that did nothing.
+  it("offers to add a light instead when nothing is connected", async () => {
+    const onAddOutput = vi.fn<() => void>();
+    await renderWithOutputs({ onAddOutput });
+    expect(screen.queryByTestId("stage-turn-on")).toBeNull();
+    expect(screen.getByText("lights:stage.noLights")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("stage-add-light"));
+    expect(onAddOutput).toHaveBeenCalledTimes(1);
   });
 
   it("hands focus to the power switch when the way on is pressed", async () => {

@@ -11,7 +11,9 @@ import {
 import { MODE_GUARD_REASONS } from "@/features/mode/state/modeGuard";
 import { ModeStrip } from "@/features/mode/ui/ModeStrip";
 import { usePreference } from "@/features/persistence/preferences";
+import { useNavigationActions } from "@/features/shell/navigationStore";
 import { Scenes } from "@/features/scenes/ui/Scenes";
+import { SECTION_IDS } from "@/shared/contracts/shell";
 import {
   LIGHTING_MODE_KIND,
   normalizeLightingModeConfig,
@@ -51,6 +53,9 @@ export const LightsCompact = memo(function LightsCompact() {
   const { changeMode } = useLightingActions();
   const { brightnessLocked, brightnessTitle } = useLightsModel();
   const lastLit = usePreference("lastLitKind");
+  const { goToSection } = useNavigationActions();
+  // Devices is a full-window section: going there opens the full window.
+  const addLight = useCallback(() => void goToSection(SECTION_IDS.DEVICES), [goToSection]);
 
   // Without this gate the worker starts with nowhere to send frames. A bridge still being checked
   // blocks activation too, but is not reported as missing.
@@ -101,6 +106,7 @@ export const LightsCompact = memo(function LightsCompact() {
         onModeChange={change}
         lastLit={lastLit}
         onTurnOn={nonOffLocked || isModeTransitioning ? undefined : () => change({ kind: lastLit })}
+        onAddLight={availability === "none" ? addLight : undefined}
       />
     </div>
   );

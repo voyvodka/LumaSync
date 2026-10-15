@@ -144,10 +144,9 @@ export function followPreference<K extends PreferenceKey>(key: K, listener: (val
 }
 
 /**
- * Applies at once. A view preference holds for the session even when the save fails: the shell's
- * "settings can't be saved" notice says a change lasts until quit, and a switch that snapped back
- * would contradict it. One Rust reads off disk (`READ_BY_RUST`) reverts instead, since showing a
- * choice that was never stored would lie.
+ * Applies at once. A view preference holds for the session even when the save fails. One Rust reads
+ * off disk (`READ_BY_RUST`) reverts instead, since showing a choice that was never stored would lie;
+ * the shell's "settings can't be saved" notice says some changes won't stick, which covers both.
  */
 export async function setPreference<K extends PreferenceKey>(
   key: K,

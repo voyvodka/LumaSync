@@ -248,6 +248,19 @@ describe("Scenario 15b — the animator finishes when animation frames stop", ()
   });
 });
 
+describe("a failed write after the resize", () => {
+  // The window was already compact-sized: throwing here left the full layout in a 320 px window.
+  it("resolves and logs, so the caller still swaps the layout", async () => {
+    setupPersistedState(makePersistedState({ uiMode: "full" }));
+    backend.failNextWrite("SHELL_STATE_WRITE_FAILED");
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(resizeToMode("compact", { animate: false })).resolves.toBeUndefined();
+    expect(setSizeMock).toHaveBeenCalled();
+    expect(error.mock.calls.some((call) => String(call[0]).startsWith("[LumaSync]"))).toBe(true);
+  });
+});
+
 describe("Scenario 15c — failed intermediate frames are logged, once per animation", () => {
   it("logs the first frame rejection with the [LumaSync] prefix and stays quiet after", async () => {
     // Intermediate frames are fire-and-forget; their rejections used to be

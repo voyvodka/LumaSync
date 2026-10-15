@@ -19,6 +19,8 @@ export default {
   },
   stage: {
     dormant: "The lights are off",
+    noLights: "No lights connected yet",
+    addLight: "Add a light",
   },
   power: {
     label: "Lights",

@@ -22,6 +22,8 @@ const lights: Catalogue<typeof enLights> = {
   },
   stage: {
     dormant: "Işıklar kapalı",
+    noLights: "Henüz bağlı ışık yok",
+    addLight: "Işık ekle",
   },
   power: {
     label: "Işıklar",

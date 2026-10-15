@@ -59,7 +59,8 @@
     border-color: var(--lm-amber);
     background: color-mix(in srgb, var(--lm-amber) 9%, transparent);
   }
-  .turnOn:disabled { cursor: not-allowed; opacity: 0.4; }
+  /* Grey while it cannot: an amber button that does nothing reads as the next step. */
+  .turnOn:disabled { cursor: default; border-color: var(--lm-line-2); color: var(--lm-ink-faint); }
   .turnOn:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
 
   .veil[data-leaving] { animation: veil-out var(--lm-dur-quick) var(--lm-ease-leave) forwards; }
