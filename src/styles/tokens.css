@@ -73,3 +73,18 @@
      the two pass each other and nothing blinks. */
   --lm-dur-follow: 0.04s;
 }
+
+/* The 3D room's sky, set inline from the running mode (`roomMood`). Registered so the stage's
+   gradient eases between moods instead of cutting; a typed property has no fallback, so the stage
+   always sets both. */
+@property --lm-room-sky-top {
+  syntax: "<color>";
+  inherits: false;
+  initial-value: transparent;
+}
+
+@property --lm-room-sky-mid {
+  syntax: "<color>";
+  inherits: false;
+  initial-value: transparent;
+}

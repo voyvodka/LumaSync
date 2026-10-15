@@ -20,15 +20,3 @@
     .stage { background: Canvas; }
   }
 }
-
-@property --lm-room-sky-top {
-  syntax: "<color>";
-  inherits: false;
-  initial-value: transparent;
-}
-
-@property --lm-room-sky-mid {
-  syntax: "<color>";
-  inherits: false;
-  initial-value: transparent;
-}
