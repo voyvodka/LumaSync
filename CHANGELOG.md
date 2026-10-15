@@ -353,10 +353,11 @@ https://keepachangelog.com/en/1.1.0/
   old value back.
 - Several USB strips at once. Ambilight now lights every saved, enabled strip that is connected
   and laid out, each from its own layout, firmware, chip and colour order, from one screen capture —
-  the slower strip skips frames on its own link instead of slowing the others. The settings you
+  the slower strip skips frames on its own link instead of slowing the others. Unplugging one
+  restarts the mode on the others. The settings you
   change without naming a strip are for your first enabled strip, and that strip now gets the mode
-  even when another one was plugged in first. A strip that will not open is left out and the others
-  keep running. Off paints every strip the mode lit black, and Solid, effects, the test pattern and
+  even when another one was plugged in first. A strip that will not open is left out — said only
+  in the log for now — and the others keep running; turning the mode off and on again retries it. Off paints every strip the mode lit black, and Solid, effects, the test pattern and
   the preview scene still use the first strip alone. The Lights and Devices pages still name one
   strip as the connected one — the one plugged in first — whichever strips are lit.
 - Room map: a room can be L-, U- or T-shaped. Room settings has a Shape row — rectangle, L, U or T,

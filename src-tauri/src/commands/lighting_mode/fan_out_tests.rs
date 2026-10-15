@@ -465,3 +465,107 @@ fn a_test_pattern_on_the_mode_s_strip_keeps_the_strip_beside_it_warm() {
     );
     stop(&mut owner);
 }
+
+// -----------------------------------------------------------------------
+// Blanking from the records, through the app
+// -----------------------------------------------------------------------
+
+fn record(port: &str, leds: usize) -> ActiveStrip {
+    ActiveStrip {
+        plan: UsbOutputPlan::Serial(port.to_string()),
+        layout: Some(calibration(leds as u16)),
+        led_count: leds,
+        profile: Default::default(),
+        chip: Default::default(),
+        color_order: LedColorOrder::default(),
+        correction: Default::default(),
+    }
+}
+
+#[test]
+fn an_off_with_no_record_paints_nothing_even_with_a_strip_connected() {
+    use super::test_support::{Rig, RigSetup};
+    let rig = Rig::new(RigSetup {
+        serial_connected: true,
+        calibrated: true,
+        ..RigSetup::default()
+    });
+    let ended = ambilight(30);
+    assert!(super::transition::blank_usb_after_off(&rig.handle(), &ended).is_none());
+    assert!(
+        rig.log.packets().is_empty(),
+        "no port no run holds is reopened"
+    );
+}
+
+#[test]
+fn a_released_strip_is_blanked_at_its_own_length_while_running_and_after() {
+    use super::test_support::{Rig, RigSetup};
+    let rig = Rig::new(RigSetup::default());
+    let ended = ambilight(30);
+    {
+        let state = rig.state();
+        state.lock_owner_recovered().active_strips = vec![record("COM-A", 30), record("COM-B", 24)];
+    }
+    super::transition::blank_serial_port(&rig.handle(), "COM-B", &ended).unwrap();
+    {
+        let state = rig.state();
+        let mut owner = state.lock_owner_recovered();
+        owner.active_strips.clear();
+        owner.ended_run = vec![record("COM-A", 30), record("COM-B", 24)];
+    }
+    super::transition::blank_serial_port(&rig.handle(), "COM-B", &ended).unwrap();
+    // Not in any record: the mode's own length, as before.
+    super::transition::blank_serial_port(&rig.handle(), "COM-C", &ended).unwrap();
+    let lengths: Vec<usize> = rig
+        .log
+        .packets()
+        .into_iter()
+        .map(|(_, packet)| packet.len())
+        .collect();
+    assert_eq!(lengths, vec![frame_len(24), frame_len(24), frame_len(30)]);
+}
+
+#[test]
+fn a_port_kept_warm_keeps_its_record_through_hand_overs() {
+    let _guard = WORKER_TEST_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+    let (mut owner, _recorder, _) = two_strips();
+    assert_eq!(apply(&mut owner, ambilight(30)), "AMBILIGHT_MODE_STARTED");
+    let effect = LightingModeConfig {
+        kind: LightingModeKind::Effect,
+        effect: Some(super::config::DEFAULT_EFFECT.clone()),
+        ..ambilight(30)
+    };
+    assert_eq!(apply(&mut owner, effect.clone()), "EFFECT_MODE_STARTED");
+    let mut other = effect;
+    other.led_calibration = Some(calibration(31));
+    assert_eq!(apply(&mut owner, other), "EFFECT_MODE_STARTED");
+    assert_eq!(
+        owner.active_ports,
+        vec!["COM-A".to_string(), "COM-B".to_string()]
+    );
+    let held: Vec<(UsbOutputPlan, usize)> = owner
+        .held_strips
+        .iter()
+        .map(|s| (s.plan.clone(), s.led_count))
+        .collect();
+    assert_eq!(held, vec![(UsbOutputPlan::Serial("COM-B".into()), 20)]);
+    stop(&mut owner);
+}
+
+#[test]
+fn a_retune_keeps_a_run_whose_strip_beside_it_did_not_start() {
+    let _guard = WORKER_TEST_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+    let (mut owner, recorder, captures) = two_strips();
+    *recorder.failing.lock().unwrap() = Some("COM-B".into());
+    assert_eq!(apply(&mut owner, ambilight(30)), "AMBILIGHT_MODE_STARTED");
+    *recorder.failing.lock().unwrap() = None;
+    let mut dimmer = ambilight(30);
+    dimmer.ambilight = Some(AmbilightPayload {
+        brightness: 0.4,
+        ..Default::default()
+    });
+    assert_eq!(apply(&mut owner, dimmer), "AMBILIGHT_MODE_UPDATED");
+    assert_eq!(captures.load(Ordering::SeqCst), 1);
+    stop(&mut owner);
+}

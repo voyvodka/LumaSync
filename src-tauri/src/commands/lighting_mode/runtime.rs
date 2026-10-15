@@ -113,9 +113,11 @@ pub(crate) struct LightingRuntimeOwner {
     /// The strips the running Ambilight asked for beside the mode's strip, whether or not each
     /// started: a retune keeps the run only when the next apply would ask for the same.
     pub(super) requested_extras: Vec<ActiveStrip>,
-    /// The strips the last run that drove anything wrote, kept past its stop so an Off can paint
-    /// each of them black; taken by the Off that does.
+    /// The strips the last run wrote — empty when it drove none — kept past its stop so an Off can
+    /// paint each of them black; taken by the Off that does.
     pub(super) ended_run: Vec<ActiveStrip>,
+    /// Ports a run on the mode's strip alone keeps warm beside it, with the records they ran with.
+    pub(super) held_strips: Vec<ActiveStrip>,
     /// Resends a Solid colour to a WLED device while Solid runs there (`SolidHold`).
     pub(super) solid_hold: Option<SolidHold>,
     pub(super) worker: Option<LightingWorkerRuntime>,
@@ -150,6 +152,7 @@ impl Default for LightingRuntimeOwner {
             active_strips: Vec::new(),
             requested_extras: Vec::new(),
             ended_run: Vec::new(),
+            held_strips: Vec::new(),
             solid_hold: None,
             worker: None,
             ambilight_live: None,

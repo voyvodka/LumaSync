@@ -304,7 +304,10 @@ Hue alone — the bridge takes 20 frames a second, so more would be read back an
 frame. With several strips one capture feeds them all, so it runs at the fastest strip's pace (a
 WLED strip counts as 30 Hz) and a slower serial strip skips frames at its own send gate rather than
 holding the others to its wire — `two_strips_keep_their_own_send_gates_for_ten_minutes` pins it. The link budget the telemetry reports is the slowest strip's,
-and a strip beside the mode's that cannot start is left out rather than failing the run. 30 rather than 60: with the strip smoothed between frames on every output step, the next
+and a strip beside the mode's that cannot start is left out rather than failing the run. The capture
+interval is chosen before the strips open, from every strip asked for, so a fast strip that then
+fails to start leaves the capture at its pace until the run is replanned — a few wasted frames, never
+a slower one. 30 rather than 60: with the strip smoothed between frames on every output step, the next
 frame is new information arriving ~8 ms sooner on average, at 1.5 times the capture cost on
 Windows, where every frame is a full-resolution GPU readback. ScreenCaptureKit and WGC are asked
 for the rate; X11 is polled at it. The scene stage's per-frame rates (the change envelope's

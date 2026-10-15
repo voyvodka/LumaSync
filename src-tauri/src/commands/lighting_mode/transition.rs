@@ -600,6 +600,7 @@ fn apply_mode_change_inner(
                     set_active_ports(owner, vec![port_name.clone()], &outgoing);
                 }
                 owner.active_strips = vec![ActiveStrip::of_mode(plan.clone(), &normalized_next)];
+                owner.held_strips.clear();
                 owner.active_usb_plan = Some(plan);
             }
 
@@ -854,6 +855,7 @@ fn apply_mode_change_inner(
                             || owner.preview.active_test_pattern.is_some()
                             || owner.preview.scene_worker
                             || owner.preview.latency_worker;
+                        let mut held_strips = Vec::new();
                         if alone_by_kind {
                             let kept: Vec<String> = owner
                                 .active_ports
@@ -863,10 +865,22 @@ fn apply_mode_change_inner(
                                 .collect();
                             for held in &kept {
                                 blank_if_lit(owner, held, &outgoing, "hand-over");
+                                // Its record goes with it, so an unplug or a later release blanks
+                                // it at its own length rather than the mode's.
+                                let plan = UsbOutputPlan::Serial(held.clone());
+                                if let Some(record) = outgoing
+                                    .strips
+                                    .iter()
+                                    .chain(owner.held_strips.iter())
+                                    .find(|strip| strip.plan == plan)
+                                {
+                                    held_strips.push(record.clone());
+                                }
                             }
                             ports.extend(kept);
                         }
                         set_active_ports(owner, ports, &outgoing);
+                        owner.held_strips = held_strips;
                     }
                     let mut active_strips: Vec<ActiveStrip> = usb_plan_for_worker
                         .clone()
@@ -1118,13 +1132,9 @@ pub(crate) fn blank_usb_after_off<R: Runtime>(
         .try_state::<LightingRuntimeState>()
         .map(|state| std::mem::take(&mut state.lock_owner_recovered().ended_run))
         .unwrap_or_default();
-    let Some((first, beside)) = ran.split_first() else {
-        let plan = UsbOutputPlan::from(
-            app.try_state::<LocalOutputRegistry>()
-                .and_then(|registry| registry.driven())?,
-        );
-        return Some(blank_plan(app, plan, ended));
-    };
+    // Every run leaves its record, so none means the run drove no strip: painting the registry's
+    // strip here would reopen a port no run holds, and the reopen resets its board.
+    let (first, beside) = ran.split_first()?;
     for strip in beside {
         blank_recorded(app, strip);
     }
@@ -1159,13 +1169,15 @@ pub(crate) fn blank_wled<R: Runtime>(
     }
 }
 
-/// The record of the strip on `plan` in the run now going, else in the run that went last.
+/// The record of the strip on `plan` in the run now going, a port it keeps warm, else the run that
+/// went last.
 fn recorded_strip<R: Runtime>(app: &AppHandle<R>, plan: &UsbOutputPlan) -> Option<ActiveStrip> {
     let state = app.try_state::<LightingRuntimeState>()?;
     let owner = state.lock_owner_recovered();
     owner
         .active_strips
         .iter()
+        .chain(owner.held_strips.iter())
         .chain(owner.ended_run.iter())
         .find(|strip| &strip.plan == plan)
         .cloned()
