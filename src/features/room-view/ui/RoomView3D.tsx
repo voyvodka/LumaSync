@@ -31,6 +31,7 @@ import { prefersReducedMotion } from "@/shared/lib/motion";
 
 import { buildRoomScene, disposeScene, type RoomScene, type RoomSceneOptions } from "./roomScene";
 import { type Bloom, createBloom } from "./scene/bloom";
+import type { LiftedPiece } from "./scene/lift";
 import styles from "./RoomView3D.module.css";
 
 /** What a measuring run varies; absent fields take the defaults below. */
@@ -112,7 +113,7 @@ function openRoomView(
   host: HTMLElement,
   onFail: (error: unknown) => void,
   onPick: (objectId: string | null) => void,
-  onMovePiece: ((objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => void) | null,
+  onMovePiece: ((objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => boolean | void) | null,
   onHover: (objectId: string | null, clientX: number, clientY: number) => void = () => {},
 ): RoomView {
   const options: SpikeOptions = window.__roomViewSpikeOptions ?? {};
@@ -311,18 +312,26 @@ function openRoomView(
       raycaster.setFromCamera(pointer, camera);
       return raycaster.ray;
     };
-    // The selected piece, the TV or a light pressed on is carried at its own height: a frame shows
-    // where it will stand, and it is put there on release. A press on anything else turns the room.
+    // The selected piece, the TV or a light pressed on is carried at its own height: the piece itself
+    // follows the pointer in a frame, and it is put there on release. A lamp's light cannot leave the
+    // built scene, so a lamp moves as the frame alone. A press on anything else turns the room.
     let carry: {
       id: string;
       kind: string;
       dx: number;
       dz: number;
       ghost: LineSegments;
+      lifted: LiftedPiece | null;
       moved: boolean;
       turn: number;
       angle: number;
     } | null = null;
+    const follow = (c: NonNullable<typeof carry>) => {
+      if (!c.lifted) return;
+      c.lifted.moveTo(c.ghost.position.x, c.ghost.position.z);
+      c.lifted.turnTo((c.turn * Math.PI) / 180);
+      renderer.shadowMap.needsUpdate = shadows;
+    };
     // While a piece of furniture is carried, the wheel or R turns it in 15° steps (⇧ the other way);
     // the TV and the lights keep the axes they have.
     const turnCarry = (by: number) => {
@@ -331,6 +340,7 @@ function openRoomView(
       carry.moved = true;
       carry.ghost.visible = true;
       carry.ghost.rotation.y = -(carry.angle + (carry.turn * Math.PI) / 180);
+      follow(carry);
       request();
     };
     canvas.addEventListener(
@@ -395,6 +405,7 @@ function openRoomView(
           dx: item.centre.x - onFloor.x,
           dz: item.centre.z - onFloor.z,
           ghost,
+          lifted: null,
           moved: false,
           turn: 0,
           angle: item.angle,
@@ -421,15 +432,24 @@ function openRoomView(
         if (!carry || !press) return;
         if (!carry.moved && Math.hypot(event.clientX - press.x, event.clientY - press.y) <= CLICK_SLOP_PX) return;
         if (!rayAt(event.clientX, event.clientY).intersectPlane(floor, onFloor)) return;
+        if (!carry.moved) lift(carry);
         carry.moved = true;
         canvas.style.cursor = "grabbing";
         carry.ghost.visible = true;
         carry.ghost.position.x = onFloor.x + carry.dx;
         carry.ghost.position.z = onFloor.z + carry.dz;
+        follow(carry);
         request();
       },
       { signal: listening.signal },
     );
+    // Lifted on the first move, not the press: a click on the selected piece leaves the scene as built.
+    const lift = (c: NonNullable<typeof carry>) => {
+      if (!room) return;
+      c.lifted = room.lift(c.id);
+      // The mark stays where the piece was built; the frame marks it while it is carried.
+      if (c.lifted) room.select(null);
+    };
     const drop = (commit: boolean) => {
       const c = carry;
       if (!c) return false;
@@ -439,8 +459,15 @@ function openRoomView(
       c.ghost.removeFromParent();
       c.ghost.geometry.dispose();
       (c.ghost.material as LineBasicMaterial).dispose();
+      // Landed, it stays where it was let go until the scene is rebuilt from the landed room; a
+      // landing refused, or Esc, puts it back.
+      const landed = commit && c.moved && onMovePiece?.(c.id, c.ghost.position.x, c.ghost.position.z, c.turn) !== false;
+      if (c.lifted && !landed) {
+        c.lifted.restore();
+        room?.select(selected);
+        renderer.shadowMap.needsUpdate = shadows;
+      }
       request();
-      if (commit && c.moved) onMovePiece?.(c.id, c.ghost.position.x, c.ghost.position.z, c.turn);
       return c.moved;
     };
     canvas.addEventListener(
@@ -698,7 +725,7 @@ export default function RoomView3D({
   cameraCommand?: CameraCommand;
   mood?: RoomMood;
   /** A piece carried to a new place on the floor: its centre there, in the scene frame. */
-  onMovePiece?: (objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => void;
+  onMovePiece?: (objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => boolean | void;
   /** A click in the room: the object it landed on, or null for empty ground. */
   onPick?: (objectId: string | null) => void;
   onHover?: (objectId: string | null, clientX: number, clientY: number) => void;

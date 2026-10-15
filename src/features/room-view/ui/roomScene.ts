@@ -55,6 +55,7 @@ import { type FinishKind, finishMaterial } from "./scene/finishes";
 import { mergeParts, type Part, transformParts } from "./scene/parts";
 import { lampFixture } from "./scene/lamps";
 import { lampLights } from "./scene/lampLights";
+import { type Liftable, type LiftedPiece, liftPiece, spansOf } from "./scene/lift";
 import { buildScreen } from "./scene/screen";
 import { buildSelectionMark } from "./scene/selection";
 import { type LedTape, ledTape, TAPE_DEPTH as STRIP_DEPTH, TAPE_WIDTH as STRIP_WIDTH } from "./scene/ledTape";
@@ -120,6 +121,9 @@ export interface RoomScene {
   faceCamera(cameraQuaternion: Quaternion): void;
   /** `null` keeps each lamp's own colour; a palette gives lamp i stop i mod n. */
   setMood(lampColour: number | null, levels: MoodLevels, palette?: readonly number[]): void;
+  /** Takes a piece of furniture, the screen or a strip out to follow the pointer; null for a lamp,
+   *  whose light and glow stay where the scene was built. */
+  lift(objectId: string): LiftedPiece | null;
   /** Where to aim and how far the room reaches from it. */
   target: Vector3;
   radius: number;
@@ -156,16 +160,25 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   }
 
   const models = classifyFurniture(config);
-  const byFinish = new Map<FinishKind, Part[]>();
+  const byFinish = new Map<FinishKind, { parts: Part[]; owners: (string | null)[] }>();
   const shadows: BufferGeometry[] = [wallFootShade(edges)];
+  const shadowOwners: (string | null)[] = [null];
+  const liftables = new Map<string, Liftable>();
+  const liftable = (id: string, x: number, z: number) => {
+    const entry: Liftable = { spans: [], extras: [], pivot: { x, z } };
+    liftables.set(id, entry);
+    return entry;
+  };
   const surfaces: Surface[] = [];
   const pickables: Pickable[] = [];
-  const sort = (parts: readonly Part[]) => {
+  const sort = (parts: readonly Part[], owner: string | null = null) => {
     for (const part of parts) {
       const kind = part.finish ?? (SATIN.has(part.color) ? "satin" : "matte");
       const list = byFinish.get(kind);
-      if (list) list.push(part);
-      else byFinish.set(kind, [part]);
+      if (list) {
+        list.parts.push(part);
+        list.owners.push(owner);
+      } else byFinish.set(kind, { parts: [part], owners: [owner] });
     }
   };
   for (const item of config.furniture) {
@@ -177,14 +190,17 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
       .multiply(new Matrix4().makeRotationY(-((item.rotation ?? 0) * Math.PI) / 180));
     const parts = furnitureParts(item, model);
     transformParts(parts, place);
-    sort(parts);
+    const id = furnitureObjectId(item.id);
+    liftable(id, centre.x, centre.z);
+    sort(parts, id);
     shadows.push(contactShadow(item.width / 2, item.height / 2, contactShade(model), place));
+    shadowOwners.push(id);
     const storedTop = resolveFurnitureTop(item);
     const scale = storedTop !== undefined ? storedTop / modelTop(model) : 1;
     const top = surfaceTop(model) * scale;
     const height = Math.max(modelTop(model) * scale, 0.02);
     pickables.push({
-      id: furnitureObjectId(item.id),
+      id,
       kind: "furniture",
       centre: { x: centre.x, y: height / 2, z: centre.z },
       half: [item.width / 2, height / 2, item.height / 2],
@@ -233,11 +249,16 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
 
   const screen = buildScreen(config, models);
   if (screen) {
-    sort(screen.parts);
+    sort(screen.parts, TV_ANCHOR_OBJECT_ID);
     const { centre, width, height } = screen.layout;
     pickables.push({ id: TV_ANCHOR_OBJECT_ID, kind: "tv", centre, half: [width / 2, height / 2, 0.06], angle: 0 });
-    for (const f of screen.footprints) shadows.push(contactShadow(f.hw, f.hd, f.shade, new Matrix4().makeTranslation(f.x, 0, f.z)));
-    scene.add(new Mesh(screen.panel, new MeshBasicMaterial({ vertexColors: true })));
+    for (const f of screen.footprints) {
+      shadows.push(contactShadow(f.hw, f.hd, f.shade, new Matrix4().makeTranslation(f.x, 0, f.z)));
+      shadowOwners.push(TV_ANCHOR_OBJECT_ID);
+    }
+    const panel = new Mesh(screen.panel, new MeshBasicMaterial({ vertexColors: true }));
+    scene.add(panel);
+    liftable(TV_ANCHOR_OBJECT_ID, centre.x, centre.z).extras.push(panel);
   }
   // The USB strips: one behind the screen is its backlight, picked there; any other runs as a lit line
   // a centimetre wide at its height. A strip was listed in the dock and drawn nowhere.
@@ -263,6 +284,8 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     // A bent strip is a tape per leg, its LEDs shared out by length so the pitch holds round a corner.
     const counts = ledsPerLeg(legs, strip.ledCount);
     const picked: PickLeg[] = [];
+    const pivot = at(stripCentre(strip).x, stripCentre(strip).y);
+    const own = liftable(id, pivot.x, pivot.z);
     legs.forEach((leg, i) => {
       if (counts[i]! < 1) return;
       const angle = Math.atan2(leg.b.y - leg.a.y, leg.b.x - leg.a.x);
@@ -271,6 +294,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
       tape.group.position.set(centre.x, centre.y, centre.z);
       tape.group.rotation.y = -angle;
       scene.add(tape.group);
+      own.extras.push(tape.group);
       tapes.push(tape);
       const half: [number, number, number] = lying ? [leg.length / 2, STRIP_DEPTH / 2, STRIP_WIDTH / 2] : [leg.length / 2, STRIP_WIDTH / 2, STRIP_DEPTH / 2];
       picked.push({ centre, half, angle });
@@ -291,27 +315,33 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
 
   // One mesh per material: a room is still a handful of draws.
   const defines = options.coldKey !== undefined ? { SPIKE_COLD_KEY: options.coldKey } : undefined;
-  for (const [kind, parts] of byFinish) {
+  // Counted before merging: a part goes in unindexed, a shadow as it is.
+  const into = (owner: string) => liftables.get(owner);
+  for (const [kind, { parts, owners }] of byFinish) {
+    const counts = parts.map(({ geometry }) => geometry.index?.count ?? geometry.getAttribute("position").count);
     const mesh = mergeParts(parts, finishMaterial(kind, { lambert: options.lambert, defines }));
-    if (mesh) scene.add(mesh);
+    if (!mesh) continue;
+    scene.add(mesh);
+    spansOf(mesh, counts, owners, into);
   }
   {
+    const counts = shadows.map((g) => g.getAttribute("position").count);
     const merged = mergeGeometries(shadows);
     for (const g of shadows) g.dispose();
     if (merged) {
-      scene.add(
-        new Mesh(
-          merged,
-          new MeshBasicMaterial({
-            vertexColors: true,
-            transparent: true,
-            depthWrite: false,
-            polygonOffset: true,
-            polygonOffsetFactor: -2,
-            side: DoubleSide,
-          }),
-        ),
+      const mesh = new Mesh(
+        merged,
+        new MeshBasicMaterial({
+          vertexColors: true,
+          transparent: true,
+          depthWrite: false,
+          polygonOffset: true,
+          polygonOffsetFactor: -2,
+          side: DoubleSide,
+        }),
       );
+      scene.add(mesh);
+      spansOf(mesh, counts, shadowOwners, into);
     }
   }
 
@@ -371,6 +401,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     const plane = new Mesh(new PlaneGeometry(backlight.width, backlight.height), spill);
     plane.position.set(backlight.x, backlight.y, backlight.z);
     scene.add(plane);
+    liftables.get(TV_ANCHOR_OBJECT_ID)?.extras.push(plane);
   }
 
   const mark = buildSelectionMark(pickables);
@@ -418,6 +449,10 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     pickables,
     select: mark.select,
     faceCamera: mark.orient,
+    lift(objectId: string) {
+      const piece = liftables.get(objectId);
+      return piece && (piece.spans.length > 0 || piece.extras.length > 0) ? liftPiece(scene, piece) : null;
+    },
     setMood,
     target: new Vector3(0, H * 0.3, 0),
     radius: Math.hypot(W, D, H) / 2,

@@ -193,8 +193,9 @@ https://keepachangelog.com/en/1.1.0/
   - Camera moves ease in about a third of a second instead of jumping: the 3D view's zoom buttons,
     "Whole room" and a double-click's focus, and the plan's zoom buttons, fit and arrow-key pans.
     What the pointer drives — a drag, the wheel, a pinch — still follows it at once.
-  - In the 3D view a piece of furniture can be picked up and carried across the floor: an amber
-    frame shows where it will stand and it lands there on release, inside the walls, and while it
+  - In the 3D view a piece of furniture can be picked up and carried across the floor: the piece
+    itself follows the pointer in an amber frame, with what stands on it, and it lands there on
+    release, inside the walls (Esc puts it back); a Hue lamp moves as the frame alone. While it
     is held the wheel or R turns it in 15° steps (⇧R the other way); a drag on anything else still
     turns the room. Wardrobes are drawn as a run of doors standing proud of the
     carcass with shadow gaps, long bar handles, a cornice and a set-back plinth.

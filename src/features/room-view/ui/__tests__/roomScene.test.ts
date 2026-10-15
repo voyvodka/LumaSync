@@ -1,8 +1,10 @@
-import { BoxGeometry, type BufferGeometry, DirectionalLight, InstancedMesh, type Material, Matrix4, Mesh, type MeshBasicMaterial, type Scene, type Texture, Vector3 } from "three";
+import { Box3, BoxGeometry, type BufferGeometry, DirectionalLight, InstancedMesh, type Material, Matrix4, Mesh, type MeshBasicMaterial, type Scene, type Texture, Vector3 } from "three";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { furnitureObjectId, hueChannelObjectId, TV_ANCHOR_OBJECT_ID } from "@/features/room-map/model/objectId";
 import { DEFAULT_ROOM_MAP, type RoomMapConfig, type UsbStripPlacement } from "@/shared/contracts/roomMap";
 
+import { roomToScene } from "../../model/roomSpace";
 import { LAMP_LIGHTS } from "../scene/lampLights";
 import { buildRoomScene, disposeScene } from "../roomScene";
 
@@ -308,3 +310,53 @@ function stripBar(scene: Scene): Mesh | undefined {
   });
   return found;
 }
+
+describe("buildRoomScene — lifting a carried piece", () => {
+  const positions = (scene: Scene) => {
+    const arrays: Float32Array[] = [];
+    scene.traverse((object) => {
+      const geometry = (object as Mesh).geometry as BufferGeometry | undefined;
+      const position = geometry?.getAttribute("position");
+      if (position) arrays.push(Float32Array.from(position.array as Float32Array));
+    });
+    return arrays;
+  };
+
+  it("takes the piece out to follow the pointer, and puts it back as it was", () => {
+    const room = buildRoomScene(furnished, OPTIONS);
+    const before = positions(room.scene);
+    const children = room.scene.children.length;
+    const lifted = room.lift(furnitureObjectId("sofa"));
+    expect(lifted).not.toBeNull();
+    const group = room.scene.children[room.scene.children.length - 1]!;
+    const start = new Box3().setFromObject(group).getCenter(new Vector3());
+    const centre = roomToScene(2, 2.95, 0, furnished.dimensions);
+    expect(start.x).toBeCloseTo(centre.x, 1);
+    expect(start.z).toBeCloseTo(centre.z, 1);
+
+    lifted!.moveTo(centre.x + 1, centre.z - 0.5);
+    const moved = new Box3().setFromObject(group).getCenter(new Vector3());
+    expect(moved.x - start.x).toBeCloseTo(1, 5);
+    expect(moved.z - start.z).toBeCloseTo(-0.5, 5);
+
+    lifted!.restore();
+    expect(room.scene.children.length).toBe(children);
+    expect(positions(room.scene)).toEqual(before);
+    disposeScene(room.scene);
+  });
+
+  it("moves the screen with its panel, and leaves a lamp to its frame", () => {
+    const room = buildRoomScene(furnished, OPTIONS);
+    const lifted = room.lift(TV_ANCHOR_OBJECT_ID);
+    expect(lifted).not.toBeNull();
+    const group = room.scene.children[room.scene.children.length - 1]!;
+    let basic = 0;
+    group.traverse((object) => {
+      if ((object as Mesh).isMesh && ((object as Mesh).material as Material).type === "MeshBasicMaterial") basic += 1;
+    });
+    expect(basic).toBeGreaterThan(0);
+    lifted!.restore();
+    expect(room.lift(hueChannelObjectId(0))).toBeNull();
+    disposeScene(room.scene);
+  });
+});
