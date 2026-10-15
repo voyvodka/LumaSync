@@ -700,10 +700,16 @@ describe("RoomMapEditor — the 3D room as the editing stage", () => {
     expect(view.queryByTestId("room-map-canvas")).toBeNull();
     expect(view.getByTestId("room-dock")).toBeInTheDocument();
     expect(stageRadio(view, "roomMap:stage.room")).toHaveAttribute("aria-checked", "true");
+    // The stage it opens on is there at once; only a switch fades the next one in.
+    const stage = view.getByTestId("room-map-stage");
+    expect(stage).toHaveAttribute("data-stage", "room");
+    expect(stage).not.toHaveAttribute("data-switched");
 
     await act(async () => stageRadio(view, "roomMap:stage.plan").click());
     expect(view.getByTestId("room-map-canvas")).toBeInTheDocument();
     expect(view.queryByTestId("room-view-3d")).toBeNull();
+    expect(stage).toHaveAttribute("data-stage", "plan");
+    expect(stage).toHaveAttribute("data-switched");
 
     view.unmount();
     const again = await openEdit();

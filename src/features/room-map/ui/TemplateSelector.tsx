@@ -160,6 +160,7 @@ export function TemplateSelector({ onSelect, onBack }: TemplateSelectorProps) {
   return (
     <div
       className={styles.page}
+      data-room-page=""
       onKeyDown={(event) => {
         if (onBack && event.key === "Escape") onBack();
       }}

@@ -76,15 +76,35 @@
   }
   .lights:hover:not(:disabled) { background: var(--lm-panel-2); }
 
-  /* The stage shown carries the face switch's plate, so it is never marked by colour alone. */
-  .button.stage[aria-checked="true"] {
-    color: var(--lm-amber);
+  /* The stage shown is marked by the face switch's plate, so never by colour alone, and the plate
+     slides between the two as the face switch's does; the labels never move. */
+  .stages {
+    position: relative;
+    padding: 0;
+  }
+  .stageGroup {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    height: 100%;
+  }
+  .button.stage { width: 44px; }
+  .button.stage[aria-checked="true"] { color: var(--lm-amber); }
+  .stageMark {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 44px;
+    border-radius: 8px;
     background: var(--lm-panel-2);
     box-shadow: inset 0 0 0 1px var(--lm-amber);
+    transform: translateX(calc(var(--i, 0) * 100%));
+    transition: transform var(--lm-dur-base) var(--lm-ease-out);
   }
-  .button.stage[aria-checked="true"]:focus-visible { box-shadow: var(--lm-focus-ring-inset); }
 
-  :global(:root[data-reduced-motion]) .button { transition: none; }
+  :global(:root[data-reduced-motion]) .button,
+  :global(:root[data-reduced-motion]) .stageMark { transition: none; }
 
   @media (forced-colors: active) {
     .capsule {
@@ -93,10 +113,13 @@
     }
     .button:focus-visible { outline: 2px solid Highlight; }
     .rule { background: CanvasText; }
+    .stageMark {
+      box-shadow: none;
+      background: Highlight;
+      forced-color-adjust: none;
+    }
     .button.stage[aria-checked="true"] {
       color: HighlightText;
-      background: Highlight;
-      box-shadow: none;
       forced-color-adjust: none;
     }
   }

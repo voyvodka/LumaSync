@@ -167,9 +167,12 @@ export function RoomMapEditor({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; targetId: string } | null>(null);
   const [stage, setStageState] = useState<EditStage>(room3d ? lastStage : EDIT_STAGES.PLAN);
+  // The stage the editor opens on is there at once; only a switch fades one in.
+  const [stageSwitched, setStageSwitched] = useState(false);
   const setStage = useCallback((next: EditStage) => {
     lastStage = next;
     setStageState(next);
+    setStageSwitched(true);
   }, []);
   const inRoom = room3d && stage === EDIT_STAGES.ROOM;
   // An image layer and a Hue zone are drawn on the plan alone: a card for one opens the plan with it.
@@ -782,7 +785,13 @@ export function RoomMapEditor({
 
   return (
     <div ref={rootRef} className="lm-room-editor relative h-full" onKeyDown={handleKeyDown} onContextMenu={handleContextMenu} tabIndex={0}>
-      <div className={styles.stage} ref={setCanvasContainer} data-testid="room-map-stage">
+      <div
+        className={styles.stage}
+        ref={setCanvasContainer}
+        data-testid="room-map-stage"
+        data-stage={inRoom ? EDIT_STAGES.ROOM : EDIT_STAGES.PLAN}
+        data-switched={stageSwitched || undefined}
+      >
         {inRoom ? (
           <RoomView3DHost
             config={scopedConfig}

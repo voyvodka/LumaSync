@@ -1,10 +1,10 @@
-import { act, render } from "@testing-library/react";
+import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { hueChannelObjectId } from "@/features/room-map/model/objectId";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 
-import RoomView3D from "../RoomView3D";
+import RoomView3D, { __closeParkedRoomViewForTests } from "../RoomView3D";
 
 const gl = vi.hoisted(() => ({
   throwOnCreate: false,
@@ -86,8 +86,42 @@ describe("RoomView3D", () => {
   });
 
   afterEach(() => {
+    // Unmounted here, before the parked view is closed: the library's own cleanup runs after this.
+    cleanup();
+    __closeParkedRoomViewForTests();
     vi.useRealTimers();
     globalThis.ResizeObserver = realResizeObserver;
+  });
+
+  // A face or stage switch unmounts the view and mounts another: a new context each time paused.
+  it("hands its renderer to the next view opened within the park time, drawn at once", async () => {
+    const first = render(<RoomView3D config={DEFAULT_ROOM_MAP} label="Room" onFail={() => {}} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    const renderer = gl.renderers[0]!;
+    first.unmount();
+    expect(renderer.forceContextLoss).not.toHaveBeenCalled();
+
+    const { container, unmount } = render(<RoomView3D config={DEFAULT_ROOM_MAP} label="Room" onFail={() => {}} />);
+    expect(gl.renderers).toHaveLength(1);
+    expect(container.querySelector("canvas")).toBe(renderer.domElement);
+    expect(container.querySelector("[data-ready]")).not.toBeNull();
+    unmount();
+  });
+
+  it("closes a parked view once the park time passes", async () => {
+    const { unmount } = render(<RoomView3D config={DEFAULT_ROOM_MAP} label="Room" onFail={() => {}} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    const renderer = gl.renderers[0]!;
+    unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+    expect(renderer.dispose).toHaveBeenCalledTimes(1);
+    expect(renderer.forceContextLoss).toHaveBeenCalledTimes(1);
   });
 
   it("hands the context back and never draws when closed before its programs compile", async () => {

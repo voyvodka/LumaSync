@@ -27,6 +27,7 @@ import type { LampFamily } from "../model/lampFamily";
 import { MOOD_LEVELS as LEVELS, type RoomMood } from "../model/roomMood";
 import { pressStartsCarry } from "../model/carryIntent";
 import { lightPickHalf, pickObject } from "../model/picking";
+import { isWindowVisible } from "@/features/shell/windowVisibility";
 import { prefersReducedMotion } from "@/shared/lib/motion";
 
 import { buildRoomScene, disposeScene, type RoomScene, type RoomSceneOptions } from "./roomScene";
@@ -71,6 +72,12 @@ interface RoomView {
   /** The camera's own controls, beside the drag and the wheel. */
   camera(command: CameraCommand["kind"]): void;
   setMood(mood: RoomMood): void;
+  /** Whether its programs are compiled; one that is not yet is closed rather than parked. */
+  ready(): boolean;
+  /** Takes the canvas off the page and stops drawing, keeping the context and the scene. */
+  park(): void;
+  /** Puts a parked view's canvas in a new host, drawn at once. */
+  adopt(host: HTMLElement): void;
   close(): void;
 }
 
@@ -110,12 +117,13 @@ const CLICK_SLOP_PX = 6;
 /** The renderer, camera and controls live as long as the view; a room-map change swaps only the
  *  scene. Throws when no WebGL context can be had. */
 function openRoomView(
-  host: HTMLElement,
+  firstHost: HTMLElement,
   onFail: (error: unknown) => void,
   onPick: (objectId: string | null) => void,
   onMovePiece: ((objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => boolean | void) | null,
   onHover: (objectId: string | null, clientX: number, clientY: number) => void = () => {},
 ): RoomView {
+  let host = firstHost;
   const options: SpikeOptions = window.__roomViewSpikeOptions ?? {};
   const started = performance.now();
   const timings: Timings = { options, openMs: 0, compileMs: 0, firstFrameMs: 0, firstFrameAt: 0, draws: [] };
@@ -223,8 +231,9 @@ function openRoomView(
       timings.draws.push(now - t0);
       if (moving) request();
     };
+    let away = false;
     const request = () => {
-      if (ready && frame === 0 && !closed) frame = requestAnimationFrame(draw);
+      if (ready && frame === 0 && !closed && !away) frame = requestAnimationFrame(draw);
     };
     let shownRoom = "";
     const moodNow = { colour: new Color(LAMP_COLOURS[0]), level: 1, ambient: 1, strip: 1 };
@@ -540,8 +549,14 @@ function openRoomView(
     observer = new ResizeObserver(fit);
     observer.observe(host);
 
+    let shownConfig: RoomMapConfig | null = null;
+    let shownFamilies: ReadonlyMap<number, LampFamily> | null = null;
     const show = (config: RoomMapConfig, lampFamilies: ReadonlyMap<number, LampFamily>) => {
       if (closed) return;
+      // A view adopted across a face switch is handed the room it already shows.
+      if (config === shownConfig && lampFamilies === shownFamilies) return;
+      shownConfig = config;
+      shownFamilies = lampFamilies;
       const first = room === null;
       if (room) disposeScene(room.scene);
       room = buildRoomScene(config, { shadows, lambert: options.lambert ?? false, coldKey: options.coldKey, lampFamilies });
@@ -688,6 +703,27 @@ function openRoomView(
           onFail(error);
         }
       },
+      ready: () => ready,
+      park() {
+        away = true;
+        press = null;
+        drop(false);
+        onHover(null, 0, 0);
+        observer?.disconnect();
+        if (frame !== 0) cancelAnimationFrame(frame);
+        frame = 0;
+        renderer.domElement.remove();
+      },
+      adopt(next) {
+        away = false;
+        host = next;
+        host.appendChild(renderer.domElement);
+        if (ready) host.setAttribute("data-ready", "");
+        observer?.disconnect();
+        observer = new ResizeObserver(fit);
+        observer.observe(host);
+        fit();
+      },
       close,
     };
   } catch (error) {
@@ -697,6 +733,57 @@ function openRoomView(
 }
 
 const NO_FAMILIES: ReadonlyMap<number, LampFamily> = new Map();
+
+interface Handlers {
+  fail: (error: unknown) => void;
+  pick: (objectId: string | null) => void;
+  move: (objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => boolean | void;
+  hover: (objectId: string | null, clientX: number, clientY: number) => void;
+}
+const IDLE: Handlers = { fail: () => {}, pick: () => {}, move: () => false, hover: () => {} };
+/**
+ * A view closed by a face or stage switch is parked this long for the one that opens next: a new
+ * context, its shaders and the scene took a visible pause on every switch. One at a time; hidden,
+ * the window hands it back at once.
+ */
+const PARK_MS = 20_000;
+let parked: { view: RoomView; handlers: Handlers; timer: ReturnType<typeof setTimeout> } | null = null;
+
+function park(view: RoomView, handlers: Handlers) {
+  view.park();
+  Object.assign(handlers, IDLE);
+  if (parked) {
+    clearTimeout(parked.timer);
+    parked.view.close();
+  }
+  if (!isWindowVisible() || !view.ready()) {
+    parked = null;
+    view.close();
+    return;
+  }
+  const timer = setTimeout(() => {
+    if (parked?.view === view) parked = null;
+    view.close();
+  }, PARK_MS);
+  parked = { view, handlers, timer };
+}
+
+export function __closeParkedRoomViewForTests(): void {
+  if (!parked) return;
+  clearTimeout(parked.timer);
+  parked.view.close();
+  parked = null;
+}
+
+function unpark(host: HTMLElement, handlers: Handlers): { view: RoomView; handlers: Handlers } | null {
+  const kept = parked;
+  if (!kept) return null;
+  parked = null;
+  clearTimeout(kept.timer);
+  Object.assign(kept.handlers, handlers);
+  kept.view.adopt(host);
+  return kept;
+}
 
 export default function RoomView3D({
   config,
@@ -750,26 +837,36 @@ export default function RoomView3D({
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const fail = (error: unknown) => onFailRef.current(error);
-    let view: RoomView;
-    try {
-      view = openRoomView(
-        host,
-        fail,
-        (objectId) => onPickRef.current?.(objectId),
-        (objectId, x, z, turn) => onMoveRef.current?.(objectId, x, z, turn),
-        (objectId, x, y) => onHoverRef.current?.(objectId, x, y),
-      );
-    } catch (error) {
-      fail(error);
-      return;
+    const mine: Handlers = {
+      fail: (error) => onFailRef.current(error),
+      pick: (objectId) => onPickRef.current?.(objectId),
+      move: (objectId, x, z, turn) => onMoveRef.current?.(objectId, x, z, turn),
+      hover: (objectId, x, y) => onHoverRef.current?.(objectId, x, y),
+    };
+    let kept = unpark(host, mine);
+    if (!kept) {
+      const handlers = { ...mine };
+      try {
+        const view = openRoomView(
+          host,
+          (error) => handlers.fail(error),
+          (objectId) => handlers.pick(objectId),
+          (objectId, x, z, turn) => handlers.move(objectId, x, z, turn),
+          (objectId, x, y) => handlers.hover(objectId, x, y),
+        );
+        kept = { view, handlers };
+      } catch (error) {
+        mine.fail(error);
+        return;
+      }
     }
+    const { view, handlers } = kept;
     viewRef.current = view;
     view.select(selectedRef.current);
     if (moodRef.current) view.setMood(moodRef.current);
     return () => {
       viewRef.current = null;
-      view.close();
+      park(view, handlers);
     };
   }, []);
 

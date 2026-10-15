@@ -13,11 +13,28 @@
     min-height: 0;
   }
 
-  /* The face switched to fades in; the one it replaced is already gone, so nothing draws twice. */
-  .arriving {
+  /* Both faces draw the same room, handed across the switch, so the room holds still and only the
+     chrome arrives: the dock rises a few pixels into place, the corner drops into it. The one it
+     replaced is already gone, so nothing draws twice. The plan is a new surface and fades in. */
+  .arriving :global([data-room-dock]) {
+    animation: chrome-in var(--lm-dur-base) var(--lm-ease-out) backwards;
+    --chrome-from: 6px;
+  }
+  .arriving :global([data-room-corner]) {
+    animation: chrome-in var(--lm-dur-base) var(--lm-ease-out) backwards;
+    --chrome-from: -4px;
+  }
+  .arriving :global([data-stage="plan"]:not([data-switched]) > :not([data-room-dock], [data-room-corner])),
+  .arriving :global([data-room-page]) {
     animation: face-in var(--lm-dur-base) var(--lm-ease-out) backwards;
   }
 
+  @keyframes chrome-in {
+    from {
+      opacity: 0;
+      translate: 0 var(--chrome-from);
+    }
+  }
   @keyframes face-in {
     from { opacity: 0; }
   }
@@ -79,7 +96,10 @@
     color: var(--lm-ink-faint);
   }
 
-  :global(:root[data-reduced-motion]) .arriving { animation: none; }
+  :global(:root[data-reduced-motion]) .arriving :global([data-room-dock]),
+  :global(:root[data-reduced-motion]) .arriving :global([data-room-corner]),
+  :global(:root[data-reduced-motion]) .arriving :global([data-stage="plan"] > *),
+  :global(:root[data-reduced-motion]) .arriving :global([data-room-page]) { animation: none; }
   :global(:root[data-reduced-motion]) .mark,
   :global(:root[data-reduced-motion]) .item { transition: none; }
 

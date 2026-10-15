@@ -193,6 +193,10 @@ https://keepachangelog.com/en/1.1.0/
   - Camera moves ease in about a third of a second instead of jumping: the 3D view's zoom buttons,
     "Whole room" and a double-click's focus, and the plan's zoom buttons, fit and arrow-key pans.
     What the pointer drives — a drag, the wheel, a pinch — still follows it at once.
+  - Switching between View and Edit, or between Edit's 3D and Plan, no longer pauses while the 3D
+    room opens again: the room is handed across and holds still, the dock and the corner controls
+    settle into place, the plan fades in under a dock that stays, and the 3D | Plan switch's plate
+    slides as View | Edit's does.
   - In the 3D view a piece of furniture can be picked up and carried across the floor: the piece
     itself follows the pointer in an amber frame, with what stands on it, and it lands there on
     release, inside the walls (Esc puts it back); a Hue lamp moves as the frame alone. While it

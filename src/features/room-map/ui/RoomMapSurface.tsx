@@ -93,6 +93,7 @@ export function RoomMapSurface({
     (template: RoomMapConfig) => {
       const next = applyRoomTemplate(config, template);
       replace(next);
+      setSwitched(true);
       setPicking(false);
       setEditTakesFocus(true);
       // A blank room has nothing to look at: it opens where it is drawn.
@@ -116,13 +117,16 @@ export function RoomMapSurface({
   }
   if (picking) {
     return (
-      <TemplateSelector
-        onSelect={handleTemplateSelect}
-        onBack={() => {
-          setPicking(false);
-          setEditTakesFocus(true);
-        }}
-      />
+      <div className={cx(styles.surface, styles.arriving)}>
+        <TemplateSelector
+          onSelect={handleTemplateSelect}
+          onBack={() => {
+            setSwitched(true);
+            setPicking(false);
+            setEditTakesFocus(true);
+          }}
+        />
+      </div>
     );
   }
 

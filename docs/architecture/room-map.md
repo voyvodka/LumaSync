@@ -33,7 +33,14 @@ selection and save queue, the Hue area the map is bound to, and the bridge's cha
 in `RoomMapSurface`, and each face reads it as a prop. So a switch between View and Edit keeps undo,
 the selection and a gesture still waiting to save, and the channels are seeded whichever face is
 open. The face left behind unmounts: the plan does not keep rendering, or taking keys, under the
-room, and the room hands its WebGL context back under the plan. The one thing a switch drops is the
+room. The room's WebGL view is not closed with it but parked for 20 s (`park` / `unpark` in
+`RoomView3D.tsx`): its canvas comes off the page and stops drawing, and the next 3D view to open —
+the other face, or Edit's 3D stage after the plan — adopts it with its scene and camera. A new
+context, its shaders and the scene took about half a second plus the fade on every switch, a pause
+the maintainer saw each time. The park ends early when the window is hidden or the view never
+finished compiling. So the room holds still across View | Edit, and only the chrome arrives — the
+dock rising a few pixels, the corner dropping into place — while a stage switch fades the surface
+under a dock that stays. The one thing a switch drops is the
 plan's zoom and pan, which fit the room again on return. The View | Edit switch is the surface's
 own, floating over both faces' top bars, so a keyboard switch keeps focus on it. The face is not
 stored: the map always opens on the room, and an empty map with no history opens on the templates

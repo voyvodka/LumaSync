@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 
 import { cx } from "@/shared/lib/cx";
@@ -73,19 +74,22 @@ export function CornerControls({
   if (!edit && !history && !view && !stage && !lights && !roomAware) return null;
   const steps = edit ?? history;
   return (
-    <div className={styles.corner}>
+    <div className={styles.corner} data-room-corner="">
       {stage && (
-        <Segmented
-          className={styles.capsule}
-          itemClassName={cx(styles.button, styles.stage)}
-          ariaLabel={t("roomMap:stage.label")}
-          value={stage.value}
-          onChange={stage.onChange}
-          options={[
-            { value: EDIT_STAGES.ROOM, label: t("roomMap:stage.room"), testId: "room-edit-stage-room" },
-            { value: EDIT_STAGES.PLAN, label: t("roomMap:stage.plan"), testId: "room-edit-stage-plan" },
-          ]}
-        />
+        <div className={cx(styles.capsule, styles.stages)} style={{ "--i": stage.value === EDIT_STAGES.ROOM ? 0 : 1 } as CSSProperties}>
+          <span className={styles.stageMark} aria-hidden="true" />
+          <Segmented
+            className={styles.stageGroup}
+            itemClassName={cx(styles.button, styles.stage)}
+            ariaLabel={t("roomMap:stage.label")}
+            value={stage.value}
+            onChange={stage.onChange}
+            options={[
+              { value: EDIT_STAGES.ROOM, label: t("roomMap:stage.room"), testId: "room-edit-stage-room" },
+              { value: EDIT_STAGES.PLAN, label: t("roomMap:stage.plan"), testId: "room-edit-stage-plan" },
+            ]}
+          />
+        </div>
       )}
       {lights && <RoomLights buttonClassName={cx(styles.capsule, styles.button, styles.lights)} />}
       {view && !steps && (
