@@ -7,7 +7,9 @@ describe("lampFamily", () => {
     expect(lampFamily("hue_play")).toBe("playBar");
     expect(lampFamily("floor_shade")).toBe("floorLamp");
     expect(lampFamily("pendant_round")).toBe("pendant");
-    expect(lampFamily("hue_go")).toBe("portable");
+    expect(lampFamily("hue_go")).toBe("go");
+    expect(lampFamily("hue_iris")).toBe("iris");
+    expect(lampFamily("hue_bloom")).toBe("bloom");
   });
 
   it("draws a word it does not know, or none, as a bulb", () => {

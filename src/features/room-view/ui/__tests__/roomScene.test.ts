@@ -4,7 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_ROOM_MAP, type RoomMapConfig } from "@/shared/contracts/roomMap";
 
 import { LAMP_LIGHTS } from "../scene/lampLights";
-import { buildRoomScene, disposeScene } from "../roomScene";
+import { roomEdges } from "../../model/roomOutline";
+import { buildRoomScene, disposeScene, nearestWallFacing } from "../roomScene";
 
 const OPTIONS = { shadows: true, lambert: false };
 
@@ -259,5 +260,14 @@ describe("buildRoomScene — mood", () => {
     room.setMood(0xff0000, { level: 0, ambient: 0, strip: 0 });
     expect(colour().r).toBeLessThan(0.1);
     disposeScene(room.scene);
+  });
+
+  // The user's Play bar lights the wall it is turned to; drawn lighting the room all round, it was wrong.
+  it("turns a one-sided light to the wall it stands nearest", () => {
+    const edges = roomEdges(4, 3, null);
+    expect(nearestWallFacing(-1.9, 0, edges)).toBeCloseTo(-Math.PI / 2);
+    expect(nearestWallFacing(1.9, 0, edges)).toBeCloseTo(Math.PI / 2);
+    expect(nearestWallFacing(0, -1.4, edges)).toBeCloseTo(0);
+    expect(Math.abs(nearestWallFacing(0, 1.4, edges))).toBeCloseTo(Math.PI);
   });
 });

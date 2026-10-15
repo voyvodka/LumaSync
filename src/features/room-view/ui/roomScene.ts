@@ -40,7 +40,7 @@ import { buildGlow, type Lamp, poolTexture, rimTexture, type WallPlane } from ".
 import { PALETTE } from "./scene/palette";
 import { type FinishKind, finishMaterial } from "./scene/finishes";
 import { mergeParts, type Part, transformParts } from "./scene/parts";
-import { lampFixture } from "./scene/lamps";
+import { lampFixture, ONE_SIDED } from "./scene/lamps";
 import { lampLights } from "./scene/lampLights";
 import { buildScreen } from "./scene/screen";
 import { buildSelectionMark } from "./scene/selection";
@@ -92,6 +92,22 @@ function surfaceUnder(x: number, z: number, y: number, surfaces: readonly Surfac
     if (Math.abs(lx) <= s.hw && Math.abs(lz) <= s.hd && s.top <= y + 0.02 && s.top > best) best = s.top;
   }
   return best;
+}
+
+/** The plan direction (radians clockwise from the back wall) of the wall nearest a point that the
+ *  point stands in front of: a one-sided light is aimed at a wall unless the map says otherwise. */
+export function nearestWallFacing(x: number, z: number, edges: ReturnType<typeof roomEdges>): number {
+  let best = Number.POSITIVE_INFINITY;
+  let facing = 0;
+  for (const e of edges) {
+    const distance = (e.ax - x) * e.outwardX + (e.az - z) * e.outwardZ;
+    const along = e.outwardZ !== 0 ? x : z;
+    const [lo, hi] = e.outwardZ !== 0 ? [Math.min(e.ax, e.bx), Math.max(e.ax, e.bx)] : [Math.min(e.az, e.bz), Math.max(e.az, e.bz)];
+    if (distance < -0.01 || along < lo || along > hi || distance >= best) continue;
+    best = distance;
+    facing = Math.atan2(e.outwardX, -e.outwardZ);
+  }
+  return facing;
 }
 
 export interface RoomScene {
@@ -194,7 +210,8 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   const lamps: Lamp[] = config.hueChannels.map((channel, i) => {
     const point = hueChannelScenePoint(channel, config.zones, dims, mount);
     const family = options.lampFamilies?.get(channel.channelIndex) ?? "bulb";
-    const fixture = lampFixture(family, point, surfaceUnder(point.x, point.z, point.y, surfaces), H);
+    const facing = ONE_SIDED.has(family) ? nearestWallFacing(point.x, point.z, edges) : 0;
+    const fixture = lampFixture(family, point, surfaceUnder(point.x, point.z, point.y, surfaces), H, facing);
     sort(fixture.body);
     const [rx, ry, rz] = fixture.glow.radii;
     pickables.push({
@@ -205,7 +222,15 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
       angle: 0,
     });
     const outside = corners !== null && outsideOutline(fixture.glow.at.x + W / 2, fixture.glow.at.z + D / 2, corners);
-    return { at: fixture.glow.at, radii: fixture.glow.radii, shape: fixture.glow.shape, color: lampColour(i), outside };
+    return {
+      at: fixture.glow.at,
+      radii: fixture.glow.radii,
+      shape: fixture.glow.shape,
+      rotation: fixture.glow.rotation,
+      beam: fixture.beam,
+      color: lampColour(i),
+      outside,
+    };
   });
 
   const screen = buildScreen(config, models);
@@ -303,7 +328,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
 
   const lampLit = lamps.some((lamp) => !lamp.outside);
   const real = lampLit ? lampLights(lamps, Math.max(W, D) * 1.1, options.shadows) : null;
-  if (real) scene.add(...real.lights);
+  if (real) scene.add(...real.objects);
 
   const surface = poolTexture(128);
   const glow = buildGlow(lamps, planes, H, surface);

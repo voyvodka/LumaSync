@@ -331,6 +331,11 @@ backlight drawn as a stray line along the wall.
   that followed the lamps recompiled the room on every added lamp. A lamp with a real light throws
   no painted pool or wash (it would light the floor twice); one past the six keeps them. Their
   placeholder colour is one warm white — one rainbow colour per lamp read as a party, not a home.
+  A one-sided fixture — a Play bar, a Signe, an Iris, a Bloom (`ONE_SIDED` in `scene/lamps.ts`) —
+  lights only the side it faces, so it takes one of three `SpotLight`s instead and is drawn turned:
+  its lit face, its body and its cone. With no facing stored it turns to the wall it stands nearest
+  (`nearestWallFacing`), which is how these lights are set up in a room; a fourth falls back to a
+  point light. Go, Iris and Bloom are three archetypes and three models, not one portable lamp.
 - **The running mode sets the room's mood.** `roomMood` (`room-view/model/roomMood.ts`) reads what
   runs from the lighting control state: Off leaves the lamps dark — the rig falls to a cool night,
   the bulbs to frosted glass, the TV's backlight out — under a navy sky; Solid lights every lamp in

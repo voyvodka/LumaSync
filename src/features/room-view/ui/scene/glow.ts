@@ -30,6 +30,10 @@ export interface Lamp {
   at: ScenePoint;
   radii: [number, number, number];
   shape?: LampShape;
+  /** The lit part's turn; absent ⇒ upright. */
+  rotation?: Quaternion;
+  /** A one-sided fixture's cone. */
+  beam?: { aim: Vector3; spread: number };
   color: number;
 }
 
@@ -152,7 +156,7 @@ export function buildGlow(
   const none = new Matrix4().makeScale(0, 0, 0);
   lamps.forEach((lamp, i) => {
     const [rx, ry, rz] = lamp.radii;
-    const place = m.compose(new Vector3(lamp.at.x, Math.max(lamp.at.y, ry + 0.02), lamp.at.z), unturned, new Vector3(rx, ry, rz));
+    const place = m.compose(new Vector3(lamp.at.x, Math.max(lamp.at.y, ry + 0.02), lamp.at.z), lamp.rotation ?? unturned, new Vector3(rx, ry, rz));
     for (const { shape, mesh } of shapes) mesh.setMatrixAt(i, shape === (lamp.shape ?? "globe") ? place : none);
   });
 

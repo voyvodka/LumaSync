@@ -9,7 +9,9 @@ export type LampFamily =
   | "tableLamp"
   | "pendant"
   | "ceiling"
-  | "portable"
+  | "go"
+  | "iris"
+  | "bloom"
   | "spot"
   | "wall"
   | "tube"
@@ -46,9 +48,9 @@ const FAMILY_OF: Readonly<Record<string, LampFamily>> = {
   ceiling_tube: "ceiling",
   recessed_ceiling: "ceiling",
   hue_centris: "ceiling",
-  hue_go: "portable",
-  hue_iris: "portable",
-  hue_bloom: "portable",
+  hue_go: "go",
+  hue_iris: "iris",
+  hue_bloom: "bloom",
   single_spot: "spot",
   double_spot: "spot",
   ground_spot: "spot",

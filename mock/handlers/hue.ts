@@ -37,7 +37,7 @@ import { status } from "./status";
 import type { TypedHandlers } from "./types";
 
 /** The shapes the mock bridge reports, one per channel in turn. */
-const MOCK_ARCHETYPES = ["hue_play", "floor_shade", "table_shade", "pendant_round", "hue_go", "hue_lightstrip"];
+const MOCK_ARCHETYPES = ["hue_play", "floor_shade", "hue_iris", "pendant_round", "hue_bloom", "hue_go", "hue_lightstrip"];
 
 const MOCK_BRIDGE_HEIGHTS: readonly number[] = [0.1, 0.1, 0.9];
 
