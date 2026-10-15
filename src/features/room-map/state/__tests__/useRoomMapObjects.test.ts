@@ -225,3 +225,16 @@ describe("useRoomMapObjects — an added object comes selected", () => {
     expect(select).toHaveBeenLastCalledWith(usbStripObjectId(strip!.stripId));
   });
 });
+
+describe("useRoomMapObjects — a second piece does not land on the first", () => {
+  it("steps a piece added onto an occupied middle down and right", () => {
+    const { result, written } = renderObjects(DEFAULT_ROOM_MAP);
+    act(() => result.current.handleAddFurniture("sofa"));
+    const first = written(0).furniture[0]!;
+    const { result: again, written: writtenAgain } = renderObjects({ ...DEFAULT_ROOM_MAP, furniture: [first] });
+    act(() => again.current.handleAddFurniture("sofa"));
+    const second = writtenAgain(0).furniture[1]!;
+    expect(second.x).toBeCloseTo(first.x + 0.3);
+    expect(second.y).toBeCloseTo(first.y + 0.3);
+  });
+});

@@ -15,6 +15,7 @@ import {
   type FootprintSide,
 } from "../../model/roomFootprint";
 import { DecimalField } from "../DecimalField";
+import { GlyphDepth, GlyphOffset, GlyphWidth } from "../objects/fieldGlyphs";
 import styles from "./RoomShapeField.module.css";
 
 // Spelled out so the key check sees every one.
@@ -124,7 +125,7 @@ export function RoomShapeField({
           <div className={styles.sizes}>
             <DecimalField
               label={t("roomMap:shape.cutWidth")}
-              prefix="W"
+              prefix={<GlyphWidth />}
               value={shape.width}
               step={0.1}
               unit="m"
@@ -133,7 +134,7 @@ export function RoomShapeField({
             />
             <DecimalField
               label={t("roomMap:shape.cutDepth")}
-              prefix="D"
+              prefix={<GlyphDepth />}
               value={shape.depth}
               step={0.1}
               unit="m"
@@ -170,7 +171,7 @@ export function RoomShapeField({
           <div className={styles.sizes}>
             <DecimalField
               label={shape.kind === "U" ? t("roomMap:shape.notchWidth") : t("roomMap:shape.stemWidth")}
-              prefix="W"
+              prefix={<GlyphWidth />}
               value={shape.width}
               step={0.1}
               unit="m"
@@ -179,7 +180,7 @@ export function RoomShapeField({
             />
             <DecimalField
               label={shape.kind === "U" ? t("roomMap:shape.notchDepth") : t("roomMap:shape.stemDepth")}
-              prefix="D"
+              prefix={<GlyphDepth />}
               value={shape.depth}
               step={0.1}
               unit="m"
@@ -188,7 +189,7 @@ export function RoomShapeField({
             />
             <DecimalField
               label={t("roomMap:shape.offset")}
-              prefix="↦"
+              prefix={<GlyphOffset />}
               value={shape.offset}
               step={0.1}
               unit="m"

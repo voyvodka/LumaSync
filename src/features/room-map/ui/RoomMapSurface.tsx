@@ -85,7 +85,12 @@ export function RoomMapSurface({
   }, []);
 
   const handleTemplateSelect = useCallback(
-    (template: RoomMapConfig) => replace(applyRoomTemplate(config, template)),
+    (template: RoomMapConfig) => {
+      const next = applyRoomTemplate(config, template);
+      replace(next);
+      // A blank room has nothing to look at: it opens where it is drawn.
+      if (isRoomMapEmpty(next)) setFace(ROOM_FACES.EDIT);
+    },
     [config, replace],
   );
 

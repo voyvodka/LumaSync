@@ -36,6 +36,15 @@ export function GlyphHeight() {
   );
 }
 
+/** How far along its wall a cut starts. */
+export function GlyphOffset() {
+  return (
+    <svg {...PROPS}>
+      <path d="M1.5 3v6M3 6h7M8.5 4.5 10 6 8.5 7.5" />
+    </svg>
+  );
+}
+
 export function GlyphRotation() {
   return (
     <svg {...PROPS}>

@@ -69,11 +69,19 @@ export function useRoomMapObjects({
     (type: FurniturePlacement["type"]) => {
       const id = `furniture-${crypto.randomUUID()}`;
       const size = FURNITURE_DEFAULT_SIZE[type];
+      // The room's middle, stepped 30 cm down-right past every piece already sitting there, so a
+      // second one added does not land exactly on the first and hide it.
+      let x = widthMeters / 2 - size.width / 2;
+      let y = depthMeters / 2 - size.depth / 2;
+      for (let tries = 0; tries < 8 && config.furniture.some((f) => Math.abs(f.x - x) < 0.05 && Math.abs(f.y - y) < 0.05); tries++) {
+        x = Math.min(x + 0.3, Math.max(0, widthMeters - size.width));
+        y = Math.min(y + 0.3, Math.max(0, depthMeters - size.depth));
+      }
       const newItem: FurniturePlacement = {
         id,
         type,
-        x: widthMeters / 2 - size.width / 2,
-        y: depthMeters / 2 - size.depth / 2,
+        x,
+        y,
         width: size.width,
         height: size.depth,
         label: t(`roomMap:furniture.type.${type}`),

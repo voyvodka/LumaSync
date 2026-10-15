@@ -72,7 +72,7 @@ export default {
     kind: { rect: "Rectangle", L: "L-shaped", U: "U-shaped", T: "T-shaped" },
     cornerLabel: "Cut corner",
     corner: { topLeft: "Top left", topRight: "Top right", bottomRight: "Bottom right", bottomLeft: "Bottom left" },
-    sideLabel: "Wall",
+    sideLabel: "On wall",
     side: { top: "TV wall", right: "Right wall", bottom: "Back wall", left: "Left wall" },
     cutWidth: "Cut width",
     cutDepth: "Cut depth",
@@ -335,14 +335,14 @@ export default {
     },
   },
   templates: {
-    title: "Choose a Template",
-    subtitle: "Pick a starting layout or start with a blank canvas.",
+    title: "Choose a template",
+    subtitle: "Optional: put your TV and lights where they really are, so Hue lights follow the picture. Start from a layout or a blank room.",
     tv55: {
-      name: "TV Setup (55\")",
+      name: "TV setup (55\")",
       desc: "TV, LED strip, and sofa in a living room",
     },
     ldesk: {
-      name: "L-Desk Setup",
+      name: "L-desk setup",
       desc: "Monitor on an L-shaped desk with side extension",
     },
     fullroom: {
@@ -350,7 +350,7 @@ export default {
       desc: "TV, sofa, coffee table, and armchair",
     },
     empty: {
-      name: "Blank canvas",
+      name: "Blank room",
       desc: "Start from scratch",
     },
   },

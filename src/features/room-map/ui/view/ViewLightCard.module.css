@@ -29,12 +29,13 @@
   }
 
   /* The facts give way to a brightness bar once a light can be dimmed from here. */
+  /* Under the light's mark, past the back button: the facts belong to the light, not to Back. */
   .facts {
     display: flex;
     flex: 1 1 0;
     align-items: center;
     min-width: 0;
-    padding-left: 8px;
+    padding-left: 38px;
   }
   /* Held for the light's power switch. */
   .slot {

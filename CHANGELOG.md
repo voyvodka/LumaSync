@@ -157,6 +157,10 @@ https://keepachangelog.com/en/1.1.0/
   - On a trackpad two fingers pan the plan and a pinch zooms; a mouse wheel still zooms.
   - A number in the inspector changes by dragging across it (⇧ for ten steps at a time); a press
     without moving types, as before. The value sits beside its mark instead of across the field.
+  - The template list says what the room map is for, a blank room opens on Edit rather than an
+    empty 3D view, a second piece added lands beside the first instead of on it, the TV snaps like
+    the furniture does, the cut's width, depth and offset fields carry drawn marks instead of the
+    English letters W, D and ↦, and the room settings' wall row reads "On wall".
 - The Lights page's outputs say what they are in plain words: "USB strip" (not the CH340 chip name
   for every controller), "Hue lights", "Bridge · ready" / "live · 20 Hz" instead of "standby" /
   "DTLS 20 Hz", and "Not set up". The Hue area row explains in its ⓘ what an entertainment area is

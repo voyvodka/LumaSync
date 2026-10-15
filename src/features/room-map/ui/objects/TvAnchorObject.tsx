@@ -120,18 +120,27 @@ export const TvAnchorObject = memo(function TvAnchorObject({
     let newX = dragRef.current.startX + dx;
     let newY = dragRef.current.startY + dy;
     const snap = snapResultRef.current;
-    if (snap) {
-      if (snap.snapX !== null) newX = snap.snapX;
-      if (snap.snapY !== null) newY = snap.snapY;
-      snapResultRef.current = null;
-    } else if (snapEnabled && gridStepPx > 0) {
-      newX = snapValue(newX, gridStepPx);
-      newY = snapValue(newY, gridStepPx);
-    }
+    snapResultRef.current = null;
+    // Per axis: a guide wins where it caught, the grid holds the other.
+    const onGrid = snapEnabled && gridStepPx > 0;
+    newX = snap?.snapX ?? (onGrid ? snapValue(newX, gridStepPx) : newX);
+    newY = snap?.snapY ?? (onGrid ? snapValue(newY, gridStepPx) : newY);
+    newX = Math.round(newX * 100) / 100;
+    newY = Math.round(newY * 100) / 100;
     onSnapDragEnd?.();
     if (newX !== placement.x || newY !== placement.y) {
       onChange({ ...placement, x: newX, y: newY });
     }
+  };
+
+  // A drag the system took away (a gesture, a dialog) puts the TV back where it was.
+  const cancelDrag = () => {
+    if (!dragRef.current.active) return;
+    dragRef.current.active = false;
+    snapResultRef.current = null;
+    onSnapDragEnd?.();
+    setLocalX(placement.x);
+    setLocalY(placement.y);
   };
 
   // Resize handlers
@@ -213,6 +222,8 @@ export const TvAnchorObject = memo(function TvAnchorObject({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onPointerCancel={cancelDrag}
+      onLostPointerCapture={cancelDrag}
     >
       <span className="pointer-events-none select-none text-[11px] font-semibold text-violet-300">
         {t("roomMap:objectPanel.tvLabel")}

@@ -75,7 +75,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     kind: { rect: "Dikdörtgen", L: "L biçimi", U: "U biçimi", T: "T biçimi" },
     cornerLabel: "Kesik köşe",
     corner: { topLeft: "Sol üst", topRight: "Sağ üst", bottomRight: "Sağ alt", bottomLeft: "Sol alt" },
-    sideLabel: "Duvar",
+    sideLabel: "Hangi duvarda",
     side: { top: "TV duvarı", right: "Sağ duvar", bottom: "Arka duvar", left: "Sol duvar" },
     cutWidth: "Kesik genişliği",
     cutDepth: "Kesik derinliği",
@@ -337,22 +337,22 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     },
   },
   templates: {
-    title: "Şablon Seç",
-    subtitle: "Hazır bir düzenle ya da boş bir tuvalle başla.",
+    title: "Şablon seç",
+    subtitle: "İsteğe bağlı: TV'ni ve ışıklarını gerçek yerlerine koy, Hue ışıkları görüntüyü takip etsin. Hazır bir düzenle ya da boş bir odayla başla.",
     tv55: {
-      name: "TV Kurulumu (55\")",
+      name: "TV kurulumu (55\")",
       desc: "Oturma odasında TV, LED şerit ve koltuk",
     },
     ldesk: {
-      name: "L-Masa Kurulumu",
+      name: "L-masa kurulumu",
       desc: "L şeklinde masada monitör ve yan uzantı",
     },
     fullroom: {
-      name: "Tam Oda",
+      name: "Tam oda",
       desc: "TV, koltuk, sehpa ve tekli koltuk",
     },
     empty: {
-      name: "Boş Tuval",
+      name: "Boş oda",
       desc: "Sıfırdan başla",
     },
   },
