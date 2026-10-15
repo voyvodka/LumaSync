@@ -198,7 +198,12 @@ box and the only shape Rust sees: the Hue cube mapping, room-aware affinity and 
 it, so a lamp standing in a notch is sampled as if the room were the full rectangle. That is a
 knowing simplification; the outline decides what the room looks like, not how it is lit. A writer
 removes the key for the plain rectangle and changes it with `dimensions` in one apply, so the two
-never disagree on disk; an empty room drawn into an L is no longer offered the templates.
+never disagree on disk; an empty room drawn into an L is no longer offered the templates. On the
+plan, the walls inside the room's box are handles (`ui/objects/FootprintWalls.tsx`): a drag moves
+one along its normal to the centimetre and stops at the last outline the contract accepts, and a
+double-click on a plain room's wall cuts a U notch — only there, since eight corners is the most an
+outline may have. The handles sit under every object, so a piece against a wall is still the piece
+you grab; they are pointer-only, and the Shape row is the keyboard's way to the same shapes.
 
 **Background images are copied in, capped at 20 MB, and pruned only at startup.** An imported
 image is copied into `room-map-backgrounds/` in the app data dir under a UUID name, because the

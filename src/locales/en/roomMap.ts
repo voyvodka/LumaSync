@@ -78,6 +78,8 @@ export default {
     stemWidth: "Wing width",
     stemDepth: "Wing length",
     offset: "Distance from the wall's start",
+    dragHint: "Drag to move this wall",
+    notchHint: "Double-click to cut a notch here",
   },
   furniture: {
     type: {

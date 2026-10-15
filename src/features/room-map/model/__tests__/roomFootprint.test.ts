@@ -11,6 +11,9 @@ import {
   FOOTPRINT_SIDES,
   type FootprintShape,
   footprintMinimumSize,
+  movableWalls,
+  moveFootprintWall,
+  notchAt,
   resizeFootprint,
 } from "../roomFootprint";
 
@@ -125,5 +128,37 @@ describe("footprintMinimumSize", () => {
 
   it("asks nothing of the rectangle", () => {
     expect(footprintMinimumSize(undefined, dims)).toEqual({ widthMeters: 0, depthMeters: 0 });
+  });
+});
+
+describe("dragging and notching the outline", () => {
+  const L = buildFootprint({ kind: "L", corner: "bottomRight", width: 2, depth: 1.5 }, dims) ?? [];
+
+  it("offers only the walls inside the room's box", () => {
+    const walls = movableWalls(L, dims);
+    expect(walls.map((w) => [w.axis, w.a, w.b])).toEqual([
+      ["y", { x: 5, y: 2.5 }, { x: 3, y: 2.5 }],
+      ["x", { x: 3, y: 2.5 }, { x: 3, y: 4 }],
+    ]);
+    expect(movableWalls(resolveRoomFootprint({ dimensions: dims }), dims)).toEqual([]);
+  });
+
+  it("moves a wall to the centimetre, and stops where the outline would break", () => {
+    const [level] = movableWalls(L, dims);
+    expect(moveFootprintWall(L, dims, level!.index, 0.504)).toContainEqual({ x: 3, y: 3 });
+    // Down onto the back wall would leave a zero-length wall.
+    expect(moveFootprintWall(L, dims, level!.index, 1.5)).toBeNull();
+  });
+
+  it("cuts a notch into a rectangle where it was double-clicked, and not into a shaped room", () => {
+    const rect = resolveRoomFootprint({ dimensions: dims });
+    expect(describeFootprint(notchAt(rect, dims, "bottom", 1), dims)).toEqual({
+      kind: "U",
+      side: "bottom",
+      width: 0.6,
+      depth: 0.4,
+      offset: 0.7,
+    });
+    expect(notchAt(L, dims, "bottom", 1)).toBeUndefined();
   });
 });

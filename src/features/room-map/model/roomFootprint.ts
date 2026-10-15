@@ -243,3 +243,61 @@ export function footprintMinimumSize(
   }
   return { widthMeters: round(width), depthMeters: round(depth) };
 }
+
+/** A wall of the outline the plan lets you drag: one inside the room's box, so moving it changes
+ *  the shape and not the room's size. */
+export interface MovableWall {
+  index: number;
+  /** Level walls move up and down, plumb ones left and right. */
+  axis: "x" | "y";
+  a: RoomCorner;
+  b: RoomCorner;
+}
+
+/** The walls of `corners` that do not lie on the room's edges. */
+export function movableWalls(corners: readonly RoomCorner[], dims: RoomDimensions): MovableWall[] {
+  if (corners.length === 4) return [];
+  const walls: MovableWall[] = [];
+  corners.forEach((a, index) => {
+    const b = corners[(index + 1) % corners.length]!;
+    if (a.y === b.y) {
+      if (a.y !== 0 && a.y !== dims.depthMeters) walls.push({ index, axis: "y", a, b });
+    } else if (a.x !== 0 && a.x !== dims.widthMeters) {
+      walls.push({ index, axis: "x", a, b });
+    }
+  });
+  return walls;
+}
+
+/** The outline with wall `index` moved `delta` metres along its axis, to the centimetre; null when
+ *  that would make an outline the contract refuses, so a drag stops at the last good place. */
+export function moveFootprintWall(
+  corners: readonly RoomCorner[],
+  dims: RoomDimensions,
+  index: number,
+  delta: number,
+): RoomCorner[] | null {
+  const n = corners.length;
+  const a = corners[index];
+  const b = corners[(index + 1) % n];
+  if (!a || !b) return null;
+  const axis = a.y === b.y ? "y" : "x";
+  const to = Math.round((a[axis] + delta) * 100) / 100;
+  const moved = corners.map((c, i) => (i === index || i === (index + 1) % n ? { ...c, [axis]: to } : c));
+  const resolved = resolveRoomFootprint({ dimensions: dims, footprint: moved });
+  return resolved.length === n ? resolved : null;
+}
+
+/** A notch cut into one wall of a plain rectangle where it was double-clicked: 60 cm wide (or what
+ *  fits) and 40 cm deep, centred on the point. Undefined when the room is already shaped. */
+export function notchAt(
+  corners: readonly RoomCorner[],
+  dims: RoomDimensions,
+  side: FootprintSide,
+  along: number,
+): RoomCorner[] | undefined {
+  if (corners.length !== 4) return undefined;
+  const span = alongX(side) ? dims.widthMeters : dims.depthMeters;
+  const width = Math.min(0.6, reach(span, 2));
+  return buildFootprint({ kind: "U", side, width, depth: 0.4, offset: along - width / 2 }, dims);
+}

@@ -1,0 +1,35 @@
+@layer components {
+  /* Under every object, over the grid: a wall gives way to a piece standing against it. */
+  .layer {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .edge,
+  .level,
+  .plumb {
+    position: absolute;
+    border-radius: 999px;
+    pointer-events: auto;
+    transition: background var(--lm-dur-quick);
+  }
+  .level { cursor: row-resize; }
+  .plumb { cursor: col-resize; }
+  .edge { cursor: copy; }
+  .level:hover,
+  .plumb:hover,
+  .level:active,
+  .plumb:active { background: color-mix(in srgb, var(--lm-amber) 35%, transparent); }
+  .edge:hover { background: color-mix(in srgb, var(--lm-amber) 18%, transparent); }
+
+  :global(:root[data-reduced-motion]) .edge,
+  :global(:root[data-reduced-motion]) .level,
+  :global(:root[data-reduced-motion]) .plumb { transition: none; }
+
+  @media (forced-colors: active) {
+    .level:hover,
+    .plumb:hover,
+    .edge:hover { background: Highlight; }
+  }
+}

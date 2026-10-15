@@ -81,6 +81,8 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     stemWidth: "Kanat genişliği",
     stemDepth: "Kanat uzunluğu",
     offset: "Duvarın başından uzaklık",
+    dragHint: "Bu duvarı taşımak için sürükle",
+    notchHint: "Buraya girinti açmak için çift tıkla",
   },
   furniture: {
     type: {

@@ -12,7 +12,12 @@ import type {
   TvAnchorPlacement,
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
-import { replaceHueChannel, ROOM_MAP_BACKGROUND_ERROR, ROOM_MAP_BACKGROUND_MAX_MB } from "@/shared/contracts/roomMap";
+import {
+  replaceHueChannel,
+  resolveRoomFootprint,
+  ROOM_MAP_BACKGROUND_ERROR,
+  ROOM_MAP_BACKGROUND_MAX_MB,
+} from "@/shared/contracts/roomMap";
 import { isEditableTarget } from "@/shared/lib/editableTarget";
 import { Callout } from "@/shared/ui/Callout/Callout";
 
@@ -32,6 +37,7 @@ import { useFurnitureModels } from "../state/useFurnitureModels";
 import type { RoomMapDocument } from "../state/useRoomMapDocument";
 import { useRoomMapGridSettings } from "../state/useRoomMapGridSettings";
 import { useUsbStripStatus } from "../state/useUsbStripStatus";
+import { FootprintWalls } from "./objects/FootprintWalls";
 import {
   buildFootprint,
   describeFootprint,
@@ -345,6 +351,10 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
     [apply, config, panOffset, widthMeters, depthMeters, zoom, setPanOffset],
   );
 
+  const outline = useMemo(
+    () => resolveRoomFootprint({ dimensions: config.dimensions, footprint: config.footprint }),
+    [config.dimensions, config.footprint],
+  );
   const roomShape = useMemo(() => describeFootprint(config.footprint, config.dimensions), [config.footprint, config.dimensions]);
   const minimumSize = useMemo(() => footprintMinimumSize(config.footprint, config.dimensions), [config.footprint, config.dimensions]);
   const handleShapeChange = useCallback(
@@ -478,6 +488,16 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
           onPanChange={setPanOffset}
           panMode={spaceHeld}
         >
+          <FootprintWalls
+            corners={outline}
+            dimensions={config.dimensions}
+            pxPerMeter={pxPerMeter}
+            zoom={zoom}
+            panMode={spaceHeld}
+            onMove={(footprint, gesture) => apply({ footprint }, { gesture })}
+            onNotch={(footprint) => apply({ footprint })}
+          />
+
           {/* Origin crosshair marker — always centered, extends to edges */}
           <OriginMarker widthM={widthMeters} depthM={depthMeters} pxPerMeter={pxPerMeter} />
 
