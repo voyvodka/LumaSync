@@ -1,6 +1,7 @@
 @layer components {
   /* Floats over the room's foot at one height whatever it shows, so nothing above it moves. Both
-     faces' docks share it, so a switch between them leaves the box where it was. */
+     faces' docks share it, so a switch between them leaves the box where it was. 920 px holds the
+     palette's Turkish names in one row; at 760 every one was cut. */
   .dock {
     position: absolute;
     bottom: var(--room-dock-bottom);
@@ -10,7 +11,7 @@
     grid-template-columns: 32px 1px minmax(0, 1fr);
     align-items: center;
     gap: 10px;
-    width: min(760px, calc(100% - 24px));
+    width: min(920px, calc(100% - 24px));
     height: var(--room-dock-h);
     padding: 10px;
     border: 1px solid var(--lm-line-2);

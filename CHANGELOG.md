@@ -593,6 +593,9 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- The room's dock is wider (up to 920 px) and its furniture row scrolls sideways with whole names,
+  so the palette no longer cuts every name to a few letters ("Kan…", "Sand…").
+
 - In the 3D view, carrying a piece or changing anything in the room no longer throws the view back
   to the room's middle; only resizing the room frames it afresh.
 - In the room map, undoing back past a template no longer drops the editor for the template list with

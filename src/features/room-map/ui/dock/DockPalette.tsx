@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { furnitureColours } from "@/features/room-view/model/furnitureModel";
 import type { FurnitureType } from "@/shared/contracts/roomMap";
 import { cx } from "@/shared/lib/cx";
+import { useSideScroll } from "@/shared/lib/useSideScroll";
 import { IconCheck, IconImage, IconLed, IconTv } from "@/shared/ui/icons";
 
 import { FURNITURE_TILES } from "../../model/paletteTiles";
@@ -34,13 +35,15 @@ export interface DockPaletteProps {
 export function DockPalette({ hasTv, onAddFurniture, onAddTv, onSelectTv, onAddStrip, onAddImage, onAddZone, hue }: DockPaletteProps) {
   const { t } = useTranslation();
   const noteRef = useRef<HTMLSpanElement | null>(null);
+  const furnitureRef = useRef<HTMLDivElement | null>(null);
+  const more = useSideScroll(furnitureRef, FURNITURE_TILES.map((tile) => tile.type).join(","), undefined);
   const zoneReady = hue?.state.kind === "ready";
   const second = ["tv", "strip", "image", ...(hue ? ["zone"] : [])];
   const { tileProps } = usePaletteKeys([FURNITURE_TILES.map((tile) => tile.type), second]);
 
   return (
     <div className={styles.palette} role="toolbar" aria-label={t("roomMap:palette.label")}>
-      <div className={styles.row}>
+      <div ref={furnitureRef} className={cx(styles.row, styles.scroll)} data-more={more} data-testid="palette-furniture">
         {FURNITURE_TILES.map((tile) => {
           const name = t(`roomMap:furniture.type.${tile.type}`);
           return (

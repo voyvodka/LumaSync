@@ -13,8 +13,20 @@
     min-width: 0;
   }
 
+  /* The furniture keeps whole names and scrolls sideways: squeezed to the dock, every name became
+     "Kan…", "Sand…". The edge with more past it fades. */
+  .scroll {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .scroll::-webkit-scrollbar { display: none; }
+  .scroll > .tile { flex-shrink: 0; }
+  .scroll[data-more="end"] { mask-image: linear-gradient(90deg, black calc(100% - 24px), transparent); }
+  .scroll[data-more="start"] { mask-image: linear-gradient(90deg, transparent, black 24px); }
+  .scroll[data-more="both"] { mask-image: linear-gradient(90deg, transparent, black 24px, black calc(100% - 24px), transparent); }
+
   /* A piece as the plan draws it and its name: no frame at rest, a tint on hover. */
-  /* Tiles give way before the row overflows the dock: a long name ends in an ellipsis. */
   .tile {
     display: inline-flex;
     flex: 0 1 auto;
@@ -71,5 +83,6 @@
   @media (forced-colors: active) {
     .tile:focus-visible { outline: 2px solid Highlight; }
     .unavailable { color: GrayText; }
+    .scroll[data-more] { mask-image: none; }
   }
 }
