@@ -104,6 +104,48 @@ export interface HueChannelPlacement {
    * `HueZone.center + HueZone.scale * zoneRelativePosition`.
    */
   zoneRelativePosition?: ZoneRelativePosition | null;
+  /** The plan direction a one-sided light throws its light, in degrees clockwise with 0 toward the
+   *  plan's top (the TV wall, Hue `y=+1`) — `FurniturePlacement.rotation`'s frame. Absent ⇒ turned to
+   *  its nearest wall. Drawing only: the stream and room-aware sampling never read it. Read through
+   *  `resolveHueFacing`. */
+  facing?: number | null;
+  /** The fixture the room draws in place of the one the bridge's archetype names — a plain bulb in
+   *  a lamp the bridge cannot know about. Absent ⇒ from the bridge. Read through `resolveHueFixture`. */
+  fixture?: HueFixture | null;
+}
+
+/** The fixtures the 3D room draws a Hue light as. */
+export const HUE_FIXTURES = {
+  PLAY_BAR: "playBar",
+  LIGHTSTRIP: "lightstrip",
+  FLOOR_LAMP: "floorLamp",
+  SIGNE: "signe",
+  TABLE_LAMP: "tableLamp",
+  PENDANT: "pendant",
+  CEILING: "ceiling",
+  GO: "go",
+  IRIS: "iris",
+  BLOOM: "bloom",
+  SPOT: "spot",
+  WALL: "wall",
+  TUBE: "tube",
+  BULB: "bulb",
+} as const;
+
+export type HueFixture = (typeof HUE_FIXTURES)[keyof typeof HUE_FIXTURES];
+
+const HUE_FIXTURE_VALUES = new Set<string>(Object.values(HUE_FIXTURES));
+
+/** The stored fixture when it is a known one, else none (from the bridge); a newer build's stays stored. */
+export function resolveHueFixture(channel: HueChannelPlacement): HueFixture | undefined {
+  const fixture: unknown = channel.fixture;
+  return typeof fixture === "string" && HUE_FIXTURE_VALUES.has(fixture) ? (fixture as HueFixture) : undefined;
+}
+
+/** The stored facing in [0, 360) when it is a number, else none (turned to its nearest wall). */
+export function resolveHueFacing(channel: HueChannelPlacement): number | undefined {
+  const facing: unknown = channel.facing;
+  return typeof facing === "number" && Number.isFinite(facing) ? ((facing % 360) + 360) % 360 : undefined;
 }
 
 /** Never index `hueChannels` by array position — `channelIndex` is bridge-assigned

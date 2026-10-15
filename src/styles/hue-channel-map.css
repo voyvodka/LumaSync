@@ -18,3 +18,19 @@
     forced-color-adjust: none;
   }
 }
+
+/* Which way a one-sided light throws its light: a wedge off the dot's centre, turned inline. */
+.lm-room-hue-beam {
+  width: 22px;
+  height: 16px;
+  margin-top: -8px;
+  transform-origin: 0 50%;
+  background: radial-gradient(ellipse at 0 50%, rgb(255 214 160 / 60%), transparent 72%);
+  clip-path: polygon(0 50%, 100% 0, 100% 100%);
+}
+@media (forced-colors: active) {
+  .lm-room-hue-beam {
+    background: CanvasText;
+    forced-color-adjust: none;
+  }
+}

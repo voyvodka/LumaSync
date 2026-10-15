@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cornerCoordinates, insideAlong, outlineCorners, type PlanCorner, roomEdges } from "../roomOutline";
+import { cornerCoordinates, insideAlong, nearestWallFacing, nearestWallFacingDegrees, outlineCorners, type PlanCorner, roomEdges } from "../roomOutline";
 
 // An L: a 4 × 4 m room with the 2 × 2 m back-right quarter cut away.
 const L: PlanCorner[] = [
@@ -67,5 +67,19 @@ describe("insideAlong", () => {
   it("names the lines where the inside can change", () => {
     expect(cornerCoordinates(4, 4, L, true)).toEqual([0, 2, 4]);
     expect(cornerCoordinates(5, 4, null, false)).toEqual([0, 4]);
+  });
+
+  // The user's Play bar lights the wall it is turned to; drawn lighting the room all round, it was wrong.
+  it("turns a one-sided light to the wall it stands nearest", () => {
+    const edges = roomEdges(4, 3, null);
+    expect(nearestWallFacing(-1.9, 0, edges)).toBeCloseTo(-Math.PI / 2);
+    expect(nearestWallFacing(1.9, 0, edges)).toBeCloseTo(Math.PI / 2);
+    expect(nearestWallFacing(0, -1.4, edges)).toBeCloseTo(0);
+    expect(Math.abs(nearestWallFacing(0, 1.4, edges))).toBeCloseTo(Math.PI);
+  });
+  it("names the nearest wall in the degrees the map stores", () => {
+    expect(nearestWallFacingDegrees(0.1, 1.5, 4, 3, null)).toBe(270);
+    expect(nearestWallFacingDegrees(2, 0.2, 4, 3, null)).toBe(0);
+    expect(nearestWallFacingDegrees(3.9, 1.5, 4, 3, null)).toBe(90);
   });
 });

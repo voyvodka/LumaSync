@@ -121,12 +121,13 @@ describe("RoomMapSurface — faces", () => {
     expect(screen.getByTestId("plan")).toHaveAttribute("data-can-undo", "true");
   });
 
-  it("reads the lamp shapes only while the room is on show", async () => {
+  // Edit needs them too: a Hue light's inspector names the model the bridge reports.
+  it("reads the lamp shapes in either face while the room is open", async () => {
     await renderSurface();
     expect(lastLampRead()).toBe(true);
 
     act(() => radio("roomMap:face.edit").click());
-    expect(lastLampRead()).toBe(false);
+    expect(lastLampRead()).toBe(true);
   });
 
   it("keeps keyboard focus on the switch as the arrow keys change the face", async () => {

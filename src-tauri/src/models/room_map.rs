@@ -113,6 +113,14 @@ pub struct HueChannelPlacement {
     /// resolves to a Hue zone). Ignored on serialise when absent.
     #[serde(default)]
     pub zone_relative_position: Option<ZoneRelativePosition>,
+    /// The editor's alone (which way a one-sided light faces); mirrored only so
+    /// the zone commands' echo does not erase it, as with `locked`.
+    #[serde(default)]
+    pub facing: Option<f64>,
+    /// The fixture the 3D room draws; a string so a newer build's value still
+    /// deserialises here. Mirrored for the echo, like `facing`.
+    #[serde(default)]
+    pub fixture: Option<String>,
 }
 
 /// A spatial 3D zone tied to one entertainment area. Channels join via

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  resolveHueFacing,
+  resolveHueFixture,
   findHueChannel,
   resolveRoomSurfaces,
   type RoomSurfaces,
@@ -305,5 +307,21 @@ describe("resolveRoomSurfaces", () => {
   it("reads an unknown wall colour, or a value that is not an object, as the defaults", () => {
     expect(resolveRoomSurfaces({ surfaces: { walls: "neon" } as unknown as RoomSurfaces }).walls).toBe("warmWhite");
     expect(resolveRoomSurfaces({ surfaces: "x" as unknown as RoomSurfaces })).toEqual({ floor: "oak", walls: "warmWhite" });
+  });
+});
+
+describe("Hue channel facing and fixture", () => {
+  const ch = { channelIndex: 0, x: 0, y: 0, z: 0 };
+  it("reads a stored facing into [0, 360) and anything else as unset", () => {
+    expect(resolveHueFacing({ ...ch, facing: -90 })).toBe(270);
+    expect(resolveHueFacing({ ...ch, facing: 450 })).toBe(90);
+    expect(resolveHueFacing({ ...ch, facing: null })).toBeUndefined();
+    expect(resolveHueFacing({ ...ch, facing: Number.NaN })).toBeUndefined();
+  });
+
+  // A newer build's fixture must read as "from the bridge" here, not throw a lookup.
+  it("reads a known fixture and treats an unknown one as from the bridge", () => {
+    expect(resolveHueFixture({ ...ch, fixture: "iris" })).toBe("iris");
+    expect(resolveHueFixture({ ...ch, fixture: "lantern2030" as never })).toBeUndefined();
   });
 });

@@ -72,7 +72,8 @@ export function RoomMapSurface({
   const [switched, setSwitched] = useState(false);
   // Edit opened from the light card takes the keys, or they would fall to the page with the card.
   const [editTakesFocus, setEditTakesFocus] = useState(false);
-  const lampFamilies = useHueLampFamilies(doc.hue.areaChannels, face === ROOM_FACES.VIEW);
+  // Edit reads them too: a Hue light's inspector names the model the bridge reports.
+  const lampFamilies = useHueLampFamilies(doc.hue.areaChannels, view3dAvailable);
 
   const handleFace = useCallback((next: RoomFace) => {
     setSwitched(true);
@@ -142,6 +143,7 @@ export function RoomMapSurface({
             hueReachable={hueReachable}
             roomAware={roomAware}
             focusOnMount={editTakesFocus}
+            lampFamilies={lampFamilies}
           />
         )}
       </div>

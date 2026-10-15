@@ -6,7 +6,7 @@ import type { LampFamily } from "@/features/room-view/model/lampFamily";
 import type { ViewLight } from "../../model/viewLights";
 
 // Spelled out so the key check sees every one: a fixture is not a contract value it could read.
-const FAMILY_KEY = {
+export const FAMILY_KEY = {
   playBar: "roomMap:view.family.playBar",
   lightstrip: "roomMap:view.family.lightstrip",
   floorLamp: "roomMap:view.family.floorLamp",

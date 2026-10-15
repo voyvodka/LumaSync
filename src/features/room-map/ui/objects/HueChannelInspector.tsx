@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 
-import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
+import { FIXTURE_ORDER, type LampFamily, ONE_SIDED } from "@/features/room-view/model/lampFamily";
+import { type HueChannelPlacement, type HueZone, resolveHueFacing, resolveHueFixture } from "@/shared/contracts/roomMap";
 import { InfoTip } from "@/shared/ui/InfoTip/InfoTip";
 import { StateWord } from "@/shared/ui/StateWord/StateWord";
 
@@ -11,10 +12,13 @@ import { DecimalField } from "../DecimalField";
 import { DockPicker } from "../dock/DockPicker";
 import { DockSlider } from "../dock/DockSlider";
 import { Actions, Disc, FieldRow, InspectorRows, Mark, Meta, NameField, Note, Status } from "../dock/InspectorParts";
-import { GlyphHeight } from "./fieldGlyphs";
+import { FAMILY_KEY } from "../view/viewLightLabel";
+import { GlyphHeight, GlyphRotation } from "./fieldGlyphs";
 import type { UsbStripConnectionStatus } from "./UsbStripInspector";
 
 const UNASSIGNED = "unassigned";
+const AUTO = "auto";
+const wrapDegrees = (degrees: number) => ((degrees % 360) + 360) % 360;
 
 function heightBandKey(
   worldZ: number,
@@ -45,6 +49,10 @@ export function HueChannelInspector({
   onRename,
   onToggleLock,
   onClose,
+  modelChoices = false,
+  bridgeFixture = null,
+  autoFacing = 0,
+  onUpdate,
 }: {
   channel: HueChannelPlacement;
   /** The zones of the channel's area, the ones it can join. */
@@ -74,6 +82,13 @@ export function HueChannelInspector({
   onRename: (label: string) => void;
   onToggleLock: () => void;
   onClose: () => void;
+  /** The 3D room is in this build: the model and facing it draws by are offered. */
+  modelChoices?: boolean;
+  /** The fixture the bridge's archetype names, or `null` when it names none. */
+  bridgeFixture?: LampFamily | null;
+  /** The facing an unset light takes, in degrees: toward its nearest wall. */
+  autoFacing?: number;
+  onUpdate?: (patch: Pick<HueChannelPlacement, "facing" | "fixture">) => void;
 }) {
   const { t } = useTranslation();
   const locked = !!channel.locked;
@@ -91,6 +106,9 @@ export function HueChannelInspector({
     const next = planMetresToHue(x, y, roomWidthMeters, roomDepthMeters);
     onMove(next.x, next.y);
   };
+
+  const fixture = resolveHueFixture(channel);
+  const drawnAs = fixture ?? bridgeFixture ?? "bulb";
 
   const zoneIndex = channel.zoneId ? zones.findIndex((z) => z.id === channel.zoneId) : -1;
   const zone = zoneIndex >= 0 ? zones[zoneIndex] : undefined;
@@ -190,6 +208,49 @@ export function HueChannelInspector({
             })}
             readout={t("roomMap:inspector.hueHeightReadout", { metres: heightMetres(shownZ) })}
           />
+          {modelChoices && onUpdate && (
+            <FieldRow>
+              <DockPicker<LampFamily | typeof AUTO>
+                label={t("roomMap:inspector.modelLabel")}
+                value={fixture ?? AUTO}
+                width={176}
+                disabled={locked}
+                options={[
+                  {
+                    value: AUTO,
+                    label: bridgeFixture
+                      ? t("roomMap:inspector.modelAuto", { model: t(FAMILY_KEY[bridgeFixture]) })
+                      : t("roomMap:inspector.hueModelAutoUnknown"),
+                  },
+                  ...FIXTURE_ORDER.map((value) => ({ value, label: t(FAMILY_KEY[value]) })),
+                ]}
+                onChange={(next) => onUpdate({ fixture: next === AUTO ? undefined : next })}
+              />
+              <InfoTip label={t("common:hintFor", { label: t("roomMap:inspector.modelLabel") })}>{t("roomMap:inspector.hueModelInfo")}</InfoTip>
+              {ONE_SIDED.has(drawnAs) && (
+                <>
+                  <DecimalField
+                    optional
+                    label={t("roomMap:inspector.hueFacingLabel")}
+                    prefix={<GlyphRotation />}
+                    value={resolveHueFacing(channel)}
+                    placeholder={String(autoFacing)}
+                    decimals={0}
+                    step={15}
+                    min={0}
+                    max={359}
+                    normalize={wrapDegrees}
+                    unit="°"
+                    disabled={locked}
+                    onCommit={(facing) => onUpdate({ facing })}
+                  />
+                  <InfoTip label={t("common:hintFor", { label: t("roomMap:inspector.hueFacingLabel") })}>
+                    {t("roomMap:inspector.hueFacingInfo", { degrees: autoFacing })}
+                  </InfoTip>
+                </>
+              )}
+            </FieldRow>
+          )}
           {limitingZone && (
             <InfoTip label={t("common:hintFor", { label: t("roomMap:inspector.hueHeightLabel") })}>
               {t("roomMap:inspector.hueHeightZoneLimit", {

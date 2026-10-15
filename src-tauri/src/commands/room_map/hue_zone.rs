@@ -550,6 +550,8 @@ pub fn assign_channel_to_hue_zone(request: AssignChannelRequest) -> HueZoneComma
             channel_id: None,
             zone_id: Some(target_zone_id.clone()),
             zone_relative_position: Some(rel),
+            facing: None,
+            fixture: None,
         });
     }
 
@@ -685,6 +687,8 @@ mod tests {
                 y: 1.0,
                 z: 0.0,
             }),
+            facing: None,
+            fixture: None,
         };
         let result = delete_hue_zone(DeleteHueZoneRequest {
             zone_id: "z1".to_string(),
@@ -775,6 +779,8 @@ mod tests {
                 y: 0.0,
                 z: 0.0,
             }),
+            facing: None,
+            fixture: None,
         };
         let result = assign_channel_to_hue_zone(AssignChannelRequest {
             channel_index: 2,

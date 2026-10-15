@@ -336,6 +336,18 @@ backlight drawn as a stray line along the wall.
   its lit face, its body and its cone. With no facing stored it turns to the wall it stands nearest
   (`nearestWallFacing`), which is how these lights are set up in a room; a fourth falls back to a
   point light. Go, Iris and Bloom are three archetypes and three models, not one portable lamp.
+- **A Hue light's model and facing are the map's to override.** `HueChannelPlacement.fixture` draws
+  a light as another fixture than its archetype names — the bridge only knows the bulb inside a
+  lamp — and `facing` turns a one-sided one, in plan degrees clockwise from the TV wall (the
+  plan's top), `FurniturePlacement.rotation`'s frame. Both are optional and absent means from the
+  bridge and toward the nearest wall; both are drawing only, so neither reaches the stream or
+  room-aware sampling, and both are read through `resolveHueFixture` / `resolveHueFacing`, which
+  read a newer build's value as absent and leave it stored. Rust mirrors them without reading them,
+  as it does `locked`: the zone commands echo the channel list back, and a field the mirror lacks
+  is erased by every zone assignment (`a_zone_command_keeps_a_channels_facing_and_fixture`). The
+  plan draws a one-sided light's facing as a wedge off its dot (`model/hueFacing.ts`), so the 2D
+  and the 3D room agree on which way it points; the Edit face reads the bridge's archetypes too,
+  for the inspector's "Auto · Play bar".
 - **The running mode sets the room's mood.** `roomMood` (`room-view/model/roomMood.ts`) reads what
   runs from the lighting control state: Off leaves the lamps dark — the rig falls to a cool night,
   the bulbs to frosted glass, the TV's backlight out — under a navy sky; Solid lights every lamp in

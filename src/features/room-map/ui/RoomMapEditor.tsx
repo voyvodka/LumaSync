@@ -3,6 +3,8 @@ import type React from "react";
 import { useTranslation } from "react-i18next";
 
 import { type FurnitureModel, modelTop } from "@/features/room-view/model/furnitureModel";
+import type { LampFamily } from "@/features/room-view/model/lampFamily";
+import { hueFacings } from "../model/hueFacing";
 import { ROOM_VIEW_3D_AVAILABLE } from "@/features/room-view/ui/RoomView3DHost";
 import type {
   FurniturePlacement,
@@ -69,6 +71,8 @@ import { RoomMapCanvas } from "./RoomMapCanvas";
 import styles from "./RoomMapEditor.module.css";
 import { SnapGuideOverlay } from "./SnapGuideOverlay";
 
+const NO_FAMILIES: ReadonlyMap<number, LampFamily> = new Map();
+
 export interface RoomMapEditorProps {
   /** The map, its history and its Hue area, owned by the surface so they outlive this face. */
   doc: RoomMapDocument;
@@ -80,6 +84,8 @@ export interface RoomMapEditorProps {
   roomAware?: RoomAwareStatus | null;
   /** Take the keys on mount: the face opened from a control the switch just took away. */
   focusOnMount?: boolean;
+  /** Each Hue channel's fixture as the bridge names it, for the inspector's model choice. */
+  lampFamilies?: ReadonlyMap<number, LampFamily>;
 }
 
 const IS_MAC = navigator.platform.includes("Mac");
@@ -102,7 +108,14 @@ function isCanvasKey(e: React.KeyboardEvent<HTMLElement>): boolean {
   return e.target instanceof Element && e.target.closest(`[${ROOM_MAP_VIEWPORT_ATTR}]`) !== null;
 }
 
-export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAware = null, focusOnMount = false }: RoomMapEditorProps) {
+export function RoomMapEditor({
+  doc,
+  onNavigateToDevices,
+  hueReachable,
+  roomAware = null,
+  focusOnMount = false,
+  lampFamilies = NO_FAMILIES,
+}: RoomMapEditorProps) {
   const { t } = useTranslation();
   const {
     config,
@@ -150,7 +163,12 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
     selectHueZone,
     hueAreaId,
   });
-  // The zones a light of the shown area can join: another area's zone holds another area's lights.
+  // Memoised: the overlay is, and a fresh map each render redrew every dot through a pan.
+  const facings = useMemo(
+    () => (ROOM_VIEW_3D_AVAILABLE ? hueFacings(visibleHueChannels, config, lampFamilies) : undefined),
+    [visibleHueChannels, config, lampFamilies],
+  );
+    // The zones a light of the shown area can join: another area's zone holds another area's lights.
   const areaZones = useMemo(
     () => (hueAreaId ? hueZones.filter((zone) => zone.entertainmentAreaId === hueAreaId) : hueZones),
     [hueZones, hueAreaId],
@@ -629,6 +647,12 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
     },
     // A held arrow in X or Y steps many times; the gesture keeps it one undo step and one save.
     onMoveObject: (id, x, y) => handleUpdatePosition(id, x, y, { gesture: `move:${id}` }),
+    onUpdateHueChannel: (channelIndex, patch) => {
+      apply(
+        { hueChannels: config.hueChannels.map((ch) => (ch.channelIndex === channelIndex ? { ...ch, ...patch } : ch)) },
+        { gesture: `hue:${channelIndex}:${Object.keys(patch).sort().join(",")}` },
+      );
+    },
     onHueChannelHeightChange: (channelIndex, worldZ) => {
       const target = visibleHueChannels.find((ch) => ch.channelIndex === channelIndex);
       if (!target) return;
@@ -792,6 +816,7 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
               onHueZoneCenterChange={handleHueZoneCenterChange}
               allHueZones={hueZones}
               hidePassiveZoneBounds={!showHueZones}
+              facings={facings}
             />
           )}
 
@@ -848,6 +873,7 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
           stripStatus={stripStatus}
           hueBridgeStatus={hueBridgeStatus}
           modelChoices={ROOM_VIEW_3D_AVAILABLE}
+          lampFamilies={lampFamilies}
           actions={inspectorActions}
           add={{
             hasTv,

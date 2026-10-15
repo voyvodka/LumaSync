@@ -26,21 +26,28 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { furnitureObjectId, hueChannelObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "@/features/room-map/model/objectId";
 import { isBacklightStrip } from "@/features/room-map/model/backlight";
 import { outsideOutline } from "@/features/room-map/model/roomFootprint";
-import { type RoomMapConfig, resolveFurnitureTop, resolveRoomFootprint, resolveRoomSurfaces } from "@/shared/contracts/roomMap";
+import {
+  type RoomMapConfig,
+  resolveFurnitureTop,
+  resolveHueFacing,
+  resolveHueFixture,
+  resolveRoomFootprint,
+  resolveRoomSurfaces,
+} from "@/shared/contracts/roomMap";
 
 import type { Pickable } from "../model/picking";
-import { roomEdges } from "../model/roomOutline";
+import { nearestWallFacing, roomEdges } from "../model/roomOutline";
 import { hueChannelScenePoint, roomToScene, tvMountHeight } from "../model/roomSpace";
 import { contactShadow, floorParts, roomLights, WALL_THICKNESS, wallFootShade, wallGeometry } from "./scene/environment";
 import { classifyFurniture, contactShade, modelTop, surfaceTop } from "../model/furnitureModel";
-import type { LampFamily } from "../model/lampFamily";
+import { type LampFamily, ONE_SIDED } from "../model/lampFamily";
 import type { MoodLevels } from "../model/roomMood";
 import { furnitureParts } from "./scene/furniture";
 import { buildGlow, type Lamp, poolTexture, rimTexture, type WallPlane } from "./scene/glow";
 import { PALETTE } from "./scene/palette";
 import { type FinishKind, finishMaterial } from "./scene/finishes";
 import { mergeParts, type Part, transformParts } from "./scene/parts";
-import { lampFixture, ONE_SIDED } from "./scene/lamps";
+import { lampFixture } from "./scene/lamps";
 import { lampLights } from "./scene/lampLights";
 import { buildScreen } from "./scene/screen";
 import { buildSelectionMark } from "./scene/selection";
@@ -92,22 +99,6 @@ function surfaceUnder(x: number, z: number, y: number, surfaces: readonly Surfac
     if (Math.abs(lx) <= s.hw && Math.abs(lz) <= s.hd && s.top <= y + 0.02 && s.top > best) best = s.top;
   }
   return best;
-}
-
-/** The plan direction (radians clockwise from the back wall) of the wall nearest a point that the
- *  point stands in front of: a one-sided light is aimed at a wall unless the map says otherwise. */
-export function nearestWallFacing(x: number, z: number, edges: ReturnType<typeof roomEdges>): number {
-  let best = Number.POSITIVE_INFINITY;
-  let facing = 0;
-  for (const e of edges) {
-    const distance = (e.ax - x) * e.outwardX + (e.az - z) * e.outwardZ;
-    const along = e.outwardZ !== 0 ? x : z;
-    const [lo, hi] = e.outwardZ !== 0 ? [Math.min(e.ax, e.bx), Math.max(e.ax, e.bx)] : [Math.min(e.az, e.bz), Math.max(e.az, e.bz)];
-    if (distance < -0.01 || along < lo || along > hi || distance >= best) continue;
-    best = distance;
-    facing = Math.atan2(e.outwardX, -e.outwardZ);
-  }
-  return facing;
 }
 
 export interface RoomScene {
@@ -209,8 +200,9 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   const mount = tvMountHeight(config.tvAnchor, dims);
   const lamps: Lamp[] = config.hueChannels.map((channel, i) => {
     const point = hueChannelScenePoint(channel, config.zones, dims, mount);
-    const family = options.lampFamilies?.get(channel.channelIndex) ?? "bulb";
-    const facing = ONE_SIDED.has(family) ? nearestWallFacing(point.x, point.z, edges) : 0;
+    const family = resolveHueFixture(channel) ?? options.lampFamilies?.get(channel.channelIndex) ?? "bulb";
+    const stored = resolveHueFacing(channel);
+    const facing = !ONE_SIDED.has(family) ? 0 : stored !== undefined ? (stored * Math.PI) / 180 : nearestWallFacing(point.x, point.z, edges);
     const fixture = lampFixture(family, point, surfaceUnder(point.x, point.z, point.y, surfaces), H, facing);
     sort(fixture.body);
     const [rx, ry, rz] = fixture.glow.radii;

@@ -469,6 +469,8 @@ mod tests {
             channel_id,
             zone_id: None,
             zone_relative_position: None,
+            facing: None,
+            fixture: None,
         }
     }
 

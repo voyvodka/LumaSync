@@ -9,11 +9,13 @@ import type {
 } from "@/shared/contracts/roomMap";
 import { resolveRoomFootprint } from "@/shared/contracts/roomMap";
 import { autoScreenKind, classifyFurniture } from "@/features/room-view/model/furnitureModel";
+import type { LampFamily } from "@/features/room-view/model/lampFamily";
 
 import { hueChannelZRange, resolveHueChannelWorld, resolveHueChannelWorldZ } from "../../model/hueChannelPosition";
 import { furnitureObjectId, hueChannelObjectId, imageLayerObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "../../model/objectId";
 import type { InspectorTarget } from "../../model/resolveInspectorTarget";
 import { outsideOutline } from "../../model/roomFootprint";
+import { autoHueFacing } from "../../model/hueFacing";
 import { FurnitureInspector } from "../objects/FurnitureInspector";
 import { HueChannelInspector } from "../objects/HueChannelInspector";
 import { HueZoneInspector } from "../objects/HueZoneInspector";
@@ -30,6 +32,7 @@ export interface InspectorActions {
   /** A typed position, in the kind's own units: a strip by its start point, a Hue channel in the cube. */
   onMoveObject: (objectId: string, x: number, y: number) => void;
   onHueChannelHeightChange: (channelIndex: number, worldZ: number) => void;
+  onUpdateHueChannel: (channelIndex: number, patch: Pick<HueChannelPlacement, "facing" | "fixture">) => void;
   onRename: (objectId: string, label: string) => void;
   onToggleLock: (objectId: string) => void;
   onDuplicate: (objectId: string) => void;
@@ -58,6 +61,8 @@ export interface DockInspectorProps {
   hueBridgeStatus: UsbStripConnectionStatus;
   /** The 3D room is in this build: model, tone, height and screen kind are offered. */
   modelChoices: boolean;
+  /** Each Hue channel's fixture as the bridge names it. */
+  lampFamilies: ReadonlyMap<number, LampFamily>;
   actions: InspectorActions;
   onClose: () => void;
 }
@@ -92,6 +97,7 @@ export function DockInspector({
   stripStatus,
   hueBridgeStatus,
   modelChoices,
+  lampFamilies,
   actions,
   onClose,
 }: DockInspectorProps) {
@@ -193,6 +199,10 @@ export function DockInspector({
           roomHeightMeters={config.dimensions.heightMeters}
           onMove={(x, y) => actions.onMoveObject(id, x, y)}
           onHeightChange={(worldZ) => actions.onHueChannelHeightChange(ch.channelIndex, worldZ)}
+          modelChoices={modelChoices}
+          bridgeFixture={lampFamilies.get(ch.channelIndex) ?? null}
+          autoFacing={autoHueFacing(ch, config)}
+          onUpdate={(patch) => actions.onUpdateHueChannel(ch.channelIndex, patch)}
           onAssignZone={(zoneId) => actions.onAssignChannelToZone(ch.channelIndex, zoneId)}
           onRename={(label) => actions.onRename(id, label)}
           onToggleLock={() => actions.onToggleLock(id)}

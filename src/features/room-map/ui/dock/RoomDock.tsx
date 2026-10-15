@@ -4,6 +4,7 @@ import type { TFunction } from "i18next";
 
 import type { FurnitureType, HueChannelPlacement, HueZone, RoomMapConfig, UsbStripPlacement } from "@/shared/contracts/roomMap";
 import { resolveFurnitureType } from "@/shared/contracts/roomMap";
+import type { LampFamily } from "@/features/room-view/model/lampFamily";
 import { cx } from "@/shared/lib/cx";
 import { ConfirmPopover } from "@/shared/ui/ConfirmPopover/ConfirmPopover";
 import { IconButton } from "@/shared/ui/IconButton/IconButton";
@@ -44,6 +45,7 @@ export interface RoomDockProps {
   stripStatus: (strip: UsbStripPlacement) => { status: UsbStripConnectionStatus; port: string | null };
   hueBridgeStatus: UsbStripConnectionStatus;
   modelChoices: boolean;
+  lampFamilies: ReadonlyMap<number, LampFamily>;
   actions: InspectorActions;
   add: DockAdd;
   /** The Hue side of the room, or `null` for a room with no bridge, area, light or zone. */
@@ -297,6 +299,7 @@ export function RoomDock(props: RoomDockProps) {
           stripStatus={props.stripStatus}
           hueBridgeStatus={props.hueBridgeStatus}
           modelChoices={props.modelChoices}
+          lampFamilies={props.lampFamilies}
           actions={props.actions}
           onClose={() => {
             props.onPopSelection();

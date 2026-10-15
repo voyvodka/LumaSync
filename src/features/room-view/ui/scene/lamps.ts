@@ -3,7 +3,7 @@
 // the one bulb mesh, so a live colour later recolours an instance instead of rebuilding the room.
 import { Matrix4, Quaternion, Vector3 } from "three";
 
-import type { LampFamily } from "../../model/lampFamily";
+import { type LampFamily, ONE_SIDED } from "../../model/lampFamily";
 import type { ScenePoint } from "../../model/roomSpace";
 import { PALETTE } from "./palette";
 import { block, type Part, rod, transformParts } from "./parts";
@@ -26,8 +26,7 @@ export interface LampFixture {
   beam?: { aim: Vector3; spread: number };
 }
 
-/** Fixtures that light one side only, so the room turns them to a wall or to `facing`. */
-export const ONE_SIDED: ReadonlySet<LampFamily> = new Set<LampFamily>(["playBar", "signe", "iris", "bloom"]);
+
 
 const CANOPY = 0xefe9df;
 const BAR = 0x1d1e21;

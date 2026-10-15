@@ -5,7 +5,7 @@ import type { TFunction } from "i18next";
 import { lampColourCss } from "@/features/room-view/model/lampColours";
 import type { LampFamily } from "@/features/room-view/model/lampFamily";
 import type { HueAreaChannelInfo } from "@/shared/contracts/hue";
-import type { HueChannelPlacement, HueZone, RoomMapConfig } from "@/shared/contracts/roomMap";
+import { type HueChannelPlacement, type HueZone, type RoomMapConfig, resolveHueFixture } from "@/shared/contracts/roomMap";
 
 import { hueChannelName } from "./hueChannelLabel";
 import { hueChannelObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "./objectId";
@@ -56,7 +56,7 @@ function hueLight(channel: HueChannelPlacement, sources: ViewLightSources, t: TF
     kind: "hue",
     name: hueChannelName(channel, t),
     zone: zone ? { name: zone.name, colour: getZoneColor(zone, zoneIndex) } : null,
-    family: families.get(channel.channelIndex) ?? null,
+    family: resolveHueFixture(channel) ?? families.get(channel.channelIndex) ?? null,
     lightCount: info ? info.lightCount : null,
     lightIds: info?.lightIds ?? [],
     ghost: liveChannelIds !== null && channel.channelId != null && !liveChannelIds.has(channel.channelId),

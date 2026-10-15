@@ -30,6 +30,7 @@ function actions(): InspectorActions {
     onUpdateImageLayer: vi.fn<InspectorActions["onUpdateImageLayer"]>(),
     onMoveObject: vi.fn<InspectorActions["onMoveObject"]>(),
     onHueChannelHeightChange: vi.fn<InspectorActions["onHueChannelHeightChange"]>(),
+    onUpdateHueChannel: vi.fn<InspectorActions["onUpdateHueChannel"]>(),
     onRename: vi.fn<InspectorActions["onRename"]>(),
     onToggleLock: vi.fn<InspectorActions["onToggleLock"]>(),
     onDuplicate: vi.fn<InspectorActions["onDuplicate"]>(),
@@ -76,6 +77,7 @@ function Harness({
     stripStatus: () => ({ status: "unknown", port: null }),
     hueBridgeStatus: "unknown",
     modelChoices: false,
+    lampFamilies: new Map(),
     actions: inspectorActions,
     add: {
       hasTv: false,

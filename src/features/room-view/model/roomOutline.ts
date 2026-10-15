@@ -115,3 +115,26 @@ export function cornerCoordinates(widthM: number, depthM: number, corners: reado
   const values = outlineCorners(widthM, depthM, corners).map((c) => (axisX ? c.x : c.y));
   return [...new Set(values)].sort((p, q) => p - q);
 }
+
+/** The direction (radians clockwise from the TV wall, the plan's top) of the wall nearest a scene
+ *  point that the point stands in front of: a one-sided light is aimed at a wall unless the map says
+ *  otherwise. */
+export function nearestWallFacing(x: number, z: number, edges: readonly OutlineEdge[]): number {
+  let best = Number.POSITIVE_INFINITY;
+  let facing = 0;
+  for (const e of edges) {
+    const distance = (e.ax - x) * e.outwardX + (e.az - z) * e.outwardZ;
+    const along = e.outwardZ !== 0 ? x : z;
+    const [lo, hi] = e.outwardZ !== 0 ? [Math.min(e.ax, e.bx), Math.max(e.ax, e.bx)] : [Math.min(e.az, e.bz), Math.max(e.az, e.bz)];
+    if (distance < -0.01 || along < lo || along > hi || distance >= best) continue;
+    best = distance;
+    facing = Math.atan2(e.outwardX, -e.outwardZ);
+  }
+  return facing;
+}
+
+/** `nearestWallFacing` for a point on the plan, in whole degrees [0, 360) as the map stores facing. */
+export function nearestWallFacingDegrees(planX: number, planY: number, widthM: number, depthM: number, corners: readonly PlanCorner[] | null): number {
+  const radians = nearestWallFacing(planX - widthM / 2, planY - depthM / 2, roomEdges(widthM, depthM, corners));
+  return ((Math.round((radians * 180) / Math.PI) % 360) + 360) % 360;
+}

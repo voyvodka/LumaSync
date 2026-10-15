@@ -366,3 +366,50 @@ describe("HueChannelInspector zone", () => {
     expect(picker()).toBeDisabled();
   });
 });
+
+describe("HueChannelInspector model and facing", () => {
+  beforeEach(cleanup);
+
+  const renderModel = (stored: Partial<HueChannelPlacement>, bridgeFixture: "playBar" | "floorLamp" | null) => {
+    const onUpdate = vi.fn<(patch: Pick<HueChannelPlacement, "facing" | "fixture">) => void>();
+    render(
+      <HueChannelInspector
+        channel={{ ...channel, ...stored }}
+        zones={[]}
+        worldZ={0}
+        roomHeightMeters={2.5}
+        world={{ x: 0, y: 0 }}
+        roomWidthMeters={5}
+        roomDepthMeters={4}
+        onMove={vi.fn<(x: number, y: number) => void>()}
+        onHeightChange={vi.fn<(z: number) => void>()}
+        onRename={vi.fn<(label: string) => void>()}
+        onToggleLock={vi.fn<() => void>()}
+        onClose={vi.fn<() => void>()}
+        modelChoices
+        bridgeFixture={bridgeFixture}
+        autoFacing={270}
+        onUpdate={onUpdate}
+      />,
+    );
+    return onUpdate;
+  };
+
+  // The user's light lights one way, at the wall it is turned to; the room must be told which way.
+  it("offers a facing for a one-sided light, empty meaning its nearest wall", () => {
+    const onUpdate = renderModel({}, "playBar");
+    const facing = screen.getByLabelText("roomMap:inspector.hueFacingLabel") as HTMLInputElement;
+    expect(facing.placeholder).toBe("270");
+    fireEvent.change(facing, { target: { value: "90" } });
+    fireEvent.keyDown(facing, { key: "Enter" });
+    expect(onUpdate).toHaveBeenCalledWith({ facing: 90 });
+  });
+
+  it("asks no facing of a light that lights all round, unless its model is set to a one-sided one", () => {
+    renderModel({}, "floorLamp");
+    expect(screen.queryByLabelText("roomMap:inspector.hueFacingLabel")).toBeNull();
+    cleanup();
+    renderModel({ fixture: "iris" }, "floorLamp");
+    expect(screen.getByLabelText("roomMap:inspector.hueFacingLabel")).toBeTruthy();
+  });
+});

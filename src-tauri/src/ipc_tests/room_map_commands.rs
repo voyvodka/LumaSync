@@ -124,6 +124,38 @@ fn deleting_a_zone_detaches_its_channels_rather_than_dropping_them() {
     assert_camel_case_keys(&channels[0]);
 }
 
+/// The zone commands echo the channel list back and the frontend re-applies it
+/// wholesale, so a field the Rust mirror does not carry is erased by them.
+#[test]
+fn a_zone_command_keeps_a_channels_facing_and_fixture() {
+    let app = app();
+    let webview = main_webview(&app);
+
+    let channel = json!({
+        "channelIndex": 3,
+        "x": 0.2, "y": 0.1, "z": 0.0,
+        "zoneId": "z1",
+        "zoneRelativePosition": { "x": 0.5, "y": 0.0, "z": 0.0 },
+        "facing": 270.0,
+        "fixture": "playBar",
+    });
+
+    let response = invoke(
+        &webview,
+        "delete_hue_zone",
+        json!({ "request": {
+            "zoneId": "z1",
+            "existingZones": [zone("z1")],
+            "channels": [channel],
+        } }),
+    )
+    .expect("delete_hue_zone must resolve");
+
+    let channels = response["channels"].as_array().expect("channels array");
+    assert_eq!(channels[0]["facing"], json!(270.0));
+    assert_eq!(channels[0]["fixture"], json!("playBar"));
+}
+
 /// A zone lives inside one entertainment area. Letting a channel from another
 /// area join it would put a bulb the bridge cannot address into the frame.
 #[test]

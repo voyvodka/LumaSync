@@ -1,21 +1,9 @@
 // What a Hue light looks like in the room, from the bridge's own word for it. Free of three.js.
 
-/** The shapes the room draws a light as. */
-export type LampFamily =
-  | "playBar"
-  | "lightstrip"
-  | "floorLamp"
-  | "signe"
-  | "tableLamp"
-  | "pendant"
-  | "ceiling"
-  | "go"
-  | "iris"
-  | "bloom"
-  | "spot"
-  | "wall"
-  | "tube"
-  | "bulb";
+import type { HueFixture } from "@/shared/contracts/roomMap";
+
+/** The shapes the room draws a light as: the contract's fixtures, which the map can also store. */
+export type LampFamily = HueFixture;
 
 /** CLIP v2 archetypes grouped by shape. The set is open: a word not listed here draws as a bulb,
  *  the shape that claims least about the fixture. */
@@ -61,6 +49,27 @@ const FAMILY_OF: Readonly<Record<string, LampFamily>> = {
   wall_washer: "wall",
   hue_tube: "tube",
 };
+
+/** Fixtures that light one side only, so the room turns them to a wall or to the stored facing. */
+export const ONE_SIDED: ReadonlySet<LampFamily> = new Set<LampFamily>(["playBar", "signe", "iris", "bloom"]);
+
+/** Every fixture in the order a picker lists them: standing, on surfaces, overhead, strips, bulbs. */
+export const FIXTURE_ORDER: readonly LampFamily[] = [
+  "floorLamp",
+  "signe",
+  "playBar",
+  "tableLamp",
+  "go",
+  "iris",
+  "bloom",
+  "pendant",
+  "ceiling",
+  "spot",
+  "wall",
+  "lightstrip",
+  "tube",
+  "bulb",
+];
 
 export function lampFamily(archetype: string | null | undefined): LampFamily {
   return (archetype && FAMILY_OF[archetype]) || "bulb";

@@ -12,6 +12,8 @@ import { cx } from "@/shared/lib/cx";
 
 interface HueChannelOverlayProps {
   channels: HueChannelPlacement[];
+  /** A one-sided light's facing in plan degrees (0 toward the TV wall), drawn as a beam off its dot. */
+  facings?: ReadonlyMap<number, number>;
   pxPerMeter: number;
   roomWidthM: number;
   roomDepthM: number;
@@ -207,6 +209,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
   onHueZoneCenterChange,
   allHueZones,
   hidePassiveZoneBounds = false,
+  facings,
 }: HueChannelOverlayProps) {
   const { t } = useTranslation();
 
@@ -690,6 +693,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
         const isGhost =
           liveChannelIds != null && ch.channelId != null && !liveChannelIds.has(ch.channelId);
         const baseLabel = hueChannelName(ch, t);
+        const facing = facings?.get(ch.channelIndex);
         const dotLabel = isGhost
           ? t("roomMap:hueChannel.ghostLabel", { name: baseLabel })
           : baseLabel;
@@ -711,6 +715,14 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
               touchAction: "none",
             }}
           >
+            {facing !== undefined && (
+              <span
+                aria-hidden="true"
+                data-testid="hue-facing"
+                className="lm-room-hue-beam pointer-events-none absolute left-1/2 top-1/2"
+                style={{ transform: `rotate(${facing - 90}deg)` }}
+              />
+            )}
             {fan && (
               // A thread back to the spot the bridge has it at.
               <span
