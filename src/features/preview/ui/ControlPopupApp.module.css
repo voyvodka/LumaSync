@@ -67,6 +67,15 @@
   .stage {
     min-width: 0;
   }
+  /* A scene's own settings, in the card the mode's settings are drawn in, so the two line up. */
+  .sceneCard {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+    padding: 10px 14px;
+    border-radius: 14px;
+    background: var(--lm-panel);
+  }
 
   .error {
     font-size: 11.5px;

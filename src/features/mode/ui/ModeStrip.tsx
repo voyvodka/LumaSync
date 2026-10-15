@@ -94,13 +94,13 @@ export function ModeStrip({
     return (
       <Segmented
         options={MODE_KIND_ORDER.map((kind) => {
-          const { PopupIcon, labelLang, labelKey } = modeKind(kind);
+          const { Icon, labelLang, labelKey } = modeKind(kind);
           return {
             value: kind,
             label: (
               <>
                 <span aria-hidden="true">
-                  <PopupIcon />
+                  <Icon />
                 </span>
                 <span lang={labelLang}>{t(labelKey)}</span>
               </>

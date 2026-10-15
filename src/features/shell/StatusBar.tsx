@@ -70,6 +70,7 @@ export function StatusBar({ items, uiMode, lightingActive = true, trailing }: St
       className={isCompact ? `${styles.bar} ${styles.compact}` : styles.bar}
       style={{ height: `${statusBarHeightPx(uiMode)}px` }}
       data-testid="status-bar"
+      data-popover-floor=""
       data-nerd-stats={showNerdStats ? "on" : "off"}
     >
       {shownItems.map((item) => (

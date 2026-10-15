@@ -256,17 +256,19 @@ export function ControlPopupApp() {
           </p>
         )}
         <PopupScenePicker playing={playing?.scene ?? null} busy={sceneBusy} onPick={handleScene} />
-        {playing?.scene === "latency" && <PopupLatencyRow result={latency} />}
         {/* The scene has the lights, so no mode is marked; any press is a choice, and it ends the scene. */}
         <ModeStrip variant="popup" value={playing ? null : kind} onSelect={handleModeClick} />
         {/* A scene's brightness is its own and never saved; the mode's settings wait until it stops. */}
+        {/* A scene's rows sit under the strip, in the card the mode's settings use: above it, the
+            latency readout pushed the strip down as the scene began. */}
         {playing ? (
-          <>
+          <div className={styles.sceneCard}>
             <PopupBrightnessRow brightness={playing.sceneBrightness} onChange={sendSceneBrightness} />
             {playing.scene === "letterbox" && (
               <PopupBlackBarsRow enabled={playing.sceneBlackBorders} onChange={sendSceneBlackBorders} />
             )}
-          </>
+            {playing.scene === "latency" && <PopupLatencyRow result={latency} />}
+          </div>
         ) : (
           <div data-lights className={styles.stage}>
             <ModeStage

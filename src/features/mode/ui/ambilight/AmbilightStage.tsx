@@ -60,6 +60,8 @@ export function AmbilightStage({
           value={brightness}
           disabled={disabled || brightnessLocked}
           title={brightnessTitle}
+          // Said under the slider, not only on hover: a locked slider with no word read as broken.
+          note={brightnessLocked ? brightnessTitle : undefined}
           onChange={(v) => onChange({ ...ambilight, brightness: v / 100 })}
           testId="ambilight-brightness"
         />

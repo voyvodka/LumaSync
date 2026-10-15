@@ -80,7 +80,9 @@ export function Popover({ open, onClose, anchorRef, side = "above", width = 240,
       // The asked side unless the popover would run off the window there and fits on the other. When
       // it fits on neither — a long list in a short window — it takes the roomier side and scrolls.
       const roomAbove = a.top - 10 - 8;
-      const roomBelow = window.innerHeight - 8 - (a.bottom + 10);
+      // The status bar is the window's floor: a list that ran under it covered the outputs' state.
+      const floor = document.querySelector("[data-popover-floor]")?.getBoundingClientRect().top ?? window.innerHeight;
+      const roomBelow = Math.min(window.innerHeight, floor) - 8 - (a.bottom + 10);
       const fitsAbove = h <= roomAbove;
       const fitsBelow = h <= roomBelow;
       const placed =
