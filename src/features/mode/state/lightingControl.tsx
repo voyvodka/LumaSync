@@ -80,7 +80,7 @@ export function useLightingControlState<S>(
 const NO_STORE: Store<LightingControlState | null> = { get: () => null, set: () => {}, subscribe: () => () => {} };
 const runningMode = (state: LightingControlState | null) => state?.lightingMode ?? null;
 
-/** What runs, or `null` outside the provider — for a view that also renders on its own. */
+/** `null` outside the provider, where the other hooks throw. */
 export function useRunningLightingMode(): LightingModeConfig | null {
   const control = useContext(LightingControlContext);
   // Read-only here, so the wider type is safe: nothing below calls `set`.

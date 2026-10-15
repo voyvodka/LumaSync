@@ -1,9 +1,5 @@
-// The glow a lit lamp has on a camera: a soft halo bleeding out of each bulb. Selective: a pass
-// draws the room with everything but the bulbs in black — still there, so a sofa in front of a
-// lamp hides its glow — blurs that, and adds it over the room. A brightness threshold could not
-// pick the bulbs out: a wall a hand from a lamp is lit brighter than the bulb is drawn.
-// The canvas stays transparent; the glow's alpha follows its light, so a halo past the room's edge
-// lands on the view's backdrop as light, not as a dark box.
+// Selective bloom: a luminance threshold could not pick the bulbs out — a wall beside a lamp is
+// lit brighter than the bulb — so a second pass draws everything else black (still occluding).
 import {
   type Camera,
   HalfFloatType,
@@ -23,7 +19,6 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 
-/** The layer an object glows on. */
 export const BLOOM_LAYER = 1;
 
 const STRENGTH = 1.4;
@@ -63,8 +58,7 @@ export function createBloom(renderer: WebGLRenderer, multisample: boolean): Bloo
   glowComposer.addPass(glowPass);
   glowComposer.addPass(bloomPass);
 
-  // The composer draws into its own target, which has no MSAA unless asked: on a 1× screen the
-  // renderer's antialias no longer reaches the picture.
+  // The composer's own target has no MSAA unless asked; the renderer's antialias stops at it.
   const roomTarget = new WebGLRenderTarget(1, 1, { type: HalfFloatType, samples: multisample ? 4 : 0 });
   const composer = new EffectComposer(renderer, roomTarget);
   const roomPass = new RenderPass(undefined as unknown as Scene, undefined as unknown as Camera);
@@ -100,7 +94,6 @@ export function createBloom(renderer: WebGLRenderer, multisample: boolean): Bloo
       glowPass.camera = camera;
       roomPass.scene = scene;
       roomPass.camera = camera;
-      // The black pass casts nothing: drawing the shadow maps again from it would only cost time.
       const shadowsWere = renderer.shadowMap.enabled;
       renderer.shadowMap.enabled = false;
       darken(scene);
@@ -117,7 +110,6 @@ export function createBloom(renderer: WebGLRenderer, multisample: boolean): Bloo
       const ratio = renderer.getPixelRatio();
       composer.setPixelRatio(ratio);
       composer.setSize(width, height);
-      // The glow is soft: half the pixels draw it as well.
       glowComposer.setPixelRatio(ratio / 2);
       glowComposer.setSize(width, height);
     },

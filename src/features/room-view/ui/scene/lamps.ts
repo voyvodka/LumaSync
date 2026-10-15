@@ -6,11 +6,9 @@ import type { ScenePoint } from "../../model/roomSpace";
 import { PALETTE } from "./palette";
 import { block, type Part, rod } from "./parts";
 
-/** The lit part's shape: a bulb or globe, a lamp's drum shade, a pendant's flared shade, or a
- *  bar (a Play's back, a strip, a tube). */
 export type LampShape = "globe" | "drum" | "flare" | "bar";
 
-/** The lit part: where it sits, its half-extents, and its shape. */
+/** The lit part; `radii` are half-extents. */
 export interface LampGlow {
   at: ScenePoint;
   radii: [number, number, number];

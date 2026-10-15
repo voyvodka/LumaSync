@@ -51,7 +51,6 @@
   }
   .ghost { color: var(--lm-ink-faint); }
 
-  /* A lit lamp's chip glows in its colour, with its brightness as a bar under the name. */
   .chip[data-lit] {
     position: relative;
     color: var(--lm-ink);

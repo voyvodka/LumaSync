@@ -40,7 +40,6 @@ interface SpikeOptions extends Partial<RoomSceneOptions> {
   asyncCompile?: boolean;
   /** Shrink the canvas to 1×1 after the context is lost, so WebKit drops its buffers at once. */
   shrinkOnClose?: boolean;
-  /** The lamps' halo pass (default on). */
   bloom?: boolean;
 }
 
@@ -69,7 +68,6 @@ interface RoomView {
   setInsets(bottom: number, top: number): void;
   /** The camera's own controls, beside the drag and the wheel. */
   camera(command: CameraCommand["kind"]): void;
-  /** The lamps' colour and level, eased there from where they are. */
   setMood(mood: RoomMood): void;
   close(): void;
 }
@@ -92,16 +90,12 @@ const CARRY_COLOUR = 0xffb020;
 /** A camera move from the corner buttons or a double-click: short and settling, as the app's
  *  motion is (`--lm-dur-slow`, an ease-out); a jump read as the view breaking. */
 const CAMERA_MOVE_MS = 320;
-/** Lamps coming on or going off: slow enough to watch the room fill, as a dimmer does. */
 const MOOD_MS = 900;
 const easeOut = (t: number) => 1 - (1 - t) ** 3;
-/** Travelling to what was picked: most of the way at once, then a long settle, as a camera
- *  operator lands a move. */
 const DOLLY_MS = 760;
 const easeOutExpo = (t: number) => (t >= 1 ? 1 : 1 - 2 ** (-10 * t));
-/** How much closer a picked light is framed than the room. */
 const DOLLY_ZOOM = 1.55;
-/** How far toward the picked light the view's middle goes: its corner of the room, with the room around it. */
+/** Short of the light itself, so it is framed in its corner with the room around it. */
 const DOLLY_REACH = 0.7;
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
@@ -281,8 +275,7 @@ function openRoomView(
       move = requestAnimationFrame(step);
     };
 
-    // A light or the screen picked: the camera travels to it, and back to where it was when the pick
-    // is cleared. Turning or zooming by hand in between forgets the way back.
+    // Turning or zooming by hand while a light is picked forgets the way back: the user's view wins.
     let home: { zoom: number; target: Vector3; position: Vector3 } | null = null;
     orbit.addEventListener("start", () => {
       home = null;
@@ -693,13 +686,11 @@ export default function RoomView3D({
   /** Pixels at the view's head that something floats over (the View/Edit switch). */
   topInset?: number;
   cameraCommand?: CameraCommand;
-  /** What the running mode does to the lamps; absent leaves them lit warm. */
   mood?: RoomMood;
   /** A piece carried to a new place on the floor: its centre there, in the scene frame. */
   onMovePiece?: (objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => void;
   /** A click in the room: the object it landed on, or null for empty ground. */
   onPick?: (objectId: string | null) => void;
-  /** The light or screen under the pointer, and where the pointer is; null when over neither. */
   onHover?: (objectId: string | null, clientX: number, clientY: number) => void;
   /** No view could be drawn — no WebGL context, or the scene failed to build. */
   onFail: (error: unknown) => void;

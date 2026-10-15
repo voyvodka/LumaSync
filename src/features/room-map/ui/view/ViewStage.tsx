@@ -75,7 +75,7 @@ export function ViewStage({
 
   const focusStage = useCallback(() => rootRef.current?.focus({ preventScroll: true }), []);
 
-  // The chip follows the pointer by transform; only a new object under it renders again.
+  // Position by ref, not state: only a new object under the pointer re-renders.
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const chipRef = useRef<HTMLDivElement | null>(null);
   const pointerRef = useRef({ x: 0, y: 0 });

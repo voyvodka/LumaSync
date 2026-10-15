@@ -74,9 +74,8 @@
   --lm-dur-follow: 0.04s;
 }
 
-/* The 3D room's sky, set inline from the running mode (`roomMood`). Registered so the stage's
-   gradient eases between moods instead of cutting; a typed property has no fallback, so the stage
-   always sets both. */
+/* Registered so the room's sky gradient eases between moods; a typed property ignores a var()
+   fallback, so the stage always sets both. */
 @property --lm-room-sky-top {
   syntax: "<color>";
   inherits: false;

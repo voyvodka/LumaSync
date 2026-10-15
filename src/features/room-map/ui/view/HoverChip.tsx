@@ -3,8 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import styles from "./HoverChip.module.css";
 
-/** The name of the light under the pointer and whether it is lit. Decorative for a screen reader:
- *  the dock lists the same lights with their state. */
+/** aria-hidden: the dock lists the same lights with their state. */
 export function HoverChip({ name, lit, level, chipRef }: { name: string; lit: boolean; level: number; chipRef: Ref<HTMLDivElement> }) {
   const { t } = useTranslation();
   return (

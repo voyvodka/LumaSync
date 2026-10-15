@@ -26,7 +26,6 @@ export interface RoomViewDockProps {
   canIdentify: boolean;
   /** Hue is streaming: the bridge will not blink a light, so the card says so before the press. */
   hueStreaming?: boolean;
-  /** The lamps lit in this colour at this brightness (0–1), or null while the lights are off. */
   lit?: LitLamps | null;
   onSelect: (id: string) => void;
   onBack: () => void;

@@ -1,8 +1,5 @@
 @layer components {
-  /* The sky the room floats in: the running mode's colour at the top fading down into the night
-     (`roomMood`). Registered, so a mood change eases the gradient instead of cutting it. The
-     renderer is transparent over it, so the backdrop costs no draw; it lives here rather than in
-     the lazy view so the slot is already night while three.js is on its way. */
+  /* Here, not in the lazy view, so the slot is already night while three.js is on its way. */
   .stage {
     position: absolute;
     inset: 0;

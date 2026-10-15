@@ -157,7 +157,6 @@ describe("RoomView3D", () => {
     expect(onFail).toHaveBeenCalledWith(expect.objectContaining({ message: "no WebGL context" }));
   });
 
-  // The camera travels to a picked light and comes back when the pick is cleared.
   it("frames a picked light and returns to the room when it is let go", async () => {
     const config = { ...DEFAULT_ROOM_MAP, hueChannels: [{ channelIndex: 0, x: 0.8, y: 0.8, z: 0, zOrigin: "bridge" as const }] };
     const onFail = vi.fn<(error: unknown) => void>();

@@ -32,7 +32,6 @@ export function DockFrame({
   extra?: ReactNode;
   onKeyDown?: (event: KeyboardEvent<HTMLElement>) => void;
   testId?: string;
-  /** Glass over what is behind it, for the View face's lit room. */
   glass?: boolean;
   children: ReactNode;
 }) {

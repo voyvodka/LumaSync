@@ -1,18 +1,13 @@
-// Real light from the lamps. The glow's pools say where light lands; these light what is there —
-// the sofa's front, the wall behind a floor lamp, the side of the table facing it — and throw the
-// shadows a lamp-lit room has. A fixed number of them, the unused ones dark, so adding a lamp to
-// the map does not change the shader programs and stall the view while the room recompiles.
+// A fixed count, spares dark: the light count is part of the shader programs, and a count that
+// followed the lamps recompiled the room on every added lamp.
 import { Color, PointLight } from "three";
 
 import type { Lamp } from "./glow";
 
 export const LAMP_LIGHTS = 6;
-/** Lamps whose light casts a shadow. Each is a cube map drawn only when the shadows are, which is
- *  when the walls cut, so the cost is memory: kept small. The caster count is part of the shader
- *  programs, so a room going from one lamp to three recompiles once; the light count does not. */
+// Cube shadow maps, redrawn only when a wall cuts: the cost is memory.
 const SHADOW_LAMPS = 3;
 const SHADOW_MAP = 256;
-/** Candela of a lamp at full: a room this size reads lamp-lit without the walls burning out. */
 const INTENSITY = 7;
 
 export interface LampLights {
@@ -21,7 +16,6 @@ export interface LampLights {
   paint(lampColour: number | null, level: number): void;
 }
 
-/** Gives the first lamps in the room a real light each and marks them `litByLight`. */
 export function lampLights(lamps: Lamp[], roomReach: number, shadows: boolean): LampLights {
   const lit = lamps.filter((lamp) => !lamp.outside).slice(0, LAMP_LIGHTS);
   for (const lamp of lit) lamp.litByLight = true;
@@ -29,14 +23,13 @@ export function lampLights(lamps: Lamp[], roomReach: number, shadows: boolean): 
   const lights = Array.from({ length: LAMP_LIGHTS }, (_, i) => {
     const lamp = lit[i];
     const light = new PointLight(0xffffff, 0, roomReach, 2);
-    // Only a lamp's light: a spare one casting would draw a cube of shadow from under the floor.
     light.castShadow = shadows && i < SHADOW_LAMPS && lamp !== undefined;
     if (light.castShadow) {
       light.shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
       light.shadow.radius = 8;
       light.shadow.bias = -0.002;
       light.shadow.camera.near = 0.05;
-      // A lamp's shadow is filled by the room's bounce; at full strength it cut black wedges.
+      // At full strength a lamp's shadow cut black wedges up the walls.
       light.shadow.intensity = 0.7;
     }
     if (lamp) {

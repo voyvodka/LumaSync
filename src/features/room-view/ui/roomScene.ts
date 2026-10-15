@@ -49,12 +49,10 @@ import { BLOOM_LAYER } from "./scene/bloom";
 /** Where a strip along a wall runs: about skirting height. */
 const STRIP_HEIGHT = 0.08;
 const STRIP_GLOW = 0xffc46b;
-/** The backlight's spill against the wall, past 1 so the glow pass picks it up. */
 const BACKLIGHT_GAIN = 0.8;
 const UNLIT_STRIP = new Color(0x2a2a2e);
 const WALL_CUT_HEIGHT = 0.2;
-/** The walls the camera looks over stop short of the ceiling, as a dollhouse's do: at full height
- *  they read as a box and hid the far half of the floor from a raised view. */
+/** At full height the walls hid the far half of the floor from a raised view. */
 const WALL_STANDING_SHARE = 0.7;
 /** Parts in these colours are metal or glass: a satin finish instead of the matte one. */
 const SATIN = new Set<number>([PALETTE.metal, PALETTE.metalSoft, PALETTE.bezel, PALETTE.keyboard, PALETTE.handle]);
@@ -99,7 +97,6 @@ export interface RoomScene {
   scene: Scene;
   /** Lowers the walls standing between the camera and the room; true when anything changed. */
   cutWalls(cameraDirection: Vector3): boolean;
-  /** Keeps the selection's ring a fixed size on screen as the view zooms. */
   setPixelsPerMetre(ppm: number): void;
   /** What a click can land on: every light, piece of furniture and the screen. */
   pickables: readonly Pickable[];
@@ -107,8 +104,7 @@ export interface RoomScene {
   select(objectId: string | null): boolean;
   /** Turns what faces the camera (the selection's ring) to it; call before each draw. */
   faceCamera(cameraQuaternion: Quaternion): void;
-  /** The lamps in one colour (or each its own, `null`) at `level`, 0 dark to 1 full, and the
-   *  room's fill light following them. */
+  /** `null` keeps each lamp's own colour; `level` 0 is the night rig, 1 the lamp-lit one. */
   setMood(lampColour: number | null, level: number): void;
   /** Where to aim and how far the room reaches from it. */
   target: Vector3;
@@ -325,7 +321,6 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
       blending: AdditiveBlending,
     });
     const plane = new Mesh(new PlaneGeometry(backlight.width, backlight.height), spill);
-    // The strip behind the screen glows as the bulbs do.
     plane.layers.enable(BLOOM_LAYER);
     plane.position.set(backlight.x, backlight.y, backlight.z);
     scene.add(plane);
@@ -334,8 +329,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   const mark = buildSelectionMark(pickables);
   scene.add(mark.group);
 
-  // The rig between the night (lamps off) and a lamp-lit evening, where the lamps carry the room and
-  // the sky and the key fall back to a dim fill. A room with no lamps keeps its evening light.
+  // A room with no lamps keeps its evening light whatever the mode.
   const evening = { sky: lights.hemisphere.color.clone(), ground: lights.hemisphere.groundColor.clone(), hemi: lights.hemisphere.intensity, key: lights.key.intensity, keyColour: lights.key.color.clone(), fill: lights.fill.intensity };
   const rigs = {
     lit: { sky: new Color(0xc9ccdf), ground: new Color(0x5a3e28), hemi: 0.5, key: 0.55, keyColour: evening.keyColour, fill: 0.2 },
@@ -354,7 +348,6 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     real?.paint(lampColour, level);
     glow?.paint(lampColour, level);
     spill?.color.set(lampColour ?? STRIP_GLOW).multiplyScalar(level * BACKLIGHT_GAIN);
-    // A strip along a wall is lit as the lamps are: off with them, in their colour.
     for (const material of stripMaterials) material.color.set(lampColour ?? STRIP_GLOW).lerp(UNLIT_STRIP, 1 - level);
   };
   setMood(null, 1);

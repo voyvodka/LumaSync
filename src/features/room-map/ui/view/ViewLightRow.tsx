@@ -13,7 +13,6 @@ import { Disc } from "../dock/InspectorParts";
 import styles from "./ViewLightRow.module.css";
 import { useViewLightLabel } from "./viewLightLabel";
 
-/** The lamps' state in the room: their colour as CSS and the brightness they run at, 0–1. */
 export interface LitLamps {
   colour: string;
   brightness: number;
@@ -21,7 +20,7 @@ export interface LitLamps {
 
 export interface ViewLightRowProps {
   lights: readonly ViewLight[];
-  /** Lit lamps glow in their chips, with their level under the name; null while the lights are off. */
+  /** null while the lights are off. */
   lit?: LitLamps | null;
   /** The Hue side of the room; an area not ready says why in place of the lights. */
   hue: PaletteHueArea | null;

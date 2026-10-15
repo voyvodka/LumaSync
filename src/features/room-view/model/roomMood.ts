@@ -1,8 +1,4 @@
-// What the running mode does to the 3D room: whether its lamps are lit, in what colour and how
-// bright, and the sky behind the room. Off leaves the room in the night; Solid lights every lamp in
-// its colour, an effect in its palette's middle; Ambilight dims the room to a cinema violet, its
-// lamps low and cool until the live colours reach the view. The sky is a top colour fading down to
-// the night.
+// Ambilight and an effect's motion are placeholders here until the live colours reach the view.
 import { type LightingModeConfig, LIGHTING_MODE_KIND } from "@/shared/contracts/mode";
 import { kelvinToRgb } from "@/shared/lib/color";
 import { paletteOf, paletteStops } from "@/features/mode/model/effectSwatch";
@@ -10,13 +6,10 @@ import { paletteOf, paletteStops } from "@/features/mode/model/effectSwatch";
 import { LAMP_COLOURS } from "./lampColours";
 
 export interface RoomMood {
-  /** 0 dark, 1 at full: the lamps' level as drawn, never below a floor while lit. */
   level: number;
-  /** The brightness the mode runs at, 0–1, as the user set it. */
+  /** As the user set it; `level` is what is drawn. */
   brightness: number;
-  /** The lamps' colour while lit. */
   lamp: number;
-  /** The sky's top, and the colour it fades through before the night. */
   sky: { top: number; mid: number };
 }
 
@@ -26,7 +19,7 @@ const SKY_CINEMA = { top: 0x2a2052, mid: 0x130e2b };
 const CINEMA_LAMP = 0xa99bff;
 const CINEMA_SHARE = 0.55;
 const SKY_NIGHT = { top: 0x121d3d, mid: 0x0a1024 };
-/** The floor a dim lamp keeps: at 1% a Hue light still glows, it does not read as off. */
+/** At 1% a Hue light still glows: the room must not read as off. */
 const LEVEL_FLOOR = 0.12;
 
 function rgb(r: number, g: number, b: number): number {
@@ -43,14 +36,12 @@ function mix(a: number, b: number, t: number): number {
   return rgb(ar + (br - ar) * t, ag + (bg - ag) * t, ab + (bb - ab) * t);
 }
 
-/** A lamp colour's sky: the colour itself, darkened into the night. */
 function skyOf(colour: number): RoomMood["sky"] {
   return { top: mix(colour, 0x0b0b12, 0.62), mid: mix(colour, 0x07070c, 0.86) };
 }
 
 const level = (brightness: number | undefined) => LEVEL_FLOOR + (1 - LEVEL_FLOOR) * Math.min(Math.max(brightness ?? 1, 0), 1);
 
-/** `null` — no running mode known (a test, a window without one) — reads as lamps lit warm. */
 export function roomMood(mode: LightingModeConfig | null): RoomMood {
   // The control state keeps every mode's last payload through a switch: read the running kind's.
   const payload =
@@ -73,16 +64,12 @@ function moodOf(mode: LightingModeConfig | null): Omit<RoomMood, "brightness"> {
     case LIGHTING_MODE_KIND.EFFECT: {
       const effect = mode.effect;
       if (!effect) return { level: 1, lamp: WARM, sky: SKY_WARM };
-      // An effect moves through its palette; until the live colours reach the view, the lamps hold
-      // the palette's middle.
       const stops = paletteStops(paletteOf(effect), effect);
       const middle = stops[Math.floor(stops.length / 2)];
       const lamp = middle ? Number.parseInt(middle.slice(1), 16) : WARM;
       return { level: level(effect.brightness), lamp, sky: skyOf(lamp) };
     }
     default:
-      // The lamps follow the screen; until its colours reach the view they hold what a screen
-      // throws into a dark room, dim and cool.
       return { level: level(mode.ambilight?.brightness) * CINEMA_SHARE, lamp: CINEMA_LAMP, sky: SKY_CINEMA };
   }
 }

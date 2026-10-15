@@ -1,6 +1,5 @@
 @layer components {
-  /* What the pointer is over in the room: a name and whether it is lit, beside the cursor. Placed
-     by transform from the stage, so following the pointer never lays the page out again. */
+  /* Placed by transform, so following the pointer never lays the page out again. */
   .chip {
     position: absolute;
     top: 0;

@@ -20,7 +20,6 @@
     transform: translateX(-50%);
   }
   .single { grid-template-columns: minmax(0, 1fr); }
-  /* The View dock floats over a lit room: glass, so the room's light reaches under it. */
   .glass {
     border-color: color-mix(in srgb, var(--lm-ink) 10%, transparent);
     background: color-mix(in srgb, var(--lm-panel-2) 64%, transparent);

@@ -1,6 +1,3 @@
-// What makes a lamp read as lit: a bulb burning past white (the bloom pass glows from it) and,
-// for a lamp past the real lights' count, a pool on the floor and a wash on the nearest wall.
-// Each kind is one draw call whatever the number of lamps.
 import {
   AdditiveBlending,
   BoxGeometry,
@@ -27,13 +24,11 @@ import type { LampShape } from "./lamps";
 export interface Lamp {
   /** Off the room's outline (in an L's or U's cut): it throws no pool on a floor that is not there. */
   outside?: boolean;
-  /** Lit by a real light, which puts the light on the floor and walls itself: no pool, no wash. */
+  /** A real light already lights its floor and walls; a painted pool would light them twice. */
   litByLight?: boolean;
   /** The lit part's centre. */
   at: ScenePoint;
-  /** The lit part's half-extents: a bulb is a small sphere, a shade a drum, a Play bar's back a strip. */
   radii: [number, number, number];
-  /** Drawn as a globe when absent. */
   shape?: LampShape;
   color: number;
 }
@@ -85,11 +80,11 @@ function additive(texture: Texture, opacity: number): MeshBasicMaterial {
 
 const WHITE = new Color(0xffffff);
 const UNLIT_BULB = new Color(0x24221f);
-/** Past 1: the bulb burns out to white in the picture, and feeds the glow pass more than a surface. */
+/** Past 1 on purpose: the bulb burns out to white and feeds the glow pass. */
 const BULB_BRIGHTNESS = 3;
 const SHADE_BRIGHTNESS = 1.9;
 
-/** Unit shapes, scaled per lamp by its half-extents: a cylinder 2 tall so its scale is a half-height. */
+/** Unit size 2, so a lamp's half-extents are its scale. */
 const SHAPES: ReadonlyArray<{ shape: LampShape; geometry: () => BufferGeometry }> = [
   { shape: "globe", geometry: () => new SphereGeometry(1, 16, 12) },
   { shape: "drum", geometry: () => new CylinderGeometry(1, 1, 2, 28) },
@@ -102,7 +97,7 @@ export interface Glow {
   objects: InstancedMesh[];
   /** Hides the washes on walls the camera has cut down; true when anything changed. */
   setCutWalls(cut: readonly boolean[]): boolean;
-  /** Every lamp in one colour (or each its own, `null`) at `level`, 0 dark to 1 full. */
+  /** `null` keeps each lamp's own colour. */
   paint(lampColour: number | null, level: number): void;
 }
 
@@ -135,8 +130,7 @@ export function buildGlow(
   const m = new Matrix4();
   const colour = new Color();
 
-  // One mesh per shape, each holding every lamp and showing only its own (the rest scaled to
-  // nothing): the draw count stays four whatever the lamps are.
+  // Every shape's mesh holds every lamp, the others scaled to nothing: four draws whatever the lamps.
   const material = new MeshBasicMaterial({ toneMapped: false });
   const shapes = SHAPES.map(({ shape, geometry }) => {
     const mesh = new InstancedMesh(geometry(), material, lamps.length);
@@ -189,11 +183,8 @@ export function buildGlow(
     washes.forEach((wash, i) => washMesh.setMatrixAt(i, wash.matrix));
   }
 
-  // A lit bulb burns nearly white whatever its colour, the bloom pass carrying the colour out; an
-  // unlit one is frosted glass.
   const paint = (lampColour: number | null, level: number) => {
     lamps.forEach((lamp, i) => {
-      // A shade glows through its fabric, dimmer than a bare bulb.
       const gain = lamp.shape === "drum" || lamp.shape === "flare" ? SHADE_BRIGHTNESS : BULB_BRIGHTNESS;
       const lit = colour.set(lampColour ?? lamp.color).lerp(WHITE, 0.2).multiplyScalar(gain);
       lit.lerp(UNLIT_BULB, 1 - level);
