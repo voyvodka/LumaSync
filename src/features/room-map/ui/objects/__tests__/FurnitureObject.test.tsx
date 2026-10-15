@@ -10,9 +10,11 @@
  * and locked-state suppression of handles.
  */
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { describe, it, expect, vi } from "vitest";
 
 import { FurnitureObject } from "../FurnitureObject";
+import { SelectionLayerContext } from "../selectionLayer";
 import type { FurniturePlacement } from "@/shared/contracts/roomMap";
 
 const BASE_PLACEMENT: FurniturePlacement = {
@@ -33,11 +35,22 @@ const BASE_PROPS = {
   model: { kind: "upholstered", seats: 3, arms: true, corner: null } as const,
   pxPerMeter: PX_PER_METER,
   selected: false,
+  roomWidth: 6,
+  roomDepth: 5,
   gridStepPx: 40,
   snapEnabled: false,
   onSelect: vi.fn(),
   onChange: vi.fn(),
 };
+
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+
+/** The plan's top layer, where a selected piece draws its frame. */
+function withLayer(ui: ReactNode) {
+  const layer = document.createElement("div");
+  document.body.appendChild(layer);
+  return { ui: <SelectionLayerContext.Provider value={layer}>{ui}</SelectionLayerContext.Provider>, layer };
+}
 
 describe("FurnitureObject", () => {
   it("draws a type from a newer build as other instead of throwing", () => {
@@ -59,34 +72,57 @@ describe("FurnitureObject", () => {
     expect(container.querySelector("[data-furniture-id]")?.hasAttribute("data-outside")).toBe(false);
   });
 
-  it("does not render resize handles when not selected", () => {
-    const { container } = render(<FurnitureObject {...BASE_PROPS} selected={false} />);
-    // ResizeHandle renders divs with corner-specific cursor classes
-    const handles = container.querySelectorAll("[class*='cursor-nwse-resize'], [class*='cursor-nesw-resize']");
-    expect(handles.length).toBe(0);
+  it("does not draw a frame when not selected", () => {
+    const { ui, layer } = withLayer(<FurnitureObject {...BASE_PROPS} selected={false} />);
+    render(ui);
+    expect(layer.querySelector("[data-testid=selection-frame]")).toBeNull();
   });
 
-  it("renders 4 resize handles when selected and unlocked", () => {
-    const { container } = render(
-      <FurnitureObject {...BASE_PROPS} selected={true} placement={{ ...BASE_PLACEMENT, locked: false }} />,
+  // Corner-only 8 px handles read as no resize at all, and turning a piece had no handle.
+  it("draws eight resize handles and a turn knob in the top layer when selected and unlocked", () => {
+    const { ui, layer } = withLayer(<FurnitureObject {...BASE_PROPS} selected={true} />);
+    render(ui);
+    expect(layer.querySelectorAll("[data-testid^=frame-handle-]")).toHaveLength(8);
+    expect(layer.querySelector("[data-testid=frame-rotate]")).not.toBeNull();
+  });
+
+  it("draws the frame but no handles when selected but locked", () => {
+    const { ui, layer } = withLayer(
+      <FurnitureObject {...BASE_PROPS} selected={true} placement={{ ...BASE_PLACEMENT, locked: true }} />,
     );
-    const nwse = container.querySelectorAll("[class*='cursor-nwse-resize']");
-    const nesw = container.querySelectorAll("[class*='cursor-nesw-resize']");
-    // nw + se = 2 nwse-resize; ne + sw = 2 nesw-resize
-    expect(nwse.length).toBe(2);
-    expect(nesw.length).toBe(2);
+    render(ui);
+    expect(layer.querySelector("[data-testid=selection-frame]")).not.toBeNull();
+    expect(layer.querySelectorAll("[data-testid^=frame-handle-]")).toHaveLength(0);
   });
 
-  it("does not render resize handles when selected but locked", () => {
+  it("stays inside the room while dragged past its wall", () => {
+    const onChange = vi.fn<(updated: FurniturePlacement) => void>();
+    const { container } = render(<FurnitureObject {...BASE_PROPS} onChange={onChange} />);
+    const piece = container.querySelector("[data-furniture-id]") as HTMLElement;
+    fireEvent.pointerDown(piece, { clientX: 100, clientY: 100, pointerId: 1 });
+    // 800 px at 80 px/m is 10 m to the right, past the 6 m wall.
+    fireEvent.pointerMove(piece, { clientX: 900, clientY: 100, pointerId: 1 });
+    fireEvent.pointerUp(piece, { clientX: 900, clientY: 100, pointerId: 1 });
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ x: 4 }));
+  });
+
+  it("holds the grid on the axis a guide did not catch", () => {
+    const onChange = vi.fn<(updated: FurniturePlacement) => void>();
+    const onSnapDragMove = vi.fn(() => ({ snapX: 2.2, snapY: null, guides: [] }));
     const { container } = render(
       <FurnitureObject
         {...BASE_PROPS}
-        selected={true}
-        placement={{ ...BASE_PLACEMENT, locked: true }}
+        placement={{ ...BASE_PLACEMENT, x: 1.3, y: 1.7 }}
+        snapEnabled
+        onChange={onChange}
+        onSnapDragMove={onSnapDragMove}
       />,
     );
-    const handles = container.querySelectorAll("[class*='cursor-nwse-resize'], [class*='cursor-nesw-resize']");
-    expect(handles.length).toBe(0);
+    const piece = container.querySelector("[data-furniture-id]") as HTMLElement;
+    fireEvent.pointerDown(piece, { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(piece, { clientX: 140, clientY: 116, pointerId: 1 });
+    fireEvent.pointerUp(piece, { clientX: 140, clientY: 116, pointerId: 1 });
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ x: 2.2, y: 2 }));
   });
 
   it("root div is positioned at pxPerMeter-scaled coordinates", () => {

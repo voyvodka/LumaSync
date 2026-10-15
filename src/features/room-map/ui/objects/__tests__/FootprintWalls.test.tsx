@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { type RoomCorner, resolveRoomFootprint } from "@/shared/contracts/roomMap";
 
-import { buildFootprint } from "../../../model/roomFootprint";
+import { buildFootprint, describeFootprint, type FootprintShape, type FootprintSide } from "../../../model/roomFootprint";
 import { FootprintWalls } from "../FootprintWalls";
 
 vi.mock("react-i18next", () => ({
@@ -16,16 +16,61 @@ const L = buildFootprint({ kind: "L", corner: "bottomRight", width: 2, depth: 1.
 const renderWalls = (corners: readonly RoomCorner[], panMode = false) => {
   const onMove = vi.fn<(corners: RoomCorner[], gesture: string) => void>();
   const onNotch = vi.fn<(corners: RoomCorner[]) => void>();
+  const onResizeStart = vi.fn<(side: FootprintSide) => void>();
+  const onResize = vi.fn<(side: FootprintSide, delta: number, gesture: string) => void>();
+  const onShapeChange = vi.fn<(shape: FootprintShape, gesture?: string) => void>();
   render(
-    <FootprintWalls corners={corners} dimensions={dims} pxPerMeter={100} zoom={2} panMode={panMode} onMove={onMove} onNotch={onNotch} />,
+    <FootprintWalls
+      corners={corners}
+      dimensions={dims}
+      shape={describeFootprint(corners.length === 4 ? undefined : [...corners], dims)}
+      pxPerMeter={100}
+      zoom={2}
+      panMode={panMode}
+      onMove={onMove}
+      onNotch={onNotch}
+      onResizeStart={onResizeStart}
+      onResize={onResize}
+      onShapeChange={onShapeChange}
+    />,
   );
-  return { onMove, onNotch };
+  return { onMove, onNotch, onResizeStart, onResize, onShapeChange };
 };
 
 describe("FootprintWalls", () => {
-  it("offers a handle for each wall inside the room's box only", () => {
+  it("offers the four outer walls to resize and each wall inside the box to reshape", () => {
     renderWalls(L);
-    expect(screen.getAllByTestId(/^room-wall-/).map((e) => e.dataset.testid)).toEqual(["room-wall-2", "room-wall-3"]);
+    expect(screen.getAllByTestId(/^room-wall-/).map((e) => e.dataset.testid)).toEqual([
+      "room-wall-top",
+      "room-wall-bottom",
+      "room-wall-left",
+      "room-wall-right",
+      "room-wall-2",
+      "room-wall-3",
+    ]);
+  });
+
+  // The room's size was a number field only; its walls did not move.
+  it("pulls an outer wall out by the drag in metres, as one gesture", () => {
+    const { onResize, onResizeStart } = renderWalls(resolveRoomFootprint({ dimensions: dims }));
+    const left = screen.getByTestId("room-wall-left");
+    fireEvent.pointerDown(left, { button: 0, clientX: 300, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(left, { clientX: 200, clientY: 100, pointerId: 1 });
+    fireEvent.pointerUp(left, { pointerId: 1 });
+    expect(onResizeStart).toHaveBeenCalledWith("left");
+    // 100 px left at zoom 2 and 100 px/m is half a metre outward.
+    expect(onResize).toHaveBeenCalledWith("left", 0.5, expect.stringMatching(/^room-wall:/));
+  });
+
+  it("slides a cut by its grip, and the × puts the rectangle back", () => {
+    const { onShapeChange } = renderWalls(L);
+    const grip = screen.getByTestId("room-shape-grip");
+    fireEvent.pointerDown(grip, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
+    // To the top-left quarter of the room: the L takes that corner.
+    fireEvent.pointerMove(grip, { clientX: -600, clientY: -500, pointerId: 1 });
+    expect(onShapeChange).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "L", corner: "topLeft" }), expect.any(String));
+    fireEvent.click(screen.getByTestId("room-shape-remove"));
+    expect(onShapeChange).toHaveBeenLastCalledWith({ kind: "rect" });
   });
 
   it("moves the wall by the drag in metres at the current zoom, as one gesture", () => {

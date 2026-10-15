@@ -140,6 +140,23 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- Room map editing, made direct:
+  - A selected piece gets a frame with eight handles that grow it from a side or a corner (⇧ keeps
+    its proportions from a corner) and a knob at its front that turns it in 15° steps (⇧ for any
+    angle) and shows which way it faces. The frame sits above every piece, so a rug's handles stay
+    reachable under the sofa on it.
+  - Pieces are drawn lowest first, as seen from above: a rug stays under the sofa or table on it,
+    whatever was added last.
+  - A dragged piece follows the grid as it moves, holds the grid on the axis an alignment guide did
+    not catch, stays inside the room's walls, and ⌥ drags it freely. The grid shows more strongly
+    while a piece moves.
+  - The room's walls drag: pulling one makes the room bigger or smaller with the opposite wall and
+    everything in the room left where it is. A cut (L, U or T) has a grip that slides it along the
+    walls or onto another one, and a × that puts the rectangle back. The walls are grey rather than
+    red, and they stay when the grid is turned off.
+  - On a trackpad two fingers pan the plan and a pinch zooms; a mouse wheel still zooms.
+  - A number in the inspector changes by dragging across it (⇧ for ten steps at a time); a press
+    without moving types, as before. The value sits beside its mark instead of across the field.
 - The Lights page's outputs say what they are in plain words: "USB strip" (not the CH340 chip name
   for every controller), "Hue lights", "Bridge · ready" / "live · 20 Hz" instead of "standby" /
   "DTLS 20 Hz", and "Not set up". The Hue area row explains in its ⓘ what an entertainment area is
@@ -491,6 +508,8 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- In the room map, undoing back past a template no longer drops the editor for the template list with
+  no way to redo, and ⇧⌘Z / Ctrl+Shift+Z redoes on every keyboard layout.
 - The scene chips are one Tab stop and the arrow keys move between them, as the mode buttons above
   do; they were six Tab stops and the arrows did nothing. Choosing Edit in the scenes library puts
   the cursor in the scene's name, where it used to drop focus on the page and leave Escape dead.

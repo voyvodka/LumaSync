@@ -1,5 +1,6 @@
 import type React from "react";
 import { memo, useRef, useState, useEffect, useCallback, useId, useMemo } from "react";
+import { SelectionLayerContext } from "./objects/selectionLayer";
 import { type RoomMapConfig, type ImageLayer, resolveRoomFootprint } from "@/shared/contracts/roomMap";
 import { clamp } from "@/shared/lib/math";
 import { imageLayerObjectId } from "../model/objectId";
@@ -268,8 +269,13 @@ interface RoomMapCanvasProps {
   onZoomChange?: (zoom: number) => void;
   onPanChange?: (offset: { x: number; y: number }) => void;
   panMode?: boolean;
+  /** A piece is being dragged: the grid steps forward so the snap it follows can be seen. */
+  dragging?: boolean;
   children?: React.ReactNode;
 }
+
+/** How long a wheel pan waits after the last event before it commits the offset. */
+const WHEEL_PAN_SETTLE_MS = 120;
 
 export function RoomMapCanvas({
   config,
@@ -286,10 +292,12 @@ export function RoomMapCanvas({
   onZoomChange,
   onPanChange,
   panMode = false,
+  dragging = false,
   children,
 }: RoomMapCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const objectLayerRef = useRef<HTMLDivElement>(null);
+  const [selectionLayer, setSelectionLayer] = useState<HTMLDivElement | null>(null);
 
   const { widthMeters, depthMeters } = config.dimensions;
   const outline = useMemo(
@@ -309,22 +317,50 @@ export function RoomMapCanvas({
     active: false, startX: 0, startY: 0, ox: 0, oy: 0, x: 0, y: 0,
   });
 
+  // Two fingers on a trackpad pan and a pinch zooms, as every map does; a mouse wheel's notches
+  // still zoom. Every wheel event used to zoom, so a trackpad could not move the plan at all.
+  const wheelPanRef = useRef<{ x: number; y: number; timer: ReturnType<typeof setTimeout> | null } | null>(null);
+  useEffect(
+    () => () => {
+      const pending = wheelPanRef.current;
+      if (pending?.timer) clearTimeout(pending.timer);
+    },
+    [],
+  );
   const handleCanvasWheel = useCallback(
     (e: React.WheelEvent<HTMLDivElement>) => {
       if (!onZoomChange || !onPanChange) return;
-      const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
-      const next = clamp(zoom + delta, ZOOM_MIN, ZOOM_MAX);
-      // Mouse position relative to canvas element
+      const pinch = e.ctrlKey;
+      const notch = e.deltaMode !== 0 || (e.deltaX === 0 && Math.abs(e.deltaY) >= 50 && Number.isInteger(e.deltaY));
+      if (!pinch && !notch) {
+        const pending = wheelPanRef.current ?? { x: panOffset.x, y: panOffset.y, timer: null };
+        pending.x -= e.deltaX;
+        pending.y -= e.deltaY;
+        const layer = objectLayerRef.current;
+        if (layer) layer.style.transform = layerTransform(pending.x, pending.y, zoom);
+        if (pending.timer) clearTimeout(pending.timer);
+        // One commit after the gesture, as a drag pan does: per event re-rendered every object.
+        pending.timer = setTimeout(() => {
+          wheelPanRef.current = null;
+          onPanChange({ x: pending.x, y: pending.y });
+        }, WHEEL_PAN_SETTLE_MS);
+        wheelPanRef.current = pending;
+        return;
+      }
+      const base = wheelPanRef.current ?? panOffset;
+      const next = pinch
+        ? clamp(zoom * Math.exp(-e.deltaY * 0.01), ZOOM_MIN, ZOOM_MAX)
+        : clamp(zoom + (e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP), ZOOM_MIN, ZOOM_MAX);
       const rect = canvasRef.current?.getBoundingClientRect();
       if (!rect) { onZoomChange(next); return; }
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
-      // Keep the point under the mouse fixed:
-      // Before zoom: worldX = (mx - panX) / oldZoom
-      // After zoom:  mx = worldX * newZoom + newPanX
-      // => newPanX = mx - (mx - panX) / oldZoom * newZoom
-      const newPanX = mx - ((mx - panOffset.x) / zoom) * next;
-      const newPanY = my - ((my - panOffset.y) / zoom) * next;
+      // Keep the point under the pointer fixed: newPan = m - (m - pan) / oldZoom * newZoom.
+      const newPanX = mx - ((mx - base.x) / zoom) * next;
+      const newPanY = my - ((my - base.y) / zoom) * next;
+      const pending = wheelPanRef.current;
+      if (pending?.timer) clearTimeout(pending.timer);
+      wheelPanRef.current = null;
       onZoomChange(next);
       onPanChange({ x: newPanX, y: newPanY });
     },
@@ -420,8 +456,8 @@ export function RoomMapCanvas({
           y2={svgMinY + svgH}
           stroke="currentColor"
           strokeWidth={gridStrokeWidth}
-          strokeDasharray="2 6"
-          opacity={0.4}
+          strokeDasharray={dragging ? undefined : "2 6"}
+          opacity={dragging ? 0.55 : 0.4}
         />,
       );
     }
@@ -437,30 +473,30 @@ export function RoomMapCanvas({
           y2={py}
           stroke="currentColor"
           strokeWidth={gridStrokeWidth}
-          strokeDasharray="2 6"
-          opacity={0.4}
-        />,
-      );
-    }
-
-    // Room boundary walls — solid red lines on top of grid, one per edge of the outline
-    const wallStroke = 1;
-    const walls = outline.map((a, i) => {
-      const b = outline[(i + 1) % outline.length]!;
-      return { key: `wall-${i}`, x1: a.x * pxPerMeter, y1: a.y * pxPerMeter, x2: b.x * pxPerMeter, y2: b.y * pxPerMeter };
-    });
-    for (const w of walls) {
-      gridLines.push(
-        <line
-          key={w.key}
-          x1={w.x1} y1={w.y1} x2={w.x2} y2={w.y2}
-          stroke="#f43f5e"
-          strokeWidth={wallStroke}
-          opacity={0.7}
+          strokeDasharray={dragging ? undefined : "2 6"}
+          opacity={dragging ? 0.55 : 0.4}
         />,
       );
     }
   }
+
+  // The walls, whether or not the grid shows: turning the grid off took the room's outline with it.
+  // Grey, not red — red read as an error on a line that is always there.
+  const wallLines = outline.map((a, i) => {
+    const b = outline[(i + 1) % outline.length]!;
+    return (
+      <line
+        key={`wall-${i}`}
+        x1={a.x * pxPerMeter}
+        y1={a.y * pxPerMeter}
+        x2={b.x * pxPerMeter}
+        y2={b.y * pxPerMeter}
+        stroke="var(--lm-ink-dim)"
+        strokeWidth={1.5}
+        strokeLinecap="square"
+      />
+    );
+  });
 
   return (
     <div
@@ -504,6 +540,17 @@ export function RoomMapCanvas({
           </svg>
         )}
 
+        <svg
+          className="absolute pointer-events-none"
+          style={{ zIndex: 2, left: 0, top: 0, overflow: "visible" }}
+          width={1}
+          height={1}
+          aria-hidden="true"
+          data-testid="room-walls"
+        >
+          {wallLines}
+        </svg>
+
         {/* What the outline cuts out of the room's box: hatched, so it reads as not the room. */}
         {outline.length > 4 && (
           <svg
@@ -542,7 +589,9 @@ export function RoomMapCanvas({
           />
         ))}
 
-        {children}
+        <SelectionLayerContext.Provider value={selectionLayer}>{children}</SelectionLayerContext.Provider>
+        {/* Above every piece: a selected rug keeps its handles while the sofa on it stays on top. */}
+        <div ref={setSelectionLayer} className="pointer-events-none absolute inset-0" style={{ zIndex: 40 }} />
       </div>
     </div>
   );

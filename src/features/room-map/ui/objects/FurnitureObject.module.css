@@ -7,7 +7,6 @@
     touch-action: none;
   }
 
-  .selected { outline: 2px solid var(--lm-ink); outline-offset: 2px; }
   /* Outside the room's shape: a dashed amber ring, so it reads as a question, not an error. */
   .outside::after {
     content: "";
@@ -17,9 +16,8 @@
     border-radius: 6px;
     pointer-events: none;
   }
-  .selected.locked { outline-color: rgb(255 255 255 / 40%); }
 
-  /* The drawing names the piece; its name comes with intent — on hover and while selected. */
+  /* The drawing names the piece on hover, upright; a selected one is named by its frame. */
   .label {
     position: absolute;
     top: 3px;
@@ -37,13 +35,11 @@
     opacity: 0;
     transition: opacity var(--lm-dur-quick);
   }
-  .piece:hover .label,
-  .selected .label { opacity: 1; }
+  .piece:hover .label { opacity: 1; }
 
   :global(:root[data-reduced-motion]) .label { transition: none; }
 
   @media (forced-colors: active) {
-    .selected { outline-color: Highlight; }
     .outside::after { border-color: Highlight; }
     .label {
       background: Canvas;

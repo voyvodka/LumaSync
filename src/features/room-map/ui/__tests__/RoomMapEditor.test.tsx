@@ -400,7 +400,7 @@ describe("RoomMapEditor — editor shortcuts stand aside for form fields", () =>
 
     let notPrevented = true;
     act(() => {
-      notPrevented = fireEvent.keyDown(field, { key: "z", metaKey: true });
+      notPrevented = fireEvent.keyDown(field, { key: "z", code: "KeyZ", metaKey: true });
     });
 
     expect(persistState.undo).not.toHaveBeenCalled();
@@ -498,7 +498,7 @@ describe("RoomMapEditor — bare keys stay on the canvas", () => {
     const { getByTestId } = await renderEditor();
 
     act(() => {
-      fireEvent.keyDown(getByTestId("dock-tab"), { key: "z", metaKey: true });
+      fireEvent.keyDown(getByTestId("dock-tab"), { key: "z", code: "KeyZ", metaKey: true });
     });
 
     expect(persistState.undo).toHaveBeenCalledTimes(1);

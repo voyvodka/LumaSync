@@ -130,15 +130,32 @@ describe("RoomMapEditor — a drag is one undo step and one save", () => {
     expect(roomMapSaves()).toHaveLength(1);
     expect(roomMapSaves()[0]?.furniture[0]?.x).toBe(3);
 
-    fireEvent.keyDown(root, { key: "z", metaKey: true });
+    fireEvent.keyDown(root, { key: "z", code: "KeyZ", metaKey: true });
     await flush();
     expect(roomMapSaves()).toHaveLength(2);
     expect(roomMapSaves()[1]?.furniture[0]?.x).toBe(1);
 
     // Nothing left to undo: the drag was one entry, not twenty.
-    fireEvent.keyDown(root, { key: "z", metaKey: true });
+    fireEvent.keyDown(root, { key: "z", code: "KeyZ", metaKey: true });
     await flush();
     expect(roomMapSaves()).toHaveLength(2);
+  });
+
+  // With ⇧ the key reads "Z", so a match on "z" never redid on Windows or Linux.
+  it("redoes on ⇧ with the capital the key reports", async () => {
+    stored({ furniture: [SOFA] });
+    const { root } = await renderEditor();
+    const sofa = canvasSofa();
+    fireEvent.pointerDown(sofa, { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(sofa, { clientX: 260, clientY: 100, pointerId: 1 });
+    fireEvent.pointerUp(sofa, { clientX: 260, clientY: 100, pointerId: 1 });
+    await flush();
+    fireEvent.keyDown(root, { key: "z", code: "KeyZ", ctrlKey: true });
+    await flush();
+    fireEvent.keyDown(root, { key: "Z", code: "KeyZ", ctrlKey: true, shiftKey: true });
+    await flush();
+    const saves = roomMapSaves();
+    expect(saves[saves.length - 1]?.furniture[0]?.x).toBe(3);
   });
 });
 
@@ -168,12 +185,12 @@ describe("RoomMapEditor — a held arrow key is one undo step and one save", () 
     expect(roomMapSaves()).toHaveLength(1);
     expect(roomMapSaves()[0]?.furniture[0]?.x).toBeCloseTo(1 + 16 * 0.1, 10);
 
-    fireEvent.keyDown(root, { key: "z", metaKey: true });
+    fireEvent.keyDown(root, { key: "z", code: "KeyZ", metaKey: true });
     await flush();
     expect(roomMapSaves()).toHaveLength(2);
     expect(roomMapSaves()[1]?.furniture[0]?.x).toBe(1);
 
-    fireEvent.keyDown(root, { key: "z", metaKey: true });
+    fireEvent.keyDown(root, { key: "z", code: "KeyZ", metaKey: true });
     await flush();
     expect(roomMapSaves()).toHaveLength(2);
   });
@@ -238,7 +255,7 @@ describe("RoomMapEditor — stepping a typed position is one undo step and one s
     // Five 5 cm steps across a 5 m room are 0.1 of the cube.
     expect(roomMapSaves()[0]?.hueChannels[0]?.x).toBeCloseTo(0.6, 6);
 
-    fireEvent.keyDown(root, { key: "z", metaKey: true });
+    fireEvent.keyDown(root, { key: "z", code: "KeyZ", metaKey: true });
     await flush();
     expect(roomMapSaves()).toHaveLength(2);
     expect(roomMapSaves()[1]?.hueChannels[0]?.x).toBe(0.5);

@@ -10,9 +10,14 @@
     height: 32px;
     padding: 0 8px;
     border-radius: 7px;
-    cursor: text;
+    /* At rest a drag across it changes the value; a press without moving types. */
+    cursor: ew-resize;
+    touch-action: none;
     transition: background var(--lm-dur-quick);
   }
+  .editing { cursor: text; }
+  .scrubbing { background: rgb(255 255 255 / 6%); }
+  .scrubbing .input { color: var(--lm-amber); }
   /* A tint rather than a panel colour: the field sits on the dock and on popovers alike. */
   .field:hover:not(.disabled) { background: rgb(255 255 255 / 4%); }
   .editing { background: rgb(255 255 255 / 6%); }
@@ -45,9 +50,9 @@
   .editing .prefix { color: var(--lm-ink-dim); }
 
   .input {
-    flex: 1;
-    width: 100%;
-    min-width: 0;
+    flex: 0 1 auto;
+    min-width: 2ch;
+    max-width: 100%;
     height: 100%;
     margin: 0;
     padding: 0;
@@ -59,6 +64,7 @@
     font-variant-numeric: tabular-nums;
     text-align: right;
     caret-color: var(--lm-amber);
+    cursor: inherit;
     outline: none;
   }
   .input::placeholder { color: var(--lm-ink-faint); }

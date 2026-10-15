@@ -30,6 +30,9 @@ export default {
     viewLabel: "The room in 3D. Pick a light from the toolbar below.",
     viewUnavailable: "View — the 3D room could not open on this computer",
   },
+  frame: {
+    rotate: "Drag to turn — 15° steps, ⇧ for any angle",
+  },
   view: {
     dock: "Lights in the room",
     lights: {
@@ -79,7 +82,10 @@ export default {
     stemDepth: "Wing length",
     offset: "Distance from the wall's start",
     dragHint: "Drag to move this wall",
-    notchHint: "Double-click to cut a notch here",
+    resizeHint: "Drag to make the room bigger or smaller",
+    resizeNotchHint: "Drag to resize the room · double-click to cut a notch",
+    moveHint: "Drag to slide the cut along the walls",
+    removeHint: "Remove the cut — back to a rectangle",
   },
   furniture: {
     type: {

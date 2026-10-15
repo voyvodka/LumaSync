@@ -33,6 +33,9 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     viewLabel: "Odanın 3D görünümü. Aşağıdaki araç çubuğundan bir ışık seç.",
     viewUnavailable: "Görünüm — 3D oda bu bilgisayarda açılamadı",
   },
+  frame: {
+    rotate: "Döndürmek için sürükle — 15° adım, ⇧ ile serbest",
+  },
   view: {
     dock: "Odadaki ışıklar",
     lights: {
@@ -82,7 +85,10 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     stemDepth: "Kanat uzunluğu",
     offset: "Duvarın başından uzaklık",
     dragHint: "Bu duvarı taşımak için sürükle",
-    notchHint: "Buraya girinti açmak için çift tıkla",
+    resizeHint: "Odayı büyütmek ya da küçültmek için sürükle",
+    resizeNotchHint: "Odayı boyutlandırmak için sürükle · girinti için çift tıkla",
+    moveHint: "Girintiyi duvarlar boyunca kaydırmak için sürükle",
+    removeHint: "Girintiyi kaldır — dikdörtgene dön",
   },
   furniture: {
     type: {

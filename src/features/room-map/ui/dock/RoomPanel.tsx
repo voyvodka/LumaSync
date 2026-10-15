@@ -8,6 +8,7 @@ import { Toggle } from "@/shared/ui/Toggle/Toggle";
 import { DecimalField, FieldHint } from "../DecimalField";
 import { GlyphDepth, GlyphHeight, GlyphWidth } from "../objects/fieldGlyphs";
 import type { FootprintShape } from "../../model/roomFootprint";
+import { ROOM_SIDE_MAX_M, ROOM_SIDE_MIN_M } from "../../model/roomResize";
 import { DockSlider } from "./DockSlider";
 import { RoomShapeField } from "./RoomShapeField";
 import styles from "./RoomPanel.module.css";
@@ -15,8 +16,6 @@ import styles from "./RoomPanel.module.css";
 /** A low basement to a double-height room. */
 export const ROOM_HEIGHT_MIN_M = 1.5;
 export const ROOM_HEIGHT_MAX_M = 8;
-const ROOM_SIDE_MIN_M = 1;
-const ROOM_SIDE_MAX_M = 30;
 
 export interface RoomSettings {
   dimensions: RoomDimensions;

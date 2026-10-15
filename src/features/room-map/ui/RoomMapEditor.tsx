@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { useTranslation } from "react-i18next";
 
-import type { FurnitureModel } from "@/features/room-view/model/furnitureModel";
+import { type FurnitureModel, modelTop } from "@/features/room-view/model/furnitureModel";
 import { ROOM_VIEW_3D_AVAILABLE } from "@/features/room-view/ui/RoomView3DHost";
 import type {
   FurniturePlacement,
@@ -45,7 +45,10 @@ import {
   footprintMinimumSize,
   outsideOutline,
   resizeFootprint,
+  type FootprintSide,
 } from "../model/roomFootprint";
+import { snapToStep } from "../model/pieceGeometry";
+import { resizeRoomFromSide } from "../model/roomResize";
 import { useRoomMapHueZones } from "../state/useRoomMapHueZones";
 import { imageLayerGestureKey, useRoomMapImageLayers } from "../state/useRoomMapImageLayers";
 import { useRoomMapObjects } from "../state/useRoomMapObjects";
@@ -151,8 +154,16 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
     [hueZones, hueAreaId],
   );
 
-  const { guides: snapGuides, onDragMove: snapDragMove, onDragEnd: snapDragEnd } = useSnapGuides(config);
+  const { guides: snapGuides, dragging: pieceDragging, onDragMove: snapDragMove, onDragEnd: snapDragEnd } = useSnapGuides(config);
   const furnitureModels = useFurnitureModels(config);
+  // Drawn lowest first, as seen from above: a rug stays under the sofa on it, whatever was added last.
+  const furnitureByHeight = useMemo(() => {
+    const top = (f: (typeof config.furniture)[number]) => f.topMeters ?? modelTop(furnitureModels.get(f.id) ?? BOX_MODEL);
+    return config.furniture
+      .map((f, index) => ({ f, index, top: top(f) }))
+      .sort((a, b) => a.top - b.top || a.index - b.index)
+      .map(({ f }) => f);
+  }, [config.furniture, furnitureModels]);
 
   const { setCanvasContainer, canvasSize, zoom, setZoom, panOffset, setPanOffset, spaceHeld, fitToView, handleArrowPan } =
     useRoomMapViewport(config.dimensions, ROOM_MAP_FIT_INSETS);
@@ -262,26 +273,27 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
       // A field's keys are the field's: Backspace in the LED count deleted the
       // strip, and Cmd+Z replaced the field's own undo with the editor's.
       if (isEditableTarget(e.target)) return;
+      // Matched on the physical key: with ⇧ the key is "Z", and on a Turkish layout ⌥ changes it.
       // Undo: Cmd+Z (Mac) / Ctrl+Z (Win/Linux)
-      if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
+      if ((e.metaKey || e.ctrlKey) && e.code === "KeyZ" && !e.shiftKey) {
         e.preventDefault();
         undo();
         return;
       }
       // Redo: Cmd+Shift+Z (Mac) / Ctrl+Shift+Z (Win/Linux)
-      if ((e.metaKey || e.ctrlKey) && e.key === "z" && e.shiftKey) {
+      if ((e.metaKey || e.ctrlKey) && e.code === "KeyZ" && e.shiftKey) {
         e.preventDefault();
         redo();
         return;
       }
       // Fit to view: Cmd+0 (Mac) / Ctrl+0 (Win/Linux)
-      if ((e.metaKey || e.ctrlKey) && e.key === "0") {
+      if ((e.metaKey || e.ctrlKey) && (e.code === "Digit0" || e.code === "Numpad0")) {
         e.preventDefault();
         fitToView(16);
         return;
       }
       // Duplicate: Cmd+D (Mac) / Ctrl+D (Win/Linux)
-      if ((e.metaKey || e.ctrlKey) && (e.key === "d" || e.key === "D")) {
+      if ((e.metaKey || e.ctrlKey) && e.code === "KeyD") {
         e.preventDefault();
         if (selectedId) handleDuplicate(selectedId);
         return;
@@ -310,6 +322,47 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
     [handleDelete, handleRotate, handleArrowNudge, handleArrowPan, handleDuplicate, undo, redo, popSelection, selectedId, fitToView],
   );
 
+  /** Everything in the room moved by (`dxM`, `dyM`) metres, as a patch. Hue channels and zones live
+   *  in the bridge's [-1, 1] cube, which spans the room, so they follow its size without a shift. */
+  const shiftedContents = useCallback(
+    (from: typeof config, dxM: number, dyM: number): Partial<typeof config> => {
+      const patch: Partial<typeof config> = {};
+      if (from.tvAnchor) patch.tvAnchor = { ...from.tvAnchor, x: from.tvAnchor.x + dxM, y: from.tvAnchor.y + dyM };
+      if (from.furniture.length > 0) patch.furniture = from.furniture.map((f) => ({ ...f, x: f.x + dxM, y: f.y + dyM }));
+      if (from.usbStrips.length > 0) {
+        patch.usbStrips = from.usbStrips.map((s) => ({ ...s, startX: s.startX + dxM, startY: s.startY + dyM, endX: s.endX + dxM, endY: s.endY + dyM }));
+      }
+      if (from.imageLayers.length > 0) {
+        patch.imageLayers = from.imageLayers.map((l) => ({ ...l, offsetX: l.offsetX + dxM * pxPerMeter, offsetY: l.offsetY + dyM * pxPerMeter }));
+      }
+      return patch;
+    },
+    [],
+  );
+
+  // An outer wall dragged: the opposite wall and everything in the room stay where they are on screen.
+  const wallDragStart = useRef<{ config: typeof config; pan: { x: number; y: number } } | null>(null);
+  const handleWallResizeStart = useCallback(() => {
+    wallDragStart.current = { config, pan: panOffset };
+  }, [config, panOffset]);
+  const handleWallResize = useCallback(
+    (side: FootprintSide, delta: number, gesture: string) => {
+      const start = wallDragStart.current;
+      if (!start) return;
+      const next = resizeRoomFromSide(start.config.dimensions, start.config.footprint, side, snapToStep(delta, 0.05));
+      if (!next) return;
+      setPanOffset({
+        x: start.pan.x - next.shift.x * pxPerMeter * zoom,
+        y: start.pan.y - next.shift.y * pxPerMeter * zoom,
+      });
+      apply(
+        { dimensions: next.dimensions, footprint: next.footprint, ...shiftedContents(start.config, next.shift.x, next.shift.y) },
+        { gesture },
+      );
+    },
+    [apply, zoom, setPanOffset, shiftedContents],
+  );
+
   const handleDimensionsChange = useCallback(
     (d: RoomDimensions) => {
       // Keep room center fixed on screen when resizing (pxPerMeter is constant)
@@ -323,33 +376,16 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
       // Shift all objects so they keep their position relative to room center
       const dxM = (d.widthMeters - widthMeters) / 2;
       const dyM = (d.depthMeters - depthMeters) / 2;
-      const dxPx = dxM * pxPerMeter;
-      const dyPx = dyM * pxPerMeter;
 
-      const patch: Partial<typeof config> = { dimensions: d };
+      const patch: Partial<typeof config> = { dimensions: d, ...shiftedContents(config, dxM, dyM) };
       // A height-only change leaves the outline as it is stored.
       if (config.footprint !== undefined && (d.widthMeters !== widthMeters || d.depthMeters !== depthMeters)) {
         patch.footprint = resizeFootprint(config.footprint, config.dimensions, d);
       }
 
-      if (config.tvAnchor) {
-        patch.tvAnchor = { ...config.tvAnchor, x: config.tvAnchor.x + dxM, y: config.tvAnchor.y + dyM };
-      }
-      if (config.furniture.length > 0) {
-        patch.furniture = config.furniture.map((f) => ({ ...f, x: f.x + dxM, y: f.y + dyM }));
-      }
-      if (config.usbStrips.length > 0) {
-        patch.usbStrips = config.usbStrips.map((s) => ({ ...s, startX: s.startX + dxM, startY: s.startY + dyM, endX: s.endX + dxM, endY: s.endY + dyM }));
-      }
-      // Hue channels and zones are not shifted: they live in the bridge's [-1, 1]
-      // cube, which spans the room, so they already follow its new size.
-      if (config.imageLayers.length > 0) {
-        patch.imageLayers = config.imageLayers.map((l) => ({ ...l, offsetX: l.offsetX + dxPx, offsetY: l.offsetY + dyPx }));
-      }
-
       apply(patch);
     },
-    [apply, config, panOffset, widthMeters, depthMeters, zoom, setPanOffset],
+    [apply, config, panOffset, widthMeters, depthMeters, zoom, setPanOffset, shiftedContents],
   );
 
   const outline = useMemo(
@@ -488,6 +524,7 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
           onZoomChange={setZoom}
           onPanChange={setPanOffset}
           panMode={spaceHeld}
+          dragging={pieceDragging}
         >
           <FootprintWalls
             corners={outline}
@@ -495,8 +532,14 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
             pxPerMeter={pxPerMeter}
             zoom={zoom}
             panMode={spaceHeld}
+            shape={roomShape}
             onMove={(footprint, gesture) => apply({ footprint }, { gesture })}
             onNotch={(footprint) => apply({ footprint })}
+            onResizeStart={handleWallResizeStart}
+            onResize={handleWallResize}
+            onShapeChange={(shape, gesture) =>
+              apply({ footprint: buildFootprint(shape, config.dimensions) }, gesture ? { gesture } : undefined)
+            }
           />
 
           {/* Origin crosshair marker — always centered, extends to edges */}
@@ -516,7 +559,7 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
             />
           ))}
 
-          {config.furniture.map((f) => (
+          {furnitureByHeight.map((f) => (
             <FurnitureObject
               key={f.id}
               placement={f}
@@ -524,6 +567,8 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
               pxPerMeter={pxPerMeter}
               selected={selectedId === furnitureObjectId(f.id)}
               outside={outsideOutline(f.x + f.width / 2, f.y + f.height / 2, outline)}
+              roomWidth={widthMeters}
+              roomDepth={depthMeters}
               gridStepPx={gridStepPx}
               snapEnabled={showGrid}
               zoom={zoom}

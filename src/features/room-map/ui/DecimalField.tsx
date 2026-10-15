@@ -47,6 +47,10 @@ export type DecimalFieldProps = RequiredValue | OptionalValue;
 
 const NUMBER = /^[-+]?(\d+\.?\d*|\.\d+)$/;
 
+/** A drag across a field: a step per this many pixels, after this much travel says it is a drag. */
+const SCRUB_PX_PER_STEP = 4;
+const SCRUB_SLOP_PX = 3;
+
 /** A typed number, with a comma read as the decimal mark the way Turkish writes it. */
 export function parseDecimal(text: string): number | null {
   const normalised = text.trim().replace(",", ".");
@@ -58,7 +62,9 @@ export function parseDecimal(text: string): number | null {
  * box arrives with intent: a tint on hover, a panel and an amber underline while editing. Typing
  * applies on leaving the field or on Enter; Esc puts the value back, and so does a number out of
  * range, with one small shake. ↑/↓ step it and apply at once (⇧ by ten), so a held arrow is one
- * gesture for a caller that coalesces its saves. Only a changed number is committed.
+ * gesture for a caller that coalesces its saves. Dragging across the field steps it the same way,
+ * a step per few pixels, so a value changes without typing; a press that does not move types.
+ * Only a changed number is committed.
  */
 export function DecimalField(props: DecimalFieldProps) {
   const {
@@ -82,6 +88,9 @@ export function DecimalField(props: DecimalFieldProps) {
   const [draft, setDraft] = useState(() => format(value));
   const [editing, setEditing] = useState(false);
   const boxRef = useRef<HTMLLabelElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const scrub = useRef<{ x: number; base: number; moved: boolean } | null>(null);
+  const [scrubbing, setScrubbing] = useState(false);
 
   if (!editing && draft !== format(value)) setDraft(format(value));
 
@@ -139,11 +148,54 @@ export function DecimalField(props: DecimalFieldProps) {
     commit(roundTo(clamp(folded, min, max), decimals));
   };
 
+  const startScrub = (event: React.PointerEvent<HTMLLabelElement>) => {
+    if (disabled || editing || event.button !== 0) return;
+    // Kept from focusing until the press turns out to be a click, so a drag does not open the text.
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const fallback = props.optional ? parseDecimal(props.placeholder) : null;
+    scrub.current = { x: event.clientX, base: value ?? fallback ?? 0, moved: false };
+  };
+  const moveScrub = (event: React.PointerEvent<HTMLLabelElement>) => {
+    const s = scrub.current;
+    if (!s) return;
+    const dx = event.clientX - s.x;
+    if (!s.moved && Math.abs(dx) < SCRUB_SLOP_PX) return;
+    if (!s.moved) {
+      s.moved = true;
+      setScrubbing(true);
+    }
+    const steps = Math.round(dx / SCRUB_PX_PER_STEP);
+    const raw = s.base + steps * step * (event.shiftKey ? 10 : 1);
+    const folded = normalize ? normalize(raw) : raw;
+    commit(roundTo(clamp(folded, min, max), decimals));
+  };
+  const endScrub = () => {
+    const s = scrub.current;
+    if (!s) return;
+    scrub.current = null;
+    setScrubbing(false);
+    if (!s.moved) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  };
+
   return (
     <label
       ref={boxRef}
-      className={cx(styles.field, editing && styles.editing, disabled && styles.disabled, className)}
+      className={cx(
+        styles.field,
+        editing && styles.editing,
+        scrubbing && styles.scrubbing,
+        disabled && styles.disabled,
+        className,
+      )}
       title={label}
+      onPointerDown={startScrub}
+      onPointerMove={moveScrub}
+      onPointerUp={endScrub}
+      onPointerCancel={endScrub}
     >
       {prefix !== undefined && (
         <span className={styles.prefix} aria-hidden="true">
@@ -151,6 +203,7 @@ export function DecimalField(props: DecimalFieldProps) {
         </span>
       )}
       <input
+        ref={inputRef}
         id={id}
         type="text"
         inputMode="decimal"
@@ -165,6 +218,8 @@ export function DecimalField(props: DecimalFieldProps) {
         aria-describedby={describedBy}
         disabled={disabled}
         className={styles.input}
+        // As wide as the number: the value sits by its mark and unit instead of across the field.
+        style={{ width: `${Math.max(draft.length, props.optional ? props.placeholder.length : 1, 1) + 0.5}ch` }}
         value={draft}
         placeholder={props.optional ? props.placeholder : undefined}
         data-testid={testId}

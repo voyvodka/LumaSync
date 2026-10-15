@@ -97,8 +97,9 @@ export function RoomMapSurface({
     );
   }
 
-  // An empty map with no edit history opens on the templates, in either face.
-  if (isRoomMapEmpty(config) && !doc.canUndo) {
+  // An empty map with no edit history opens on the templates, in either face. Undo back past a
+  // template keeps the editor: its Redo is the way back, and the picker had none.
+  if (isRoomMapEmpty(config) && !doc.canUndo && !doc.canRedo) {
     return <TemplateSelector onSelect={handleTemplateSelect} />;
   }
 

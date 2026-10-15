@@ -1,0 +1,93 @@
+@layer components {
+  /* The frame and its handles keep their size on screen at any zoom: each scales by 1 / zoom. */
+  .frame {
+    position: absolute;
+    transform-origin: center center;
+    outline: calc(1.5px * var(--frame-scale, 1)) solid var(--lm-amber);
+    outline-offset: calc(2px * var(--frame-scale, 1));
+    pointer-events: none;
+  }
+  .locked { outline-color: rgb(255 255 255 / 40%); }
+
+  .label {
+    position: absolute;
+    top: calc(100% + 8px * var(--frame-scale, 1));
+    left: 50%;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgb(0 0 0 / 70%);
+    color: var(--lm-ink);
+    font: 600 10.5px/1.5 var(--lm-sans);
+    white-space: nowrap;
+    transform-origin: top center;
+  }
+
+  .handle {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    margin: -5px 0 0 -5px;
+    border: 1.5px solid var(--lm-amber);
+    border-radius: 2px;
+    background: var(--lm-bg);
+    pointer-events: auto;
+    touch-action: none;
+    transform: scale(var(--frame-scale, 1));
+  }
+  /* A 24 px target around a 10 px mark. */
+  .handle::before { content: ""; position: absolute; inset: -7px; }
+  .handle:hover { background: var(--lm-amber); }
+  .nw { top: 0; left: 0; }
+  .n { top: 0; left: 50%; }
+  .ne { top: 0; left: 100%; }
+  .e { top: 50%; left: 100%; }
+  .se { top: 100%; left: 100%; }
+  .s { top: 100%; left: 50%; }
+  .sw { top: 100%; left: 0; }
+  .w { top: 50%; left: 0; }
+
+  /* The front: a stem up from the top edge to the knob that turns the piece. */
+  .stem {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    width: 1.5px;
+    height: 18px;
+    margin-left: -0.75px;
+    background: var(--lm-amber);
+    transform: scale(var(--frame-scale, 1));
+    transform-origin: bottom center;
+  }
+  .knob {
+    position: absolute;
+    bottom: calc(100% + 18px * var(--frame-scale, 1));
+    left: 50%;
+    display: grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    margin: 0 0 -9px -9px;
+    padding: 0;
+    border: 1.5px solid var(--lm-amber);
+    border-radius: 50%;
+    background: var(--lm-bg);
+    color: var(--lm-amber);
+    cursor: grab;
+    pointer-events: auto;
+    touch-action: none;
+    transform: scale(var(--frame-scale, 1));
+    transform-origin: center;
+  }
+  .knob::before { content: ""; position: absolute; inset: -7px; border-radius: 50%; }
+  .knob:active { cursor: grabbing; }
+  .knob svg { width: 10px; height: 10px; }
+  .knob:hover { background: var(--lm-amber); color: var(--lm-bg); }
+
+  @media (forced-colors: active) {
+    .frame { outline-color: Highlight; }
+    .handle,
+    .knob { border-color: Highlight; background: Canvas; color: Highlight; }
+    .stem { background: Highlight; }
+    .label { background: Canvas; color: CanvasText; forced-color-adjust: none; }
+  }
+}

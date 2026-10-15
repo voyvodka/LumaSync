@@ -4,8 +4,9 @@ import type { FurniturePlacement } from "@/shared/contracts/roomMap";
 import { cx } from "@/shared/lib/cx";
 import { FurnitureGlyph } from "./FurnitureGlyph";
 import styles from "./FurnitureObject.module.css";
-import { ResizeHandle } from "./ResizeHandle";
+import { type FrameHandle, handleSigns, SelectionFrame } from "./SelectionFrame";
 import { furnitureObjectId } from "../../model/objectId";
+import { clampInsideRoom, resizeFromHandle, snapToStep } from "../../model/pieceGeometry";
 import { isClick } from "../../model/snapGeometry";
 import type { SnapResult } from "../../state/useSnapGuides";
 
@@ -19,6 +20,9 @@ interface FurnitureObjectProps {
   selected: boolean;
   /** Its middle sits outside the room's outline: marked, never refused. */
   outside?: boolean;
+  /** The room's box: a dragged piece stays inside it. */
+  roomWidth: number;
+  roomDepth: number;
   gridStepPx: number;
   snapEnabled: boolean;
   zoom?: number;
@@ -35,6 +39,8 @@ export const FurnitureObject = memo(function FurnitureObject({
   pxPerMeter,
   selected,
   outside = false,
+  roomWidth,
+  roomDepth,
   gridStepPx,
   snapEnabled,
   onSelect,
@@ -44,241 +50,156 @@ export const FurnitureObject = memo(function FurnitureObject({
   zoom = 1,
   panMode = false,
 }: FurnitureObjectProps) {
-  const [localX, setLocalX] = useState(placement.x);
-  const [localY, setLocalY] = useState(placement.y);
-  const [localW, setLocalW] = useState(placement.width);
-  const [localH, setLocalH] = useState(placement.height);
+  const [local, setLocal] = useState(() => ({
+    x: placement.x,
+    y: placement.y,
+    w: placement.width,
+    h: placement.height,
+    r: placement.rotation ?? 0,
+  }));
 
   // Sync local state when placement prop changes from outside
   const prevPlacement = useRef(placement);
   if (prevPlacement.current !== placement) {
     prevPlacement.current = placement;
-    setLocalX(placement.x);
-    setLocalY(placement.y);
-    setLocalW(placement.width);
-    setLocalH(placement.height);
+    setLocal({ x: placement.x, y: placement.y, w: placement.width, h: placement.height, r: placement.rotation ?? 0 });
   }
 
-  const dragRef = useRef<{
-    active: boolean;
-    startClientX: number;
-    startClientY: number;
-    startX: number;
-    startY: number;
-  }>({ active: false, startClientX: 0, startClientY: 0, startX: 0, startY: 0 });
-
-  const resizeRef = useRef<{
-    active: boolean;
-    corner: "nw" | "ne" | "sw" | "se" | null;
-    startX: number;
-    startY: number;
-    startW: number;
-    startH: number;
-  }>({ active: false, corner: null, startX: 0, startY: 0, startW: 0, startH: 0 });
+  const dragRef = useRef<{ active: boolean; startClientX: number; startClientY: number; startX: number; startY: number }>({
+    active: false,
+    startClientX: 0,
+    startClientY: 0,
+    startX: 0,
+    startY: 0,
+  });
+  const gestureStart = useRef(local);
+  const latest = useRef(local);
+  latest.current = local;
 
   const minSizeM = MIN_SIZE_PX / pxPerMeter;
+  const gridStepM = gridStepPx / pxPerMeter;
+  const room = { width: roomWidth, depth: roomDepth };
+
+  /** Where a drag puts the piece: inside the room, on the guide it meets, else on the grid (⌥ free). */
+  const dragTarget = (clientX: number, clientY: number, free: boolean) => {
+    const ppm = pxPerMeter * zoom;
+    const d = dragRef.current;
+    const raw = clampInsideRoom(
+      { x: d.startX + (clientX - d.startClientX) / ppm, y: d.startY + (clientY - d.startClientY) / ppm, w: local.w, h: local.h, r: local.r },
+      room,
+    );
+    const snap = onSnapDragMove?.(furnitureObjectId(placement.id), raw.x, raw.y, local.w, local.h) ?? null;
+    if (free) return raw;
+    const onGrid = snapEnabled && gridStepM > 0;
+    // Per axis: a guide wins where it caught, the grid holds the other — it used to drop the grid on both.
+    const x = snap?.snapX ?? (onGrid ? snapToStep(raw.x, gridStepM) : raw.x);
+    const y = snap?.snapY ?? (onGrid ? snapToStep(raw.y, gridStepM) : raw.y);
+    return clampInsideRoom({ x, y, w: local.w, h: local.h, r: local.r }, room);
+  };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (resizeRef.current.active) return;
     if (panMode) return; // Let event bubble up for canvas pan
     onSelect(placement.id);
     if (placement.locked) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = {
-      active: true,
-      startClientX: e.clientX,
-      startClientY: e.clientY,
-      startX: localX,
-      startY: localY,
-    };
+    dragRef.current = { active: true, startClientX: e.clientX, startClientY: e.clientY, startX: local.x, startY: local.y };
   };
-
-  const snapResultRef = useRef<SnapResult | null>(null);
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragRef.current.active) return;
-    const effectivePpm = pxPerMeter * zoom;
-    const dx = (e.clientX - dragRef.current.startClientX) / effectivePpm;
-    const dy = (e.clientY - dragRef.current.startClientY) / effectivePpm;
-    const newX = dragRef.current.startX + dx;
-    const newY = dragRef.current.startY + dy;
-    setLocalX(newX);
-    setLocalY(newY);
-    if (onSnapDragMove) {
-      snapResultRef.current = onSnapDragMove(furnitureObjectId(placement.id), newX, newY, localW, localH);
-    }
+    if (isClick(dragRef.current.startClientX, dragRef.current.startClientY, e.clientX, e.clientY)) return;
+    const next = dragTarget(e.clientX, e.clientY, e.altKey);
+    setLocal((current) => ({ ...current, x: next.x, y: next.y }));
   };
 
-  const snapValue = (val: number, step: number) => {
-    const stepM = step / pxPerMeter;
-    return Math.round(val / stepM) * stepM;
-  };
-
-  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+  const finishDrag = (commit: { clientX: number; clientY: number; free: boolean } | null) => {
     if (!dragRef.current.active) return;
     dragRef.current.active = false;
-    if (isClick(dragRef.current.startClientX, dragRef.current.startClientY, e.clientX, e.clientY)) {
-      snapResultRef.current = null;
+    const d = dragRef.current;
+    if (commit === null || isClick(d.startClientX, d.startClientY, commit.clientX, commit.clientY)) {
       onSnapDragEnd?.();
-      setLocalX(placement.x);
-      setLocalY(placement.y);
+      setLocal((current) => ({ ...current, x: placement.x, y: placement.y }));
       return;
     }
-    const effectivePpm = pxPerMeter * zoom;
-    const dx = (e.clientX - dragRef.current.startClientX) / effectivePpm;
-    const dy = (e.clientY - dragRef.current.startClientY) / effectivePpm;
-    let newX = dragRef.current.startX + dx;
-    let newY = dragRef.current.startY + dy;
-    // Apply snap guide position if available
-    const snap = snapResultRef.current;
-    if (snap) {
-      if (snap.snapX !== null) newX = snap.snapX;
-      if (snap.snapY !== null) newY = snap.snapY;
-      snapResultRef.current = null;
-    } else if (snapEnabled && gridStepPx > 0) {
-      newX = snapValue(newX, gridStepPx);
-      newY = snapValue(newY, gridStepPx);
-    }
+    const next = dragTarget(commit.clientX, commit.clientY, commit.free);
     onSnapDragEnd?.();
-    if (newX !== placement.x || newY !== placement.y) {
-      onChange({ ...placement, x: newX, y: newY });
-    }
+    const x = Math.round(next.x * 100) / 100;
+    const y = Math.round(next.y * 100) / 100;
+    if (x !== placement.x || y !== placement.y) onChange({ ...placement, x, y });
   };
 
-  // Resize handlers
-  const handleResizeDragStart = (
-    _e: React.PointerEvent,
-    corner: "nw" | "ne" | "sw" | "se",
-  ) => {
-    resizeRef.current = {
-      active: true,
-      corner,
-      startX: localX,
-      startY: localY,
-      startW: localW,
-      startH: localH,
-    };
+  const handleResizeStart = () => {
+    gestureStart.current = latest.current;
   };
-
-  const handleResizeDragMove = (dx: number, dy: number, corner: "nw" | "ne" | "sw" | "se") => {
-    const θ = (placement.rotation ?? 0) * (Math.PI / 180);
-    const cosT = Math.cos(θ);
-    const sinT = Math.sin(θ);
-    const ref = resizeRef.current;
-
-    // Rotate screen delta into object's local coordinate system
-    const localDx = (dx * cosT + dy * sinT) / (pxPerMeter * zoom);
-    const localDy = (-dx * sinT + dy * cosT) / (pxPerMeter * zoom);
-
-    // Compute new width/height based on which corner is being dragged
-    let newW = ref.startW;
-    let newH = ref.startH;
-    if (corner === "se") {
-      newW = Math.max(minSizeM, ref.startW + localDx);
-      newH = Math.max(minSizeM, ref.startH + localDy);
-    } else if (corner === "sw") {
-      newW = Math.max(minSizeM, ref.startW - localDx);
-      newH = Math.max(minSizeM, ref.startH + localDy);
-    } else if (corner === "ne") {
-      newW = Math.max(minSizeM, ref.startW + localDx);
-      newH = Math.max(minSizeM, ref.startH - localDy);
-    } else if (corner === "nw") {
-      newW = Math.max(minSizeM, ref.startW - localDx);
-      newH = Math.max(minSizeM, ref.startH - localDy);
-    }
-
-    // Keep the opposite (anchor) corner fixed in world space.
-    // CSS model: element at (x,y), then rotated around its center.
-    // World pos of a corner = center + rotate(localOffset, θ)
-    const anchor = { se: "nw", ne: "sw", sw: "ne", nw: "se" }[corner] as typeof corner;
-    const aOldLx = (anchor === "ne" || anchor === "se") ? ref.startW / 2 : -ref.startW / 2;
-    const aOldLy = (anchor === "sw" || anchor === "se") ? ref.startH / 2 : -ref.startH / 2;
-    const origCx = ref.startX + ref.startW / 2;
-    const origCy = ref.startY + ref.startH / 2;
-    const anchorWx = origCx + aOldLx * cosT - aOldLy * sinT;
-    const anchorWy = origCy + aOldLx * sinT + aOldLy * cosT;
-
-    // Anchor's local offset in the new dimensions
-    const aNewLx = (anchor === "ne" || anchor === "se") ? newW / 2 : -newW / 2;
-    const aNewLy = (anchor === "sw" || anchor === "se") ? newH / 2 : -newH / 2;
-    // New center = anchorWorld - rotate(newAnchorLocal, θ)
-    const newCx = anchorWx - (aNewLx * cosT - aNewLy * sinT);
-    const newCy = anchorWy - (aNewLx * sinT + aNewLy * cosT);
-
-    setLocalX(newCx - newW / 2);
-    setLocalY(newCy - newH / 2);
-    setLocalW(newW);
-    setLocalH(newH);
-  };
-
-  const handleResizeDragEnd = (corner: "nw" | "ne" | "sw" | "se") => {
-    resizeRef.current.active = false;
-    onChange({
-      ...placement,
-      x: localX,
-      y: localY,
-      width: localW,
-      height: localH,
+  const handleResizeMove = (handle: FrameHandle, dx: number, dy: number, keepRatio: boolean) => {
+    const start = gestureStart.current;
+    const ppm = pxPerMeter * zoom;
+    const next = resizeFromHandle(start, handleSigns(handle), dx / ppm, dy / ppm, {
+      min: minSizeM,
+      step: snapEnabled ? gridStepM : 0,
+      keepRatio,
     });
-    void corner;
+    setLocal(next);
+  };
+  const handleResizeEnd = () => {
+    const l = latest.current;
+    const round = (v: number) => Math.round(v * 100) / 100;
+    onChange({ ...placement, x: round(l.x), y: round(l.y), width: round(l.w), height: round(l.h) });
   };
 
-  const rotation = placement.rotation ?? 0;
-  const showResizeHandles = selected && !placement.locked;
+  const handleRotateMove = (rotation: number) => setLocal((current) => ({ ...current, r: rotation }));
+  const handleRotateEnd = () => {
+    const r = latest.current.r;
+    if (r !== (placement.rotation ?? 0)) onChange({ ...placement, rotation: r });
+  };
+
+  const px = {
+    left: local.x * pxPerMeter,
+    top: local.y * pxPerMeter,
+    width: local.w * pxPerMeter,
+    height: local.h * pxPerMeter,
+  };
 
   return (
-    <div
-      className={cx(
-        styles.piece,
-        selected && styles.selected,
-        placement.locked ? "cursor-default" : "cursor-grab active:cursor-grabbing",
-        placement.locked && styles.locked,
-        outside && styles.outside,
-      )}
-      data-furniture-id={placement.id}
-      data-outside={outside || undefined}
-      style={{
-        left: localX * pxPerMeter,
-        top: localY * pxPerMeter,
-        width: localW * pxPerMeter,
-        height: localH * pxPerMeter,
-        transform: `rotate(${rotation}deg)`,
-      }}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-    >
-      <FurnitureGlyph model={model} colours={furnitureColours(placement, model)} width={localW} depth={localH} />
-      <span className={styles.label}>{placement.label}</span>
-
-      {showResizeHandles && (
-        <>
-          <ResizeHandle
-            corner="nw"
-            onDragStart={(e) => handleResizeDragStart(e, "nw")}
-            onDragMove={(dx, dy) => handleResizeDragMove(dx, dy, "nw")}
-            onDragEnd={() => handleResizeDragEnd("nw")}
-          />
-          <ResizeHandle
-            corner="ne"
-            onDragStart={(e) => handleResizeDragStart(e, "ne")}
-            onDragMove={(dx, dy) => handleResizeDragMove(dx, dy, "ne")}
-            onDragEnd={() => handleResizeDragEnd("ne")}
-          />
-          <ResizeHandle
-            corner="sw"
-            onDragStart={(e) => handleResizeDragStart(e, "sw")}
-            onDragMove={(dx, dy) => handleResizeDragMove(dx, dy, "sw")}
-            onDragEnd={() => handleResizeDragEnd("sw")}
-          />
-          <ResizeHandle
-            corner="se"
-            onDragStart={(e) => handleResizeDragStart(e, "se")}
-            onDragMove={(dx, dy) => handleResizeDragMove(dx, dy, "se")}
-            onDragEnd={() => handleResizeDragEnd("se")}
-          />
-        </>
-      )}
-    </div>
+    <>
+      <div
+        className={cx(
+          styles.piece,
+          placement.locked ? "cursor-default" : "cursor-grab active:cursor-grabbing",
+          outside && styles.outside,
+        )}
+        data-furniture-id={placement.id}
+        data-selected={selected || undefined}
+        data-outside={outside || undefined}
+        style={{ ...px, transform: `rotate(${local.r}deg)` }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={(e) => finishDrag({ clientX: e.clientX, clientY: e.clientY, free: e.altKey })}
+        onPointerCancel={() => finishDrag(null)}
+        onLostPointerCapture={() => finishDrag(null)}
+      >
+        <FurnitureGlyph model={model} colours={furnitureColours(placement, model)} width={local.w} depth={local.h} />
+        {selected ? null : (
+          <span className={styles.label} style={{ transform: `rotate(${-local.r}deg)` }}>
+            {placement.label}
+          </span>
+        )}
+      </div>
+      {selected ? (
+        <SelectionFrame
+          {...px}
+          rotation={local.r}
+          label={placement.label}
+          editable={!placement.locked}
+          zoom={zoom}
+          onResizeStart={handleResizeStart}
+          onResizeMove={handleResizeMove}
+          onResizeEnd={handleResizeEnd}
+          onRotateStart={() => {}}
+          onRotateMove={handleRotateMove}
+          onRotateEnd={handleRotateEnd}
+        />
+      ) : null}
+    </>
   );
 });

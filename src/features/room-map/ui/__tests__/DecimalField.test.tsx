@@ -202,3 +202,27 @@ describe("DecimalField — semantics", () => {
     expect(onKeyDown).not.toHaveBeenCalled();
   });
 });
+
+// A value could only change by typing or an arrow key; a drag across the field now steps it.
+describe("DecimalField — a drag across it", () => {
+  it("steps the value a step per few pixels, ten with ⇧", () => {
+    const { onCommit, input } = renderRequired({ step: 0.1 });
+    const box = input.closest("label")!;
+    fireEvent.pointerDown(box, { button: 0, clientX: 100, pointerId: 1 });
+    fireEvent.pointerMove(box, { clientX: 112, pointerId: 1 });
+    expect(onCommit).toHaveBeenLastCalledWith(1.5);
+    fireEvent.pointerMove(box, { clientX: 104, shiftKey: true, pointerId: 1 });
+    expect(onCommit).toHaveBeenLastCalledWith(2.2);
+    fireEvent.pointerUp(box, { pointerId: 1 });
+    expect(input).not.toHaveFocus();
+  });
+
+  it("types after a press that does not move", () => {
+    const { onCommit, input } = renderRequired();
+    const box = input.closest("label")!;
+    fireEvent.pointerDown(box, { button: 0, clientX: 100, pointerId: 1 });
+    fireEvent.pointerUp(box, { clientX: 101, pointerId: 1 });
+    expect(input).toHaveFocus();
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+});

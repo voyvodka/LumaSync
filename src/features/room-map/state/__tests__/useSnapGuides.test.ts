@@ -29,11 +29,13 @@ describe("useSnapGuides — only a change in the guides re-renders", () => {
     const { result, renders } = renderCounted();
     const start = renders();
 
-    // Far from everything: no guides, and there were none.
+    // Far from everything: no guides, and there were none. The first move says a drag began (the
+    // plan shows its grid then), and none after it renders again.
     for (let i = 0; i < 10; i++) {
       act(() => void result.current.onDragMove(SOFA, 4 + i * 0.01, 3.1, 1, 0.5));
     }
-    expect(renders()).toBe(start);
+    expect(renders()).toBe(start + 1);
+    expect(result.current.dragging).toBe(true);
   });
 
   it("re-renders once on entering a snap and not again while it holds", () => {

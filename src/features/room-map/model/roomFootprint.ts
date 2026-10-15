@@ -317,3 +317,44 @@ export function outsideOutline(x: number, y: number, corners: readonly RoomCorne
   }
   return !inside;
 }
+
+/** Where a shape's grip sits on the plan: the middle of an L's or U's cut, the middle of a T's stem. */
+export function shapeGrip(shape: FootprintShape, dims: RoomDimensions): RoomCorner | null {
+  const s = clampFootprintShape(shape, dims);
+  const { widthMeters: w, depthMeters: d } = dims;
+  if (s.kind === "L") {
+    const left = s.corner === "topLeft" || s.corner === "bottomLeft";
+    const top = s.corner === "topLeft" || s.corner === "topRight";
+    return { x: left ? s.width / 2 : w - s.width / 2, y: top ? s.depth / 2 : d - s.depth / 2 };
+  }
+  if (s.kind === "U" || s.kind === "T") {
+    return orient([{ x: s.offset + s.width / 2, y: s.depth / 2 }], s.side, dims)[0]!;
+  }
+  return null;
+}
+
+/**
+ * The shape moved so its grip follows `p`: an L takes the corner of the quarter `p` is in, a U or T
+ * the wall nearest `p`, slid along it. Its sizes are kept, cut down only where the new wall is shorter.
+ */
+export function moveShapeTo(shape: FootprintShape, dims: RoomDimensions, p: RoomCorner): FootprintShape {
+  const { widthMeters: w, depthMeters: d } = dims;
+  if (shape.kind === "L") {
+    const left = p.x < w / 2;
+    const top = p.y < d / 2;
+    const corner: FootprintCorner = top ? (left ? "topLeft" : "topRight") : left ? "bottomLeft" : "bottomRight";
+    return clampFootprintShape({ ...shape, corner }, dims);
+  }
+  if (shape.kind === "U" || shape.kind === "T") {
+    const distances: [FootprintSide, number][] = [
+      ["top", p.y],
+      ["bottom", d - p.y],
+      ["left", p.x],
+      ["right", w - p.x],
+    ];
+    const side = distances.reduce((best, next) => (next[1] < best[1] ? next : best))[0];
+    const along = alongX(side) ? p.x : p.y;
+    return clampFootprintShape({ ...shape, side, offset: round(along - shape.width / 2) }, dims);
+  }
+  return shape;
+}
