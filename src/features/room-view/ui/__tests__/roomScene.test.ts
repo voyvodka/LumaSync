@@ -345,6 +345,19 @@ describe("buildRoomScene — lifting a carried piece", () => {
     disposeScene(room.scene);
   });
 
+  it("carries a desk's monitor with the desk, and a sofa alone", () => {
+    const desk = { id: "desk", type: "table" as const, variant: "desk" as const, x: 1, y: 0, width: 1.6, height: 0.7 };
+    const config: RoomMapConfig = { ...furnished, furniture: [...furnished.furniture, desk], tvAnchor: { x: 1.5, y: 0.2, width: 0.6, height: 0.05 } };
+    const room = buildRoomScene(config, OPTIONS);
+    const withDesk = room.lift(furnitureObjectId("desk"));
+    expect(withDesk?.riders).toEqual([TV_ANCHOR_OBJECT_ID]);
+    withDesk!.restore();
+    const sofa = room.lift(furnitureObjectId("sofa"));
+    expect(sofa?.riders).toEqual([]);
+    sofa!.restore();
+    disposeScene(room.scene);
+  });
+
   it("moves the screen with its panel, and leaves a lamp to its frame", () => {
     const room = buildRoomScene(furnished, OPTIONS);
     const lifted = room.lift(TV_ANCHOR_OBJECT_ID);

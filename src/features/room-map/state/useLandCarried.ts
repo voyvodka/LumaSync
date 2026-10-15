@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 
-import { landCarried } from "../model/carryLanding";
+import { landCarriedWith } from "../model/carryLanding";
 import type { RoomMapDocument } from "./useRoomMapDocument";
 
 /**
@@ -12,11 +12,11 @@ export function useLandCarried(doc: Pick<RoomMapDocument, "apply" | "config" | "
   const { apply, config, hueAreaId, scopedConfig } = doc;
   const { widthMeters, depthMeters } = scopedConfig.dimensions;
   return useCallback(
-    (objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => {
+    (objectId: string, sceneX: number, sceneZ: number, turnDeg: number, riders: readonly string[] = []) => {
       const cx = sceneX + widthMeters / 2;
       const cy = sceneZ + depthMeters / 2;
-      if (!landCarried(config, objectId, cx, cy, turnDeg, { hueAreaId })) return false;
-      apply((cfg) => landCarried(cfg, objectId, cx, cy, turnDeg, { hueAreaId }) ?? {});
+      if (!landCarriedWith(config, objectId, cx, cy, turnDeg, riders, { hueAreaId })) return false;
+      apply((cfg) => landCarriedWith(cfg, objectId, cx, cy, turnDeg, riders, { hueAreaId }) ?? {});
       return true;
     },
     [apply, config, hueAreaId, widthMeters, depthMeters],

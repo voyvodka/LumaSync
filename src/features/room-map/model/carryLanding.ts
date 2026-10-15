@@ -58,3 +58,41 @@ export function landCarried(
       return null;
   }
 }
+
+function centreOf(config: RoomMapConfig, objectId: string): { x: number; y: number } | null {
+  const ref = parseObjectId(objectId);
+  const box =
+    ref?.kind === "furniture" ? config.furniture.find((f) => f.id === ref.furnitureId) : ref?.kind === "tv" ? config.tvAnchor : null;
+  return box ? { x: box.x + box.width / 2, y: box.y + box.height / 2 } : null;
+}
+
+/**
+ * `landCarried`, with what rode on the piece — a desk's monitor — moved by as far as the piece landed
+ * from where it stood, each through its own landing. One patch, so one undo step takes both back.
+ */
+export function landCarriedWith(
+  config: RoomMapConfig,
+  objectId: string,
+  cx: number,
+  cy: number,
+  turnDeg: number,
+  riders: readonly string[],
+  ctx: RoomObjectContext,
+): Partial<RoomMapConfig> | null {
+  const landed = landCarried(config, objectId, cx, cy, turnDeg, ctx);
+  if (!landed || riders.length === 0) return landed;
+  const before = centreOf(config, objectId);
+  let next: RoomMapConfig = { ...config, ...landed };
+  const after = centreOf(next, objectId);
+  if (!before || !after) return landed;
+  let patch = landed;
+  for (const rider of riders) {
+    const at = centreOf(next, rider);
+    if (!at) continue;
+    const moved = landCarried(next, rider, at.x + after.x - before.x, at.y + after.y - before.y, 0, ctx);
+    if (!moved) continue;
+    next = { ...next, ...moved };
+    patch = { ...patch, ...moved };
+  }
+  return patch;
+}

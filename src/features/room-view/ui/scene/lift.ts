@@ -15,6 +15,8 @@ export interface Liftable {
 }
 
 export interface LiftedPiece {
+  /** What rides on the piece and moves with it, turning with nothing: a desk's monitor. */
+  riders: readonly string[];
   moveTo(x: number, z: number): void;
   /** On top of the turn it was built with. */
   turnTo(radians: number): void;
@@ -54,10 +56,11 @@ function copySpan({ mesh, start, count }: Span): BufferGeometry {
 
 /**
  * Takes an object out of the merged meshes into a group of its own that can follow the pointer:
- * its vertices are copied out and collapsed to a point where they were, so nothing is rebuilt while
- * it is carried. The scene built from the landed room replaces both.
+ * its vertices are copied out and collapsed onto the origin, a zero-area point, so nothing is
+ * rebuilt while it is carried. The scene built from the landed room replaces both.
  */
-export function liftPiece(scene: Scene, piece: Liftable): LiftedPiece {
+export function liftPiece(scene: Scene, piece: Liftable, riders: ReadonlyMap<string, Liftable> = new Map()): LiftedPiece {
+  const carried = [...riders].map(([id, rider]) => ({ id, rider, lifted: liftPiece(scene, rider) }));
   const pivot = new Group();
   pivot.position.set(piece.pivot.x, 0, piece.pivot.z);
   const inner = new Group();
@@ -81,14 +84,17 @@ export function liftPiece(scene: Scene, piece: Liftable): LiftedPiece {
   for (const extra of piece.extras) inner.add(extra);
   scene.add(pivot);
   return {
+    riders: carried.map(({ id }) => id),
     moveTo(x, z) {
       pivot.position.x = x;
       pivot.position.z = z;
+      for (const { rider, lifted } of carried) lifted.moveTo(rider.pivot.x + x - piece.pivot.x, rider.pivot.z + z - piece.pivot.z);
     },
     turnTo(radians) {
       pivot.rotation.y = -radians;
     },
     restore() {
+      for (const { lifted } of carried) lifted.restore();
       for (const extra of piece.extras) scene.add(extra);
       pivot.removeFromParent();
       for (const { span, kept, copy } of saved) {

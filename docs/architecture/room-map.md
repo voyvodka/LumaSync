@@ -303,11 +303,14 @@ backlight drawn as a stray line along the wall.
 The carried piece itself follows the pointer, not a stand-in. The scene merges every piece into one
 mesh per finish, so a piece cannot be moved on its own, and rebuilding the scene costs about 40 ms
 for the Showroom — far over a frame. On the first move, `RoomScene.lift` copies the piece's vertices
-out of the merged meshes into a group of its own and collapses them to a point where they were
-(`room-view/ui/scene/lift.ts`), so nothing is rebuilt while it is held. On landing, the scene
-rebuilt from the landed room replaces both. A refused landing or Esc copies the vertices back. A
-Hue lamp is not lifted, because its light and glow are built into the scene, so it moves as the
-amber frame alone.
+out of the merged meshes into a group of its own and collapses them onto the origin, a zero-area
+point (`room-view/ui/scene/lift.ts`), so nothing is rebuilt while it is held. On landing, the scene
+rebuilt from the landed room replaces both. A refused landing, Esc, or a rebuild by another writer
+mid-carry copies the vertices back. A wheel turn before the first move lifts the piece too. A desk
+carries the monitor standing on it: the screen rides along without turning and lands by as far as
+the desk did (`landCarriedWith`), in one undo step. Left behind, the screen hung in the air and then
+stood on nothing. A lamp on a piece does not ride. A Hue lamp is not lifted at all, because its
+light and glow are built into the scene, so it moves as the amber frame alone.
 
 ## Gotchas
 

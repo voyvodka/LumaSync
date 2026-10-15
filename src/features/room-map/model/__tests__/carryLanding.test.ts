@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { DEFAULT_ROOM_MAP, type RoomMapConfig } from "@/shared/contracts/roomMap";
 
-import { landCarried } from "../carryLanding";
+import { landCarried, landCarriedWith } from "../carryLanding";
+import { furnitureObjectId } from "../objectId";
 
 const ctx = { hueAreaId: null };
 const base: RoomMapConfig = {
@@ -42,5 +43,24 @@ describe("landCarried", () => {
   it("turns only furniture, and moves nothing locked", () => {
     expect(landCarried(base, "furniture-sofa", 2.5, 2, 15, ctx)?.furniture?.[0]?.rotation).toBe(15);
     expect(landCarried({ ...base, tvAnchor: { ...base.tvAnchor!, locked: true } }, "tv", 1, 1, 0, ctx)).toBeNull();
+  });
+});
+
+describe("landCarriedWith", () => {
+  const desk = { id: "desk", type: "table" as const, variant: "desk" as const, x: 1, y: 0, width: 1.6, height: 0.7 };
+  const config: RoomMapConfig = { ...base, furniture: [desk], tvAnchor: { x: 1.3, y: 0.2, width: 0.6, height: 0.05 } };
+
+  // Left behind, the monitor hung in the air while the desk was carried and stood on nothing after.
+  it("moves what rode on the piece by as far as the piece landed from where it stood", () => {
+    const patch = landCarriedWith(config, furnitureObjectId("desk"), 2.8, 2.35, 0, ["tv"], ctx);
+    expect(patch?.furniture?.[0]).toMatchObject({ x: 2, y: 2 });
+    expect(patch?.tvAnchor?.x).toBeCloseTo(2.3);
+    expect(patch?.tvAnchor?.y).toBeCloseTo(2.2);
+  });
+
+  it("lands the piece alone when its rider is locked, and as landCarried with no riders", () => {
+    const locked = { ...config, tvAnchor: { ...config.tvAnchor!, locked: true } };
+    expect(landCarriedWith(locked, furnitureObjectId("desk"), 2.8, 2.35, 0, ["tv"], ctx)?.tvAnchor).toBeUndefined();
+    expect(landCarriedWith(config, furnitureObjectId("desk"), 2.8, 2.35, 0, [], ctx)).toEqual(landCarried(config, furnitureObjectId("desk"), 2.8, 2.35, 0, ctx));
   });
 });

@@ -41,6 +41,8 @@ export interface ScreenBuild {
   panel: PlaneGeometry;
   /** Footprints (centre and half sizes in the scene) that shade the floor. */
   footprints: Array<{ x: number; z: number; hw: number; hd: number; shade: number }>;
+  /** The desk a monitor stands on, which carries it when it is carried. */
+  deskId: string | null;
 }
 
 export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, FurnitureModel>): ScreenBuild | null {
@@ -155,5 +157,5 @@ export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, F
       }
     : null;
 
-  return { layout: { centre, width, height, backlight }, parts, panel, footprints };
+  return { layout: { centre, width, height, backlight }, parts, panel, footprints, deskId: onDesk && desk ? desk.id : null };
 }

@@ -120,7 +120,7 @@ function openRoomView(
   firstHost: HTMLElement,
   onFail: (error: unknown) => void,
   onPick: (objectId: string | null) => void,
-  onMovePiece: ((objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => boolean | void) | null,
+  onMovePiece: ((objectId: string, sceneX: number, sceneZ: number, turnDeg: number, riders: readonly string[]) => boolean) | null,
   onHover: (objectId: string | null, clientX: number, clientY: number) => void = () => {},
 ): RoomView {
   let host = firstHost;
@@ -331,6 +331,8 @@ function openRoomView(
       dz: number;
       ghost: LineSegments;
       lifted: LiftedPiece | null;
+      /** Lifted on the first move or turn, whether or not it could be. */
+      tried: boolean;
       moved: boolean;
       turn: number;
       angle: number;
@@ -345,6 +347,7 @@ function openRoomView(
     // the TV and the lights keep the axes they have.
     const turnCarry = (by: number) => {
       if (!carry || carry.kind !== "furniture") return;
+      if (!carry.tried) lift(carry);
       carry.turn = (((carry.turn + by) % 360) + 360) % 360;
       carry.moved = true;
       carry.ghost.visible = true;
@@ -415,6 +418,7 @@ function openRoomView(
           dz: item.centre.z - onFloor.z,
           ghost,
           lifted: null,
+          tried: false,
           moved: false,
           turn: 0,
           angle: item.angle,
@@ -441,7 +445,7 @@ function openRoomView(
         if (!carry || !press) return;
         if (!carry.moved && Math.hypot(event.clientX - press.x, event.clientY - press.y) <= CLICK_SLOP_PX) return;
         if (!rayAt(event.clientX, event.clientY).intersectPlane(floor, onFloor)) return;
-        if (!carry.moved) lift(carry);
+        if (!carry.tried) lift(carry);
         carry.moved = true;
         canvas.style.cursor = "grabbing";
         carry.ghost.visible = true;
@@ -454,6 +458,7 @@ function openRoomView(
     );
     // Lifted on the first move, not the press: a click on the selected piece leaves the scene as built.
     const lift = (c: NonNullable<typeof carry>) => {
+      c.tried = true;
       if (!room) return;
       c.lifted = room.lift(c.id);
       // The mark stays where the piece was built; the frame marks it while it is carried.
@@ -470,7 +475,7 @@ function openRoomView(
       (c.ghost.material as LineBasicMaterial).dispose();
       // Landed, it stays where it was let go until the scene is rebuilt from the landed room; a
       // landing refused, or Esc, puts it back.
-      const landed = commit && c.moved && onMovePiece?.(c.id, c.ghost.position.x, c.ghost.position.z, c.turn) !== false;
+      const landed = commit && c.moved && onMovePiece?.(c.id, c.ghost.position.x, c.ghost.position.z, c.turn, c.lifted?.riders ?? []) === true;
       if (c.lifted && !landed) {
         c.lifted.restore();
         room?.select(selected);
@@ -557,6 +562,11 @@ function openRoomView(
       if (config === shownConfig && lampFamilies === shownFamilies) return;
       shownConfig = config;
       shownFamilies = lampFamilies;
+      // Rebuilt by another writer mid-carry: put the piece down first, while its buffers still exist.
+      if (carry) {
+        press = null;
+        drop(false);
+      }
       const first = room === null;
       if (room) disposeScene(room.scene);
       room = buildRoomScene(config, { shadows, lambert: options.lambert ?? false, coldKey: options.coldKey, lampFamilies });
@@ -737,7 +747,7 @@ const NO_FAMILIES: ReadonlyMap<number, LampFamily> = new Map();
 interface Handlers {
   fail: (error: unknown) => void;
   pick: (objectId: string | null) => void;
-  move: (objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => boolean | void;
+  move: (objectId: string, sceneX: number, sceneZ: number, turnDeg: number, riders: readonly string[]) => boolean;
   hover: (objectId: string | null, clientX: number, clientY: number) => void;
 }
 const IDLE: Handlers = { fail: () => {}, pick: () => {}, move: () => false, hover: () => {} };
@@ -812,7 +822,7 @@ export default function RoomView3D({
   cameraCommand?: CameraCommand;
   mood?: RoomMood;
   /** A piece carried to a new place on the floor: its centre there, in the scene frame. */
-  onMovePiece?: (objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => boolean | void;
+  onMovePiece?: (objectId: string, sceneX: number, sceneZ: number, turnDeg: number, riders: readonly string[]) => boolean;
   /** A click in the room: the object it landed on, or null for empty ground. */
   onPick?: (objectId: string | null) => void;
   onHover?: (objectId: string | null, clientX: number, clientY: number) => void;
@@ -840,7 +850,7 @@ export default function RoomView3D({
     const mine: Handlers = {
       fail: (error) => onFailRef.current(error),
       pick: (objectId) => onPickRef.current?.(objectId),
-      move: (objectId, x, z, turn) => onMoveRef.current?.(objectId, x, z, turn),
+      move: (objectId, x, z, turn, riders) => onMoveRef.current?.(objectId, x, z, turn, riders) ?? false,
       hover: (objectId, x, y) => onHoverRef.current?.(objectId, x, y),
     };
     let kept = unpark(host, mine);
@@ -851,7 +861,7 @@ export default function RoomView3D({
           host,
           (error) => handlers.fail(error),
           (objectId) => handlers.pick(objectId),
-          (objectId, x, z, turn) => handlers.move(objectId, x, z, turn),
+          (objectId, x, z, turn, riders) => handlers.move(objectId, x, z, turn, riders),
           (objectId, x, y) => handlers.hover(objectId, x, y),
         );
         kept = { view, handlers };

@@ -451,7 +451,11 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     faceCamera: mark.orient,
     lift(objectId: string) {
       const piece = liftables.get(objectId);
-      return piece && (piece.spans.length > 0 || piece.extras.length > 0) ? liftPiece(scene, piece) : null;
+      if (!piece || (piece.spans.length === 0 && piece.extras.length === 0)) return null;
+      const tv = liftables.get(TV_ANCHOR_OBJECT_ID);
+      const riders = new Map<string, Liftable>();
+      if (tv && screen?.deskId != null && furnitureObjectId(screen.deskId) === objectId) riders.set(TV_ANCHOR_OBJECT_ID, tv);
+      return liftPiece(scene, piece, riders);
     },
     setMood,
     target: new Vector3(0, H * 0.3, 0),

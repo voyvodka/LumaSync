@@ -198,8 +198,9 @@ https://keepachangelog.com/en/1.1.0/
     settle into place, the plan fades in under a dock that stays, and the 3D | Plan switch's plate
     slides as View | Edit's does.
   - In the 3D view a piece of furniture can be picked up and carried across the floor: the piece
-    itself follows the pointer in an amber frame, with what stands on it, and it lands there on
-    release, inside the walls (Esc puts it back); a Hue lamp moves as the frame alone. While it
+    itself follows the pointer in an amber frame, a desk taking its monitor along, and it lands
+    there on release, inside the walls (Esc puts it back); a Hue lamp moves as the frame alone.
+    While it
     is held the wheel or R turns it in 15° steps (⇧R the other way); a drag on anything else still
     turns the room. Wardrobes are drawn as a run of doors standing proud of the
     carcass with shadow gaps, long bar handles, a cornice and a set-back plinth.
