@@ -230,6 +230,12 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
   // dragging a piece or the TV moves them all, so a desk carries its monitor and its lamps.
   const [group, setGroup] = useState<readonly string[]>([]);
   const groupSet = useMemo(() => new Set(group), [group]);
+  // Read before scheduling a reset, so a plain click with no group schedules no update at all.
+  const groupRef = useRef(group);
+  groupRef.current = group;
+  const clearGroup = useCallback(() => {
+    if (groupRef.current.length > 0) setGroup([]);
+  }, []);
   const grouped = group.length > 1;
   const shiftHeld = useRef(false);
   useEffect(() => {
@@ -244,8 +250,8 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
     };
   }, []);
   useEffect(() => {
-    if (selectedId === null || (grouped && !groupSet.has(selectedId))) setGroup((current) => (current.length === 0 ? current : []));
-  }, [selectedId, grouped, groupSet]);
+    if (selectedId === null || (grouped && !groupSet.has(selectedId))) clearGroup();
+  }, [selectedId, grouped, groupSet, clearGroup]);
   const pick = useCallback(
     (objectId: string, additive: boolean) => {
       if (additive) {
@@ -254,11 +260,11 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
           return base.includes(objectId) ? base.filter((member) => member !== objectId) : [...base, objectId];
         });
       } else if (!groupSet.has(objectId)) {
-        setGroup((current) => (current.length === 0 ? current : []));
+        clearGroup();
       }
       select(objectId);
     },
-    [select, selectedId, groupSet],
+    [select, selectedId, groupSet, clearGroup],
   );
   const handleFurnitureSelect = useCallback(
     (id: string, additive = false) => pick(furnitureObjectId(id), additive || shiftHeld.current),
