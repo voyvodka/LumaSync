@@ -22,8 +22,9 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 
+import { LAMP_COLOURS } from "../model/lampColours";
 import type { LampFamily } from "../model/lampFamily";
-import type { RoomMood } from "../model/roomMood";
+import { MOOD_LEVELS as LEVELS, type RoomMood } from "../model/roomMood";
 import { pressStartsCarry } from "../model/carryIntent";
 import { lightPickHalf, pickObject } from "../model/picking";
 import { prefersReducedMotion } from "@/shared/lib/motion";
@@ -225,10 +226,10 @@ function openRoomView(
       if (ready && frame === 0 && !closed) frame = requestAnimationFrame(draw);
     };
     let shownRoom = "";
-    const moodNow = { colour: new Color(0xffe0bf), level: 1 };
+    const moodNow = { colour: new Color(LAMP_COLOURS[0]), level: 1, ambient: 1, strip: 1 };
     let moodFrame = 0;
-    let moodTarget: { lamp: number; level: number } | null = null;
-    const paintMood = () => room?.setMood(moodNow.colour.getHex(), moodNow.level);
+    let moodTarget: RoomMood | null = null;
+    const paintMood = () => room?.setMood(moodNow.colour.getHex(), moodNow);
     orbit.addEventListener("change", () => {
       request();
       if (shownRoom) {
@@ -581,17 +582,18 @@ function openRoomView(
 
     return {
       setMood(mood) {
-        if (moodTarget && moodTarget.lamp === mood.lamp && moodTarget.level === mood.level) return;
-        moodTarget = { lamp: mood.lamp, level: mood.level };
+        const same = (m: RoomMood | null) => m !== null && LEVELS.every((key) => m[key] === mood[key]) && m.lamp === mood.lamp;
+        if (same(moodTarget)) return;
+        moodTarget = mood;
         if (moodFrame !== 0) cancelAnimationFrame(moodFrame);
         moodFrame = 0;
         const colour0 = moodNow.colour.clone();
-        const level0 = moodNow.level;
+        const from = { ...moodNow };
         const colour1 = new Color(mood.lamp);
-        if (colour0.equals(colour1) && level0 === mood.level) return;
+        if (colour0.equals(colour1) && LEVELS.every((key) => from[key] === mood[key])) return;
         const end = () => {
           moodNow.colour.copy(colour1);
-          moodNow.level = mood.level;
+          for (const key of LEVELS) moodNow[key] = mood[key];
           paintMood();
           request();
         };
@@ -609,7 +611,7 @@ function openRoomView(
           }
           const k = easeInOut(t);
           moodNow.colour.lerpColors(colour0, colour1, k);
-          moodNow.level = level0 + (mood.level - level0) * k;
+          for (const key of LEVELS) moodNow[key] = from[key] + (mood[key] - from[key]) * k;
           paintMood();
           request();
           moodFrame = requestAnimationFrame(step);

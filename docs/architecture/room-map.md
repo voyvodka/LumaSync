@@ -336,7 +336,12 @@ backlight drawn as a stray line along the wall.
   the bulbs to frosted glass, the TV's backlight out — under a navy sky; Solid lights every lamp in
   its colour at its brightness, never below a floor so 1% still glows; an effect holds its palette's
   middle; Ambilight dims the room to a cinema violet, its lamps low and cool — what a screen throws
-  into a dark room — until the live colours reach the view. The sky is two registered custom
+  into a dark room — until the live colours reach the view. Three levels move apart: the lamps, the
+  room's own light, and the strips with the screen's backlight. The room's light followed the lamps
+  once, and every mode washed the whole room in its colour; now an effect lights the room at about
+  half its lamps, Ambilight at a quarter, while the strips and the backlight — what carries the
+  picture — stay at the brightness the user set. The backlight throws a rim around the screen, not
+  a round pool. The sky is two registered custom
   properties on the stage (`--lm-room-sky-top`, `--lm-room-sky-mid`), so a change eases the CSS
   gradient, and the lamps ease over 900 ms without rebuilding the scene (`RoomScene.setMood`). The
   colours stay placeholders where the live feed is the truth (Ambilight, an effect's motion) until it

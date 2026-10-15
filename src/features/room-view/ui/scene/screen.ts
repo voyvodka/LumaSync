@@ -21,7 +21,7 @@ export interface ScreenLayout {
   width: number;
   height: number;
   /** The wall glow's plane, when a strip lights the screen from behind. */
-  backlight: { x: number; y: number; z: number; width: number; height: number } | null;
+  backlight: { x: number; y: number; z: number; width: number; height: number; screenWidth: number; screenHeight: number } | null;
 }
 
 export interface ScreenBuild {
@@ -122,8 +122,10 @@ export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, F
         x: centre.x,
         y: mount,
         z: onWall ? wallZ + 0.012 : centre.z - depth,
-        width: width * 1.8,
-        height: height * 1.9,
+        width: width * 1.45,
+        height: height * 1.6,
+        screenWidth: width,
+        screenHeight: height,
       }
     : null;
 

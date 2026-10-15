@@ -53,4 +53,17 @@ describe("roomMood", () => {
     expect(ambilight.sky).not.toEqual(roomMood(null).sky);
     expect(roomMood(null)).toMatchObject({ level: 1, lamp: LAMP_COLOURS[0] });
   });
+
+  // The whole room turned the mode's colour; the reference keeps a dark room with local light in it.
+  it("keeps the room itself dim under Ambilight and dimmer than its lamps under an effect", () => {
+    const ambilight = roomMood({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+    expect(ambilight.ambient).toBeLessThan(0.5);
+    expect(ambilight.strip).toBeGreaterThan(ambilight.level);
+    const effect = roomMood({
+      kind: LIGHTING_MODE_KIND.EFFECT,
+      effect: { id: EFFECT_IDS.BREATHE, speed: 0.5, brightness: 1, palette: PALETTE_IDS.CUSTOM, colors: [{ r: 0, g: 255, b: 0 }] },
+    });
+    expect(effect.ambient).toBeLessThan(effect.level);
+    expect(roomMood({ kind: LIGHTING_MODE_KIND.SOLID, solid: { r: 255, g: 255, b: 255, brightness: 1 } }).ambient).toBe(1);
+  });
 });

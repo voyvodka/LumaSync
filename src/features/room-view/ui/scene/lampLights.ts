@@ -9,6 +9,7 @@ export const LAMP_LIGHTS = 6;
 const SHADOW_LAMPS = 3;
 const SHADOW_MAP = 256;
 const INTENSITY = 7;
+const MIN_LIGHT_Y = 0.3;
 
 export interface LampLights {
   lights: PointLight[];
@@ -30,11 +31,12 @@ export function lampLights(lamps: Lamp[], roomReach: number, shadows: boolean): 
       light.shadow.bias = -0.002;
       light.shadow.camera.near = 0.05;
       // At full strength a lamp's shadow cut black wedges up the walls.
-      light.shadow.intensity = 0.7;
+      light.shadow.intensity = 0.4;
     }
     if (lamp) {
-      // Just under the lit part, so a ceiling light's own canopy does not shadow the whole room.
-      light.position.set(lamp.at.x, lamp.at.y - Math.max(lamp.radii[1], 0.02) - 0.03, lamp.at.z);
+      // Just under the lit part, so a ceiling light's own canopy does not shadow the whole room; never
+      // at the floor, where it grazed the planks into bright seams.
+      light.position.set(lamp.at.x, Math.max(lamp.at.y - Math.max(lamp.radii[1], 0.02) - 0.03, MIN_LIGHT_Y), lamp.at.z);
     } else {
       light.position.set(0, -10, 0);
     }

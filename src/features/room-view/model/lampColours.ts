@@ -1,7 +1,7 @@
 // The colour each Hue light glows in the 3D room until live colour reaches it, by its place in the
 // map's channel list. The dock's chips read the same table, so a chip shows its lamp's colour.
 // One warm white: a rainbow colour per lamp read as a party, not a room.
-export const LAMP_COLOURS = [0xffe0bf] as const;
+export const LAMP_COLOURS = [0xffe6cc] as const;
 
 export function lampColour(listIndex: number): number {
   return LAMP_COLOURS[listIndex % LAMP_COLOURS.length] ?? LAMP_COLOURS[0];

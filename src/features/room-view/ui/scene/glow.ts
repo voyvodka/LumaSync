@@ -48,18 +48,29 @@ export interface WallPlane {
 const WASH_REACH = 1.6;
 const WASH_SIZE = 2.4;
 
-export function radialTexture(size: number, inner: string, outer: string): CanvasTexture {
+/** Light thrown on the wall by a strip behind a screen: brightest at the screen's edge and falling
+ *  off from it, a rim rather than a round pool. `inner` is the screen's share of the texture. */
+export function rimTexture(size: number, innerWidth: number, innerHeight: number): CanvasTexture {
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext("2d");
   if (ctx) {
-    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-    g.addColorStop(0, inner);
-    g.addColorStop(0.35, inner.replace(/[\d.]+\)$/, "0.45)"));
-    g.addColorStop(1, outer);
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, size, size);
+    const image = ctx.createImageData(size, size);
+    const hw = innerWidth / 2;
+    const hh = innerHeight / 2;
+    const reach = Math.min(0.5 - hw, 0.5 - hh);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const dx = Math.max(Math.abs((x + 0.5) / size - 0.5) - hw, 0);
+        const dy = Math.max(Math.abs((y + 0.5) / size - 0.5) - hh, 0);
+        const t = Math.min(Math.hypot(dx, dy) / reach, 1);
+        const i = (y * size + x) * 4;
+        image.data[i] = image.data[i + 1] = image.data[i + 2] = 255;
+        image.data[i + 3] = Math.round(255 * (1 - t) ** 2.2);
+      }
+    }
+    ctx.putImageData(image, 0, 0);
   }
   return new CanvasTexture(canvas);
 }
@@ -79,7 +90,7 @@ function additive(texture: Texture, opacity: number): MeshBasicMaterial {
 }
 
 const WHITE = new Color(0xffffff);
-const UNLIT_BULB = new Color(0x24221f);
+const UNLIT_BULB = new Color(0x16171c);
 /** Past 1 on purpose: the bulb burns out to white and feeds the glow pass. */
 const BULB_BRIGHTNESS = 3;
 const SHADE_BRIGHTNESS = 1.9;
@@ -186,7 +197,8 @@ export function buildGlow(
   const paint = (lampColour: number | null, level: number) => {
     lamps.forEach((lamp, i) => {
       const gain = lamp.shape === "drum" || lamp.shape === "flare" ? SHADE_BRIGHTNESS : BULB_BRIGHTNESS;
-      const lit = colour.set(lampColour ?? lamp.color).lerp(WHITE, 0.2).multiplyScalar(gain);
+      // Steeper than the level: a dimmed bulb still blew out at a third and bloomed like a full one.
+      const lit = colour.set(lampColour ?? lamp.color).lerp(WHITE, 0.2).multiplyScalar(gain * level ** 1.5);
       lit.lerp(UNLIT_BULB, 1 - level);
       for (const { mesh } of shapes) mesh.setColorAt(i, lit);
       pools.setColorAt(i, colour.set(lampColour ?? lamp.color).multiplyScalar(level));

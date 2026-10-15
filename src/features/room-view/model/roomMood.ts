@@ -5,8 +5,18 @@ import { paletteOf, paletteStops } from "@/features/mode/model/effectSwatch";
 
 import { LAMP_COLOURS } from "./lampColours";
 
-export interface RoomMood {
+export interface MoodLevels {
+  /** The lamps, 0 dark to 1 full. */
   level: number;
+  /** The room's own light, 0 night to 1 lamp-lit: a screen or an effect lights a dark room. */
+  ambient: number;
+  /** The LED strips and the screen's backlight: under Ambilight they carry the picture at full. */
+  strip: number;
+}
+
+export const MOOD_LEVELS = ["level", "ambient", "strip"] as const satisfies ReadonlyArray<keyof MoodLevels>;
+
+export interface RoomMood extends MoodLevels {
   /** As the user set it; `level` is what is drawn. */
   brightness: number;
   lamp: number;
@@ -17,7 +27,9 @@ const WARM = LAMP_COLOURS[0];
 const SKY_WARM = { top: 0x6e5a4c, mid: 0x2a211e };
 const SKY_CINEMA = { top: 0x2a2052, mid: 0x130e2b };
 const CINEMA_LAMP = 0xa99bff;
-const CINEMA_SHARE = 0.55;
+const CINEMA_SHARE = 0.2;
+const CINEMA_AMBIENT = 0.25;
+const EFFECT_AMBIENT = 0.55;
 const SKY_NIGHT = { top: 0x121d3d, mid: 0x0a1024 };
 /** At 1% a Hue light still glows: the room must not read as off. */
 const LEVEL_FLOOR = 0.12;
@@ -37,7 +49,7 @@ function mix(a: number, b: number, t: number): number {
 }
 
 function skyOf(colour: number): RoomMood["sky"] {
-  return { top: mix(colour, 0x0b0b12, 0.62), mid: mix(colour, 0x07070c, 0.86) };
+  return { top: mix(colour, 0x0b0b12, 0.8), mid: mix(colour, 0x07070c, 0.93) };
 }
 
 const level = (brightness: number | undefined) => LEVEL_FLOOR + (1 - LEVEL_FLOOR) * Math.min(Math.max(brightness ?? 1, 0), 1);
@@ -50,27 +62,30 @@ export function roomMood(mode: LightingModeConfig | null): RoomMood {
 }
 
 function moodOf(mode: LightingModeConfig | null): Omit<RoomMood, "brightness"> {
-  if (!mode) return { level: 1, lamp: WARM, sky: SKY_WARM };
+  if (!mode) return { level: 1, ambient: 1, strip: 1, lamp: WARM, sky: SKY_WARM };
   switch (mode.kind) {
     case LIGHTING_MODE_KIND.OFF:
-      return { level: 0, lamp: WARM, sky: SKY_NIGHT };
+      return { level: 0, ambient: 0, strip: 0, lamp: WARM, sky: SKY_NIGHT };
     case LIGHTING_MODE_KIND.SOLID: {
       const solid = mode.solid;
-      if (!solid) return { level: 1, lamp: WARM, sky: SKY_WARM };
+      if (!solid) return { level: 1, ambient: 1, strip: 1, lamp: WARM, sky: SKY_WARM };
       const c = solid.kelvin != null ? kelvinToRgb(solid.kelvin) : solid;
       const lamp = rgb(c.r, c.g, c.b);
-      return { level: level(solid.brightness), lamp, sky: skyOf(lamp) };
+      const lit = level(solid.brightness);
+      return { level: lit, ambient: lit, strip: lit, lamp, sky: skyOf(lamp) };
     }
     case LIGHTING_MODE_KIND.EFFECT: {
       const effect = mode.effect;
-      if (!effect) return { level: 1, lamp: WARM, sky: SKY_WARM };
+      if (!effect) return { level: 1, ambient: EFFECT_AMBIENT, strip: 1, lamp: WARM, sky: SKY_WARM };
       const stops = paletteStops(paletteOf(effect), effect);
       const middle = stops[Math.floor(stops.length / 2)];
       const lamp = middle ? Number.parseInt(middle.slice(1), 16) : WARM;
-      return { level: level(effect.brightness), lamp, sky: skyOf(lamp) };
+      const lit = level(effect.brightness);
+      return { level: lit, ambient: lit * EFFECT_AMBIENT, strip: lit, lamp, sky: skyOf(lamp) };
     }
     default:
-      return { level: level(mode.ambilight?.brightness) * CINEMA_SHARE, lamp: CINEMA_LAMP, sky: SKY_CINEMA };
+      const lit = level(mode.ambilight?.brightness);
+      return { level: lit * CINEMA_SHARE, ambient: CINEMA_AMBIENT, strip: lit, lamp: CINEMA_LAMP, sky: SKY_CINEMA };
   }
 }
 

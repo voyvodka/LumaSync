@@ -254,9 +254,9 @@ describe("buildRoomScene — mood", () => {
     );
     expect(bar).toBeDefined();
     const colour = () => (bar!.material as MeshBasicMaterial).color;
-    room.setMood(0xff0000, 1);
+    room.setMood(0xff0000, { level: 1, ambient: 1, strip: 1 });
     expect(colour().getHex()).toBe(0xff0000);
-    room.setMood(0xff0000, 0);
+    room.setMood(0xff0000, { level: 0, ambient: 0, strip: 0 });
     expect(colour().r).toBeLessThan(0.1);
     disposeScene(room.scene);
   });

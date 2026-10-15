@@ -3,7 +3,7 @@
 // here: the plan's settings read it from the main bundle.
 import type { FloorFinish, WallColor } from "@/shared/contracts/roomMap";
 
-const OAK_PLANKS = [0xb08a65, 0xab855f, 0xb48e69, 0xa8825d] as const;
+const OAK_PLANKS = [0xa88c74, 0xa3876e, 0xac9079, 0xa0846b] as const;
 
 /** Planks for the woods, square slabs and their grout for the tiles and concrete, one even weave
  *  for carpet (`size` 0). */
