@@ -7,6 +7,7 @@ import type { UsbStripPlacement } from "@/shared/contracts/roomMap";
 import type { ViewLight } from "../../../model/viewLights";
 import type { HueIdentify } from "../../../state/useHueIdentify";
 import { RoomViewDock } from "../RoomViewDock";
+import { ViewLightRow } from "../ViewLightRow";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -195,5 +196,14 @@ describe("RoomViewDock", () => {
     render(<Harness initial="tv" onEdit={onEdit} />);
     fireEvent.click(screen.getByText("roomMap:view.edit"));
     expect(onEdit).toHaveBeenCalledWith("tv");
+  });
+});
+
+describe("ViewLightRow — an effect's colours", () => {
+  it("fills a lit light's disc with the palette, not their grey mean", () => {
+    const fill = "conic-gradient(#ff0000, #0000ff, #ff0000)";
+    render(<ViewLightRow lights={[LIGHTS[0]!]} hue={null} lit={{ colour: "#ff0000", brightness: 1, fill }} onSelect={vi.fn<() => void>()} />);
+    const disc = screen.getByTestId("view-lights").querySelector("[data-lit] span[style]") as HTMLElement;
+    expect(disc.style.background).toContain("conic-gradient");
   });
 });

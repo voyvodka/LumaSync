@@ -47,7 +47,7 @@ import { hueChannelScenePoint, roomToScene, tvMountHeight } from "../model/roomS
 import { contactShadow, floorParts, roomLights, WALL_THICKNESS, wallFootShade, wallGeometry } from "./scene/environment";
 import { classifyFurniture, contactShade, modelTop, surfaceTop } from "../model/furnitureModel";
 import { type LampFamily, ONE_SIDED } from "../model/lampFamily";
-import type { MoodLevels } from "../model/roomMood";
+import { type MoodLevels, paletteColour } from "../model/roomMood";
 import { furnitureParts } from "./scene/furniture";
 import { buildGlow, type Lamp, poolTexture, rimTexture, type WallPlane } from "./scene/glow";
 import { PALETTE } from "./scene/palette";
@@ -61,6 +61,7 @@ import { type LedTape, ledTape, TAPE_DEPTH as STRIP_DEPTH, TAPE_WIDTH as STRIP_W
 
 const STRIP_GLOW = 0xffc46b;
 const BACKLIGHT_GAIN = 1.6;
+const LAMP_BOUNCE = 0.35;
 const UNLIT_STRIP = new Color(0x2a2a2e);
 /** A wall between the camera and the room drops to this, so the room reads as a cutaway. */
 const WALL_CUT_HEIGHT = 0.2;
@@ -116,8 +117,8 @@ export interface RoomScene {
   select(objectId: string | null): boolean;
   /** Turns what faces the camera (the selection's ring) to it; call before each draw. */
   faceCamera(cameraQuaternion: Quaternion): void;
-  /** `null` keeps each lamp's own colour. */
-  setMood(lampColour: number | null, levels: MoodLevels): void;
+  /** `null` keeps each lamp's own colour; a palette gives lamp i stop i mod n. */
+  setMood(lampColour: number | null, levels: MoodLevels, palette?: readonly number[]): void;
   /** Where to aim and how far the room reaches from it. */
   target: Vector3;
   radius: number;
@@ -377,23 +378,30 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   // A room with no lamps keeps its evening light whatever the mode.
   const evening = { sky: lights.hemisphere.color.clone(), ground: lights.hemisphere.groundColor.clone(), hemi: lights.hemisphere.intensity, key: lights.key.intensity, keyColour: lights.key.color.clone(), fill: lights.fill.intensity };
   const rigs = {
-    lit: { sky: new Color(0xc9ccdf), ground: new Color(0x4a4038), hemi: 0.5, key: 0.55, keyColour: evening.keyColour, fill: 0.2 },
-    night: { sky: new Color(0x8d9ccc), ground: new Color(0x1c1a26), hemi: 0.42, key: 0.32, keyColour: new Color(0xa9b8e8), fill: 0.14 },
+    // Far apart, so the lamps going out reads: the lit room was dimmer than one with no lamps at all.
+    lit: { sky: new Color(0xffe4c8), ground: new Color(0x6a4c38), hemi: 0.95, key: 0.6, keyColour: evening.keyColour, fill: 0.22 },
+    night: { sky: new Color(0x8d9ccc), ground: new Color(0x1c1a26), hemi: 0.25, key: 0.18, keyColour: new Color(0xa9b8e8), fill: 0.08 },
   };
-  const setMood = (lampColour: number | null, { level, ambient, strip }: MoodLevels) => {
+  const litSky = new Color();
+  const bounce = new Color();
+  const setMood = (lampColour: number | null, { level, ambient, strip }: MoodLevels, palette?: readonly number[]) => {
     const from = lampLit ? rigs.night : evening;
     const to = lampLit ? rigs.lit : evening;
     const k = lampLit ? ambient : 1;
-    lights.hemisphere.color.lerpColors(from.sky, to.sky, k);
+    // The bounce takes some of the lamps' colour, so a red room is not lit by a peach sky.
+    const sky = to === rigs.lit && lampColour !== null ? litSky.copy(to.sky).lerp(bounce.set(lampColour), LAMP_BOUNCE) : to.sky;
+    lights.hemisphere.color.lerpColors(from.sky, sky, k);
     lights.hemisphere.groundColor.lerpColors(from.ground, to.ground, k);
     lights.hemisphere.intensity = from.hemi + (to.hemi - from.hemi) * k;
     lights.key.color.lerpColors(from.keyColour, to.keyColour, k);
     lights.key.intensity = from.key + (to.key - from.key) * k;
     lights.fill.intensity = from.fill + (to.fill - from.fill) * k;
-    real?.paint(lampColour, level);
-    glow?.paint(lampColour, level);
+    real?.paint(lampColour, level, palette);
+    glow?.paint(lampColour, level, palette);
     spill?.color.set(lampColour ?? STRIP_GLOW).multiplyScalar(strip * BACKLIGHT_GAIN);
-    for (const material of stripMaterials) material.color.set(lampColour ?? STRIP_GLOW).lerp(UNLIT_STRIP, 1 - strip);
+    stripMaterials.forEach((material, i) =>
+      material.color.set(paletteColour(palette, i + 1) ?? lampColour ?? STRIP_GLOW).lerp(UNLIT_STRIP, 1 - strip),
+    );
   };
   setMood(null, { level: 1, ambient: 1, strip: 1 });
 

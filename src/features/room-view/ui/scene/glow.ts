@@ -17,6 +17,7 @@ import {
   Vector3,
 } from "three";
 
+import { paletteColour } from "../../model/roomMood";
 import type { ScenePoint } from "../../model/roomSpace";
 import { BLOOM_LAYER } from "./bloom";
 import type { LampShape } from "./lamps";
@@ -24,7 +25,7 @@ import type { LampShape } from "./lamps";
 export interface Lamp {
   /** Off the room's outline (in an L's or U's cut): it throws no pool on a floor that is not there. */
   outside?: boolean;
-  /** A real light already lights its floor and walls; a painted pool would light them twice. */
+  /** A real light already lights its floor and walls: it keeps no wall wash and only a faint pool. */
   litByLight?: boolean;
   /** The lit part's centre. */
   at: ScenePoint;
@@ -96,8 +97,9 @@ function additive(texture: Texture, opacity: number): MeshBasicMaterial {
 const WHITE = new Color(0xffffff);
 const UNLIT_BULB = new Color(0x16171c);
 /** Past 1 on purpose: the bulb burns out to white and feeds the glow pass. */
-const BULB_BRIGHTNESS = 3;
+const BULB_BRIGHTNESS = 2.2;
 const SHADE_BRIGHTNESS = 1.9;
+const LIT_POOL_SHARE = 0.5;
 
 /** Unit size 2, so a lamp's half-extents are its scale. */
 const SHAPES: ReadonlyArray<{ shape: LampShape; geometry: () => BufferGeometry }> = [
@@ -112,8 +114,8 @@ export interface Glow {
   objects: InstancedMesh[];
   /** Hides the washes on walls the camera has cut down; true when anything changed. */
   setCutWalls(cut: readonly boolean[]): boolean;
-  /** `null` keeps each lamp's own colour. */
-  paint(lampColour: number | null, level: number): void;
+  /** `null` keeps each lamp's own colour; a palette gives lamp i stop i mod n. */
+  paint(lampColour: number | null, level: number, palette?: readonly number[]): void;
 }
 
 /** A wide, soft fall-off for light thrown on a surface: no bright core, so pools from neighbouring
@@ -163,7 +165,7 @@ export function buildGlow(
   // An evening room: each lamp throws a wide pool, so the lights read as what lights the room.
   const pools = new InstancedMesh(new PlaneGeometry(1, 1), additive(surface, 0.62), lamps.length);
   lamps.forEach((lamp, i) => {
-    const size = lamp.outside || lamp.litByLight ? 0 : 1.6 + Math.min(Math.max(lamp.at.y, 0), heightM) * 0.9;
+    const size = lamp.outside ? 0 : 1.6 + Math.min(Math.max(lamp.at.y, 0), heightM) * 0.9;
     pools.setMatrixAt(i, m.compose(new Vector3(lamp.at.x, 0.006, lamp.at.z), FLAT, new Vector3(size, size, 1)));
   });
 
@@ -198,17 +200,18 @@ export function buildGlow(
     washes.forEach((wash, i) => washMesh.setMatrixAt(i, wash.matrix));
   }
 
-  const paint = (lampColour: number | null, level: number) => {
+  const paint = (lampColour: number | null, level: number, palette?: readonly number[]) => {
+    const hue = (lamp: Lamp | undefined, i: number) => paletteColour(palette, i) ?? lampColour ?? lamp?.color ?? 0;
     lamps.forEach((lamp, i) => {
       const gain = lamp.shape === "drum" || lamp.shape === "flare" ? SHADE_BRIGHTNESS : BULB_BRIGHTNESS;
       // Steeper than the level: a dimmed bulb still blew out at a third and bloomed like a full one.
-      const lit = colour.set(lampColour ?? lamp.color).lerp(WHITE, 0.2).multiplyScalar(gain * level ** 1.5);
+      const lit = colour.set(hue(lamp, i)).lerp(WHITE, 0.2).multiplyScalar(gain * level ** 1.5);
       lit.lerp(UNLIT_BULB, 1 - level);
       for (const { mesh } of shapes) mesh.setColorAt(i, lit);
-      pools.setColorAt(i, colour.set(lampColour ?? lamp.color).multiplyScalar(level));
+      pools.setColorAt(i, colour.set(hue(lamp, i)).multiplyScalar(level * (lamp.litByLight ? LIT_POOL_SHARE : 1)));
     });
     washLamps.forEach(({ lamp, fade }, i) => {
-      washMesh?.setColorAt(i, colour.set(lampColour ?? lamps[lamp]?.color ?? 0).multiplyScalar(fade * level));
+      washMesh?.setColorAt(i, colour.set(hue(lamps[lamp], lamp)).multiplyScalar(fade * level));
     });
     for (const mesh of [...shapes.map((entry) => entry.mesh), pools, washMesh]) if (mesh?.instanceColor) mesh.instanceColor.needsUpdate = true;
   };

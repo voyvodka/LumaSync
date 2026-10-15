@@ -166,6 +166,11 @@ https://keepachangelog.com/en/1.1.0/
     of jumping half a metre at a time; sizes land on 5 cm. A turned piece's side handles show the
     cursor along the way they drag. The name field edits as the number fields do, with a soft tint
     and an amber line instead of a framed box.
+  - The 3D room's light reads its mode more clearly: an effect colours each lamp and strip with its
+    own stop of the palette instead of one middle colour, so it no longer looks like Solid white, and
+    the dock's lights show the palette; lit lamps fill the room with a warm bounce tinted by their
+    colour, Off darkens it plainly, a lamp keeps a soft pool on the floor under it, bulbs blow out
+    less, and a strip stays one soft lit line from further in before its LEDs show one by one.
   - The 3D view has the lights' everyday controls: a button in its corner names the running mode,
     and opens the modes, the brightness, Solid's colour and white, and the effect for every light at
     once, as the tray window does.

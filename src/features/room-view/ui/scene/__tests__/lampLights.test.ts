@@ -10,6 +10,14 @@ const coned = (x: number): Lamp => ({ ...lamp(x), beam: { aim: new Vector3(0, 0,
 const lamp = (x: number, outside?: boolean): Lamp => ({ at: { x, y: 1, z: 0 }, radii: [0.1, 0.1, 0.1], color: 0xffd6ad, outside });
 
 describe("lampLights", () => {
+  it("gives each lit lamp its stop of a palette, counted over every lamp", () => {
+    const lamps = [lamp(0, true), lamp(1), lamp(2)];
+    const lit = lampLights(lamps, 5, false);
+    lit.paint(null, 1, [0xff0000, 0x00ff00, 0x0000ff]);
+    const lights = lit.objects.filter((o): o is Light => o instanceof Light && o.intensity > 0);
+    expect(lights.map((l) => l.color.getHex())).toEqual([0x00ff00, 0x0000ff]);
+  });
+
   // A count that followed the lamps changed the shader programs, and adding a lamp recompiled the room.
   it("adds the same number of lights for one lamp as for ten", () => {
     expect(lightsOf([lamp(0)])).toHaveLength(LAMP_LIGHTS + LAMP_SPOTS);

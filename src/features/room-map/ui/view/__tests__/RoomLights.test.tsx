@@ -49,7 +49,6 @@ describe("RoomLights", () => {
     expect(trigger).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("dialog", { name: "roomMap:view.allLights" })).toBeInTheDocument();
     expect(screen.getByTestId("mode-button-solid")).toBeInTheDocument();
-    // Rendered into the body, the popover would be the last stop for Tab: focus starts on the running mode.
     expect(document.activeElement).toBe(screen.getByTestId("mode-button-ambilight"));
     // The room's popover carries no scenes: those stay on the Lights page and the tray.
     expect(screen.queryByRole("radio", { name: /lights:scenes\.suggested/ })).toBeNull();

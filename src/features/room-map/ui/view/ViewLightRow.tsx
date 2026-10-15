@@ -16,6 +16,8 @@ import { useViewLightLabel } from "./viewLightLabel";
 export interface LitLamps {
   colour: string;
   brightness: number;
+  /** An effect's colours in the disc: their mean is a grey that read as off. */
+  fill?: string;
 }
 
 export interface ViewLightRowProps {
@@ -103,7 +105,7 @@ function Chip({
       <span className={styles.mark} aria-hidden="true">
         {light.kind === "hue" ? (
           // Filled with the colour its lamp glows in the room, so the chip and the lamp read as one.
-          <Disc ghost={light.ghost} fill={lit?.colour ?? light.glow ?? undefined} />
+          <Disc ghost={light.ghost} fill={lit?.fill ?? lit?.colour ?? light.glow ?? undefined} />
         ) : (
           <span style={{ color: light.kind === "tv" ? TYPE_DOT_COLOR.tv : TYPE_DOT_COLOR.usb, display: "grid" }}>
             {light.kind === "tv" ? <IconTv /> : <IconLed />}

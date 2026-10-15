@@ -401,10 +401,14 @@ backlight drawn as a stray line along the wall.
   is a CSS gradient behind a transparent canvas, so it costs no draw.
 - **The lamps light the room; they are not painted on it.** The first six lamps in the room each get
   a real `PointLight` (`scene/lampLights.ts`), three of them casting a small cube shadow, and the
-  evening rig — sky, key and fill — drops to a dim fill while any lamp is lit. The count is fixed,
+  evening rig — sky, key and fill — gives way to two rigs set far apart: a lamp-lit one, a warm
+  bounce that takes a third of the lamps' colour, and a night one that falls to a quarter of it, so
+  the lamps going out reads as the room going dark. The lit rig once sat dimmer than a room with no
+  lamps, and Off still showed a fully readable floor. The count is fixed,
   the spare lights dark, because three.js builds its shader programs for a number of lights: a count
   that followed the lamps recompiled the room on every added lamp. A lamp with a real light throws
-  no painted pool or wash (it would light the floor twice); one past the six keeps them. Their
+  no painted wash and only half its pool — at the lights' strength the real light alone left dark
+  wood an even brown with no pool under the lamp; one past the six keeps both. Their
   placeholder colour is one warm white — one rainbow colour per lamp read as a party, not a home.
   A one-sided fixture — a Play bar, a Signe, an Iris, a Bloom (`ONE_SIDED` in `scene/lamps.ts`) —
   lights only the side it faces, so it takes one of three `SpotLight`s instead and is drawn turned:
@@ -433,8 +437,11 @@ backlight drawn as a stray line along the wall.
 - **The running mode sets the room's mood.** `roomMood` (`room-view/model/roomMood.ts`) reads what
   runs from the lighting control state: Off leaves the lamps dark — the rig falls to a cool night,
   the bulbs to frosted glass, the TV's backlight out — under a navy sky; Solid lights every lamp in
-  its colour at its brightness, never below a floor so 1% still glows; an effect holds its palette's
-  middle; Ambilight dims the room to a cinema violet, its lamps low and cool — what a screen throws
+  its colour at its brightness, never below a floor so 1% still glows; an effect spreads its palette
+  over the room, lamp *i* and strip *i* taking stop *i* mod *n*, the sky and the backlight from the
+  stops' mean, and the dock's discs draw the palette (the mean of a rainbow is a grey that read as
+  off) — one middle colour for every lamp had made Effect indistinguishable from Solid white, and
+  with no effect chosen yet the room plays the default one, as the contract reads it; Ambilight dims the room to a cinema violet, its lamps low and cool — what a screen throws
   into a dark room — until the live colours reach the view. Three levels move apart: the lamps, the
   room's own light, and the strips with the screen's backlight. The room's light followed the lamps
   once, and every mode washed the whole room in its colour; now an effect lights the room at about

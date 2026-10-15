@@ -1,5 +1,5 @@
 // Ambilight and an effect's motion are placeholders here until the live colours reach the view.
-import { type LightingModeConfig, LIGHTING_MODE_KIND } from "@/shared/contracts/mode";
+import { DEFAULT_EFFECT, type LightingModeConfig, LIGHTING_MODE_KIND } from "@/shared/contracts/mode";
 import { kelvinToRgb } from "@/shared/lib/color";
 import { paletteOf, paletteStops } from "@/features/mode/model/effectSwatch";
 
@@ -20,6 +20,8 @@ export interface RoomMood extends MoodLevels {
   /** As the user set it; `level` is what is drawn. */
   brightness: number;
   lamp: number;
+  /** An effect's colours, lamp i taking stop i mod n; `lamp` is then their mean. */
+  palette?: readonly number[];
   sky: { top: number; mid: number };
 }
 
@@ -46,6 +48,14 @@ function mix(a: number, b: number, t: number): number {
   const [ar, ag, ab] = channels(a);
   const [br, bg, bb] = channels(b);
   return rgb(ar + (br - ar) * t, ag + (bg - ag) * t, ab + (bb - ab) * t);
+}
+
+function meanOf(colours: readonly number[]): number {
+  const sum = colours.reduce<[number, number, number]>((acc, c) => {
+    const [r, g, b] = channels(c);
+    return [acc[0] + r, acc[1] + g, acc[2] + b];
+  }, [0, 0, 0]);
+  return rgb(sum[0] / colours.length, sum[1] / colours.length, sum[2] / colours.length);
 }
 
 function skyOf(colour: number): RoomMood["sky"] {
@@ -75,18 +85,22 @@ function moodOf(mode: LightingModeConfig | null): Omit<RoomMood, "brightness"> {
       return { level: lit, ambient: lit, strip: lit, lamp, sky: skyOf(lamp) };
     }
     case LIGHTING_MODE_KIND.EFFECT: {
-      const effect = mode.effect;
-      if (!effect) return { level: 1, ambient: EFFECT_AMBIENT, strip: 1, lamp: WARM, sky: SKY_WARM };
-      const stops = paletteStops(paletteOf(effect), effect);
-      const middle = stops[Math.floor(stops.length / 2)];
-      const lamp = middle ? Number.parseInt(middle.slice(1), 16) : WARM;
+      // No payload reads as the default effect, as the contract's normaliser reads one.
+      const effect = mode.effect ?? DEFAULT_EFFECT;
+      const palette = paletteStops(paletteOf(effect), effect).map((stop) => Number.parseInt(stop.slice(1), 16));
+      const lamp = palette.length > 0 ? meanOf(palette) : WARM;
       const lit = level(effect.brightness);
-      return { level: lit, ambient: lit * EFFECT_AMBIENT, strip: lit, lamp, sky: skyOf(lamp) };
+      return { level: lit, ambient: lit * EFFECT_AMBIENT, strip: lit, lamp, ...(palette.length > 1 ? { palette } : {}), sky: skyOf(lamp) };
     }
     default:
       const lit = level(mode.ambilight?.brightness);
       return { level: lit * CINEMA_SHARE, ambient: CINEMA_AMBIENT, strip: lit, lamp: CINEMA_LAMP, sky: SKY_CINEMA };
   }
+}
+
+/** Lamp `i`'s stop of a palette, or nothing without one. */
+export function paletteColour(palette: readonly number[] | undefined, i: number): number | undefined {
+  return palette && palette.length > 0 ? palette[i % palette.length] : undefined;
 }
 
 export function hexCss(hex: number): string {

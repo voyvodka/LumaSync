@@ -229,7 +229,7 @@ function openRoomView(
     const moodNow = { colour: new Color(LAMP_COLOURS[0]), level: 1, ambient: 1, strip: 1 };
     let moodFrame = 0;
     let moodTarget: RoomMood | null = null;
-    const paintMood = () => room?.setMood(moodNow.colour.getHex(), moodNow);
+    const paintMood = () => room?.setMood(moodNow.colour.getHex(), moodNow, moodTarget?.palette);
     orbit.addEventListener("change", () => {
       request();
       if (shownRoom) {
@@ -582,7 +582,11 @@ function openRoomView(
 
     return {
       setMood(mood) {
-        const same = (m: RoomMood | null) => m !== null && LEVELS.every((key) => m[key] === mood[key]) && m.lamp === mood.lamp;
+        const same = (m: RoomMood | null) =>
+          m !== null &&
+          LEVELS.every((key) => m[key] === mood[key]) &&
+          m.lamp === mood.lamp &&
+          (m.palette ?? []).join() === (mood.palette ?? []).join();
         if (same(moodTarget)) return;
         moodTarget = mood;
         if (moodFrame !== 0) cancelAnimationFrame(moodFrame);
@@ -590,7 +594,12 @@ function openRoomView(
         const colour0 = moodNow.colour.clone();
         const from = { ...moodNow };
         const colour1 = new Color(mood.lamp);
-        if (colour0.equals(colour1) && LEVELS.every((key) => from[key] === mood[key])) return;
+        // Only the palette changed: nothing to fade, but its colours still go on.
+        if (colour0.equals(colour1) && LEVELS.every((key) => from[key] === mood[key])) {
+          paintMood();
+          request();
+          return;
+        }
         const end = () => {
           moodNow.colour.copy(colour1);
           for (const key of LEVELS) moodNow[key] = mood[key];

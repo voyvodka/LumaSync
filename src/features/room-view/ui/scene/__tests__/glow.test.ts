@@ -1,4 +1,4 @@
-import { type InstancedMesh, Matrix4, Texture, Vector3 } from "three";
+import { Color, type InstancedMesh, Matrix4, Texture, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 
 import { buildGlow } from "../glow";
@@ -17,6 +17,21 @@ describe("buildGlow", () => {
     };
     expect(scale(0)).toBeGreaterThan(1);
     expect(scale(1)).toBe(0);
+  });
+
+  // With its pool taken away a real-lit lamp left the dark floor under it an even brown.
+  it("keeps a fainter pool under a lamp a real light already lights", () => {
+    const glow = buildGlow([lamp(0), { ...lamp(1), litByLight: true }], [], 2.5, new Texture())!;
+    const pools = glow.objects.find((mesh) => mesh.geometry.type === "PlaneGeometry") as InstancedMesh;
+    const m = new Matrix4();
+    pools.getMatrixAt(1, m);
+    expect(new Vector3().setFromMatrixScale(m).x).toBeGreaterThan(1);
+    const painted = new Color();
+    const own = new Color();
+    pools.getColorAt(0, own);
+    pools.getColorAt(1, painted);
+    expect(painted.r).toBeGreaterThan(0);
+    expect(painted.r).toBeLessThan(own.r);
   });
 });
 

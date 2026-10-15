@@ -4,7 +4,7 @@ import { EFFECT_IDS, PALETTE_IDS } from "@/shared/contracts/effects";
 import { LIGHTING_MODE_KIND } from "@/shared/contracts/mode";
 
 import { LAMP_COLOURS } from "../lampColours";
-import { roomMood } from "../roomMood";
+import { paletteColour, roomMood } from "../roomMood";
 
 const channels = (hex: number) => [(hex >> 16) & 0xff, (hex >> 8) & 0xff, hex & 0xff];
 
@@ -65,5 +65,30 @@ describe("roomMood", () => {
     });
     expect(effect.ambient).toBeLessThan(effect.level);
     expect(roomMood({ kind: LIGHTING_MODE_KIND.SOLID, solid: { r: 255, g: 255, b: 255, brightness: 1 } }).ambient).toBe(1);
+  });
+
+  // Effect read the same as Solid white: one middle colour for every lamp, and warm with no payload.
+  it("spreads an effect's colours over the lamps, its mean the room's, the default effect's with none chosen", () => {
+    const mood = roomMood({
+      kind: LIGHTING_MODE_KIND.EFFECT,
+      effect: {
+        id: EFFECT_IDS.BREATHE,
+        speed: 0.5,
+        brightness: 1,
+        palette: PALETTE_IDS.CUSTOM,
+        colors: [
+          { r: 255, g: 0, b: 0 },
+          { r: 0, g: 0, b: 255 },
+        ],
+      },
+    });
+    expect(mood.palette).toEqual([0xff0000, 0x0000ff]);
+    expect(mood.lamp).toBe(0x800080);
+    expect([0, 1, 2].map((i) => paletteColour(mood.palette, i))).toEqual([0xff0000, 0x0000ff, 0xff0000]);
+
+    const unchosen = roomMood({ kind: LIGHTING_MODE_KIND.EFFECT });
+    expect(unchosen.palette?.length).toBeGreaterThan(1);
+    expect(unchosen.lamp).not.toBe(LAMP_COLOURS[0]);
+    expect(roomMood({ kind: LIGHTING_MODE_KIND.SOLID, solid: { r: 255, g: 0, b: 0, brightness: 1 } }).palette).toBeUndefined();
   });
 });

@@ -10,8 +10,8 @@ export const TAPE_DEPTH = 0.004;
 /** An LED chip is a 5050 package: 5 mm square. */
 const CHIP = 0.005;
 /** The LEDs are drawn one by one once their pitch spans this many pixels; under it they blur into the
- *  line the far view draws. */
-export const CHIP_DETAIL_PX = 6;
+ *  line the far view draws. At 6 the overview already broke a strip into dashes. */
+export const CHIP_DETAIL_PX = 12;
 const TAPE_COLOUR = 0x1c1c20;
 /** From afar the line keeps this width on screen: at its true centimetre it fell under a pixel and
  *  broke into dashes. */

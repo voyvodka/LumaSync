@@ -2,6 +2,7 @@
 // followed the lamps recompiled the room on every added lamp.
 import { Color, type Light, type Object3D, PointLight, SpotLight } from "three";
 
+import { paletteColour } from "../../model/roomMood";
 import type { Lamp } from "./glow";
 
 export const LAMP_LIGHTS = 6;
@@ -20,8 +21,9 @@ const SPOT_SETBACK = 0.04;
 export interface LampLights {
   /** The lights and the spots' targets, to add to the scene. */
   objects: Object3D[];
-  /** Every lit lamp in one colour (or each its own, `null`) at `level`, 0 dark to 1 full. */
-  paint(lampColour: number | null, level: number): void;
+  /** Every lit lamp in one colour (or each its own, `null`) at `level`, 0 dark to 1 full; a palette
+   *  gives lamp i stop i mod n. */
+  paint(lampColour: number | null, level: number, palette?: readonly number[]): void;
 }
 
 export function lampLights(lamps: Lamp[], roomReach: number, shadows: boolean): LampLights {
@@ -30,6 +32,7 @@ export function lampLights(lamps: Lamp[], roomReach: number, shadows: boolean): 
   const round = inside.filter((lamp) => !coned.includes(lamp)).slice(0, LAMP_LIGHTS);
   for (const lamp of [...coned, ...round]) lamp.litByLight = true;
   const colour = new Color();
+  const order = new Map(lamps.map((lamp, i) => [lamp, i]));
 
   const points = Array.from({ length: LAMP_LIGHTS }, (_, i) => {
     const lamp = round[i];
@@ -67,9 +70,9 @@ export function lampLights(lamps: Lamp[], roomReach: number, shadows: boolean): 
     return light;
   });
 
-  const paint = (lampColour: number | null, level: number) => {
+  const paint = (lampColour: number | null, level: number, palette?: readonly number[]) => {
     const light = (target: Light, lamp: Lamp, intensity: number) => {
-      target.color.copy(colour.set(lampColour ?? lamp.color));
+      target.color.copy(colour.set(paletteColour(palette, order.get(lamp) ?? 0) ?? lampColour ?? lamp.color));
       target.intensity = intensity * level;
     };
     round.forEach((lamp, i) => points[i] && light(points[i], lamp, INTENSITY));

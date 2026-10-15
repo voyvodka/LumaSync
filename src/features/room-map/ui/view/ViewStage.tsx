@@ -52,7 +52,13 @@ export function ViewStage({
   const identify = useHueIdentify(hueBridgeIp);
   const running = useRunningLightingMode();
   const mood = useMemo(() => roomMood(running), [running]);
-  const lit = useMemo(() => (mood.level > 0 ? { colour: hexCss(mood.lamp), brightness: mood.brightness } : null), [mood]);
+  const lit = useMemo(() => {
+    if (mood.level <= 0) return null;
+    const stops = mood.palette?.map(hexCss);
+    return stops?.[0]
+      ? { colour: stops[0], brightness: mood.brightness, fill: `conic-gradient(${[...stops, stops[0]].join(", ")})` }
+      : { colour: hexCss(mood.lamp), brightness: mood.brightness };
+  }, [mood]);
 
   const zones = useMemo(
     () => (hueAreaId ? scopedConfig.zones.filter((zone) => zone.entertainmentAreaId === hueAreaId) : scopedConfig.zones),
