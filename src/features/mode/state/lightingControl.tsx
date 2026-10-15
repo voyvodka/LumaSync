@@ -77,6 +77,17 @@ export function useLightingControlState<S>(
   return useStoreSelector(useLightingControl().store, selector, isEqual);
 }
 
+const NO_STORE: Store<LightingControlState | null> = { get: () => null, set: () => {}, subscribe: () => () => {} };
+const runningMode = (state: LightingControlState | null) => state?.lightingMode ?? null;
+
+/** What runs, or `null` outside the provider — for a view that also renders on its own. */
+export function useRunningLightingMode(): LightingModeConfig | null {
+  const control = useContext(LightingControlContext);
+  // Read-only here, so the wider type is safe: nothing below calls `set`.
+  const store = (control?.store as Store<LightingControlState | null> | undefined) ?? NO_STORE;
+  return useStoreSelector(store, runningMode);
+}
+
 /** The whole state as it is now, for a one-off read (a copy at a press); subscribes to nothing. */
 export function useLightingControlReader(): () => LightingControlState {
   return useLightingControl().store.get;

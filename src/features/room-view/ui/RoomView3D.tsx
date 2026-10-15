@@ -4,6 +4,7 @@
 import { useEffect, useRef } from "react";
 import {
   BoxGeometry,
+  Color,
   EdgesGeometry,
   LineBasicMaterial,
   LineSegments,
@@ -22,6 +23,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 
 import type { LampFamily } from "../model/lampFamily";
+import type { RoomMood } from "../model/roomMood";
 import { pressStartsCarry } from "../model/carryIntent";
 import { lightPickHalf, pickObject } from "../model/picking";
 import { prefersReducedMotion } from "@/shared/lib/motion";
@@ -67,6 +69,8 @@ interface RoomView {
   setInsets(bottom: number, top: number): void;
   /** The camera's own controls, beside the drag and the wheel. */
   camera(command: CameraCommand["kind"]): void;
+  /** The lamps' colour and level, eased there from where they are. */
+  setMood(mood: RoomMood): void;
   close(): void;
 }
 
@@ -88,9 +92,12 @@ const CARRY_COLOUR = 0xffb020;
 /** A camera move from the corner buttons or a double-click: short and settling, as the app's
  *  motion is (`--lm-dur-slow`, an ease-out); a jump read as the view breaking. */
 const CAMERA_MOVE_MS = 320;
+/** Lamps coming on or going off: slow enough to watch the room fill, as a dimmer does. */
+const MOOD_MS = 900;
 const easeOut = (t: number) => 1 - (1 - t) ** 3;
+const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
-const POLAR = 0.95;
+const POLAR = 0.8;
 /** A press that moves further than this turns the room; one that stays within it is a click (the
  *  plan's rule, `CLICK_SLOP_PX` in snapGeometry.ts, so a nudge while clicking a lamp does not throw
  *  the selection away). */
@@ -215,6 +222,10 @@ function openRoomView(
       if (ready && frame === 0 && !closed) frame = requestAnimationFrame(draw);
     };
     let shownRoom = "";
+    const moodNow = { colour: new Color(0xffe0bf), level: 1 };
+    let moodFrame = 0;
+    let moodTarget: { lamp: number; level: number } | null = null;
+    const paintMood = () => room?.setMood(moodNow.colour.getHex(), moodNow.level);
     orbit.addEventListener("change", () => {
       request();
       if (shownRoom) {
@@ -478,6 +489,7 @@ function openRoomView(
       // rebuilds the scene, and taking the target back to the middle threw the view across the room.
       if (first || roomKey(config) !== shownRoom) orbit.target.copy(room.target);
       room.select(selected);
+      paintMood();
       if (first) {
         const kept = sessionCamera;
         if (kept && kept.room === roomKey(config)) {
@@ -536,6 +548,42 @@ function openRoomView(
     };
 
     return {
+      setMood(mood) {
+        if (moodTarget && moodTarget.lamp === mood.lamp && moodTarget.level === mood.level) return;
+        moodTarget = { lamp: mood.lamp, level: mood.level };
+        if (moodFrame !== 0) cancelAnimationFrame(moodFrame);
+        moodFrame = 0;
+        const colour0 = moodNow.colour.clone();
+        const level0 = moodNow.level;
+        const colour1 = new Color(mood.lamp);
+        if (colour0.equals(colour1) && level0 === mood.level) return;
+        const end = () => {
+          moodNow.colour.copy(colour1);
+          moodNow.level = mood.level;
+          paintMood();
+          request();
+        };
+        if (!ready || prefersReducedMotion()) {
+          end();
+          return;
+        }
+        const start = performance.now();
+        const step = () => {
+          const t = Math.min((performance.now() - start) / MOOD_MS, 1);
+          if (t >= 1 || closed) {
+            moodFrame = 0;
+            if (!closed) end();
+            return;
+          }
+          const k = easeInOut(t);
+          moodNow.colour.lerpColors(colour0, colour1, k);
+          moodNow.level = level0 + (mood.level - level0) * k;
+          paintMood();
+          request();
+          moodFrame = requestAnimationFrame(step);
+        };
+        moodFrame = requestAnimationFrame(step);
+      },
       camera(kind) {
         if (!room) return;
         if (kind === "reset") {
@@ -587,6 +635,7 @@ export default function RoomView3D({
   bottomInset = 0,
   topInset = 0,
   cameraCommand,
+  mood,
   onPick,
   onMovePiece,
   onFail,
@@ -602,6 +651,8 @@ export default function RoomView3D({
   /** Pixels at the view's head that something floats over (the View/Edit switch). */
   topInset?: number;
   cameraCommand?: CameraCommand;
+  /** What the running mode does to the lamps; absent leaves them lit warm. */
+  mood?: RoomMood;
   /** A piece carried to a new place on the floor: its centre there, in the scene frame. */
   onMovePiece?: (objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => void;
   /** A click in the room: the object it landed on, or null for empty ground. */
@@ -619,6 +670,8 @@ export default function RoomView3D({
   onMoveRef.current = onMovePiece;
   const selectedRef = useRef(selectedId);
   selectedRef.current = selectedId;
+  const moodRef = useRef(mood);
+  moodRef.current = mood;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -638,6 +691,7 @@ export default function RoomView3D({
     }
     viewRef.current = view;
     view.select(selectedRef.current);
+    if (moodRef.current) view.setMood(moodRef.current);
     return () => {
       viewRef.current = null;
       view.close();
@@ -655,6 +709,10 @@ export default function RoomView3D({
   useEffect(() => {
     if (cameraCommand) viewRef.current?.camera(cameraCommand.kind);
   }, [cameraCommand]);
+
+  useEffect(() => {
+    if (mood) viewRef.current?.setMood(mood);
+  }, [mood]);
 
   // Its own effect, so a new selection marks the room without building it again.
   useEffect(() => {

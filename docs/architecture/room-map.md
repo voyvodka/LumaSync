@@ -329,6 +329,15 @@ backlight drawn as a stray line along the wall.
   that followed the lamps recompiled the room on every added lamp. A lamp with a real light throws
   no painted pool or wash (it would light the floor twice); one past the six keeps them. Their
   placeholder colour is one warm white — one rainbow colour per lamp read as a party, not a home.
+- **The running mode sets the room's mood.** `roomMood` (`room-view/model/roomMood.ts`) reads what
+  runs from the lighting control state: Off leaves the lamps dark — the rig falls to a cool night,
+  the bulbs to frosted glass, the TV's backlight out — under a navy sky; Solid lights every lamp in
+  its colour at its brightness, never below a floor so 1% still glows; an effect holds its palette's
+  middle; Ambilight keeps the warm lamps under a cinema violet. The sky is two registered custom
+  properties on the stage (`--lm-room-sky-top`, `--lm-room-sky-mid`), so a change eases the CSS
+  gradient, and the lamps ease over 900 ms without rebuilding the scene (`RoomScene.setMood`). The
+  colours stay placeholders where the live feed is the truth (Ambilight, an effect's motion) until it
+  reaches the view.
 - **The glow comes from the bulbs alone.** `scene/bloom.ts` draws the room a second time at half
   resolution with every material black but the bulbs (`BLOOM_LAYER`), blurs that and adds it over
   the room, so a sofa in front of a lamp still hides its glow. A brightness threshold could not pick

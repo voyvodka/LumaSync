@@ -78,6 +78,7 @@ function additive(texture: Texture, opacity: number): MeshBasicMaterial {
 }
 
 const WHITE = new Color(0xffffff);
+const UNLIT_BULB = new Color(0x24221f);
 /** Past 1: the bulb burns out to white in the picture, and feeds the glow pass more than a surface. */
 const BULB_BRIGHTNESS = 3;
 const FLAT = new Quaternion().setFromEuler(new Object3D().rotateX(-Math.PI / 2).rotation);
@@ -86,6 +87,8 @@ export interface Glow {
   objects: InstancedMesh[];
   /** Hides the washes on walls the camera has cut down; true when anything changed. */
   setCutWalls(cut: readonly boolean[]): boolean;
+  /** Every lamp in one colour (or each its own, `null`) at `level`, 0 dark to 1 full. */
+  paint(lampColour: number | null, level: number): void;
 }
 
 /** A wide, soft fall-off for light thrown on a surface: no bright core, so pools from neighbouring
@@ -126,8 +129,6 @@ export function buildGlow(
       i,
       m.compose(new Vector3(lamp.at.x, Math.max(lamp.at.y, ry + 0.02), lamp.at.z), unturned, new Vector3(rx, ry, rz)),
     );
-    // A lit bulb burns nearly white whatever its colour; the bloom pass carries the colour out.
-    bulbs.setColorAt(i, colour.set(lamp.color).lerp(WHITE, 0.2).multiplyScalar(BULB_BRIGHTNESS));
   });
 
   // An evening room: each lamp throws a wide pool, so the lights read as what lights the room.
@@ -135,13 +136,12 @@ export function buildGlow(
   lamps.forEach((lamp, i) => {
     const size = lamp.outside || lamp.litByLight ? 0 : 1.6 + Math.min(Math.max(lamp.at.y, 0), heightM) * 0.9;
     pools.setMatrixAt(i, m.compose(new Vector3(lamp.at.x, 0.006, lamp.at.z), FLAT, new Vector3(size, size, 1)));
-    pools.setColorAt(i, colour.set(lamp.color));
   });
 
   const washes: Array<{ wall: number; matrix: Matrix4 }> = [];
-  const washColours: number[] = [];
+  const washLamps: Array<{ lamp: number; fade: number }> = [];
   const p = new Vector3();
-  lamps.forEach((lamp) => {
+  lamps.forEach((lamp, lampIndex) => {
     if (lamp.outside || lamp.litByLight) return;
     p.set(lamp.at.x, lamp.at.y, lamp.at.z);
     walls.forEach((wall, wallIndex) => {
@@ -161,21 +161,34 @@ export function buildGlow(
       else onWall.z = Math.min(Math.max(onWall.z, wall.centre - reach), wall.centre + reach);
       const facing = new Quaternion().setFromUnitVectors(new Vector3(0, 0, 1), wall.normal);
       washes.push({ wall: wallIndex, matrix: new Matrix4().compose(onWall, facing, new Vector3(size, size, 1)) });
-      washColours.push(colour.set(lamp.color).multiplyScalar(fade).getHex());
+      washLamps.push({ lamp: lampIndex, fade });
     });
   });
   const washMesh = washes.length > 0 ? new InstancedMesh(new PlaneGeometry(1, 1), additive(surface, 0.55), washes.length) : null;
   if (washMesh) {
-    washes.forEach((wash, i) => {
-      washMesh.setMatrixAt(i, wash.matrix);
-      washMesh.setColorAt(i, colour.set(washColours[i] ?? 0));
-    });
+    washes.forEach((wash, i) => washMesh.setMatrixAt(i, wash.matrix));
   }
+
+  // A lit bulb burns nearly white whatever its colour, the bloom pass carrying the colour out; an
+  // unlit one is frosted glass.
+  const paint = (lampColour: number | null, level: number) => {
+    lamps.forEach((lamp, i) => {
+      const lit = colour.set(lampColour ?? lamp.color).lerp(WHITE, 0.2).multiplyScalar(BULB_BRIGHTNESS);
+      bulbs.setColorAt(i, lit.lerp(UNLIT_BULB, 1 - level));
+      pools.setColorAt(i, colour.set(lampColour ?? lamp.color).multiplyScalar(level));
+    });
+    washLamps.forEach(({ lamp, fade }, i) => {
+      washMesh?.setColorAt(i, colour.set(lampColour ?? lamps[lamp]?.color ?? 0).multiplyScalar(fade * level));
+    });
+    for (const mesh of [bulbs, pools, washMesh]) if (mesh?.instanceColor) mesh.instanceColor.needsUpdate = true;
+  };
+  paint(null, 1);
 
   const hidden = new Matrix4().makeScale(0, 0, 0);
   let cutState: readonly boolean[] = [];
   return {
     objects: [bulbs, pools, ...(washMesh ? [washMesh] : [])],
+    paint,
     setCutWalls(cut) {
       if (!washMesh || (cutState.length === cut.length && cutState.every((c, i) => c === cut[i]))) return false;
       cutState = [...cut];

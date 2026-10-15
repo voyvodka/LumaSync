@@ -1,9 +1,10 @@
-import { lazy, Suspense } from "react";
+import { type CSSProperties, lazy, Suspense } from "react";
 
 import { useWindowVisible } from "@/features/shell/windowVisibility";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 
 import type { LampFamily } from "../model/lampFamily";
+import { hexCss, type RoomMood, roomMood } from "../model/roomMood";
 import type { CameraCommand } from "./RoomView3D";
 import styles from "./RoomView3DHost.module.css";
 
@@ -16,6 +17,10 @@ const RoomView3D =
 
 export const ROOM_VIEW_3D_AVAILABLE = RoomView3D !== null;
 
+function skyStyle(mood: RoomMood): CSSProperties {
+  return { "--lm-room-sky-top": hexCss(mood.sky.top), "--lm-room-sky-mid": hexCss(mood.sky.mid) } as CSSProperties;
+}
+
 /** The 3D room, filling its slot. It holds a WebGL context only while the window is on screen:
  *  hidden, it unmounts and hands everything back. */
 export function RoomView3DHost(props: {
@@ -26,6 +31,7 @@ export function RoomView3DHost(props: {
   bottomInset?: number;
   topInset?: number;
   cameraCommand?: CameraCommand;
+  mood?: RoomMood;
   onPick?: (objectId: string | null) => void;
   onMovePiece?: (objectId: string, sceneX: number, sceneZ: number, turnDeg: number) => void;
   onFail: (error: unknown) => void;
@@ -33,7 +39,7 @@ export function RoomView3DHost(props: {
   const visible = useWindowVisible();
   if (!RoomView3D || !visible) return null;
   return (
-    <div className={styles.stage} data-testid="room-view-3d">
+    <div className={styles.stage} data-testid="room-view-3d" style={skyStyle(props.mood ?? roomMood(null))}>
       <Suspense fallback={null}>
         <RoomView3D {...props} />
       </Suspense>

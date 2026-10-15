@@ -1,15 +1,34 @@
 @layer components {
-  /* The night the room floats in: a deep navy, lifted a little behind the room. The renderer is
-     transparent over it, so the backdrop costs no draw; it lives here rather than in the lazy view
-     so the slot is already night while three.js is on its way. */
+  /* The sky the room floats in: the running mode's colour at the top fading down into the night
+     (`roomMood`). Registered, so a mood change eases the gradient instead of cutting it. The
+     renderer is transparent over it, so the backdrop costs no draw; it lives here rather than in
+     the lazy view so the slot is already night while three.js is on its way. */
   .stage {
     position: absolute;
     inset: 0;
     background:
-      radial-gradient(ellipse 70% 60% at 50% 42%, var(--lm-room-night) 0%, var(--lm-room-night-mid) 55%, var(--lm-room-night-edge) 100%);
+      radial-gradient(ellipse 60% 45% at 50% 46%, var(--lm-room-sky-mid, var(--lm-room-night-mid)) 0%, transparent 100%),
+      linear-gradient(180deg, var(--lm-room-sky-top, var(--lm-room-night)) 0%, var(--lm-room-sky-mid, var(--lm-room-night-mid)) 48%, var(--lm-room-night-edge) 92%);
+    transition:
+      --lm-room-sky-top 900ms var(--lm-ease-out),
+      --lm-room-sky-mid 900ms var(--lm-ease-out);
   }
+
+  :global(:root[data-reduced-motion]) .stage { transition: none; }
 
   @media (forced-colors: active) {
     .stage { background: Canvas; }
   }
+}
+
+@property --lm-room-sky-top {
+  syntax: "<color>";
+  inherits: false;
+  initial-value: transparent;
+}
+
+@property --lm-room-sky-mid {
+  syntax: "<color>";
+  inherits: false;
+  initial-value: transparent;
 }

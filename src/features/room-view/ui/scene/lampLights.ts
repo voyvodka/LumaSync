@@ -16,6 +16,8 @@ const INTENSITY = 7;
 
 export interface LampLights {
   lights: PointLight[];
+  /** Every lit lamp in one colour (or each its own, `null`) at `level`, 0 dark to 1 full. */
+  paint(lampColour: number | null, level: number): void;
 }
 
 /** Gives the first lamps in the room a real light each and marks them `litByLight`. */
@@ -32,16 +34,25 @@ export function lampLights(lamps: Lamp[], roomReach: number, shadows: boolean): 
       light.shadow.radius = 8;
       light.shadow.bias = -0.002;
       light.shadow.camera.near = 0.05;
+      // A lamp's shadow is filled by the room's bounce; at full strength it cut black wedges.
+      light.shadow.intensity = 0.7;
     }
     if (lamp) {
       // Just under the lit part, so a ceiling light's own canopy does not shadow the whole room.
       light.position.set(lamp.at.x, lamp.at.y - Math.max(lamp.radii[1], 0.02) - 0.03, lamp.at.z);
-      light.color.copy(colour.set(lamp.color));
-      light.intensity = INTENSITY;
     } else {
       light.position.set(0, -10, 0);
     }
     return light;
   });
-  return { lights };
+  const paint = (lampColour: number | null, level: number) => {
+    lit.forEach((lamp, i) => {
+      const light = lights[i];
+      if (!light) return;
+      light.color.copy(colour.set(lampColour ?? lamp.color));
+      light.intensity = INTENSITY * level;
+    });
+  };
+  paint(null, 1);
+  return { lights, paint };
 }

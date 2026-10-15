@@ -6,6 +6,7 @@ import {
   AdditiveBlending,
   BoxGeometry,
   type BufferGeometry,
+  Color,
   DoubleSide,
   InstancedMesh,
   Light,
@@ -42,12 +43,18 @@ import { lampFixture } from "./scene/lamps";
 import { lampLights } from "./scene/lampLights";
 import { buildScreen } from "./scene/screen";
 import { buildSelectionMark } from "./scene/selection";
+import { BLOOM_LAYER } from "./scene/bloom";
 
 /** A wall between the camera and the room drops to this, so the room reads as a cutaway. */
 /** Where a strip along a wall runs: about skirting height. */
 const STRIP_HEIGHT = 0.08;
 const STRIP_GLOW = 0xffc46b;
+/** The backlight's spill against the wall, past 1 so the glow pass picks it up. */
+const BACKLIGHT_GAIN = 1.6;
 const WALL_CUT_HEIGHT = 0.2;
+/** The walls the camera looks over stop short of the ceiling, as a dollhouse's do: at full height
+ *  they read as a box and hid the far half of the floor from a raised view. */
+const WALL_STANDING_SHARE = 0.7;
 /** Parts in these colours are metal or glass: a satin finish instead of the matte one. */
 const SATIN = new Set<number>([PALETTE.metal, PALETTE.metalSoft, PALETTE.bezel, PALETTE.keyboard, PALETTE.handle]);
 
@@ -99,6 +106,9 @@ export interface RoomScene {
   select(objectId: string | null): boolean;
   /** Turns what faces the camera (the selection's ring) to it; call before each draw. */
   faceCamera(cameraQuaternion: Quaternion): void;
+  /** The lamps in one colour (or each its own, `null`) at `level`, 0 dark to 1 full, and the
+   *  room's fill light following them. */
+  setMood(lampColour: number | null, level: number): void;
   /** Where to aim and how far the room reaches from it. */
   target: Vector3;
   radius: number;
@@ -262,6 +272,9 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   // corner it turns in at, the next wall already covers the joint from outside, and a wrap would
   // poke into the room.
   const wallMaterial = solid(0.95);
+  // Never below a mounted screen's top edge.
+  const screenTop = screen ? screen.layout.centre.y + screen.layout.height / 2 + 0.12 : 0;
+  const standing = Math.min(H, Math.max(H * WALL_STANDING_SHARE, screenTop));
   const walls = edges.map((e) => {
     const alongX = e.outwardZ !== 0;
     const wrapA = alongX && e.convexA ? WALL_THICKNESS : 0;
@@ -274,7 +287,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
       0,
       (e.az + e.bz) / 2 + (dz * (wrapB - wrapA)) / 2 + (e.outwardZ * WALL_THICKNESS) / 2,
     );
-    mesh.scale.y = H;
+    mesh.scale.y = standing;
     mesh.receiveShadow = true;
     scene.add(mesh);
     return { mesh, outward: new Vector3(e.outwardX, 0, e.outwardZ) };
@@ -286,15 +299,9 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     halfLength: e.length / 2,
   }));
 
-  if (lamps.some((lamp) => !lamp.outside)) {
-    // Lamp-lit: the lamps carry the room, the sky and the key fall back to a dim evening fill.
-    lights.hemisphere.color.set(0xc9ccdf);
-    lights.hemisphere.groundColor.set(0x5a3e28);
-    lights.hemisphere.intensity = 0.5;
-    lights.key.intensity = 0.55;
-    lights.fill.intensity = 0.2;
-    scene.add(...lampLights(lamps, Math.max(W, D) * 1.1, options.shadows).lights);
-  }
+  const lampLit = lamps.some((lamp) => !lamp.outside);
+  const real = lampLit ? lampLights(lamps, Math.max(W, D) * 1.1, options.shadows) : null;
+  if (real) scene.add(...real.lights);
 
   const surface = poolTexture(128);
   const glow = buildGlow(lamps, planes, H, surface);
@@ -302,19 +309,19 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   else surface.dispose();
 
   const backlight = screen?.layout.backlight;
+  let spill: MeshBasicMaterial | null = null;
   if (backlight) {
     const texture = radialTexture(256, "rgba(255,255,255,1)", "rgba(255,255,255,0)");
-    const plane = new Mesh(
-      new PlaneGeometry(backlight.width, backlight.height),
-      new MeshBasicMaterial({
-        map: texture,
-        color: 0xffb347,
-        transparent: true,
-        depthWrite: false,
-        toneMapped: false,
-        blending: AdditiveBlending,
-      }),
-    );
+    spill = new MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      depthWrite: false,
+      toneMapped: false,
+      blending: AdditiveBlending,
+    });
+    const plane = new Mesh(new PlaneGeometry(backlight.width, backlight.height), spill);
+    // The strip behind the screen glows as the bulbs do.
+    plane.layers.enable(BLOOM_LAYER);
     plane.position.set(backlight.x, backlight.y, backlight.z);
     scene.add(plane);
   }
@@ -322,11 +329,35 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   const mark = buildSelectionMark(pickables);
   scene.add(mark.group);
 
+  // The rig between the night (lamps off) and a lamp-lit evening, where the lamps carry the room and
+  // the sky and the key fall back to a dim fill. A room with no lamps keeps its evening light.
+  const evening = { sky: lights.hemisphere.color.clone(), ground: lights.hemisphere.groundColor.clone(), hemi: lights.hemisphere.intensity, key: lights.key.intensity, keyColour: lights.key.color.clone(), fill: lights.fill.intensity };
+  const rigs = {
+    lit: { sky: new Color(0xc9ccdf), ground: new Color(0x5a3e28), hemi: 0.5, key: 0.55, keyColour: evening.keyColour, fill: 0.2 },
+    night: { sky: new Color(0x8d9ccc), ground: new Color(0x1c1a26), hemi: 0.42, key: 0.32, keyColour: new Color(0xa9b8e8), fill: 0.14 },
+  };
+  const setMood = (lampColour: number | null, level: number) => {
+    const from = lampLit ? rigs.night : evening;
+    const to = lampLit ? rigs.lit : evening;
+    const k = lampLit ? level : 1;
+    lights.hemisphere.color.lerpColors(from.sky, to.sky, k);
+    lights.hemisphere.groundColor.lerpColors(from.ground, to.ground, k);
+    lights.hemisphere.intensity = from.hemi + (to.hemi - from.hemi) * k;
+    lights.key.color.lerpColors(from.keyColour, to.keyColour, k);
+    lights.key.intensity = from.key + (to.key - from.key) * k;
+    lights.fill.intensity = from.fill + (to.fill - from.fill) * k;
+    real?.paint(lampColour, level);
+    glow?.paint(lampColour, level);
+    spill?.color.set(lampColour ?? STRIP_GLOW).multiplyScalar(level * BACKLIGHT_GAIN);
+  };
+  setMood(null, 1);
+
   return {
     scene,
     pickables,
     select: mark.select,
     faceCamera: mark.orient,
+    setMood,
     target: new Vector3(0, H * 0.3, 0),
     radius: Math.hypot(W, D, H) / 2,
     cutWalls(direction: Vector3) {
@@ -336,7 +367,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
         // a U's or T's inner wall faces away from the camera yet still hid the room behind it.
         const nearSide = mesh.position.x * direction.x + mesh.position.z * direction.z > 0.15;
         const isCut = outward.dot(direction) > 0.05 || (nearSide && outward.dot(direction) < -0.05);
-        const height = isCut ? WALL_CUT_HEIGHT : H;
+        const height = isCut ? WALL_CUT_HEIGHT : standing;
         if (mesh.scale.y !== height) {
           mesh.scale.y = height;
           changed = true;

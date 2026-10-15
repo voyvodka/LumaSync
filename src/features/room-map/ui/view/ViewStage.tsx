@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import type { LampFamily } from "@/features/room-view/model/lampFamily";
 import type { CameraCommand } from "@/features/room-view/ui/RoomView3D";
 import { RoomView3DHost } from "@/features/room-view/ui/RoomView3DHost";
+import { roomMood } from "@/features/room-view/model/roomMood";
+import { useRunningLightingMode } from "@/features/mode/state/lightingControl";
 
 import { deriveHueAreaState } from "../../model/hueAreaState";
 import { furnitureObjectId, parseObjectId } from "../../model/objectId";
@@ -47,6 +49,8 @@ export function ViewStage({
   const { scopedConfig, selectedId, select, selectHueZone, hue, hueAreaId, hueBridgeConfigured, hueBridgeIp, apply } = doc;
   const { stripStatus } = useUsbStripStatus(hueReachable);
   const identify = useHueIdentify(hueBridgeIp);
+  const running = useRunningLightingMode();
+  const mood = useMemo(() => roomMood(running), [running]);
 
   const zones = useMemo(
     () => (hueAreaId ? scopedConfig.zones.filter((zone) => zone.entertainmentAreaId === hueAreaId) : scopedConfig.zones),
@@ -119,6 +123,7 @@ export function ViewStage({
         bottomInset={ROOM_MAP_FIT_INSETS.bottom}
         topInset={ROOM_MAP_FIT_INSETS.top}
         cameraCommand={cameraCommand}
+        mood={mood}
         onPick={handlePick}
         onMovePiece={handleMovePiece}
         onFail={onFail}
