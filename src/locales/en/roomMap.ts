@@ -279,6 +279,7 @@ export default {
     modelInfo: "Auto reads the model from the piece's size and what stands around it. Pick one to keep it.",
     hueModelAutoUnknown: "Auto",
     hueModelInfo: "Auto draws the light as the bridge names it. Pick one when the bridge only knows the bulb inside your lamp.",
+    hueSeatOn: "Stand on {{name}}",
     hueFacingLabel: "Facing",
     hueFacingInfo: "Which way it throws its light. Leave empty to turn it to the nearest wall ({{degrees}}°).",
     toneLabel: "Tone",

@@ -348,6 +348,13 @@ backlight drawn as a stray line along the wall.
   plan draws a one-sided light's facing as a wedge off its dot (`model/hueFacing.ts`), so the 2D
   and the 3D room agree on which way it points; the Edit face reads the bridge's archetypes too,
   for the inspector's "Auto · Play bar".
+- **A light set down sits on what is there.** Moved on the plan — dragged, typed or carried in 3D —
+  a Hue light that stood on the floor or a piece (within 15 cm of its top) goes on standing on the
+  new surface the same distance up, and one the new piece would swallow rises onto its top
+  (`model/lightSeat.ts`); one hung above both keeps its height. The 3D room already drew a lamp on
+  the piece under it, but the stored height — which the stream and room-aware sampling read — was
+  left at the floor until typed in. The inspector offers "Stand on {piece}" for a light over a piece
+  it is not on.
 - **The running mode sets the room's mood.** `roomMood` (`room-view/model/roomMood.ts`) reads what
   runs from the lighting control state: Off leaves the lamps dark — the rig falls to a cool night,
   the bulbs to frosted glass, the TV's backlight out — under a navy sky; Solid lights every lamp in

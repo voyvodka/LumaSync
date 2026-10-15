@@ -2,6 +2,7 @@ import type { HueChannelPlacement, RoomMapConfig } from "@/shared/contracts/room
 import { findHueChannel, replaceHueChannel } from "@/shared/contracts/roomMap";
 
 import { moveHueChannelToWorld, nudgeHueChannel } from "./hueChannelPosition";
+import { seatMovedLight } from "./lightSeat";
 import { findScopedHueChannel, updateScopedHueChannel } from "./hueChannelScope";
 import { furnitureObjectId, usbStripObjectId, type RoomObjectKind, type RoomObjectRef } from "./objectId";
 import { keepPlacedInside, keepStripInside, roomBoxOf } from "./pieceGeometry";
@@ -177,7 +178,7 @@ export const ROOM_OBJECT_KINDS = {
     duplicate: null,
     moveTo: (config, ref, x, y, { hueAreaId }) => ({
       hueChannels: updateScopedHueChannel(config.hueChannels, hueAreaId, ref.channelIndex, (ch) =>
-        moveHueChannelToWorld(ch, config.zones, x, y),
+        seatMovedLight(ch, moveHueChannelToWorld(ch, config.zones, x, y), config),
       ),
     }),
     // Hue ignores Shift: its space is [-1, 1], where a metre-sized step would leave the room.

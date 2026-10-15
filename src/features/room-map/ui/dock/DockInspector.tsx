@@ -11,11 +11,12 @@ import { resolveRoomFootprint } from "@/shared/contracts/roomMap";
 import { autoScreenKind, classifyFurniture } from "@/features/room-view/model/furnitureModel";
 import type { LampFamily } from "@/features/room-view/model/lampFamily";
 
-import { hueChannelZRange, resolveHueChannelWorld, resolveHueChannelWorldZ } from "../../model/hueChannelPosition";
+import { hueChannelZRange, hueToPlanMetres, resolveHueChannelWorld, resolveHueChannelWorldZ } from "../../model/hueChannelPosition";
 import { furnitureObjectId, hueChannelObjectId, imageLayerObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "../../model/objectId";
 import type { InspectorTarget } from "../../model/resolveInspectorTarget";
 import { outsideOutline } from "../../model/roomFootprint";
 import { autoHueFacing } from "../../model/hueFacing";
+import { pieceUnder } from "../../model/lightSeat";
 import { FurnitureInspector } from "../objects/FurnitureInspector";
 import { HueChannelInspector } from "../objects/HueChannelInspector";
 import { HueZoneInspector } from "../objects/HueZoneInspector";
@@ -65,6 +66,12 @@ export interface DockInspectorProps {
   lampFamilies: ReadonlyMap<number, LampFamily>;
   actions: InspectorActions;
   onClose: () => void;
+}
+
+function seatUnder(channel: HueChannelPlacement, config: RoomMapConfig) {
+  const { widthMeters, depthMeters } = config.dimensions;
+  const plan = hueToPlanMetres(resolveHueChannelWorld(channel, config.zones), widthMeters, depthMeters);
+  return pieceUnder(config, plan.x, plan.y);
 }
 
 /** What the selection key is, so an inspector remounts on a new object of the same kind — without
@@ -202,6 +209,7 @@ export function DockInspector({
           modelChoices={modelChoices}
           bridgeFixture={lampFamilies.get(ch.channelIndex) ?? null}
           autoFacing={autoHueFacing(ch, config)}
+          seat={seatUnder(ch, config)}
           onUpdate={(patch) => actions.onUpdateHueChannel(ch.channelIndex, patch)}
           onAssignZone={(zoneId) => actions.onAssignChannelToZone(ch.channelIndex, zoneId)}
           onRename={(label) => actions.onRename(id, label)}

@@ -413,3 +413,40 @@ describe("HueChannelInspector model and facing", () => {
     expect(screen.getByLabelText("roomMap:inspector.hueFacingLabel")).toBeTruthy();
   });
 });
+
+describe("HueChannelInspector standing on a piece", () => {
+  beforeEach(cleanup);
+
+  const renderSeat = (worldZ: number) => {
+    const onHeightChange = vi.fn<(z: number) => void>();
+    render(
+      <HueChannelInspector
+        channel={channel}
+        zones={[]}
+        worldZ={worldZ}
+        roomHeightMeters={2.5}
+        world={{ x: 0, y: 0 }}
+        roomWidthMeters={5}
+        roomDepthMeters={4}
+        onMove={vi.fn<(x: number, y: number) => void>()}
+        onHeightChange={onHeightChange}
+        onRename={vi.fn<(label: string) => void>()}
+        onToggleLock={vi.fn<() => void>()}
+        onClose={vi.fn<() => void>()}
+        seat={{ item: { id: "desk", type: "table", x: 0, y: 0, width: 1, height: 1, label: "Desk" }, top: 0.75 }}
+      />,
+    );
+    return onHeightChange;
+  };
+
+  it("offers to stand a light on the piece under it, at the piece's top", () => {
+    const onHeightChange = renderSeat(-1);
+    fireEvent.click(screen.getByText("roomMap:inspector.hueSeatOn"));
+    expect(onHeightChange).toHaveBeenCalledWith(0.75 / 2.5 * 2 - 1);
+  });
+
+  it("says nothing once the light stands on it", () => {
+    renderSeat(0.8 / 2.5 * 2 - 1);
+    expect(screen.queryByText("roomMap:inspector.hueSeatOn")).toBeNull();
+  });
+});

@@ -23,7 +23,8 @@ const archetypesOf = (lights: readonly HueLightName[]): Readonly<Record<string, 
   Object.fromEntries(lights.map((light) => [light.id, light.archetype]));
 
 /** Each Hue channel's lamp shape (channel index → family), read from the bridge only while
- *  `enabled` — the 3D room is the one reader, so a closed view asks the bridge nothing. It shares
+ *  `enabled` — while the room is open in a build with the 3D room: the view draws by it and the
+ *  inspector names it, so a closed room asks the bridge nothing. It shares
  *  the light names' session cache, so the Hue page's read serves it and its Revalidate refreshes it.
  *  Until the answer lands, or without one, the map is empty and every light draws as a bulb. */
 export function useHueLampFamilies(

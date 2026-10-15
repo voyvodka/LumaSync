@@ -1,7 +1,14 @@
 import { useTranslation } from "react-i18next";
 
 import { FIXTURE_ORDER, type LampFamily, ONE_SIDED } from "@/features/room-view/model/lampFamily";
-import { type HueChannelPlacement, type HueZone, resolveHueFacing, resolveHueFixture } from "@/shared/contracts/roomMap";
+import {
+  type FurniturePlacement,
+  type HueChannelPlacement,
+  type HueZone,
+  resolveFurnitureType,
+  resolveHueFacing,
+  resolveHueFixture,
+} from "@/shared/contracts/roomMap";
 import { InfoTip } from "@/shared/ui/InfoTip/InfoTip";
 import { StateWord } from "@/shared/ui/StateWord/StateWord";
 
@@ -11,7 +18,7 @@ import { getZoneColor } from "../../model/zoneColor";
 import { DecimalField } from "../DecimalField";
 import { DockPicker } from "../dock/DockPicker";
 import { DockSlider } from "../dock/DockSlider";
-import { Actions, Disc, FieldRow, InspectorRows, Mark, Meta, NameField, Note, Status } from "../dock/InspectorParts";
+import { Actions, Disc, FieldRow, InspectorRows, Mark, Meta, NameField, Note, RowLink, Status } from "../dock/InspectorParts";
 import { FAMILY_KEY } from "../view/viewLightLabel";
 import { GlyphHeight, GlyphRotation } from "./fieldGlyphs";
 import type { UsbStripConnectionStatus } from "./UsbStripInspector";
@@ -19,6 +26,9 @@ import type { UsbStripConnectionStatus } from "./UsbStripInspector";
 const UNASSIGNED = "unassigned";
 const AUTO = "auto";
 const wrapDegrees = (degrees: number) => ((degrees % 360) + 360) % 360;
+const metresToHue = (metres: number, roomHeight: number) => Math.min(Math.max((metres / roomHeight) * 2 - 1, -1), 1);
+/** On the top, give or take a Play bar's middle above it. */
+const standsOn = (height: number, top: number) => height >= top - 0.02 && height - top <= 0.15;
 
 function heightBandKey(
   worldZ: number,
@@ -52,6 +62,7 @@ export function HueChannelInspector({
   modelChoices = false,
   bridgeFixture = null,
   autoFacing = 0,
+  seat = null,
   onUpdate,
 }: {
   channel: HueChannelPlacement;
@@ -88,6 +99,8 @@ export function HueChannelInspector({
   bridgeFixture?: LampFamily | null;
   /** The facing an unset light takes, in degrees: toward its nearest wall. */
   autoFacing?: number;
+  /** The piece under the light and its top, in metres: one click stands the light on it. */
+  seat?: { item: FurniturePlacement; top: number } | null;
   onUpdate?: (patch: Pick<HueChannelPlacement, "facing" | "fixture">) => void;
 }) {
   const { t } = useTranslation();
@@ -208,6 +221,13 @@ export function HueChannelInspector({
             })}
             readout={t("roomMap:inspector.hueHeightReadout", { metres: heightMetres(shownZ) })}
           />
+          {seat && !standsOn(hueToMetres(shownZ, roomHeightMeters), seat.top) && !locked && (
+            <RowLink onClick={() => onHeightChange(metresToHue(seat.top, roomHeightMeters))}>
+              {t("roomMap:inspector.hueSeatOn", {
+                name: seat.item.label ?? t(`roomMap:furniture.type.${resolveFurnitureType(seat.item.type)}`),
+              })}
+            </RowLink>
+          )}
           {modelChoices && onUpdate && (
             <FieldRow>
               <DockPicker<LampFamily | typeof AUTO>

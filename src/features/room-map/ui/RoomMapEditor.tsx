@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { type FurnitureModel, modelTop } from "@/features/room-view/model/furnitureModel";
 import type { LampFamily } from "@/features/room-view/model/lampFamily";
 import { hueFacings } from "../model/hueFacing";
+import { seatMovedLight } from "../model/lightSeat";
 import { ROOM_VIEW_3D_AVAILABLE } from "@/features/room-view/ui/RoomView3DHost";
 import type {
   FurniturePlacement,
@@ -168,7 +169,7 @@ export function RoomMapEditor({
     () => (ROOM_VIEW_3D_AVAILABLE ? hueFacings(visibleHueChannels, config, lampFamilies) : undefined),
     [visibleHueChannels, config, lampFamilies],
   );
-    // The zones a light of the shown area can join: another area's zone holds another area's lights.
+  // The zones a light of the shown area can join: another area's zone holds another area's lights.
   const areaZones = useMemo(
     () => (hueAreaId ? hueZones.filter((zone) => zone.entertainmentAreaId === hueAreaId) : hueZones),
     [hueZones, hueAreaId],
@@ -409,7 +410,12 @@ export function RoomMapEditor({
   );
   const handleHueChannelChange = useCallback(
     (updated: HueChannelPlacement) => {
-      apply((cfg) => ({ hueChannels: replaceHueChannel(cfg.hueChannels, updated) }));
+      apply((cfg) => {
+        const before = cfg.hueChannels.find(
+          (ch) => ch.channelIndex === updated.channelIndex && (ch.entertainmentAreaId ?? "") === (updated.entertainmentAreaId ?? ""),
+        );
+        return { hueChannels: replaceHueChannel(cfg.hueChannels, before ? seatMovedLight(before, updated, cfg) : updated) };
+      });
     },
     [apply],
   );
@@ -648,8 +654,11 @@ export function RoomMapEditor({
     // A held arrow in X or Y steps many times; the gesture keeps it one undo step and one save.
     onMoveObject: (id, x, y) => handleUpdatePosition(id, x, y, { gesture: `move:${id}` }),
     onUpdateHueChannel: (channelIndex, patch) => {
+      // The shown area's channel: the same index names another light in every other area.
+      const target = visibleHueChannels.find((ch) => ch.channelIndex === channelIndex);
+      if (!target) return;
       apply(
-        { hueChannels: config.hueChannels.map((ch) => (ch.channelIndex === channelIndex ? { ...ch, ...patch } : ch)) },
+        { hueChannels: replaceHueChannel(config.hueChannels, { ...target, ...patch }) },
         { gesture: `hue:${channelIndex}:${Object.keys(patch).sort().join(",")}` },
       );
     },

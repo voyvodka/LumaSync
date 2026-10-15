@@ -282,6 +282,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     modelInfo: "Otomatik, modeli parçanın boyutundan ve çevresinden okur. Sabit kalması için birini seç.",
     hueModelAutoUnknown: "Otomatik",
     hueModelInfo: "Otomatik, ışığı köprünün verdiği adla çizer. Köprü yalnızca lambanın içindeki ampulü biliyorsa birini seç.",
+    hueSeatOn: "{{name}} üstüne koy",
     hueFacingLabel: "Yön",
     hueFacingInfo: "Işığını hangi yöne verdiği. En yakın duvara dönmesi için boş bırak ({{degrees}}°).",
     toneLabel: "Ton",
