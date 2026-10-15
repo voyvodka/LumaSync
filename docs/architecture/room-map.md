@@ -206,7 +206,7 @@ outline may have. The handles sit under every object, so a piece against a wall 
 you grab; they are pointer-only, and the Shape row is the keyboard's way to the same shapes.
 
 **The room's finish is the editor's alone, and an unknown value is kept.** `roomMap.surfaces` names
-the floor (`FLOOR_FINISHES`) and the walls' paint (`WALL_COLORS`) from short named lists — no hex, so
+the floor (`FLOOR_FINISHES`) and the walls' paint (`WALL_COLORS`) from named lists of ten — no hex, so
 the palette stays one the lights read well against, and the colours live once in
 `room-view/model/surfaceColours.ts` for both the 3D room and the Room settings discs. Only the 3D
 view draws it; Rust neither mirrors nor rewrites it (a Hue forget keeps it, `forget.rs` pins that).
@@ -215,6 +215,15 @@ newer build chose survives this build changing the walls. A template keeps the r
 so does Reset map, which is the empty template: it clears the layout, not the finish. A
 pick is a gesture, since every `roomMap` save refreshes the running mode. Glass walls were left out:
 a second wall material breaks the scene's fixed draw count, and they wait for their own change.
+The lists' order is the discs' order, light to dark and the woods first, so reordering the keys is
+free — nothing stores an index. Every pattern is real geometry merged into the floor's one draw:
+herringbone lays 9 × 45 cm planks on the lattice n·(w, −w) + m·(l, l), one plank along each axis per
+point, which tiles with no gap and no overlap (`environment.test.ts` samples the floor for both); a
+checkerboard counts its squares from the room's corner so a notch does not shift the grid. A disc
+shows its pattern in CSS (`floorSwatchCss`): rows, a diagonal for the zigzag, a grout grid, a
+checker. Ten in one row ran out of the panel, so each set is two rows of five. Herringbone is the
+costly one to build: a 10 × 8 m room is about 2,000 planks and 8 ms to lay against oak's 300 and
+1.6 ms (Node, M4 Pro), once per scene build and still one draw.
 
 **Background images are copied in, capped at 20 MB, and pruned only at startup.** An imported
 image is copied into `room-map-backgrounds/` in the app data dir under a UUID name, because the

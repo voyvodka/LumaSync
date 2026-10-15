@@ -1164,25 +1164,34 @@ export interface RoomMapConfig {
   surfaces?: RoomSurfaces;
 }
 
-/** The floor's finish, as one choice: a wood, a tile, carpet or concrete. */
+/** The floor's finish, as one choice: a wood or parquet, carpet, a tile or concrete. The keys' order
+ *  is Room settings' order, light to dark with the woods first; nothing stores an index. */
 export const FLOOR_FINISHES = {
   OAK: "oak",
   WALNUT: "walnut",
   ASH: "ash",
+  HERRINGBONE: "herringbone",
+  CARPET: "carpet",
   TILE_LIGHT: "tileLight",
   TILE_DARK: "tileDark",
-  CARPET: "carpet",
+  CHECKER: "checker",
+  TERRACOTTA: "terracotta",
   CONCRETE: "concrete",
 } as const;
 export type FloorFinish = (typeof FLOOR_FINISHES)[keyof typeof FLOOR_FINISHES];
 
-/** The walls' paint, from one short palette that stays behind the lights. */
+/** The walls' paint, from a named palette the lights read against. The keys' order is Room
+ *  settings' order, light to dark. */
 export const WALL_COLORS = {
   WARM_WHITE: "warmWhite",
   COOL_WHITE: "coolWhite",
   GREIGE: "greige",
+  BLUSH: "blush",
   SAGE: "sage",
   CLAY: "clay",
+  OCHRE: "ochre",
+  FOREST: "forest",
+  NAVY: "navy",
   CHARCOAL: "charcoal",
 } as const;
 export type WallColor = (typeof WALL_COLORS)[keyof typeof WALL_COLORS];

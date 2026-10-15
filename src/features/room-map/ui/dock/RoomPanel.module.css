@@ -39,7 +39,7 @@
   .surfaces { display: flex; flex-direction: column; }
   .surfaceRow {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 4px;
     min-height: 32px;
     padding-left: 8px;
@@ -47,10 +47,12 @@
   .surfaceLabel {
     flex: 0 0 52px;
     font-size: 12px;
+    line-height: 32px;
     color: var(--lm-ink-dim);
   }
-  .swatches { display: flex; flex-shrink: 0; }
-  /* 30 px across, so seven fit beside their name in the panel; 32 px tall to the pointer. */
+  /* Two rows of five, light to dark: ten in one row ran out of the panel. */
+  .swatches { display: grid; grid-template-columns: repeat(5, 30px); flex-shrink: 0; }
+  /* 30 px across, 32 px tall to the pointer. */
   .swatch {
     position: relative;
     display: grid;

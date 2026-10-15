@@ -83,6 +83,9 @@ export default {
       tileDark: "Dark tile",
       carpet: "Carpet",
       concrete: "Concrete",
+      herringbone: "Herringbone",
+      checker: "Checkerboard",
+      terracotta: "Terracotta",
     },
     walls: {
       warmWhite: "Warm white",
@@ -91,6 +94,10 @@ export default {
       sage: "Sage",
       clay: "Clay",
       charcoal: "Charcoal",
+      navy: "Navy",
+      forest: "Forest green",
+      blush: "Blush",
+      ochre: "Ochre",
     },
   },
   shape: {

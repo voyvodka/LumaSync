@@ -86,6 +86,9 @@ const roomMap: Catalogue<typeof enRoomMap> = {
       tileDark: "Koyu karo",
       carpet: "Halıfleks",
       concrete: "Beton",
+      herringbone: "Balıksırtı",
+      checker: "Dama",
+      terracotta: "Terakota",
     },
     walls: {
       warmWhite: "Sıcak beyaz",
@@ -94,6 +97,10 @@ const roomMap: Catalogue<typeof enRoomMap> = {
       sage: "Adaçayı",
       clay: "Kil",
       charcoal: "Antrasit",
+      navy: "Lacivert",
+      forest: "Orman yeşili",
+      blush: "Pudra",
+      ochre: "Hardal",
     },
   },
   shape: {

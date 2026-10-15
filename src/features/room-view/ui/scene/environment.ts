@@ -13,7 +13,7 @@ import {
 import { FLOOR_FINISHES, type FloorFinish, WALL_COLORS, type WallColor } from "@/shared/contracts/roomMap";
 
 import { cornerCoordinates, insideAlong, type OutlineEdge, type PlanCorner } from "../../model/roomOutline";
-import { FLOOR_PALETTE, WALL_PALETTE } from "../../model/surfaceColours";
+import { FLOOR_PALETTE, type FloorLook, WALL_PALETTE } from "../../model/surfaceColours";
 import { PALETTE } from "./palette";
 import { block, type Part, seeded } from "./parts";
 
@@ -55,13 +55,18 @@ export function floorParts(
   edges: readonly OutlineEdge[] = [],
   finish: FloorFinish = FLOOR_FINISHES.OAK,
 ): Part[] {
-  const look = FLOOR_PALETTE[finish] ?? FLOOR_PALETTE.oak;
+  const look: FloorLook = FLOOR_PALETTE[finish] ?? FLOOR_PALETTE.oak;
   const rects = outlineRects(widthM, depthM, corners);
   const parts: Part[] = rects.map((r) =>
     block(r.x1 - r.x0, 0.03, r.y1 - r.y0, (r.x0 + r.x1) / 2 - widthM / 2, -0.05, (r.y0 + r.y1) / 2 - depthM / 2, look.gap, 0),
   );
   if ("slab" in look) {
-    slabs(parts, rects, widthM, depthM, look.slab, look.size);
+    slabs(parts, rects, widthM, depthM, look.slab, look.size, look.alternate);
+    skirting(parts, edges);
+    return parts;
+  }
+  if (look.herringbone) {
+    herringbone(parts, rects, widthM, depthM, look.planks);
     skirting(parts, edges);
     return parts;
   }
@@ -132,6 +137,7 @@ function slabs(
   depthM: number,
   colour: number,
   size: number,
+  alternate?: number,
 ): void {
   const rand = seeded(((widthM * 5.13 + depthM * 2.71) % 1) || 0.5);
   const gap = size > 0 ? 0.004 : 0;
@@ -148,10 +154,61 @@ function slabs(
         const y1 = Math.min(y + size, r.y1);
         if (x1 - x0 - gap <= 0.01 || y1 - y0 - gap <= 0.01) continue;
         const shadeBy = 0.96 + rand() * 0.06;
+        // A checkerboard counts its squares from the room's corner, so the grid does not shift with a cut.
+        const odd = alternate !== undefined && (Math.round(x / size) + Math.round(y / size)) % 2 !== 0;
         parts.push(
-          block(x1 - x0 - gap, 0.02, y1 - y0 - gap, (x0 + x1) / 2 - widthM / 2, -0.02, (y0 + y1) / 2 - depthM / 2, shade(colour, shadeBy), 0),
+          block(x1 - x0 - gap, 0.02, y1 - y0 - gap, (x0 + x1) / 2 - widthM / 2, -0.02, (y0 + y1) / 2 - depthM / 2, shade(odd ? alternate : colour, shadeBy), 0),
         );
       }
+    }
+  }
+}
+
+const HERRING_WIDTH = 0.09;
+const HERRING_LENGTH = 0.45;
+
+/**
+ * Herringbone: short planks laid in pairs at right angles, each one's end against the next one's
+ * side, so the rows zigzag. On the lattice n·(w, −w) + m·(l, l) each point holds one plank along x
+ * at [0, l] × [0, w] and one along y at [l, l + w] × [0, l]; that tiles the plane with no overlap.
+ * Every plank is cut to the outline.
+ */
+function herringbone(
+  parts: Part[],
+  rects: readonly { x0: number; y0: number; x1: number; y1: number }[],
+  widthM: number,
+  depthM: number,
+  planks: readonly number[],
+): void {
+  const w = HERRING_WIDTH;
+  const l = HERRING_LENGTH;
+  const rand = seeded(((widthM * 3.71 + depthM * 1.93) % 1) || 0.5);
+  const lay = (x0: number, y0: number, x1: number, y1: number) => {
+    const base = planks[Math.floor(rand() * planks.length)] ?? planks[0]!;
+    const colour = shade(base, 0.96 + rand() * 0.07);
+    for (const r of rects) {
+      const cx0 = Math.max(x0, r.x0);
+      const cx1 = Math.min(x1, r.x1);
+      const cy0 = Math.max(y0, r.y0);
+      const cy1 = Math.min(y1, r.y1);
+      if (cx1 - cx0 - PLANK_GAP <= 0.01 || cy1 - cy0 - PLANK_GAP <= 0.01) continue;
+      parts.push(
+        block(cx1 - cx0 - PLANK_GAP, 0.02, cy1 - cy0 - PLANK_GAP, (cx0 + cx1) / 2 - widthM / 2, -0.02, (cy0 + cy1) / 2 - depthM / 2, colour, 0),
+      );
+    }
+  };
+  // u = x + y = 2ml, v = x − y = 2nw at a lattice point; each plank reaches l + w beyond its point.
+  const mFrom = Math.floor(-(l + w) / (2 * l)) - 1;
+  const mTo = Math.ceil((widthM + depthM) / (2 * l)) + 1;
+  const nFrom = Math.floor(-(depthM + l + w) / (2 * w)) - 1;
+  const nTo = Math.ceil((widthM + l + w) / (2 * w)) + 1;
+  for (let m = mFrom; m <= mTo; m++) {
+    for (let n = nFrom; n <= nTo; n++) {
+      const px = n * w + m * l;
+      const py = -n * w + m * l;
+      if (px > widthM || py > depthM || px + l + w < 0 || py + l < 0) continue;
+      lay(px, py, px + l, py + w);
+      lay(px + l, py, px + l + w, py + l);
     }
   }
 }
