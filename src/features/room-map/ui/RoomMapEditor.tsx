@@ -32,6 +32,13 @@ import { useFurnitureModels } from "../state/useFurnitureModels";
 import type { RoomMapDocument } from "../state/useRoomMapDocument";
 import { useRoomMapGridSettings } from "../state/useRoomMapGridSettings";
 import { useUsbStripStatus } from "../state/useUsbStripStatus";
+import {
+  buildFootprint,
+  describeFootprint,
+  type FootprintShape,
+  footprintMinimumSize,
+  resizeFootprint,
+} from "../model/roomFootprint";
 import { useRoomMapHueZones } from "../state/useRoomMapHueZones";
 import { imageLayerGestureKey, useRoomMapImageLayers } from "../state/useRoomMapImageLayers";
 import { useRoomMapObjects } from "../state/useRoomMapObjects";
@@ -313,6 +320,10 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
       const dyPx = dyM * pxPerMeter;
 
       const patch: Partial<typeof config> = { dimensions: d };
+      // A height-only change leaves the outline as it is stored.
+      if (config.footprint !== undefined && (d.widthMeters !== widthMeters || d.depthMeters !== depthMeters)) {
+        patch.footprint = resizeFootprint(config.footprint, config.dimensions, d);
+      }
 
       if (config.tvAnchor) {
         patch.tvAnchor = { ...config.tvAnchor, x: config.tvAnchor.x + dxM, y: config.tvAnchor.y + dyM };
@@ -332,6 +343,13 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
       apply(patch);
     },
     [apply, config, panOffset, widthMeters, depthMeters, zoom, setPanOffset],
+  );
+
+  const roomShape = useMemo(() => describeFootprint(config.footprint, config.dimensions), [config.footprint, config.dimensions]);
+  const minimumSize = useMemo(() => footprintMinimumSize(config.footprint, config.dimensions), [config.footprint, config.dimensions]);
+  const handleShapeChange = useCallback(
+    (shape: FootprintShape) => apply({ footprint: buildFootprint(shape, config.dimensions) }),
+    [apply, config.dimensions],
   );
 
   const handleContextMenu = useCallback(
@@ -610,6 +628,9 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
           room={{
             dimensions: config.dimensions,
             onDimensionsChange: handleDimensionsChange,
+            shape: roomShape,
+            onShapeChange: handleShapeChange,
+            minimumSize,
             showGrid,
             onShowGridChange: setShowGrid,
             gridStrokeWidth,

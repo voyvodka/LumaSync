@@ -351,6 +351,12 @@ https://keepachangelog.com/en/1.1.0/
   plan gets that height back. A number applies when you leave it or press Enter, takes a comma or a
   point, and steps with the arrow keys (ten steps with Shift); one out of range, like Esc, puts the
   old value back.
+- Room map: a room can be L-, U- or T-shaped. Room settings has a Shape row — rectangle, L, U or T,
+  which corner or wall the cut is at, and its size in metres — and the plan draws the walls along
+  that outline with the cut-away part hatched. Changing the room's width or depth keeps the shape,
+  and the room cannot be made too small for it. A template or Reset goes back to a rectangle. The
+  lighting still reads the room as its full rectangle, so a lamp in the cut-away corner is sampled
+  as before.
 - Room map: the plan fills the editor. The toolbar, the chips down the left, the side panel and the
   coordinate readout are gone; one panel floats over the plan's foot at a height that never
   changes. With nothing selected it shows what you can add — each piece drawn as the plan draws it,

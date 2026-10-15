@@ -132,3 +132,29 @@ describe("mergeEditorSave", () => {
     expect(mergeEditorSave(stored, null, next)).toBe(next);
   });
 });
+
+describe("mergeEditorSave — the room's outline", () => {
+  const L = [
+    { x: 0, y: 0 },
+    { x: 5, y: 0 },
+    { x: 5, y: 2 },
+    { x: 3, y: 2 },
+    { x: 3, y: 4 },
+    { x: 0, y: 4 },
+  ];
+
+  it("writes an outline the editor added, and drops one it removed", () => {
+    const base = map({});
+    expect(mergeEditorSave(base, base, { ...base, footprint: L }).footprint).toEqual(L);
+    const shaped = map({ footprint: L });
+    const { footprint: _gone, ...plain } = shaped;
+    expect(mergeEditorSave(shaped, shaped, plain as RoomMapConfig).footprint).toBeUndefined();
+  });
+
+  it("keeps a stored outline it cannot read as stored when the editor changed something else", () => {
+    const garbage = [{ x: "a" }] as unknown as RoomMapConfig["footprint"];
+    const stored = map({ footprint: garbage });
+    const next = { ...stored, furniture: [{ id: "sofa", type: "sofa" as const, x: 1, y: 1, width: 2, height: 1 }] };
+    expect(mergeEditorSave(stored, stored, next).footprint).toBe(garbage);
+  });
+});

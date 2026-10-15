@@ -66,6 +66,22 @@ const roomMap: Catalogue<typeof enRoomMap> = {
       bulb: "Ampul",
     },
   },
+  shape: {
+    label: "Şekil",
+    custom: "Şekil (özel)",
+    kind: { rect: "Dikdörtgen", L: "L biçimi", U: "U biçimi", T: "T biçimi" },
+    cornerLabel: "Kesik köşe",
+    corner: { topLeft: "Sol üst", topRight: "Sağ üst", bottomRight: "Sağ alt", bottomLeft: "Sol alt" },
+    sideLabel: "Duvar",
+    side: { top: "TV duvarı", right: "Sağ duvar", bottom: "Arka duvar", left: "Sol duvar" },
+    cutWidth: "Kesik genişliği",
+    cutDepth: "Kesik derinliği",
+    notchWidth: "Girinti genişliği",
+    notchDepth: "Girinti derinliği",
+    stemWidth: "Kanat genişliği",
+    stemDepth: "Kanat uzunluğu",
+    offset: "Duvarın başından uzaklık",
+  },
   furniture: {
     type: {
       sofa: "Kanepe",

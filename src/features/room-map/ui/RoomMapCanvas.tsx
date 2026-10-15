@@ -1,6 +1,6 @@
 import type React from "react";
-import { memo, useRef, useState, useEffect, useCallback } from "react";
-import type { RoomMapConfig, ImageLayer } from "@/shared/contracts/roomMap";
+import { memo, useRef, useState, useEffect, useCallback, useId, useMemo } from "react";
+import { type RoomMapConfig, type ImageLayer, resolveRoomFootprint } from "@/shared/contracts/roomMap";
 import { clamp } from "@/shared/lib/math";
 import { imageLayerObjectId } from "../model/objectId";
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "../state/useRoomMapViewport";
@@ -292,6 +292,12 @@ export function RoomMapCanvas({
   const objectLayerRef = useRef<HTMLDivElement>(null);
 
   const { widthMeters, depthMeters } = config.dimensions;
+  const outline = useMemo(
+    () => resolveRoomFootprint({ dimensions: config.dimensions, footprint: config.footprint }),
+    [config.dimensions, config.footprint],
+  );
+  // A url(#…) reference cannot take the characters React puts in an id.
+  const cutPatternId = `room-cut-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
 
   // Grid interval: 0.5m if room width < 4m, else 1.0m
   const gridInterval = widthMeters < 4 ? 0.5 : 1.0;
@@ -437,18 +443,12 @@ export function RoomMapCanvas({
       );
     }
 
-    // Room boundary walls — solid red lines on top of grid
-    const bx0 = 0;
-    const bx1 = widthMeters * pxPerMeter;
-    const by0 = 0;
-    const by1 = depthMeters * pxPerMeter;
+    // Room boundary walls — solid red lines on top of grid, one per edge of the outline
     const wallStroke = 1;
-    const walls = [
-      { key: "wall-top",    x1: bx0, y1: by0, x2: bx1, y2: by0 },
-      { key: "wall-bottom", x1: bx0, y1: by1, x2: bx1, y2: by1 },
-      { key: "wall-left",   x1: bx0, y1: by0, x2: bx0, y2: by1 },
-      { key: "wall-right",  x1: bx1, y1: by0, x2: bx1, y2: by1 },
-    ];
+    const walls = outline.map((a, i) => {
+      const b = outline[(i + 1) % outline.length]!;
+      return { key: `wall-${i}`, x1: a.x * pxPerMeter, y1: a.y * pxPerMeter, x2: b.x * pxPerMeter, y2: b.y * pxPerMeter };
+    });
     for (const w of walls) {
       gridLines.push(
         <line
@@ -501,6 +501,31 @@ export function RoomMapCanvas({
             height={1}
           >
             {gridLines}
+          </svg>
+        )}
+
+        {/* What the outline cuts out of the room's box: hatched, so it reads as not the room. */}
+        {outline.length > 4 && (
+          <svg
+            className="absolute pointer-events-none text-ink-faint"
+            style={{ zIndex: 1, left: 0, top: 0, overflow: "visible" }}
+            width={1}
+            height={1}
+            aria-hidden="true"
+            data-testid="room-outline-cut"
+          >
+            <defs>
+              <pattern id={cutPatternId} width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                <line x1="0" y1="0" x2="0" y2="8" stroke="currentColor" strokeWidth="1" opacity="0.35" />
+              </pattern>
+            </defs>
+            <path
+              fillRule="evenodd"
+              fill={`url(#${cutPatternId})`}
+              d={`M0 0H${widthMeters * pxPerMeter}V${depthMeters * pxPerMeter}H0Z M${outline
+                .map((c) => `${c.x * pxPerMeter} ${c.y * pxPerMeter}`)
+                .join(" L")}Z`}
+            />
           </svg>
         )}
 

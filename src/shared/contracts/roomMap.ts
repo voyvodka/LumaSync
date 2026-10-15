@@ -396,6 +396,116 @@ export interface RoomDimensions {
   heightMeters: number;
 }
 
+/** A corner of the room's outline on the plan, in metres from the top-left (y down from the TV wall). */
+export interface RoomCorner {
+  x: number;
+  y: number;
+}
+
+/** How far a stored corner may sit off the room's edge, or off its wall's line, and still be read. */
+const ROOM_FOOTPRINT_TOLERANCE_M = 0.001;
+/** The shortest wall an outline may have. */
+export const ROOM_FOOTPRINT_MIN_WALL_M = 0.1;
+
+const rectangleOf = ({ widthMeters: w, depthMeters: d }: RoomDimensions): RoomCorner[] => [
+  { x: 0, y: 0 },
+  { x: w, y: 0 },
+  { x: w, y: d },
+  { x: 0, y: d },
+];
+
+/** Whether two axis-aligned walls share any point, ends included. */
+function wallsMeet(a: RoomCorner, b: RoomCorner, c: RoomCorner, d: RoomCorner): boolean {
+  const overlap = (p1: number, p2: number, q1: number, q2: number) =>
+    Math.max(Math.min(p1, p2), Math.min(q1, q2)) <= Math.min(Math.max(p1, p2), Math.max(q1, q2));
+  return overlap(a.x, b.x, c.x, d.x) && overlap(a.y, b.y, c.y, d.y);
+}
+
+/**
+ * The room's outline: a stored footprint when it is a usable orthogonal polygon — 4, 6 or 8
+ * corners, walls that turn at every corner and are at least 10 cm long, no wall touching another
+ * but its neighbours, and a bounding box that is exactly the room's dimensions — else the plain
+ * rectangle. Never scaled to fit and never written back: a footprint that disagrees with the
+ * dimensions is ignored rather than trusted, since `dimensions` is what Rust samples the room by.
+ * The answer is snapped onto its walls and the room's edges, walks with the room on its right and
+ * starts at the top-left-most corner, so every reading of one shape is the same list.
+ */
+export function resolveRoomFootprint(config: Pick<RoomMapConfig, "footprint" | "dimensions">): RoomCorner[] {
+  const rectangle = rectangleOf(config.dimensions);
+  const stored: unknown = config.footprint;
+  if (!Array.isArray(stored) || ![4, 6, 8].includes(stored.length)) return rectangle;
+  const raw: RoomCorner[] = [];
+  for (const corner of stored as unknown[]) {
+    const { x, y } = (corner ?? {}) as { x?: unknown; y?: unknown };
+    if (typeof x !== "number" || typeof y !== "number" || !Number.isFinite(x) || !Number.isFinite(y)) return rectangle;
+    raw.push({ x, y });
+  }
+  const n = raw.length;
+  const tol = ROOM_FOOTPRINT_TOLERANCE_M;
+  const at = (i: number) => raw[((i % n) + n) % n]!;
+
+  // Each wall is level or plumb and turns at its end; its length is judged once it is snapped.
+  const level: boolean[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = at(i);
+    const b = at(i + 1);
+    const flat = Math.abs(a.y - b.y) <= tol;
+    const upright = Math.abs(a.x - b.x) <= tol;
+    if (flat === upright) return rectangle;
+    level.push(flat);
+  }
+  for (let i = 0; i < n; i++) if (level[i] === level[(i + 1) % n]) return rectangle;
+
+  // Onto the walls' lines: a corner takes its level wall's y and its plumb wall's x — onto the
+  // room's edge when within the tolerance, else to the millimetre — so reading the answer again
+  // gives the same numbers.
+  const place = (value: number, edge: number) =>
+    Math.abs(value) <= tol ? 0 : Math.abs(value - edge) <= tol ? edge : Math.round(value * 1000) / 1000;
+  const { widthMeters: w, depthMeters: d } = config.dimensions;
+  const corners = raw.map((_, i) => {
+    const incoming = i - 1;
+    const levelIn = level[(incoming + n) % n];
+    const flatWall = levelIn ? [at(incoming), at(i)] : [at(i), at(i + 1)];
+    const plumbWall = levelIn ? [at(i), at(i + 1)] : [at(incoming), at(i)];
+    const y = (flatWall[0]!.y + flatWall[1]!.y) / 2;
+    const x = (plumbWall[0]!.x + plumbWall[1]!.x) / 2;
+    return { x: place(x, w), y: place(y, d) };
+  });
+
+  // On the snapped corners, so an answer read again is judged by the same lengths.
+  for (let i = 0; i < n; i++) {
+    const a = corners[i]!;
+    const b = corners[(i + 1) % n]!;
+    if (Math.abs(a.x - b.x) + Math.abs(a.y - b.y) < ROOM_FOOTPRINT_MIN_WALL_M - 1e-9) return rectangle;
+  }
+
+  const xs = corners.map((c) => c.x);
+  const ys = corners.map((c) => c.y);
+  if (Math.min(...xs) !== 0 || Math.max(...xs) !== w || Math.min(...ys) !== 0 || Math.max(...ys) !== d) return rectangle;
+
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue;
+      if (wallsMeet(corners[i]!, corners[(i + 1) % n]!, corners[j]!, corners[(j + 1) % n]!)) return rectangle;
+    }
+  }
+
+  let area2 = 0;
+  for (let i = 0; i < n; i++) {
+    const a = corners[i]!;
+    const b = corners[(i + 1) % n]!;
+    area2 += a.x * b.y - b.x * a.y;
+  }
+  const walk = area2 > 0 ? corners : [...corners].reverse();
+  let start = 0;
+  for (let i = 1; i < n; i++) {
+    const c = walk[i]!;
+    const s = walk[start]!;
+    if (c.y < s.y || (c.y === s.y && c.x < s.x)) start = i;
+  }
+  return [...walk.slice(start), ...walk.slice(0, start)];
+}
+
 // ---------------------------------------------------------------------------
 // Room Geometry (ambilight worker input)
 // ---------------------------------------------------------------------------
@@ -873,6 +983,10 @@ export interface RoomMapConfig {
   originX?: number;
   /** Custom room origin Y position in metres (defaults to room center) */
   originY?: number;
+  /** The room's outline when it is not the plain rectangle of `dimensions` (an L, U or T); read
+   *  through `resolveRoomFootprint`. The editor's alone: Rust samples the room by `dimensions`. A
+   *  writer deletes the key for the plain rectangle, and changes it and `dimensions` in one apply. */
+  footprint?: RoomCorner[];
 }
 
 // ---------------------------------------------------------------------------

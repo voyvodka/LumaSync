@@ -7,7 +7,9 @@ import { Toggle } from "@/shared/ui/Toggle/Toggle";
 
 import { DecimalField, FieldHint } from "../DecimalField";
 import { GlyphDepth, GlyphHeight, GlyphWidth } from "../objects/fieldGlyphs";
+import type { FootprintShape } from "../../model/roomFootprint";
 import { DockSlider } from "./DockSlider";
+import { RoomShapeField } from "./RoomShapeField";
 import styles from "./RoomPanel.module.css";
 
 /** A low basement to a double-height room. */
@@ -19,6 +21,11 @@ const ROOM_SIDE_MAX_M = 30;
 export interface RoomSettings {
   dimensions: RoomDimensions;
   onDimensionsChange: (dimensions: RoomDimensions) => void;
+  /** The room's outline in the editor's terms. */
+  shape: FootprintShape;
+  onShapeChange: (shape: FootprintShape) => void;
+  /** The smallest width and depth the outline still fits. */
+  minimumSize: { widthMeters: number; depthMeters: number };
   showGrid: boolean;
   onShowGridChange: (show: boolean) => void;
   gridStrokeWidth: number;
@@ -46,7 +53,7 @@ export function RoomPanel({
 }) {
   const { t } = useTranslation();
   const hintId = useId();
-  const { dimensions, onDimensionsChange } = settings;
+  const { dimensions, onDimensionsChange, minimumSize } = settings;
 
   return (
     <Popover open={open} onClose={onClose} anchorRef={anchorRef} side="above" width={288} id={id} label={t("roomMap:dock.room")} role="dialog">
@@ -56,7 +63,7 @@ export function RoomPanel({
             label={t("roomMap:settings.roomWidth")}
             prefix={<GlyphWidth />}
             value={dimensions.widthMeters}
-            min={ROOM_SIDE_MIN_M}
+            min={Math.max(ROOM_SIDE_MIN_M, minimumSize.widthMeters)}
             max={ROOM_SIDE_MAX_M}
             step={0.5}
             unit="m"
@@ -67,7 +74,7 @@ export function RoomPanel({
             label={t("roomMap:settings.roomDepth")}
             prefix={<GlyphDepth />}
             value={dimensions.depthMeters}
-            min={ROOM_SIDE_MIN_M}
+            min={Math.max(ROOM_SIDE_MIN_M, minimumSize.depthMeters)}
             max={ROOM_SIDE_MAX_M}
             step={0.5}
             unit="m"
@@ -88,6 +95,8 @@ export function RoomPanel({
           />
         </div>
         <FieldHint id={`${hintId}-height`}>{t("roomMap:settings.roomHeightHint")}</FieldHint>
+
+        <RoomShapeField shape={settings.shape} dimensions={dimensions} onChange={settings.onShapeChange} />
 
         <label className={styles.toggle}>
           <span>{t("roomMap:settings.showGrid")}</span>

@@ -189,6 +189,17 @@ resolves from the keychain, so the room never holds a credential. The card keeps
 end and its facts' width for a power switch and a brightness bar, so neither moves anything when
 per-light control arrives; until the live feed reaches the view, the lamps' colours are placeholders.
 
+**A room that is not a rectangle is an outline over its dimensions, never a replacement for them.**
+`roomMap.footprint` holds 4, 6 or 8 corners of an orthogonal outline (an L, U or T) in plan metres,
+read only through `resolveRoomFootprint` in the contract: anything it cannot use — diagonal or
+touching walls, a wall under 10 cm, a box that is not exactly `[0, W] × [0, D]` — reads as the plain
+rectangle, and nothing is ever scaled to fit or written back on load. `dimensions` stays the bounding
+box and the only shape Rust sees: the Hue cube mapping, room-aware affinity and the emitters all use
+it, so a lamp standing in a notch is sampled as if the room were the full rectangle. That is a
+knowing simplification; the outline decides what the room looks like, not how it is lit. A writer
+removes the key for the plain rectangle and changes it with `dimensions` in one apply, so the two
+never disagree on disk; an empty room drawn into an L is no longer offered the templates.
+
 **Background images are copied in, capped at 20 MB, and pruned only at startup.** An imported
 image is copied into `room-map-backgrounds/` in the app data dir under a UUID name, because the
 `fs:allow-read-file` capability is scoped to exactly that directory and the source may be on a

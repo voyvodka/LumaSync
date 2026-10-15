@@ -190,7 +190,14 @@ mod tests {
                 "hueOnboardingStep": "ready",
                 "hueBridgeSyncedPositions": { "area-1": [{ "channelId": 0, "positionX": 0.1, "positionY": 0.8 }] },
                 "hueOffBehavior": "restore",
-                "roomMap": { "hueChannels": [{ "channelIndex": 0, "x": 0.1, "y": 0.8, "z": 0.0 }], "zones": [] },
+                "roomMap": {
+                    "hueChannels": [{ "channelIndex": 0, "x": 0.1, "y": 0.8, "z": 0.0 }],
+                    "zones": [],
+                    "footprint": [
+                        { "x": 0.0, "y": 0.0 }, { "x": 5.0, "y": 0.0 }, { "x": 5.0, "y": 2.5 },
+                        { "x": 3.0, "y": 2.5 }, { "x": 3.0, "y": 4.0 }, { "x": 0.0, "y": 4.0 }
+                    ],
+                },
             }),
             ..RigSetup::default()
         });
@@ -250,6 +257,12 @@ mod tests {
             rig.saved("roomMap")
                 .is_some_and(|room| room["hueChannels"][0]["x"] == json!(0.1)),
             "room-map placements are the user's layout"
+        );
+        assert_eq!(
+            rig.saved("roomMap")
+                .map(|room| room["footprint"][3].clone()),
+            Some(json!({ "x": 3.0, "y": 2.5 })),
+            "the room's outline is the editor's and survives a forget"
         );
         for slot in [KEY_HUE_APP_KEY, KEY_HUE_CLIENT_KEY, KEY_HUE_BRIDGE_ID] {
             assert_eq!(

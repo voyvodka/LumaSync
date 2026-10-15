@@ -16,6 +16,9 @@ function settings(overrides: Partial<RoomSettings> = {}): RoomSettings {
   return {
     dimensions: DEFAULT_ROOM_DIMENSIONS,
     onDimensionsChange: vi.fn<(d: RoomDimensions) => void>(),
+    shape: { kind: "rect" },
+    onShapeChange: vi.fn<RoomSettings["onShapeChange"]>(),
+    minimumSize: { widthMeters: 0, depthMeters: 0 },
     showGrid: false,
     onShowGridChange: vi.fn<(show: boolean) => void>(),
     gridStrokeWidth: 1,

@@ -63,6 +63,22 @@ export default {
       bulb: "Bulb",
     },
   },
+  shape: {
+    label: "Shape",
+    custom: "Shape (custom)",
+    kind: { rect: "Rectangle", L: "L-shaped", U: "U-shaped", T: "T-shaped" },
+    cornerLabel: "Cut corner",
+    corner: { topLeft: "Top left", topRight: "Top right", bottomRight: "Bottom right", bottomLeft: "Bottom left" },
+    sideLabel: "Wall",
+    side: { top: "TV wall", right: "Right wall", bottom: "Back wall", left: "Left wall" },
+    cutWidth: "Cut width",
+    cutDepth: "Cut depth",
+    notchWidth: "Notch width",
+    notchDepth: "Notch depth",
+    stemWidth: "Wing width",
+    stemDepth: "Wing length",
+    offset: "Distance from the wall's start",
+  },
   furniture: {
     type: {
       sofa: "Sofa",

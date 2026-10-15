@@ -44,9 +44,36 @@ describe("isRoomMapEmpty", () => {
     expect(isRoomMapEmpty(map({ tvAnchor: TV_TEMPLATE.tvAnchor }))).toBe(false);
     expect(isRoomMapEmpty(map({ furniture: TV_TEMPLATE.furniture }))).toBe(false);
   });
+
+  it("does not once the room is drawn into another shape, and does for a footprint it cannot read", () => {
+    const base = map({});
+    const { widthMeters: w, depthMeters: d } = base.dimensions;
+    const L = [
+      { x: 0, y: 0 },
+      { x: w, y: 0 },
+      { x: w, y: d / 2 },
+      { x: w / 2, y: d / 2 },
+      { x: w / 2, y: d },
+      { x: 0, y: d },
+    ];
+    expect(isRoomMapEmpty({ ...base, footprint: L })).toBe(false);
+    expect(isRoomMapEmpty({ ...base, footprint: L.slice(0, 5) })).toBe(true);
+  });
 });
 
 describe("applyRoomTemplate", () => {
+  it("leaves the room's outline behind, as Reset does", () => {
+    const L = [
+      { x: 0, y: 0 },
+      { x: 5, y: 0 },
+      { x: 5, y: 2 },
+      { x: 3, y: 2 },
+      { x: 3, y: 4 },
+      { x: 0, y: 4 },
+    ];
+    expect(applyRoomTemplate({ ...map({}), footprint: L }, TV_TEMPLATE).footprint).toBeUndefined();
+  });
+
   it("puts the connected strip where the template's strip goes, keeping its port and LED count", () => {
     const connected = strip({ stripId: "usb-conn", portName: PORT });
     const next = applyRoomTemplate(map({ usbStrips: [connected] }), TV_TEMPLATE);

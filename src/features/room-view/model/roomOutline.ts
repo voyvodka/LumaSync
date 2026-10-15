@@ -2,11 +2,10 @@
 // the plan. Free of three.js. Plan coordinates are metres from the top-left corner (x right, y down
 // from the TV wall); scene coordinates centre the room's bounding box on the origin (x, z).
 
+import type { RoomCorner } from "@/shared/contracts/roomMap";
+
 /** A corner on the plan, in metres. */
-export interface PlanCorner {
-  x: number;
-  y: number;
-}
+export type PlanCorner = RoomCorner;
 
 /** One wall's run along the outline, in scene coordinates. */
 export interface OutlineEdge {

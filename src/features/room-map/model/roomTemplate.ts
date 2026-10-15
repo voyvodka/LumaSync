@@ -1,4 +1,4 @@
-import type { RoomMapConfig, UsbStripPlacement } from "@/shared/contracts/roomMap";
+import { type RoomMapConfig, resolveRoomFootprint, type UsbStripPlacement } from "@/shared/contracts/roomMap";
 
 /**
  * Whether the room map opens on the template picker: nothing the user placed is
@@ -11,6 +11,8 @@ import type { RoomMapConfig, UsbStripPlacement } from "@/shared/contracts/roomMa
  */
 export function isRoomMapEmpty(config: RoomMapConfig): boolean {
   return (
+    // A room drawn into an L is a choice already made, even with nothing in it yet.
+    resolveRoomFootprint(config).length === 4 &&
     !config.tvAnchor &&
     config.furniture.length === 0 &&
     config.usbStrips.every((strip) => Boolean(strip.portName))

@@ -66,6 +66,8 @@ describe("channel placements parity fixture", () => {
         expect(geometry).toBeUndefined();
         return;
       }
+      // Nothing the editor alone reads (a screen kind, an outline) may ride along to the runtime.
+      expect(Object.keys(geometry ?? {}).sort()).toEqual(["dimensions", "huePlacements", "tv"]);
       expect(geometry?.dimensions).toEqual(testCase.expected.dimensions);
       expect(geometry?.tv).toEqual(testCase.expected.tv);
       expectPlacements(geometry?.huePlacements, testCase.expected.huePlacements);

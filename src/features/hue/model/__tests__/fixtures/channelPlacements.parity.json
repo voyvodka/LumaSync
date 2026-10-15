@@ -300,6 +300,27 @@
         "tv": { "x": 1, "y": 0, "width": 1.2, "height": 0.1, "mountHeightMeters": 1.1 },
         "huePlacements": [{ "channelId": 4, "positionX": 0.5, "positionY": 1, "positionZ": 0.3 }]
       }
+    },
+    {
+      "name": "a footprint is the editor's alone and never reaches the runtime",
+      "state": {
+        "roomMap": {
+          "dimensions": { "widthMeters": 5, "depthMeters": 4, "heightMeters": 2.5 },
+          "footprint": [
+            { "x": 0, "y": 0 }, { "x": 5, "y": 0 }, { "x": 5, "y": 2.5 },
+            { "x": 3, "y": 2.5 }, { "x": 3, "y": 4 }, { "x": 0, "y": 4 }
+          ],
+          "tvAnchor": { "x": 1, "y": 0, "width": 1.2, "height": 0.1 },
+          "hueChannels": [{ "channelIndex": 0, "channelId": 4, "entertainmentAreaId": "area-1", "x": 0.5, "y": 1, "z": 0.3, "zOrigin": "user" }],
+          "zones": []
+        },
+        "lastHueAreaId": "area-1"
+      },
+      "expected": {
+        "dimensions": { "widthMeters": 5, "depthMeters": 4, "heightMeters": 2.5 },
+        "tv": { "x": 1, "y": 0, "width": 1.2, "height": 0.1 },
+        "huePlacements": [{ "channelId": 4, "positionX": 0.5, "positionY": 1, "positionZ": 0.3 }]
+      }
     }
   ]
 }

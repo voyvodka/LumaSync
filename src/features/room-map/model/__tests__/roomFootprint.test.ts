@@ -1,0 +1,129 @@
+import { describe, expect, it } from "vitest";
+
+import { resolveRoomFootprint } from "@/shared/contracts/roomMap";
+
+import {
+  buildFootprint,
+  clampFootprintShape,
+  defaultFootprintShape,
+  describeFootprint,
+  FOOTPRINT_CORNERS,
+  FOOTPRINT_SIDES,
+  type FootprintShape,
+  footprintMinimumSize,
+  resizeFootprint,
+} from "../roomFootprint";
+
+const dims = { widthMeters: 5, depthMeters: 4, heightMeters: 2.5 };
+
+describe("buildFootprint and describeFootprint", () => {
+  const shapes: FootprintShape[] = [
+    ...FOOTPRINT_CORNERS.map((corner) => ({ kind: "L" as const, corner, width: 2, depth: 1.5 })),
+    ...FOOTPRINT_SIDES.map((side) => ({ kind: "U" as const, side, width: 1.2, depth: 1, offset: 1.4 })),
+    ...FOOTPRINT_SIDES.map((side) => ({ kind: "T" as const, side, width: 1.2, depth: 2, offset: 1 })),
+  ];
+
+  it.each(shapes.map((s) => [`${s.kind} ${"corner" in s ? s.corner : "side" in s ? s.side : ""}`, s] as const))(
+    "builds %s into an outline the contract keeps, and reads it back as itself",
+    (_name, shape) => {
+      const corners = buildFootprint(shape, dims);
+      expect(corners).toBeDefined();
+      expect(resolveRoomFootprint({ dimensions: dims, footprint: corners })).toEqual(corners);
+      expect(describeFootprint(corners, dims)).toEqual(shape);
+    },
+  );
+
+  it("cuts an L from the corner it names", () => {
+    expect(buildFootprint({ kind: "L", corner: "bottomRight", width: 2, depth: 1.5 }, dims)).toEqual([
+      { x: 0, y: 0 },
+      { x: 5, y: 0 },
+      { x: 5, y: 2.5 },
+      { x: 3, y: 2.5 },
+      { x: 3, y: 4 },
+      { x: 0, y: 4 },
+    ]);
+  });
+
+  it("opens a U's notch in the wall it names, and reaches a T's stem to it", () => {
+    const u = buildFootprint({ kind: "U", side: "bottom", width: 1, depth: 1, offset: 2 }, dims) ?? [];
+    expect(u).toContainEqual({ x: 2, y: 3 });
+    expect(u).toContainEqual({ x: 3, y: 4 });
+    const t = buildFootprint({ kind: "T", side: "bottom", width: 1, depth: 2, offset: 2 }, dims) ?? [];
+    expect(t).toContainEqual({ x: 2, y: 4 });
+    expect(t).toContainEqual({ x: 0, y: 2 });
+  });
+
+  it("stores nothing for the rectangle", () => {
+    expect(buildFootprint({ kind: "rect" }, dims)).toBeUndefined();
+    expect(describeFootprint(undefined, dims)).toEqual({ kind: "rect" });
+  });
+
+  it("names an outline it cannot make as custom", () => {
+    // Two cuts at opposite corners: a valid outline, but no shape this editor offers.
+    const z = [
+      { x: 1, y: 0 },
+      { x: 5, y: 0 },
+      { x: 5, y: 3 },
+      { x: 4, y: 3 },
+      { x: 4, y: 4 },
+      { x: 0, y: 4 },
+      { x: 0, y: 1 },
+      { x: 1, y: 1 },
+    ];
+    expect(describeFootprint(z, dims)).toEqual({ kind: "custom" });
+  });
+
+  it("keeps every wall at least 10 cm whatever is typed", () => {
+    const tooBig = clampFootprintShape({ kind: "L", corner: "topLeft", width: 9, depth: 0 }, dims);
+    expect(tooBig).toEqual({ kind: "L", corner: "topLeft", width: 4.9, depth: 0.1 });
+    const notch = clampFootprintShape({ kind: "U", side: "top", width: 5, depth: 1, offset: 0 }, dims);
+    expect(notch).toMatchObject({ width: 4.8, offset: 0.1 });
+    expect(buildFootprint(notch, dims)).toBeDefined();
+  });
+
+  it("offers each shape at a size that reads at once", () => {
+    for (const kind of ["L", "U", "T"] as const) {
+      expect(buildFootprint(defaultFootprintShape(kind, dims), dims)).toBeDefined();
+    }
+  });
+});
+
+describe("resizeFootprint", () => {
+  const L = buildFootprint({ kind: "L", corner: "bottomRight", width: 2, depth: 1.5 }, dims);
+
+  it("keeps corners on the room's edges and moves the inner one by half the growth", () => {
+    const grown = resizeFootprint(L, dims, { ...dims, widthMeters: 7 });
+    expect(grown).toEqual([
+      { x: 0, y: 0 },
+      { x: 7, y: 0 },
+      { x: 7, y: 2.5 },
+      { x: 4, y: 2.5 },
+      { x: 4, y: 4 },
+      { x: 0, y: 4 },
+    ]);
+  });
+
+  it("has nothing to move for the rectangle, and gives up an outline the new size cannot hold", () => {
+    expect(resizeFootprint(undefined, dims, { ...dims, widthMeters: 7 })).toBeUndefined();
+    // The inner corner at x 3 is 0.5 m right of the centre; a 1 m room puts it past the edge.
+    expect(resizeFootprint(L, dims, { ...dims, widthMeters: 1 })).toBeUndefined();
+  });
+
+  it("leaves the outline alone on a height-only change", () => {
+    expect(resizeFootprint(L, dims, { ...dims, heightMeters: 3 })).toEqual(L);
+  });
+});
+
+describe("footprintMinimumSize", () => {
+  it("is what keeps every inner corner's walls at least 10 cm", () => {
+    const L = buildFootprint({ kind: "L", corner: "bottomRight", width: 2, depth: 1.5 }, dims);
+    // Inner x 3 sits 0.5 m off centre, inner y 2.5 sits 0.5 m off centre.
+    expect(footprintMinimumSize(L, dims)).toEqual({ widthMeters: 1.2, depthMeters: 1.2 });
+    const atMinimum = resizeFootprint(L, dims, { ...dims, widthMeters: 1.2, depthMeters: 1.2 });
+    expect(atMinimum).toHaveLength(6);
+  });
+
+  it("asks nothing of the rectangle", () => {
+    expect(footprintMinimumSize(undefined, dims)).toEqual({ widthMeters: 0, depthMeters: 0 });
+  });
+});

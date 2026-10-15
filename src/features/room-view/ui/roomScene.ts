@@ -21,10 +21,10 @@ import {
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
 import { furnitureObjectId, hueChannelObjectId, TV_ANCHOR_OBJECT_ID } from "@/features/room-map/model/objectId";
-import { type RoomMapConfig, resolveFurnitureTop } from "@/shared/contracts/roomMap";
+import { type RoomMapConfig, resolveFurnitureTop, resolveRoomFootprint } from "@/shared/contracts/roomMap";
 
 import type { Pickable } from "../model/picking";
-import { type PlanCorner, roomEdges } from "../model/roomOutline";
+import { roomEdges } from "../model/roomOutline";
 import { hueChannelScenePoint, roomToScene, tvMountHeight } from "../model/roomSpace";
 import { contactShadow, floorParts, roomLights, WALL_THICKNESS, wallFootShade, wallGeometry } from "./scene/environment";
 import { classifyFurniture, contactShade, modelTop, surfaceTop } from "../model/furnitureModel";
@@ -52,8 +52,6 @@ export interface RoomSceneOptions {
   coldKey?: number;
   /** Each Hue channel's fixture by channel index; one not listed draws as a bulb. */
   lampFamilies?: ReadonlyMap<number, LampFamily>;
-  /** The room's outline on the plan when it is not the plain rectangle of its dimensions. */
-  outline?: readonly PlanCorner[] | null;
 }
 
 /** A piece's top as something stands on it, in the scene frame. */
@@ -117,7 +115,9 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     return material;
   };
 
-  const corners = options.outline ?? null;
+  // The rectangle is drawn as no outline at all.
+  const footprint = resolveRoomFootprint(config);
+  const corners = footprint.length > 4 ? footprint : null;
   const edges = roomEdges(W, D, corners);
   const floor = mergeParts(floorParts(W, D, corners, edges), solid(0.72), false);
   if (floor) {

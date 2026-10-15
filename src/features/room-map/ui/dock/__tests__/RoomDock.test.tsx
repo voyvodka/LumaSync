@@ -93,6 +93,9 @@ function Harness({
     room: {
       dimensions: DEFAULT_ROOM_MAP.dimensions,
       onDimensionsChange: vi.fn<RoomDockProps["room"]["onDimensionsChange"]>(),
+      shape: { kind: "rect" },
+      onShapeChange: vi.fn<RoomDockProps["room"]["onShapeChange"]>(),
+      minimumSize: { widthMeters: 0, depthMeters: 0 },
       showGrid: true,
       onShowGridChange: vi.fn<(show: boolean) => void>(),
       gridStrokeWidth: 1,

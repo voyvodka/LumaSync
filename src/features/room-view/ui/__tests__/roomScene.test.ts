@@ -167,7 +167,7 @@ describe("buildRoomScene — an outline that is not a rectangle", () => {
     expect(walls(rectangle.scene)).toHaveLength(4);
     disposeScene(rectangle.scene);
 
-    const shaped = buildRoomScene(room, { ...OPTIONS, outline: L });
+    const shaped = buildRoomScene({ ...room, footprint: L }, OPTIONS);
     const built = walls(shaped.scene);
     expect(built).toHaveLength(6);
     // The inner corner is the scene's origin; the wall along x that ends there must not reach past
@@ -205,5 +205,18 @@ describe("buildRoomScene — picking and the selection mark", () => {
     expect(room.select("furniture-gone")).toBe(true);
     expect(room.select(null)).toBe(false);
     disposeScene(room.scene);
+  });
+
+  it("frees the floor outline a selection made, with the scene", () => {
+    const room = buildRoomScene(furnished, OPTIONS);
+    room.select("furniture-sofa");
+    const outlines: BufferGeometry[] = [];
+    room.scene.traverse((o) => {
+      if (o instanceof Mesh && o.geometry.type === "ShapeGeometry") outlines.push(o.geometry);
+    });
+    expect(outlines).toHaveLength(1);
+    const dispose = vi.spyOn(outlines[0]!, "dispose");
+    disposeScene(room.scene);
+    expect(dispose).toHaveBeenCalledTimes(1);
   });
 });

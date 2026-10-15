@@ -10,6 +10,8 @@ import {
   resolveFurnitureTop,
   resolveFurnitureType,
   resolveFurnitureVariant,
+  resolveRoomFootprint,
+  type RoomMapConfig,
   resolveScreenKind,
   type HueChannelPlacement,
 } from "@/shared/contracts/roomMap";
@@ -139,5 +141,150 @@ describe("height and screen kind resolvers", () => {
     expect(resolveScreenKind("monitor")).toBe("monitor");
     expect(resolveScreenKind("projector")).toBeUndefined();
     expect(resolveScreenKind(undefined)).toBeUndefined();
+  });
+});
+
+describe("resolveRoomFootprint", () => {
+  const dims = { widthMeters: 5, depthMeters: 4, heightMeters: 2.5 };
+  const RECT = [
+    { x: 0, y: 0 },
+    { x: 5, y: 0 },
+    { x: 5, y: 4 },
+    { x: 0, y: 4 },
+  ];
+  // An L: the bottom-right 2 × 1.5 m corner cut away, as the plan reads it (room on the right).
+  const L = [
+    { x: 0, y: 0 },
+    { x: 5, y: 0 },
+    { x: 5, y: 2.5 },
+    { x: 3, y: 2.5 },
+    { x: 3, y: 4 },
+    { x: 0, y: 4 },
+  ];
+  const read = (footprint: unknown, dimensions = dims) =>
+    resolveRoomFootprint({ dimensions, footprint: footprint as RoomMapConfig["footprint"] });
+
+  it.each([
+    ["absent", undefined],
+    ["null", null],
+    ["a string", "L"],
+    ["a non-finite corner", [...L.slice(0, 5), { x: Number.NaN, y: 4 }]],
+    ["a corner that is not a point", [...L.slice(0, 5), "0,4"]],
+    ["three corners", L.slice(0, 3)],
+    ["five corners", L.slice(0, 5)],
+    ["seven corners", [...L, { x: 0, y: 2 }]],
+    ["ten corners", [...L, ...L.slice(0, 4)]],
+    ["a diagonal wall", [{ x: 0, y: 0 }, { x: 5, y: 0 }, { x: 5, y: 2.5 }, { x: 3, y: 4 }, { x: 1, y: 4 }, { x: 0, y: 4 }]],
+    ["a zero-length wall", [{ x: 0, y: 0 }, { x: 5, y: 0 }, { x: 5, y: 0 }, { x: 5, y: 4 }, { x: 0, y: 4 }, { x: 0, y: 4 }]],
+    ["two walls in one line", [{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 5, y: 0 }, { x: 5, y: 4 }, { x: 2, y: 4 }, { x: 0, y: 4 }]],
+    ["a closing duplicate", [...RECT, RECT[0], RECT[1]]],
+    ["a wall shorter than 10 cm", [{ x: 0, y: 0 }, { x: 5, y: 0 }, { x: 5, y: 3.95 }, { x: 3, y: 3.95 }, { x: 3, y: 4 }, { x: 0, y: 4 }]],
+    ["an outline smaller than the room", [{ x: 0, y: 0 }, { x: 4, y: 0 }, { x: 4, y: 2.5 }, { x: 3, y: 2.5 }, { x: 3, y: 4 }, { x: 0, y: 4 }]],
+    ["an outline larger than the room", [{ x: 0, y: 0 }, { x: 6, y: 0 }, { x: 6, y: 2.5 }, { x: 3, y: 2.5 }, { x: 3, y: 4 }, { x: 0, y: 4 }]],
+    ["an outline offset from the room", L.map((c) => ({ x: c.x + 0.5, y: c.y }))],
+  ])("reads %s as the rectangle", (_name, footprint) => {
+    expect(read(footprint)).toEqual(RECT);
+  });
+
+  it("reads walls that touch away from their own corners as the rectangle", () => {
+    // A notch cut up from the far wall all the way to the TV wall: its side touches that wall.
+    const touching = [
+      { x: 0, y: 0 }, { x: 5, y: 0 }, { x: 5, y: 4 }, { x: 3, y: 4 },
+      { x: 3, y: 0 }, { x: 2, y: 0 }, { x: 2, y: 4 }, { x: 0, y: 4 },
+    ];
+    expect(read(touching)).toEqual(RECT);
+    // Inside the room's box, but one wall runs across another.
+    const crossing = [{ x: 0, y: 0 }, { x: 3, y: 0 }, { x: 3, y: 4 }, { x: 5, y: 4 }, { x: 5, y: 1 }, { x: 0, y: 1 }];
+    expect(read(crossing)).toEqual(RECT);
+  });
+
+  it("keeps a usable L, and the plain rectangle as itself", () => {
+    expect(read(L)).toEqual(L);
+    expect(read(RECT)).toEqual(RECT);
+  });
+
+  it("snaps a corner up to a millimetre off its wall or the room's edge onto it", () => {
+    const off = L.map((c, i) => (i === 3 ? { x: 3.0004, y: 2.5004 } : i === 1 ? { x: 5.0005, y: 0 } : c));
+    expect(read(off)).toEqual(L);
+  });
+
+  it("snaps a whole wall up to a millimetre past the room's edge back onto it", () => {
+    const past = L.map((c) => ({ x: c.x === 5 ? 5.0009 : c.x === 0 ? -0.0009 : c.x, y: c.y }));
+    expect(read(past)).toEqual(L);
+    const odd = { widthMeters: 4.0004, depthMeters: 4, heightMeters: 2.5 };
+    const oddL = L.map((c) => ({ x: c.x === 5 ? 4.0004 : c.x, y: c.y }));
+    expect(read(oddL, odd)).toEqual(oddL);
+  });
+
+  it("reads its own answer as the same answer", () => {
+    // A wall just under 10 cm once its corners are snapped must not pass the first reading only.
+    const p = 1.0055;
+    const near = [
+      { x: 0, y: 0 },
+      { x: 5, y: 0 },
+      { x: 5, y: 4 },
+      { x: p + 0.001, y: 4 },
+      { x: p, y: 3.9 },
+      { x: p + 0.1, y: 3.9 },
+      { x: p + 0.1, y: 2.5 },
+      { x: 0, y: 2.5 },
+    ];
+    const shapes: unknown[] = [L, near, L.map((c, i) => (i === 3 ? { x: 3.0004, y: 2.5004 } : c))];
+    for (const shape of shapes) {
+      const once = read(shape);
+      expect(read(once)).toEqual(once);
+    }
+    // Notches near every limit — wall lengths around 10 cm, corners up to a millimetre off — from a
+    // fixed seed, so a failure reproduces.
+    let seed = 7;
+    const next = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+    for (let k = 0; k < 2000; k++) {
+      const p0 = 0.2 + next() * 3;
+      const wall = 0.098 + next() * 0.006;
+      const jitter = () => (next() - 0.5) * 0.002;
+      const shape = [
+        { x: 0, y: 0 },
+        { x: 5, y: 0 },
+        { x: 5 + jitter(), y: 4 },
+        { x: p0 + wall + jitter(), y: 4 },
+        { x: p0 + wall, y: 3.9 + jitter() },
+        { x: p0, y: 3.9 },
+        { x: p0 + jitter(), y: 2.5 },
+        { x: 0, y: 2.5 + jitter() },
+      ];
+      const once = read(shape);
+      expect(read(once)).toEqual(once);
+    }
+  });
+
+  it("reads one L in any rotation and either winding as one list", () => {
+    const rotations = [0, 1, 2, 3, 4, 5].map((k) => [...L.slice(k), ...L.slice(0, k)]);
+    for (const order of [...rotations, ...rotations.map((r) => [...r].reverse())]) {
+      expect(read(order)).toEqual(L);
+    }
+  });
+
+  it("reads an L turned to every side of the room", () => {
+    const square = { widthMeters: 4, depthMeters: 4, heightMeters: 2.5 };
+    const base = [{ x: 0, y: 0 }, { x: 4, y: 0 }, { x: 4, y: 2 }, { x: 2, y: 2 }, { x: 2, y: 4 }, { x: 0, y: 4 }];
+    const turn = (c: { x: number; y: number }) => ({ x: 4 - c.y, y: c.x });
+    let shape = base;
+    for (let quarter = 0; quarter < 4; quarter++) {
+      const out = read(shape, square);
+      expect(out).toHaveLength(6);
+      expect(out[0]).toEqual([...out].sort((a, b) => a.y - b.y || a.x - b.x)[0]);
+      shape = shape.map(turn);
+    }
+  });
+
+  it("keeps a U and a T", () => {
+    const U = [{ x: 0, y: 0 }, { x: 5, y: 0 }, { x: 5, y: 4 }, { x: 3.5, y: 4 }, { x: 3.5, y: 2 }, { x: 1.5, y: 2 }, { x: 1.5, y: 4 }, { x: 0, y: 4 }];
+    const T = [{ x: 0, y: 0 }, { x: 5, y: 0 }, { x: 5, y: 1.5 }, { x: 3.5, y: 1.5 }, { x: 3.5, y: 4 }, { x: 1.5, y: 4 }, { x: 1.5, y: 1.5 }, { x: 0, y: 1.5 }];
+    expect(read(U)).toEqual(U);
+    expect(read(T)).toEqual(T);
+  });
+
+  it("ignores extra keys on a corner", () => {
+    expect(read(L.map((c) => ({ ...c, label: "x" })))).toEqual(L);
   });
 });
