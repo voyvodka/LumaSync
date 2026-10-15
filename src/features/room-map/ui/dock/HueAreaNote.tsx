@@ -10,6 +10,8 @@ import { Note } from "./InspectorParts";
 export interface PaletteHueArea {
   state: HueAreaState;
   zoneCount: number;
+  /** The area's lights on this map. */
+  lightCount: number;
   /** Last channel-fetch code. A failed read must not look like an empty area. */
   channelsStatus: string | null;
   refreshing: boolean;
@@ -83,7 +85,9 @@ export function HueAreaNote({ hue, noteRef }: { hue: PaletteHueArea; noteRef: Re
           : undefined
       }
     >
-      {t("roomMap:hueZones.areaState.readyTitle", { N: String(hue.zoneCount) })}
+      {hue.zoneCount > 0
+        ? t("roomMap:hueZones.areaState.readyZones", { count: hue.lightCount, zones: hue.zoneCount })
+        : t("roomMap:hueZones.areaState.ready", { count: hue.lightCount })}
     </Note>
   );
 }

@@ -211,7 +211,7 @@ export function DecimalField(props: DecimalFieldProps) {
         autoComplete="off"
         spellCheck={false}
         aria-label={label}
-        aria-valuenow={value}
+        aria-valuenow={value === undefined ? undefined : roundTo(value, decimals)}
         aria-valuemin={Number.isFinite(min) ? min : undefined}
         aria-valuemax={Number.isFinite(max) ? max : undefined}
         aria-valuetext={value === undefined ? undefined : `${format(value)}${unit ? ` ${unit}` : ""}`}

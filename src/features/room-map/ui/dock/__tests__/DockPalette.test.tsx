@@ -29,7 +29,7 @@ function renderPalette(overrides: Partial<DockPaletteProps> = {}) {
 }
 
 const tile = (testId: string) => screen.getByTestId(testId);
-const ready: PaletteHueArea = { state: { kind: "ready", orphanedAreaId: false }, zoneCount: 2, channelsStatus: null, refreshing: false };
+const ready: PaletteHueArea = { state: { kind: "ready", orphanedAreaId: false }, zoneCount: 2, lightCount: 4, channelsStatus: null, refreshing: false };
 
 describe("DockPalette", () => {
   it("adds a piece of the pressed type", () => {
@@ -62,7 +62,7 @@ describe("DockPalette", () => {
     const props = renderPalette({ hue: { ...ready, onRefresh } });
     fireEvent.click(tile("palette-zone"));
     expect(props.onAddZone).toHaveBeenCalledTimes(1);
-    expect(screen.getByText('roomMap:hueZones.areaState.readyTitle {"N":"2"}')).toBeInTheDocument();
+    expect(screen.getByText('roomMap:hueZones.areaState.readyZones {"count":4,"zones":2}')).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "roomMap:hueZones.areaState.refresh" }));
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
@@ -70,7 +70,7 @@ describe("DockPalette", () => {
   it("sends a zone pressed with no area to the way to get one", () => {
     const onNavigateToDevices = vi.fn<() => void>();
     const props = renderPalette({
-      hue: { state: { kind: "no-area", orphanedAreaId: false }, zoneCount: 0, channelsStatus: null, refreshing: false, onNavigateToDevices },
+      hue: { state: { kind: "no-area", orphanedAreaId: false }, zoneCount: 0, lightCount: 0, channelsStatus: null, refreshing: false, onNavigateToDevices },
     });
     const zone = tile("palette-zone");
     expect(zone).toHaveAttribute("aria-disabled", "true");

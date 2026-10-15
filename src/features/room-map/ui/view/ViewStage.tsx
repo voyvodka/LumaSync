@@ -131,6 +131,7 @@ export function ViewStage({
             ? {
                 state: deriveHueAreaState(hueBridgeConfigured, hueAreaId),
                 zoneCount: zones.length,
+                lightCount: lights.filter((light) => light.kind === "hue").length,
                 channelsStatus: hue.channelsStatus,
                 refreshing: hue.isLoadingChannels,
                 onRefresh: hue.refreshChannels,

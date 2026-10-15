@@ -211,9 +211,15 @@ export function Actions({
           onClick={onDelete}
         />
       )}
+      {(onToggleLock || onDuplicate || onDelete) && <span className={styles.actionsRule} aria-hidden="true" />}
       <IconButton className={styles.action} label={t("roomMap:dock.close")} icon={<IconClose />} onClick={onClose} />
     </span>
   );
+}
+
+/** An ⓘ in a field row, beside the one field it explains rather than at the row's end. */
+export function FieldTip({ children }: { children: ReactNode }) {
+  return <span className={styles.fieldTip}>{children}</span>;
 }
 
 /** Numbers side by side, each taking an equal share of the row. `fixed` keeps the row at its

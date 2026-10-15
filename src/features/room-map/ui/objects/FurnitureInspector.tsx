@@ -19,7 +19,7 @@ import { furnitureTile } from "../../model/paletteTiles";
 import { DecimalField } from "../DecimalField";
 import { DockPicker } from "../dock/DockPicker";
 import { TonePicker } from "../dock/DockSwatches";
-import { Actions, FieldRow, InspectorRows, Mark, NameField, Note } from "../dock/InspectorParts";
+import { Actions, FieldRow, FieldTip, InspectorRows, Mark, NameField, Note } from "../dock/InspectorParts";
 import { GlyphDepth, GlyphHeight, GlyphRotation, GlyphWidth } from "./fieldGlyphs";
 import { FurnitureGlyph } from "./FurnitureGlyph";
 
@@ -171,6 +171,13 @@ export function FurnitureInspector({
             ) : (
               <span />
             )}
+            {showHeight && model && (
+              <FieldTip>
+                <InfoTip label={t("common:hintFor", { label: t("roomMap:inspector.heightLabel") })}>
+                  {t("roomMap:inspector.topHint", { metres: modelTop(model).toFixed(2) })}
+                </InfoTip>
+              </FieldTip>
+            )}
             <DecimalField
               label={t("roomMap:inspector.furnitureRotationLabel")}
               prefix={<GlyphRotation />}
@@ -185,9 +192,6 @@ export function FurnitureInspector({
               onCommit={(rotation) => onUpdate({ rotation })}
             />
           </FieldRow>
-          {showHeight && model && (
-            <InfoTip label={t("common:hintFor", { label: t("roomMap:inspector.heightLabel") })}>{t("roomMap:inspector.topHint", { metres: modelTop(model).toFixed(2) })}</InfoTip>
-          )}
         </>
       }
     />

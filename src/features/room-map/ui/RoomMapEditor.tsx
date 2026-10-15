@@ -47,7 +47,7 @@ import {
   resizeFootprint,
   type FootprintSide,
 } from "../model/roomFootprint";
-import { snapToStep } from "../model/pieceGeometry";
+import { keepPlacedInside, keepStripInside, roomBoxOf, snapToStep } from "../model/pieceGeometry";
 import { resizeRoomFromSide } from "../model/roomResize";
 import { useRoomMapHueZones } from "../state/useRoomMapHueZones";
 import { imageLayerGestureKey, useRoomMapImageLayers } from "../state/useRoomMapImageLayers";
@@ -593,16 +593,18 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
     // undo step and one save, as the zone inspector's fields do.
     onUpdateTvAnchor: (patch) => {
       if (!config.tvAnchor) return;
-      apply({ tvAnchor: { ...config.tvAnchor, ...patch } }, { gesture: `tv:${Object.keys(patch).sort().join(",")}` });
+      apply({ tvAnchor: keepPlacedInside({ ...config.tvAnchor, ...patch }, roomBoxOf(config)) }, { gesture: `tv:${Object.keys(patch).sort().join(",")}` });
     },
     onUpdateFurniture: (id, patch) => {
       apply(
-        { furniture: config.furniture.map((f) => (f.id === id ? { ...f, ...patch } : f)) },
+        { furniture: config.furniture.map((f) => (f.id === id ? keepPlacedInside({ ...f, ...patch }, roomBoxOf(config)) : f)) },
         { gesture: `furniture:${id}:${Object.keys(patch).sort().join(",")}` },
       );
     },
     onUpdateUsbStrip: (stripId, patch) => {
-      apply({ usbStrips: config.usbStrips.map((s) => (s.stripId === stripId ? { ...s, ...patch } : s)) });
+      apply({
+        usbStrips: config.usbStrips.map((s) => (s.stripId === stripId ? keepStripInside({ ...s, ...patch }, roomBoxOf(config)) : s)),
+      });
     },
     onUpdateImageLayer: (id, patch) => {
       // The opacity slider lands here per input event.
@@ -841,6 +843,7 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
               ? {
                   state: deriveHueAreaState(hueBridgeConfigured, hueAreaId),
                   zoneCount: areaZones.length,
+                  lightCount: visibleHueChannels.length,
                   channelsStatus,
                   refreshing: isLoadingChannels,
                   onRefresh: refreshChannels,

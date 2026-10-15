@@ -1,4 +1,4 @@
-import { memo, useRef, useCallback } from "react";
+import { memo, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 import { findHueChannel } from "@/shared/contracts/roomMap";
@@ -6,6 +6,7 @@ import { clamp } from "@/shared/lib/math";
 import { hueChannelObjectId } from "../model/objectId";
 import { findBoundZone, hueToMetres, resolveHueChannelWorld } from "../model/hueChannelPosition";
 import { hueChannelDotText, hueChannelName } from "../model/hueChannelLabel";
+import { fanOutStacked } from "../model/stackFan";
 import { cx } from "@/shared/lib/cx";
 
 interface HueChannelOverlayProps {
@@ -226,7 +227,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
   allHueZonesRef.current = allHueZones ?? [];
 
   const handlePointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>, ch: HueChannelPlacement) => {
+    (e: React.PointerEvent<HTMLDivElement>, ch: HueChannelPlacement, fan?: { dx: number; dy: number }) => {
       if (panMode) return;
       e.stopPropagation();
       onSelect(ch.channelIndex);
@@ -237,10 +238,17 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
       // From where the dot is drawn, not `ch.x/y`: for a bound channel those are
       // leftovers a zone move or an assignment never updated, and the drag
       // jumped the dot to them.
-      const start = resolveHueChannelWorld(
+      const drawn = resolveHueChannelWorld(
         ch,
         withActiveZone(allHueZonesRef.current, activeHueZoneRef.current),
       );
+      // A light fanned out of a stack is dragged from where it is drawn, so it lands where it is let go.
+      const start = fan
+        ? {
+            x: clamp(drawn.x + (fan.dx / ppmRef.current / widthRef.current) * 2, -1, 1),
+            y: clamp(drawn.y - (fan.dy / ppmRef.current / depthRef.current) * 2, -1, 1),
+          }
+        : drawn;
 
       dragRef.current = {
         active: true,
@@ -372,6 +380,26 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
       );
 
   const resolvableZones = withActiveZone(allHueZones ?? [], activeHueZone);
+  const placed = channels.map((ch) => {
+    // Render from zone-relative coords for any bound channel: the absolute
+    // `ch.x/y` is stale leftover and passive zones would visibly drift.
+    const { x: worldX, y: worldY } = resolveHueChannelWorld(ch, resolvableZones);
+    // NaN has real sources here (failed mid-drag invoke, `pxPerMeter` 0 at
+    // mount) and React would stamp it into `style.left`. See room-map.md.
+    const rawLeftPx = hueToMetres(worldX, roomWidthM) * pxPerMeter;
+    // Invert Y: CSS y grows downward; Hue +y (the TV wall) is the canvas top.
+    const rawTopPx = hueToMetres(-worldY, roomDepthM) * pxPerMeter;
+    return {
+      ch,
+      leftPx: Number.isFinite(rawLeftPx) ? rawLeftPx : 0,
+      topPx: Number.isFinite(rawTopPx) ? rawTopPx : 0,
+    };
+  });
+  // In layer pixels, which the plan scales by `zoom`: divided by it, the fan keeps its size on screen.
+  const fans = fanOutStacked(
+    placed.map((p) => ({ id: p.ch.channelIndex, x: p.leftPx, y: p.topPx })),
+    { near: 10 / zoom, radius: 16 / zoom, spacing: 22 / zoom },
+  );
 
   return (
     <>
@@ -571,17 +599,8 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
         </>
       )}
 
-      {channels.map((ch) => {
-        // Render from zone-relative coords for any bound channel: the absolute
-        // `ch.x/y` is stale leftover and passive zones would visibly drift.
-        const { x: worldX, y: worldY } = resolveHueChannelWorld(ch, resolvableZones);
-        // NaN has real sources here (failed mid-drag invoke, `pxPerMeter` 0 at
-        // mount) and React would stamp it into `style.left`. See room-map.md.
-        const rawLeftPx = hueToMetres(worldX, roomWidthM) * pxPerMeter;
-        const rawTopPx = hueToMetres(-worldY, roomDepthM) * pxPerMeter;
-        const leftPx = Number.isFinite(rawLeftPx) ? rawLeftPx : 0;
-        // Invert Y: CSS y grows downward; Hue +y (the TV wall) is the canvas top.
-        const topPx = Number.isFinite(rawTopPx) ? rawTopPx : 0;
+      {placed.map(({ ch, leftPx, topPx }) => {
+        const fan = fans.get(ch.channelIndex);
 
         const isSelected = selectedId === hueChannelObjectId(ch.channelIndex);
         // When a Hue zone is active, channels NOT bound to it
@@ -612,13 +631,26 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
             data-object-id={hueChannelObjectId(ch.channelIndex)}
             className="absolute"
             style={{
-              left: leftPx,
-              top: topPx,
+              left: leftPx + (fan?.dx ?? 0),
+              top: topPx + (fan?.dy ?? 0),
               transform: "translate(-50%, -50%)",
               zIndex: 20,
               touchAction: "none",
             }}
           >
+            {fan && (
+              // A thread back to the spot the bridge has it at.
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute left-1/2 top-1/2 bg-white/40"
+                style={{
+                  width: Math.hypot(fan.dx, fan.dy),
+                  height: 1 / zoom,
+                  transformOrigin: "0 50%",
+                  transform: `rotate(${(Math.atan2(-fan.dy, -fan.dx) * 180) / Math.PI}deg)`,
+                }}
+              />
+            )}
             <div
               role="button"
               // Dimmed dots take no pointer, so the keyboard must not reach them either.
@@ -628,7 +660,8 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
               aria-label={dotLabel}
               title={dotLabel}
               className={cx(
-                "flex items-center justify-center rounded-full border-2 text-[8px] font-bold select-none",
+                // The disc is 12 px; the ring around it makes a 28 px target.
+                "relative flex items-center justify-center rounded-full border-2 text-[8px] font-bold select-none before:absolute before:-inset-2 before:rounded-full before:content-['']",
                 isSelected ? "w-4 h-4" : "w-3 h-3",
                 isGhost
                   ? "lm-room-hue-dot--ghost border-dashed"
@@ -642,7 +675,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
               style={{ touchAction: "none", ...ringStyle }}
               onPointerDown={(e) => {
                 if (dimmedByHueZone) return;
-                handlePointerDown(e, ch);
+                handlePointerDown(e, ch, fan);
               }}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}

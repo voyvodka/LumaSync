@@ -109,8 +109,16 @@
   .actions {
     display: flex;
     flex-shrink: 0;
+    align-items: center;
     gap: 0;
     margin-left: auto;
+  }
+  /* The object's own actions, then a rule, then the one that only closes the panel. */
+  .actionsRule {
+    width: 1px;
+    height: 16px;
+    margin: 0 4px;
+    background: var(--lm-line-2);
   }
   .action {
     display: grid;
@@ -139,6 +147,7 @@
   }
   /* One width for every number, so X sits over X from one kind to the next; a full row shares out. */
   .fields > * { flex: 0 1 124px; min-width: 96px; }
+  .fields > .fieldTip { display: grid; flex: 0 0 auto; place-items: center; min-width: 0; margin-left: -4px; }
   .fixed { flex: 0 0 auto; }
   .fixed > * { flex: 0 0 124px; }
 
