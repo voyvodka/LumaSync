@@ -11,7 +11,7 @@ export default {
     twinHide: "Hide the on-screen LEDs",
     twinShow: "Show the on-screen LEDs",
     twinHeld: "The on-screen LEDs are hidden while Ambilight captures the screen.",
-    calibrationRequired: "The LED strip needs a calibration first. Set it up in LED Setup, then pick the mode again.",
+    calibrationRequired: "The LED strip isn't set up yet. Set it up in LED Setup, then pick the mode again.",
   },
   twin: {
     ariaLabel: "LED strip digital-twin overlay",

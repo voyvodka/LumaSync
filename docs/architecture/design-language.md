@@ -176,6 +176,10 @@ text fields, where the browser treats click focus as visible anyway. A ring pain
 that opaque children cover is invisible: the room-map editor draws its ring on a `::after` above
 them for that reason.
 
+**Text clears 4.5:1 on the page.** `--lm-ink-faint` is the quietest text colour, used for captions,
+inactive tabs and the status bar; it was `#4d5564`, 2.7:1, until an audit read it as unreadable and
+it rose to `#737c8c`. A colour quieter than that is for borders and marks, never for words.
+
 **32 px is the tap-target floor**, for every clickable element. `IconButton` guarantees it and a
 name; a hand-rolled control has to guarantee both itself.
 
@@ -213,6 +217,24 @@ dims with `--lm-scrim`: the three modals had drifted to three depths.
 either locale, so the parity test and `check:i18n` both pass while a Turkish user sees English
 inside Turkish chrome — the room-map rename dialog and the status-bar key hints shipped that way.
 Catching it is review's job; no gate can.
+
+**One word per thing, in both languages.** A first-time audit found the same act called Flash,
+Identify, Tanıt and Tanımla on four screens, and "output", "calibration" and "frames" in sentences
+a user reads. The words, settled 2026-10:
+
+| Thing | EN | TR |
+|---|---|---|
+| A light strip, USB or WLED | strip | şerit |
+| What lights at all (strips and Hue) | light, lights | ışık, ışıklar |
+| Making a real light show itself | Blink | Yanıp söndür |
+| Working out a strip's colour order | Find order | Sırayı bul |
+| Counting the LEDs on each edge | LED setup (the screen: LED Setup) | LED kurulumu |
+| The controller's program | firmware | bellenim |
+| Philips' hub | Hue Bridge | Hue Bridge |
+| A Hue streaming group | entertainment area | eğlence alanı |
+
+"Output", "calibration", "frames" and "worker" stay in code. English is British ("colour"),
+sentence case everywhere except the tray menu, which follows the platform's title-case menus.
 
 **The global error boundary's hardcoded English is deliberate.** It can fire before i18next has
 loaded, so it carries fallback copy for that case; everywhere else it is localised.

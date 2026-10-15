@@ -9,7 +9,7 @@ export default {
       solid: "Solid",
       effect: "Effect",
     },
-    solidColor: "Solid color",
+    solidColor: "Solid colour",
     brightness: "Brightness",
   },
   callout: {
@@ -22,7 +22,7 @@ export default {
   },
   ui: {
     colorPicker: {
-      rootAriaLabel: "Color picker",
+      rootAriaLabel: "Colour picker",
       hueLabel: "Hue",
       svLabel: "Saturation and brightness",
       hexLabel: "HEX",

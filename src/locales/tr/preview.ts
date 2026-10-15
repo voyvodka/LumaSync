@@ -14,7 +14,7 @@ const preview: Catalogue<typeof enPreview> = {
     twinHide: "Ekrandaki LED'leri gizle",
     twinShow: "Ekrandaki LED'leri göster",
     twinHeld: "Ambilight ekranı yakalarken ekrandaki LED'ler gizli.",
-    calibrationRequired: "LED şeridin önce kalibre edilmesi gerekiyor. LED Kurulumu'ndan ayarla, sonra modu yeniden seç.",
+    calibrationRequired: "LED şerit henüz kurulmadı. LED kurulumundan ayarla, sonra modu yeniden seç.",
   },
   twin: {
     ariaLabel: "LED şerit dijital ikiz kaplaması",

@@ -140,6 +140,11 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- One word for each thing across the app, in English and Turkish: making a real strip or Hue light
+  show itself is "Blink" / "Yanıp söndür" everywhere (it was Flash, Identify, Tanıt and Tanımla),
+  working out a strip's colour order is "Find order" / "Sırayı bul", firmware is "bellenim" in
+  Turkish, "Hue Bridge" is spelled one way, English is British throughout ("colour"), and template
+  and dialog titles are in sentence case.
 - Plainer words in Settings and the notice line: "Compact window" / "Full window" for the title-bar
   switch (it said "Full settings"), "Start at login", "When LumaSync starts: Last mode / Lights off",
   "Off when locked or asleep", "Live stats", "LED setup needed" instead of "Calibration required",

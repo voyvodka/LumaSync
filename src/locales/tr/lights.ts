@@ -221,8 +221,8 @@ const lights: Catalogue<typeof enLights> = {
     colorOrder: {
       currentAria: "Geçerli renk sırası: {{order}}",
       identify: {
-        button: "Belirle",
-        title: "Renk sırasını belirle",
+        button: "Sırayı bul",
+        title: "Renk sırasını bul",
         step: "Adım {{current}}/{{total}}",
         prompt: "Şerit hangi renkte yanıyor?",
         answer: {
@@ -231,7 +231,7 @@ const lights: Catalogue<typeof enLights> = {
           blue: "Mavi",
           other: "Başka renk / kapalı",
         },
-        otherHint: "Şeridin saf kırmızı, yeşil ya da mavi yanması gerekir. Başka bir renk ya da beyaz gördüysen veya hiç ışık yoksa önce LED çip tipini ve firmware profilini kontrol et, sonra tekrar dene.",
+        otherHint: "Şeridin saf kırmızı, yeşil ya da mavi yanması gerekir. Başka bir renk ya da beyaz gördüysen veya hiç ışık yoksa önce LED çip tipini ve bellenim profilini kontrol et, sonra tekrar dene.",
         duplicate: "{{color}} rengini önceki bir adımda zaten seçtin. Her adımda farklı bir renk yanar, tekrar bak.",
         result: "Şeridin için doğru sıra: {{order}}.",
         apply: "{{order}} olarak kaydet",
@@ -253,10 +253,10 @@ const lights: Catalogue<typeof enLights> = {
       },
     },
     firmwareProfile: {
-      title: "Firmware profili",
+      title: "Bellenim profili",
       lumasyncV1Label: "LumaSync v1",
       adalightLabel: "Adalight",
-      brightnessDisabledTooltip: "Adalight profili: parlaklık firmware tarafından kontrol edilir",
+      brightnessDisabledTooltip: "Adalight profili: parlaklık bellenim tarafından kontrol edilir",
     },
   },
 };
