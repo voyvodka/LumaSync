@@ -82,7 +82,7 @@ impl PersistedShellState {
     }
 
     pub fn led_calibration(&self) -> Option<LedCalibrationConfig> {
-        read_value(self.primary_strip()?.layout.as_ref()?, "ledCalibration")
+        decode_strip(&self.primary_strip()?).layout
     }
 
     /// `lightingMode.ambilight` — the last Ambilight settings the user saved.
@@ -102,27 +102,15 @@ impl PersistedShellState {
     }
 
     pub fn firmware_profile(&self) -> Option<FirmwareProfile> {
-        read_value(
-            self.primary_strip()?.hardware.firmware_profile.as_ref()?,
-            "firmwareProfile",
-        )
+        decode_strip(&self.primary_strip()?).firmware_profile
     }
 
-    /// The chip picker persists under `selectedChipType`; the IPC field name
-    /// `chipType` is not a shell-state key.
     pub fn chip_type(&self) -> Option<LedChipType> {
-        read_value(
-            self.primary_strip()?.hardware.chip_type.as_ref()?,
-            "selectedChipType",
-        )
+        decode_strip(&self.primary_strip()?).chip_type
     }
 
-    /// Persisted as `ledColorOrder`; `colorOrder` is only the IPC field name.
     pub fn color_order(&self) -> Option<LedColorOrder> {
-        read_value(
-            self.primary_strip()?.hardware.color_order.as_ref()?,
-            "ledColorOrder",
-        )
+        decode_strip(&self.primary_strip()?).color_order
     }
 
     pub fn selected_display_id(&self) -> Option<String> {
@@ -304,6 +292,42 @@ impl PersistedShellState {
                 .get("dimensions")
                 .and_then(|dims| read_value::<RoomDimensions>(dims, "roomMap.dimensions")),
         })
+    }
+}
+
+/// A saved strip's own layout and hardware, each `None` when absent or in a shape this build
+/// cannot read (logged). The primary strip's readers above and the fan-out read through this.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct DecodedStrip {
+    pub layout: Option<LedCalibrationConfig>,
+    pub firmware_profile: Option<FirmwareProfile>,
+    /// The chip picker persists under `selectedChipType`; `chipType` is only the IPC field name.
+    pub chip_type: Option<LedChipType>,
+    /// Persisted as `ledColorOrder`; `colorOrder` is only the IPC field name.
+    pub color_order: Option<LedColorOrder>,
+}
+
+pub fn decode_strip(strip: &LedStrip) -> DecodedStrip {
+    DecodedStrip {
+        layout: strip
+            .layout
+            .as_ref()
+            .and_then(|v| read_value(v, "ledCalibration")),
+        firmware_profile: strip
+            .hardware
+            .firmware_profile
+            .as_ref()
+            .and_then(|v| read_value(v, "firmwareProfile")),
+        chip_type: strip
+            .hardware
+            .chip_type
+            .as_ref()
+            .and_then(|v| read_value(v, "selectedChipType")),
+        color_order: strip
+            .hardware
+            .color_order
+            .as_ref()
+            .and_then(|v| read_value(v, "ledColorOrder")),
     }
 }
 
