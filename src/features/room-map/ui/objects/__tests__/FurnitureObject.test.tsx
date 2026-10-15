@@ -52,6 +52,13 @@ describe("FurnitureObject", () => {
     expect(screen.getByText("Corner sofa")).toBeDefined();
   });
 
+  it("marks a piece outside the room's shape, and nothing else", () => {
+    const { container, rerender } = render(<FurnitureObject {...BASE_PROPS} outside />);
+    expect(container.querySelector("[data-furniture-id]")?.hasAttribute("data-outside")).toBe(true);
+    rerender(<FurnitureObject {...BASE_PROPS} />);
+    expect(container.querySelector("[data-furniture-id]")?.hasAttribute("data-outside")).toBe(false);
+  });
+
   it("does not render resize handles when not selected", () => {
     const { container } = render(<FurnitureObject {...BASE_PROPS} selected={false} />);
     // ResizeHandle renders divs with corner-specific cursor classes

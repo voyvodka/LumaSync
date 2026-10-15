@@ -14,6 +14,7 @@ import {
   movableWalls,
   moveFootprintWall,
   notchAt,
+  outsideOutline,
   resizeFootprint,
 } from "../roomFootprint";
 
@@ -160,5 +161,21 @@ describe("dragging and notching the outline", () => {
       offset: 0.7,
     });
     expect(notchAt(L, dims, "bottom", 1)).toBeUndefined();
+  });
+});
+
+describe("outsideOutline", () => {
+  const L = buildFootprint({ kind: "L", corner: "bottomRight", width: 2, depth: 1.5 }, dims) ?? [];
+
+  it("finds a point in the cut-away corner outside, and one in the room inside", () => {
+    expect(outsideOutline(4, 3.5, L)).toBe(true);
+    expect(outsideOutline(1, 3.5, L)).toBe(false);
+    expect(outsideOutline(4, 1, L)).toBe(false);
+  });
+
+  it("counts a point on a wall as inside, and nothing as outside a plain room", () => {
+    expect(outsideOutline(3, 3, L)).toBe(false);
+    expect(outsideOutline(4, 2.5, L)).toBe(false);
+    expect(outsideOutline(4.9, 3.9, resolveRoomFootprint({ dimensions: dims }))).toBe(false);
   });
 });

@@ -8,6 +8,15 @@
   }
 
   .selected { outline: 2px solid var(--lm-ink); outline-offset: 2px; }
+  /* Outside the room's shape: a dashed amber ring, so it reads as a question, not an error. */
+  .outside::after {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    border: 1.5px dashed var(--lm-amber);
+    border-radius: 6px;
+    pointer-events: none;
+  }
   .selected.locked { outline-color: rgb(255 255 255 / 40%); }
 
   /* The drawing names the piece; its name comes with intent — on hover and while selected. */
@@ -35,6 +44,7 @@
 
   @media (forced-colors: active) {
     .selected { outline-color: Highlight; }
+    .outside::after { border-color: Highlight; }
     .label {
       background: Canvas;
       color: CanvasText;

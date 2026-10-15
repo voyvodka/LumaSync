@@ -7,11 +7,13 @@ import type {
   TvAnchorPlacement,
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
+import { resolveRoomFootprint } from "@/shared/contracts/roomMap";
 import { autoScreenKind, classifyFurniture } from "@/features/room-view/model/furnitureModel";
 
 import { hueChannelZRange, resolveHueChannelWorld, resolveHueChannelWorldZ } from "../../model/hueChannelPosition";
 import { furnitureObjectId, hueChannelObjectId, imageLayerObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "../../model/objectId";
 import type { InspectorTarget } from "../../model/resolveInspectorTarget";
+import { outsideOutline } from "../../model/roomFootprint";
 import { FurnitureInspector } from "../objects/FurnitureInspector";
 import { HueChannelInspector } from "../objects/HueChannelInspector";
 import { HueZoneInspector } from "../objects/HueZoneInspector";
@@ -141,6 +143,7 @@ export function DockInspector({
             furniture: config.furniture.map((f) => (f.id === item.id ? { ...f, variant: undefined } : f)),
           }).get(item.id)}
           modelChoices={modelChoices}
+          outside={outsideOutline(item.x + item.width / 2, item.y + item.height / 2, resolveRoomFootprint(config))}
           onUpdate={(patch) => actions.onUpdateFurniture(item.id, patch)}
           onRename={(label) => actions.onRename(id, label)}
           onToggleLock={() => actions.onToggleLock(id)}

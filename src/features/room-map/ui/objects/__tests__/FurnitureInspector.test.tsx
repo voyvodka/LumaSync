@@ -44,6 +44,29 @@ afterEach(() => {
 });
 
 describe("FurnitureInspector — model", () => {
+  it("says when the piece is outside the room's shape", () => {
+    const noop = () => {};
+    const { unmount } = render(
+      <FurnitureInspector
+        item={table}
+        model={coffee}
+        autoModel={coffee}
+        modelChoices
+        outside
+        onUpdate={noop}
+        onRename={noop}
+        onToggleLock={noop}
+        onDuplicate={noop}
+        onDelete={noop}
+        onClose={noop}
+      />,
+    );
+    expect(screen.getByText("roomMap:inspector.outsideShape")).toBeTruthy();
+    unmount();
+    renderInspector();
+    expect(screen.queryByText("roomMap:inspector.outsideShape")).toBeNull();
+  });
+
   it("offers Auto, named for what it reads as, and the type's own models", () => {
     renderInspector();
     const picker = screen.getByRole("button", { name: /^roomMap:inspector\.modelLabel: / });

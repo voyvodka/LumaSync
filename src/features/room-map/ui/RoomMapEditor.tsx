@@ -43,6 +43,7 @@ import {
   describeFootprint,
   type FootprintShape,
   footprintMinimumSize,
+  outsideOutline,
   resizeFootprint,
 } from "../model/roomFootprint";
 import { useRoomMapHueZones } from "../state/useRoomMapHueZones";
@@ -522,6 +523,7 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
               model={furnitureModels.get(f.id) ?? BOX_MODEL}
               pxPerMeter={pxPerMeter}
               selected={selectedId === furnitureObjectId(f.id)}
+              outside={outsideOutline(f.x + f.width / 2, f.y + f.height / 2, outline)}
               gridStepPx={gridStepPx}
               snapEnabled={showGrid}
               zoom={zoom}

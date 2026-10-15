@@ -301,3 +301,19 @@ export function notchAt(
   const width = Math.min(0.6, reach(span, 2));
   return buildFootprint({ kind: "U", side, width, depth: 0.4, offset: along - width / 2 }, dims);
 }
+
+/** Whether a point on the plan lies outside the room's outline (on a wall counts as inside). Only
+ *  an outline that is not the plain rectangle can leave a point of the room's box outside it. */
+export function outsideOutline(x: number, y: number, corners: readonly RoomCorner[]): boolean {
+  if (corners.length <= 4) return false;
+  let inside = false;
+  for (let i = 0, j = corners.length - 1; i < corners.length; j = i++) {
+    const a = corners[i]!;
+    const b = corners[j]!;
+    // On a wall: inside.
+    if (a.y === b.y && y === a.y && x >= Math.min(a.x, b.x) && x <= Math.max(a.x, b.x)) return false;
+    if (a.x === b.x && x === a.x && y >= Math.min(a.y, b.y) && y <= Math.max(a.y, b.y)) return false;
+    if (a.y > y !== b.y > y && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return !inside;
+}

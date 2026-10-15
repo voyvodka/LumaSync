@@ -74,6 +74,7 @@
     min-width: 0;
     overflow: hidden;
   }
+  .noteFit { flex: 0 0 auto; }
   .noteCallout { align-items: center; min-width: 0; }
   .noteCallout > span:first-child { margin-top: 0; }
   .noteCallout :global(p) {

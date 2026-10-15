@@ -354,7 +354,8 @@ https://keepachangelog.com/en/1.1.0/
 - Room map: a room can be L-, U- or T-shaped. Room settings has a Shape row — rectangle, L, U or T,
   which corner or wall the cut is at, and its size in metres — and the plan draws the walls along
   that outline with the cut-away part hatched. A wall of the cut can be dragged on the plan, and a
-  double-click on a plain room's wall cuts a notch there. Changing the room's width or depth keeps the shape,
+  double-click on a plain room's wall cuts a notch there. A piece left in the cut-away part is
+  marked with a dashed ring and "Outside" in its panel, never moved or refused. Changing the room's width or depth keeps the shape,
   and the room cannot be made too small for it. A template or Reset goes back to a rectangle. The
   lighting still reads the room as its full rectangle, so a lamp in the cut-away corner is sampled
   as before.

@@ -274,6 +274,8 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     hueHeightCeiling: "tavan hizası",
     hueHeightValueText: "{{metres}} m — {{label}}",
     hueHeightReadout: "{{metres}} m",
+    outsideShape: "Dışarıda",
+    outsideShapeHint: "Ortası odanın şeklinin dışında. İçeri taşı ya da şekli değiştir.",
     hueGhostShort: "Artık bu alanda değil",
     tvAboveCeilingShort: "Tavanın üstünde · odaya duyarlı kapalı",
     zoneChipElsewhere: "{{zone}} içinde. Buraya taşımak için bas.",

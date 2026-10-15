@@ -17,6 +17,8 @@ interface FurnitureObjectProps {
   model: FurnitureModel;
   pxPerMeter: number;
   selected: boolean;
+  /** Its middle sits outside the room's outline: marked, never refused. */
+  outside?: boolean;
   gridStepPx: number;
   snapEnabled: boolean;
   zoom?: number;
@@ -32,6 +34,7 @@ export const FurnitureObject = memo(function FurnitureObject({
   model,
   pxPerMeter,
   selected,
+  outside = false,
   gridStepPx,
   snapEnabled,
   onSelect,
@@ -230,8 +233,10 @@ export const FurnitureObject = memo(function FurnitureObject({
         selected && styles.selected,
         placement.locked ? "cursor-default" : "cursor-grab active:cursor-grabbing",
         placement.locked && styles.locked,
+        outside && styles.outside,
       )}
       data-furniture-id={placement.id}
+      data-outside={outside || undefined}
       style={{
         left: localX * pxPerMeter,
         top: localY * pxPerMeter,

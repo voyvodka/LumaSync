@@ -271,6 +271,8 @@ export default {
     hueHeightCeiling: "ceiling level",
     hueHeightValueText: "{{metres}} m — {{label}}",
     hueHeightReadout: "{{metres}} m",
+    outsideShape: "Outside",
+    outsideShapeHint: "Its middle is outside the room's shape. Move it in, or change the shape.",
     hueGhostShort: "No longer in this area",
     tvAboveCeilingShort: "Above the ceiling · room-aware off",
     zoneChipElsewhere: "In {{zone}}. Press to move it here.",

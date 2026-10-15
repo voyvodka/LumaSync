@@ -19,7 +19,7 @@ import { furnitureTile } from "../../model/paletteTiles";
 import { DecimalField } from "../DecimalField";
 import { DockPicker } from "../dock/DockPicker";
 import { TonePicker } from "../dock/DockSwatches";
-import { Actions, FieldRow, InspectorRows, Mark, NameField } from "../dock/InspectorParts";
+import { Actions, FieldRow, InspectorRows, Mark, NameField, Note } from "../dock/InspectorParts";
 import { GlyphDepth, GlyphHeight, GlyphRotation, GlyphWidth } from "./fieldGlyphs";
 import { FurnitureGlyph } from "./FurnitureGlyph";
 
@@ -40,6 +40,7 @@ function TypeMark({ type }: { type: FurnitureType }) {
 
 export function FurnitureInspector({
   item,
+  outside = false,
   model,
   autoModel,
   modelChoices,
@@ -51,6 +52,8 @@ export function FurnitureInspector({
   onClose,
 }: {
   item: FurniturePlacement;
+  /** Its middle sits outside the room's outline. */
+  outside?: boolean;
   /** What the piece is drawn as now — the automatic reading, or the user's pick. */
   model: FurnitureModel | undefined;
   /** What it would read as with no pick: the name the Auto choice carries. */
@@ -93,6 +96,11 @@ export function FurnitureInspector({
             disabled={locked}
             onCommit={onRename}
           />
+          {outside && (
+            <Note tone="warning" fit title={t("roomMap:inspector.outsideShapeHint")}>
+              {t("roomMap:inspector.outsideShape")}
+            </Note>
+          )}
           <DockPicker
             label={t("roomMap:inspector.furnitureTypeLabel")}
             value={type}

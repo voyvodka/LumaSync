@@ -119,17 +119,20 @@ export function Note({
   tone,
   title,
   action,
+  fit = false,
   ref,
   children,
 }: {
   tone: CalloutTone;
   title?: string;
   action?: CalloutAction;
+  /** Holds its word whole instead of giving way to the row. */
+  fit?: boolean;
   ref?: Ref<HTMLSpanElement>;
   children: ReactNode;
 }) {
   return (
-    <span ref={ref} className={styles.note} title={title}>
+    <span ref={ref} className={cx(styles.note, fit && styles.noteFit)} title={title}>
       <Callout tone={tone} announce={false} action={action} className={styles.noteCallout}>
         {children}
       </Callout>
