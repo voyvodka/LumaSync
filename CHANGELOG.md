@@ -168,6 +168,13 @@ https://keepachangelog.com/en/1.1.0/
     (it said "Edit", like the switch above it), and someone without Hue is no longer told their area
     has no Hue lights. Storage longer than a sideboard reads as a run of wardrobes, with doors about
     half a metre wide.
+  - Several pieces at once: ⇧-click adds a piece to the selection or takes it out, a box dragged
+    across empty floor selects what it covers, dragging any of them moves them all as one undo
+    step, and Delete removes them all. The shortcuts list names these, and ⌥-drag for moving
+    without snapping.
+  - Camera moves ease in about a third of a second instead of jumping: the 3D view's zoom buttons,
+    "Whole room" and a double-click's focus, and the plan's zoom buttons, fit and arrow-key pans.
+    What the pointer drives — a drag, the wheel, a pinch — still follows it at once.
   - In the 3D view each light's chip is filled with the colour its lamp glows in the room, the inner
     walls of a U- or T-shaped room drop when they stand between the camera and the room, Blink waits
     with its reason while Hue streams instead of failing on the press, a table lamp stays on what is

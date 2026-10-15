@@ -226,7 +226,66 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
     },
     [apply],
   );
-  const handleFurnitureSelect = useCallback((id: string) => select(furnitureObjectId(id)), [select]);
+  // Several pieces at once: ⇧-click adds or takes one away, a box on the floor takes what it covers.
+  // The one last pressed is the selection the inspector shows; dragging any of them moves them all.
+  const [group, setGroup] = useState<readonly string[]>([]);
+  const groupSet = useMemo(() => new Set(group), [group]);
+  const grouped = group.length > 1;
+  useEffect(() => {
+    if (selectedId === null || !selectedId.startsWith("furniture-")) setGroup((current) => (current.length === 0 ? current : []));
+  }, [selectedId]);
+  const handleFurnitureSelect = useCallback(
+    (id: string, additive = false) => {
+      if (additive) {
+        setGroup((current) => {
+          const primary = selectedId?.startsWith("furniture-") ? selectedId.slice("furniture-".length) : null;
+          const base = current.length > 0 ? current : primary ? [primary] : [];
+          return base.includes(id) ? base.filter((member) => member !== id) : [...base, id];
+        });
+      } else if (!groupSet.has(id)) {
+        setGroup([]);
+      }
+      select(furnitureObjectId(id));
+    },
+    [select, selectedId, groupSet],
+  );
+  const handleMarquee = useCallback(
+    (box: { x0: number; y0: number; x1: number; y1: number }, additive: boolean) => {
+      const inside = config.furniture
+        .filter((f) => {
+          const cx = f.x + f.width / 2;
+          const cy = f.y + f.height / 2;
+          return cx >= box.x0 && cx <= box.x1 && cy >= box.y0 && cy <= box.y1;
+        })
+        .map((f) => f.id);
+      const next = additive ? [...new Set([...group, ...inside])] : inside;
+      setGroup(next);
+      const last = next[next.length - 1];
+      select(last ? furnitureObjectId(last) : null);
+    },
+    [config.furniture, group, select],
+  );
+  const [groupOffset, setGroupOffset] = useState<{ dx: number; dy: number } | null>(null);
+  const handleGroupDragEnd = useCallback(
+    (dx: number, dy: number) => {
+      setGroupOffset(null);
+      if (dx === 0 && dy === 0) return;
+      const round = (v: number) => Math.round(v * 100) / 100;
+      apply((cfg) => ({
+        furniture: cfg.furniture.map((f) => (groupSet.has(f.id) && !f.locked ? { ...f, x: round(f.x + dx), y: round(f.y + dy) } : f)),
+      }));
+    },
+    [apply, groupSet],
+  );
+  const handleDeleteSelection = useCallback(() => {
+    if (!grouped) {
+      handleDelete();
+      return;
+    }
+    apply((cfg) => ({ furniture: cfg.furniture.filter((f) => !groupSet.has(f.id) || f.locked) }));
+    setGroup([]);
+    select(null);
+  }, [grouped, handleDelete, apply, groupSet, select]);
   const handleFurnitureChange = useCallback(
     (updated: FurniturePlacement) => {
       apply((cfg) => ({
@@ -308,7 +367,7 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
         return;
       }
       if (e.key === "Delete" || e.key === "Backspace") {
-        handleDelete();
+        handleDeleteSelection();
       } else if ((e.key === "r" || e.key === "R") && !e.metaKey && !e.ctrlKey) {
         handleRotate();
       } else if (selectedId) {
@@ -319,7 +378,7 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
         handleArrowPan(e);
       }
     },
-    [handleDelete, handleRotate, handleArrowNudge, handleArrowPan, handleDuplicate, undo, redo, popSelection, selectedId, fitToView],
+    [handleDeleteSelection, handleRotate, handleArrowNudge, handleArrowPan, handleDuplicate, undo, redo, popSelection, selectedId, fitToView],
   );
 
   /** Everything in the room moved by (`dxM`, `dyM`) metres, as a patch. Hue channels and zones live
@@ -525,6 +584,7 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
           onPanChange={setPanOffset}
           panMode={spaceHeld}
           dragging={pieceDragging}
+          onMarquee={handleMarquee}
         >
           <FootprintWalls
             corners={outline}
@@ -566,6 +626,10 @@ export function RoomMapEditor({ doc, onNavigateToDevices, hueReachable, roomAwar
               model={furnitureModels.get(f.id) ?? BOX_MODEL}
               pxPerMeter={pxPerMeter}
               selected={selectedId === furnitureObjectId(f.id)}
+              grouped={grouped && groupSet.has(f.id)}
+              groupOffset={grouped && groupSet.has(f.id) ? groupOffset : null}
+              onGroupDragMove={grouped && groupSet.has(f.id) ? (dx, dy) => setGroupOffset({ dx, dy }) : undefined}
+              onGroupDragEnd={grouped && groupSet.has(f.id) ? handleGroupDragEnd : undefined}
               outside={outsideOutline(f.x + f.width / 2, f.y + f.height / 2, outline)}
               roomWidth={widthMeters}
               roomDepth={depthMeters}

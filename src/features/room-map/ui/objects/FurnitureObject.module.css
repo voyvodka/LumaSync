@@ -36,11 +36,14 @@
     transition: opacity var(--lm-dur-quick);
   }
   .piece:hover .label { opacity: 1; }
+  /* In the selection with others, not the one the inspector shows: a quiet amber ring. */
+  .grouped { outline: 1.5px dashed var(--lm-amber); outline-offset: 2px; }
 
   :global(:root[data-reduced-motion]) .label { transition: none; }
 
   @media (forced-colors: active) {
     .outside::after { border-color: Highlight; }
+    .grouped { outline-color: Highlight; }
     .label {
       background: Canvas;
       color: CanvasText;

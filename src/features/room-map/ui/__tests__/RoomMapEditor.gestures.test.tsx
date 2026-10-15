@@ -274,3 +274,45 @@ describe("canvas objects are memoised", () => {
     expect((component as unknown as { $$typeof: symbol }).$$typeof).toBe(Symbol.for("react.memo"));
   });
 });
+
+describe("RoomMapEditor — several pieces at once", () => {
+  const CHAIR = { id: "chair", type: "chair" as const, x: 3, y: 2, width: 0.6, height: 0.6, label: "Chair" };
+  const piece = (id: string) => document.querySelector(`[data-furniture-id="${id}"]`) as HTMLElement;
+
+  it("moves every piece ⇧-clicked into the selection with one drag, as one save", async () => {
+    stored({ furniture: [SOFA, CHAIR] });
+    await renderEditor();
+    fireEvent.pointerDown(piece("sofa"), { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerUp(piece("sofa"), { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerDown(piece("chair"), { clientX: 300, clientY: 100, pointerId: 2, shiftKey: true });
+    fireEvent.pointerUp(piece("chair"), { clientX: 300, clientY: 100, pointerId: 2, shiftKey: true });
+    await flush();
+
+    fireEvent.pointerDown(piece("sofa"), { clientX: 100, clientY: 100, pointerId: 3 });
+    fireEvent.pointerMove(piece("sofa"), { clientX: 180, clientY: 100, pointerId: 3, altKey: true });
+    fireEvent.pointerUp(piece("sofa"), { clientX: 180, clientY: 100, pointerId: 3, altKey: true });
+    await flush();
+
+    const saves = roomMapSaves();
+    const last = saves[saves.length - 1];
+    expect(roomMapSaves()).toHaveLength(1);
+    const sofa = last?.furniture.find((f) => f.id === "sofa");
+    const chair = last?.furniture.find((f) => f.id === "chair");
+    expect(sofa!.x - SOFA.x).toBeCloseTo(chair!.x - CHAIR.x);
+    expect(sofa!.x).toBeGreaterThan(SOFA.x);
+  });
+
+  it("deletes the whole selection with Delete", async () => {
+    stored({ furniture: [SOFA, CHAIR] });
+    const { root } = await renderEditor();
+    fireEvent.pointerDown(piece("sofa"), { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerUp(piece("sofa"), { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerDown(piece("chair"), { clientX: 300, clientY: 100, pointerId: 2, shiftKey: true });
+    fireEvent.pointerUp(piece("chair"), { clientX: 300, clientY: 100, pointerId: 2, shiftKey: true });
+    await flush();
+    fireEvent.keyDown(root, { key: "Delete", code: "Delete" });
+    await flush();
+    const saves = roomMapSaves();
+    expect(saves[saves.length - 1]?.furniture).toEqual([]);
+  });
+});

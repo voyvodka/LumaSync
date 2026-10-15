@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import type { LampFamily } from "@/features/room-view/model/lampFamily";
 import type { CameraCommand } from "@/features/room-view/ui/RoomView3D";
 import { RoomView3DHost } from "@/features/room-view/ui/RoomView3DHost";
-import { type HueShellStatus, useHueShellStatus } from "@/features/hue/state/hueShellStatus";
 
 import { deriveHueAreaState } from "../../model/hueAreaState";
 import { parseObjectId } from "../../model/objectId";
@@ -17,13 +16,12 @@ import { CornerControls } from "../CornerControls";
 import { ROOM_MAP_FIT_INSETS } from "../dock/dockGeometry";
 import { RoomViewDock } from "./RoomViewDock";
 
-const selectHueStreaming = (status: HueShellStatus) => status.streaming;
-
 export interface ViewStageProps {
   doc: RoomMapDocument;
   lampFamilies: ReadonlyMap<number, LampFamily>;
   roomAware: RoomAwareStatus | null;
   hueReachable?: boolean;
+  hueStreaming?: boolean;
   /** Opens the plan with what is selected. */
   onEdit: () => void;
   onNavigateToDevices?: () => void;
@@ -32,14 +30,22 @@ export interface ViewStageProps {
 
 /** The View face: the room in 3D, its lights in the dock, and the selection the plan shares. A
  *  light picked in the room or in the dock is the same selection, so Edit opens on it. */
-export function ViewStage({ doc, lampFamilies, roomAware, hueReachable, onEdit, onNavigateToDevices, onFail }: ViewStageProps) {
+export function ViewStage({
+  doc,
+  lampFamilies,
+  roomAware,
+  hueReachable,
+  hueStreaming = false,
+  onEdit,
+  onNavigateToDevices,
+  onFail,
+}: ViewStageProps) {
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [cameraCommand, setCameraCommand] = useState<CameraCommand | undefined>(undefined);
   const { scopedConfig, selectedId, select, selectHueZone, hue, hueAreaId, hueBridgeConfigured, hueBridgeIp } = doc;
   const { stripStatus } = useUsbStripStatus(hueReachable);
   const identify = useHueIdentify(hueBridgeIp);
-  const hueStreaming = useHueShellStatus(selectHueStreaming);
 
   const zones = useMemo(
     () => (hueAreaId ? scopedConfig.zones.filter((zone) => zone.entertainmentAreaId === hueAreaId) : scopedConfig.zones),

@@ -326,7 +326,10 @@ export default {
     panKeyboard: "Pan canvas (no selection)",
     pan: "Pan canvas",
     zoom: "Zoom",
-    scrollWheel: "Scroll",
+    addToSelection: "Add to or take from the selection",
+    boxSelect: "Select what the box covers",
+    freeDrag: "Move without snapping",
+    scrollWheel: "Scroll · pinch",
     // Key caps as printed on the keyboard; the TR caps keep the physical labels.
     keys: {
       delete: "Delete",
@@ -334,6 +337,9 @@ export default {
       escape: "Esc",
       arrows: "Arrow keys",
       spaceDrag: "Space + drag",
+      shiftClick: "{{shift}}click",
+      floorDrag: "Drag on the floor",
+      altDrag: "{{alt}}drag",
     },
   },
   templates: {

@@ -1,8 +1,9 @@
 import type React from "react";
-import { memo, useRef, useState, useEffect, useCallback, useId, useMemo } from "react";
+import { memo, useRef, useState, useEffect, useCallback, useId, useLayoutEffect, useMemo } from "react";
 import { SelectionLayerContext } from "./objects/selectionLayer";
 import { type RoomMapConfig, type ImageLayer, resolveRoomFootprint } from "@/shared/contracts/roomMap";
 import { clamp } from "@/shared/lib/math";
+import { prefersReducedMotion } from "@/shared/lib/motion";
 import { imageLayerObjectId } from "../model/objectId";
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "../state/useRoomMapViewport";
 import { readRoomMapImage } from "../roomMapFilesApi";
@@ -271,6 +272,8 @@ interface RoomMapCanvasProps {
   panMode?: boolean;
   /** A piece is being dragged: the grid steps forward so the snap it follows can be seen. */
   dragging?: boolean;
+  /** A box dragged across empty floor, in room metres: what it covers is selected (⇧ adds). */
+  onMarquee?: (box: { x0: number; y0: number; x1: number; y1: number }, additive: boolean) => void;
   children?: React.ReactNode;
 }
 
@@ -293,11 +296,26 @@ export function RoomMapCanvas({
   onPanChange,
   panMode = false,
   dragging = false,
+  onMarquee,
   children,
 }: RoomMapCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const objectLayerRef = useRef<HTMLDivElement>(null);
   const [selectionLayer, setSelectionLayer] = useState<HTMLDivElement | null>(null);
+  // A zoom or pan from a button (+, −, fit, an arrow key) eases there; one the pointer drives — a
+  // drag, the wheel, a pinch — follows it at once, or the plan would lag behind the hand.
+  const pointerDriven = useRef(false);
+  const viewKey = `${zoom}:${panOffset.x}:${panOffset.y}`;
+  const lastView = useRef(viewKey);
+  useLayoutEffect(() => {
+    if (lastView.current === viewKey) return;
+    lastView.current = viewKey;
+    const layer = objectLayerRef.current;
+    if (!layer) return;
+    const eased = !pointerDriven.current && !prefersReducedMotion();
+    pointerDriven.current = false;
+    layer.style.transition = eased ? "transform var(--lm-dur-base) var(--lm-ease-out)" : "none";
+  }, [viewKey]);
 
   const { widthMeters, depthMeters } = config.dimensions;
   const outline = useMemo(
@@ -337,11 +355,15 @@ export function RoomMapCanvas({
         pending.x -= e.deltaX;
         pending.y -= e.deltaY;
         const layer = objectLayerRef.current;
-        if (layer) layer.style.transform = layerTransform(pending.x, pending.y, zoom);
+        if (layer) {
+          layer.style.transition = "none";
+          layer.style.transform = layerTransform(pending.x, pending.y, zoom);
+        }
         if (pending.timer) clearTimeout(pending.timer);
         // One commit after the gesture, as a drag pan does: per event re-rendered every object.
         pending.timer = setTimeout(() => {
           wheelPanRef.current = null;
+          pointerDriven.current = true;
           onPanChange({ x: pending.x, y: pending.y });
         }, WHEEL_PAN_SETTLE_MS);
         wheelPanRef.current = pending;
@@ -361,14 +383,28 @@ export function RoomMapCanvas({
       const pending = wheelPanRef.current;
       if (pending?.timer) clearTimeout(pending.timer);
       wheelPanRef.current = null;
+      pointerDriven.current = true;
       onZoomChange(next);
       onPanChange({ x: newPanX, y: newPanY });
     },
     [zoom, panOffset, onZoomChange, onPanChange],
   );
 
+  // A box across empty floor selects what it covers; the click that ends it is not a deselect.
+  const marqueeRef = useRef<{ x: number; y: number; id: number } | null>(null);
+  const [marquee, setMarquee] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const swallowClick = useRef(false);
+
   const handleCanvasPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      const onFloor = e.target === e.currentTarget || e.target === objectLayerRef.current;
+      if (!panMode && e.button === 0 && onFloor && onMarquee) {
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        marqueeRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top, id: e.pointerId };
+        return;
+      }
       if (panMode || e.button === 1) {
         e.preventDefault();
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -383,30 +419,69 @@ export function RoomMapCanvas({
         };
       }
     },
-    [panOffset, panMode],
+    [panOffset, panMode, onMarquee],
   );
 
   const handleCanvasPointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      const m = marqueeRef.current;
+      if (m) {
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        if (Math.hypot(x - m.x, y - m.y) < 4 && marquee === null) return;
+        setMarquee({ left: Math.min(m.x, x), top: Math.min(m.y, y), width: Math.abs(x - m.x), height: Math.abs(y - m.y) });
+        return;
+      }
       const pan = panRef.current;
       if (!pan.active) return;
       pan.x = pan.ox + e.clientX - pan.startX;
       pan.y = pan.oy + e.clientY - pan.startY;
       const layer = objectLayerRef.current;
-      if (layer) layer.style.transform = layerTransform(pan.x, pan.y, zoom);
+      if (layer) {
+        layer.style.transition = "none";
+        layer.style.transform = layerTransform(pan.x, pan.y, zoom);
+      }
     },
-    [zoom],
+    [zoom, marquee],
   );
 
-  const handleCanvasPointerUp = useCallback(() => {
+  const handleCanvasPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (marqueeRef.current) {
+      marqueeRef.current = null;
+      const box = marquee;
+      setMarquee(null);
+      if (box && onMarquee) {
+        swallowClick.current = true;
+        const ppm = pxPerMeter * zoom;
+        onMarquee(
+          {
+            x0: (box.left - panOffset.x) / ppm,
+            y0: (box.top - panOffset.y) / ppm,
+            x1: (box.left + box.width - panOffset.x) / ppm,
+            y1: (box.top + box.height - panOffset.y) / ppm,
+          },
+          e.shiftKey,
+        );
+      }
+      return;
+    }
     const pan = panRef.current;
     if (!pan.active) return;
     pan.active = false;
-    if (pan.x !== pan.ox || pan.y !== pan.oy) onPanChange?.({ x: pan.x, y: pan.y });
-  }, [onPanChange]);
+    if (pan.x !== pan.ox || pan.y !== pan.oy) {
+      pointerDriven.current = true;
+      onPanChange?.({ x: pan.x, y: pan.y });
+    }
+  }, [onPanChange, marquee, onMarquee, pxPerMeter, zoom, panOffset]);
 
   const handleBackgroundClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
+      if (swallowClick.current) {
+        swallowClick.current = false;
+        return;
+      }
       if (e.target === e.currentTarget) {
         onCanvasClick();
       }
@@ -523,9 +598,12 @@ export function RoomMapCanvas({
           transformOrigin: "0 0",
         }}
         onClick={(e) => {
-          if (e.target === e.currentTarget) {
-            onCanvasClick();
+          if (e.target !== e.currentTarget) return;
+          if (swallowClick.current) {
+            swallowClick.current = false;
+            return;
           }
+          onCanvasClick();
         }}
       >
         {/* Grid SVG — inside object layer so it moves with zoom/pan */}
@@ -593,6 +671,13 @@ export function RoomMapCanvas({
         {/* Above every piece: a selected rug keeps its handles while the sofa on it stays on top. */}
         <div ref={setSelectionLayer} className="pointer-events-none absolute inset-0" style={{ zIndex: 40 }} />
       </div>
+      {marquee && (
+        <div
+          className="pointer-events-none absolute z-50 rounded-[3px] border border-amber/70 bg-amber/10"
+          style={marquee}
+          data-testid="room-marquee"
+        />
+      )}
     </div>
   );
 }

@@ -205,7 +205,8 @@ describe("SettingsLayout render boundaries", () => {
   // one), so a stream going from live to retrying is nothing it shows.
   it.each([
     [SECTION_IDS.SYSTEM, { streaming: true }, { streaming: false, reconnecting: true }],
-    [SECTION_IDS.ROOM_MAP, {}, { streaming: true, reconnecting: true }],
+    // The room map reads whether Hue streams (its Blink waits then), not whether it is retrying.
+    [SECTION_IDS.ROOM_MAP, {}, { reconnecting: true }],
   ] as const)(
     "does not re-render %s for a Hue status change it does not show",
     async (section, start, change) => {

@@ -159,7 +159,7 @@ describe("FurnitureObject", () => {
     fireEvent.pointerDown(piece, { clientX: 100, clientY: 100, pointerId: 1 });
     fireEvent.pointerMove(piece, { clientX: 101, clientY: 101, pointerId: 1 });
     fireEvent.pointerUp(piece, { clientX: 101, clientY: 101, pointerId: 1 });
-    expect(onSelect).toHaveBeenCalledWith("sofa-1");
+    expect(onSelect).toHaveBeenCalledWith("sofa-1", false);
     expect(onChange).not.toHaveBeenCalled();
     expect(piece.style.left).toBe(`${1.3 * PX_PER_METER}px`);
   });

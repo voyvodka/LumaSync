@@ -313,10 +313,10 @@ const roomMap: Catalogue<typeof enRoomMap> = {
   contextMenu: {
     duplicate: "Çoğalt",
     delete: "Sil",
-    rotate: "15° Döndür",
+    rotate: "15° döndür",
   },
   shortcuts: {
-    title: "Klavye Kısayolları",
+    title: "Klavye kısayolları",
     undo: "Geri al",
     redo: "Yinele",
     duplicate: "Çoğalt",
@@ -329,13 +329,19 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     panKeyboard: "Haritayı kaydır (seçim yokken)",
     pan: "Haritayı kaydır",
     zoom: "Yakınlaştır",
-    scrollWheel: "Kaydırma",
+    addToSelection: "Seçime ekle ya da çıkar",
+    boxSelect: "Kutunun kapladığını seç",
+    freeDrag: "Yapışmadan taşı",
+    scrollWheel: "Kaydırma · kıstırma",
     keys: {
       delete: "Delete",
       del: "Del",
       escape: "Esc",
       arrows: "Ok tuşları",
       spaceDrag: "Boşluk + sürükle",
+      shiftClick: "{{shift}}tıkla",
+      floorDrag: "Zeminde sürükle",
+      altDrag: "{{alt}}sürükle",
     },
   },
   templates: {

@@ -32,6 +32,9 @@ export function ShortcutsHelp({ buttonClassName }: { buttonClassName?: string })
     { id: "panKeyboard", key: arrows, desc: t("roomMap:shortcuts.panKeyboard") },
     { id: "pan", key: t("roomMap:shortcuts.keys.spaceDrag"), desc: t("roomMap:shortcuts.pan") },
     { id: "zoom", key: t("roomMap:shortcuts.scrollWheel"), desc: t("roomMap:shortcuts.zoom") },
+    { id: "addToSelection", key: t("roomMap:shortcuts.keys.shiftClick", { shift }), desc: t("roomMap:shortcuts.addToSelection") },
+    { id: "boxSelect", key: t("roomMap:shortcuts.keys.floorDrag"), desc: t("roomMap:shortcuts.boxSelect") },
+    { id: "freeDrag", key: t("roomMap:shortcuts.keys.altDrag", { alt: IS_MAC ? "⌥" : "Alt+" }), desc: t("roomMap:shortcuts.freeDrag") },
   ];
 
   return (

@@ -200,6 +200,7 @@ const selectRoomMapHue = (status: HueShellStatus) => ({
   reachable: status.reachable,
   configured: status.configured,
   probeVerdict: status.probeVerdict,
+  streaming: status.streaming,
 });
 
 const RoomMapPanel = memo(function RoomMapPanel() {
@@ -215,6 +216,7 @@ const RoomMapPanel = memo(function RoomMapPanel() {
         outputTargets={outputTargets}
         hueConfigured={hue.configured}
         hueProbeVerdict={hue.probeVerdict}
+        hueStreaming={hue.streaming}
       />
     </div>
   );

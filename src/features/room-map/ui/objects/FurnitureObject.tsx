@@ -32,7 +32,14 @@ interface FurnitureObjectProps {
   snapEnabled: boolean;
   zoom?: number;
   panMode?: boolean;
-  onSelect: (id: string) => void;
+  /** One of several selected pieces: dragging it moves them all, through `onGroupDrag*`. */
+  grouped?: boolean;
+  /** How far the group is being dragged now, for the members not under the pointer. */
+  groupOffset?: { dx: number; dy: number } | null;
+  onGroupDragMove?: (dx: number, dy: number) => void;
+  onGroupDragEnd?: (dx: number, dy: number) => void;
+  /** `additive`: ⇧ was held, so the piece joins or leaves the selection. */
+  onSelect: (id: string, additive?: boolean) => void;
   onChange: (updated: FurniturePlacement) => void;
   onSnapDragMove?: (id: string, x: number, y: number, w: number, h: number) => SnapResult;
   onSnapDragEnd?: () => void;
@@ -54,6 +61,10 @@ export const FurnitureObject = memo(function FurnitureObject({
   onSnapDragEnd,
   zoom = 1,
   panMode = false,
+  grouped = false,
+  groupOffset = null,
+  onGroupDragMove,
+  onGroupDragEnd,
 }: FurnitureObjectProps) {
   const [local, setLocal] = useState(() => ({
     x: placement.x,
@@ -109,8 +120,8 @@ export const FurnitureObject = memo(function FurnitureObject({
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (panMode) return; // Let event bubble up for canvas pan
-    onSelect(placement.id);
-    if (placement.locked) return;
+    onSelect(placement.id, e.shiftKey);
+    if (placement.locked || e.shiftKey) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     dragRef.current = { active: true, startClientX: e.clientX, startClientY: e.clientY, startX: local.x, startY: local.y };
   };
@@ -120,6 +131,7 @@ export const FurnitureObject = memo(function FurnitureObject({
     if (isClick(dragRef.current.startClientX, dragRef.current.startClientY, e.clientX, e.clientY)) return;
     const next = dragTarget(e.clientX, e.clientY, e.altKey);
     setLocal((current) => ({ ...current, x: next.x, y: next.y }));
+    onGroupDragMove?.(next.x - dragRef.current.startX, next.y - dragRef.current.startY);
   };
 
   const finishDrag = (commit: { clientX: number; clientY: number; free: boolean } | null) => {
@@ -129,10 +141,15 @@ export const FurnitureObject = memo(function FurnitureObject({
     if (commit === null || isClick(d.startClientX, d.startClientY, commit.clientX, commit.clientY)) {
       onSnapDragEnd?.();
       setLocal((current) => ({ ...current, x: placement.x, y: placement.y }));
+      onGroupDragEnd?.(0, 0);
       return;
     }
     const next = dragTarget(commit.clientX, commit.clientY, commit.free);
     onSnapDragEnd?.();
+    if (onGroupDragEnd) {
+      onGroupDragEnd(next.x - d.startX, next.y - d.startY);
+      return;
+    }
     const x = Math.round(next.x * 100) / 100;
     const y = Math.round(next.y * 100) / 100;
     if (x !== placement.x || y !== placement.y) onChange({ ...placement, x, y });
@@ -163,9 +180,11 @@ export const FurnitureObject = memo(function FurnitureObject({
     if (r !== (placement.rotation ?? 0)) onChange({ ...placement, rotation: r });
   };
 
+  // A member the pointer is not on follows the one it is on.
+  const follow = groupOffset && !dragRef.current.active ? groupOffset : { dx: 0, dy: 0 };
   const px = {
-    left: local.x * pxPerMeter,
-    top: local.y * pxPerMeter,
+    left: (local.x + follow.dx) * pxPerMeter,
+    top: (local.y + follow.dy) * pxPerMeter,
     width: local.w * pxPerMeter,
     height: local.h * pxPerMeter,
   };
@@ -177,6 +196,7 @@ export const FurnitureObject = memo(function FurnitureObject({
           styles.piece,
           placement.locked ? "cursor-default" : "cursor-grab active:cursor-grabbing",
           outside && styles.outside,
+          grouped && !selected && styles.grouped,
         )}
         data-furniture-id={placement.id}
         data-selected={selected || undefined}

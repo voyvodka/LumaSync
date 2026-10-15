@@ -59,6 +59,10 @@ export interface CameraCommand {
 }
 
 const ZOOM_STEP = 1.25;
+/** A camera move from the corner buttons or a double-click: short and settling, as the app's
+ *  motion is (`--lm-dur-slow`, an ease-out); a jump read as the view breaking. */
+const CAMERA_MOVE_MS = 320;
+const easeOut = (t: number) => 1 - (1 - t) ** 3;
 
 const POLAR = 0.95;
 /** A press that moves further than this turns the room; one that stays within it is a click (the
@@ -188,6 +192,35 @@ function openRoomView(
       { signal: listening.signal },
     );
 
+    // One move at a time, from wherever the camera is now: a second press during a move carries on
+    // from there instead of jumping to the end of the first.
+    let move = 0;
+    const moveCamera = (to: { zoom: number; target?: Vector3; position?: Vector3 }) => {
+      if (move !== 0) cancelAnimationFrame(move);
+      const zoom0 = camera.zoom;
+      const target0 = orbit.target.clone();
+      const position0 = camera.position.clone();
+      const apply = (k: number) => {
+        camera.zoom = zoom0 + (to.zoom - zoom0) * k;
+        if (to.target) orbit.target.lerpVectors(target0, to.target, k);
+        if (to.position) camera.position.lerpVectors(position0, to.position, k);
+        camera.updateProjectionMatrix();
+        orbit.update();
+        request();
+      };
+      if (prefersReducedMotion()) {
+        apply(1);
+        return;
+      }
+      const start = performance.now();
+      const step = (now: number) => {
+        const t = Math.min((now - start) / CAMERA_MOVE_MS, 1);
+        apply(easeOut(t));
+        move = t < 1 && !closed ? requestAnimationFrame(step) : 0;
+      };
+      move = requestAnimationFrame(step);
+    };
+
     const raycaster = new Raycaster();
     const pointer = new Vector2();
     let press: { x: number; y: number; id: number } | null = null;
@@ -225,12 +258,11 @@ function openRoomView(
         const hit = raycaster.intersectObject(room.scene, true)[0];
         if (!hit) return;
         const shift = hit.point.clone().sub(orbit.target);
-        orbit.target.add(shift);
-        camera.position.add(shift);
-        camera.zoom = Math.min(Math.max(camera.zoom * 1.6, orbit.minZoom), orbit.maxZoom);
-        camera.updateProjectionMatrix();
-        orbit.update();
-        request();
+        moveCamera({
+          zoom: Math.min(Math.max(camera.zoom * 1.6, orbit.minZoom), orbit.maxZoom),
+          target: hit.point.clone(),
+          position: camera.position.clone().add(shift),
+        });
       },
       { signal: listening.signal },
     );
@@ -309,15 +341,18 @@ function openRoomView(
       camera(kind) {
         if (!room) return;
         if (kind === "reset") {
-          orbit.target.copy(room.target);
-          camera.zoom = 1;
-          placeCamera(room, Math.PI / 4);
-        } else {
-          camera.zoom = Math.min(Math.max(camera.zoom * (kind === "in" ? ZOOM_STEP : 1 / ZOOM_STEP), orbit.minZoom), orbit.maxZoom);
+          const distance = room.radius * 4;
+          const azimuth = Math.PI / 4;
+          const position = new Vector3(
+            room.target.x + distance * Math.sin(POLAR) * Math.sin(azimuth),
+            room.target.y + distance * Math.cos(POLAR),
+            room.target.z + distance * Math.sin(POLAR) * Math.cos(azimuth),
+          );
+          moveCamera({ zoom: 1, target: room.target.clone(), position });
+          return;
         }
-        camera.updateProjectionMatrix();
-        orbit.update();
-        request();
+        const factor = kind === "in" ? ZOOM_STEP : 1 / ZOOM_STEP;
+        moveCamera({ zoom: Math.min(Math.max(camera.zoom * factor, orbit.minZoom), orbit.maxZoom) });
       },
       setBottomInset(px) {
         if (px === bottomInset) return;

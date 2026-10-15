@@ -40,6 +40,8 @@ export interface RoomMapSurfaceProps {
   hueConfigured?: boolean;
   /** Picks the paused room-aware chip's reason, as it does the Lights Hue row's. */
   hueProbeVerdict?: HueProbeVerdict | null;
+  /** Hue is streaming: the room's Blink waits until it stops. */
+  hueStreaming?: boolean;
   /** Whether this build carries the 3D room; a prop so a test can take either branch. */
   view3dAvailable?: boolean;
 }
@@ -57,6 +59,7 @@ export function RoomMapSurface({
   outputTargets = [],
   hueConfigured = false,
   hueProbeVerdict = null,
+  hueStreaming = false,
   view3dAvailable = ROOM_VIEW_3D_AVAILABLE,
 }: RoomMapSurfaceProps) {
   const { t } = useTranslation();
@@ -124,6 +127,7 @@ export function RoomMapSurface({
             lampFamilies={lampFamilies}
             roomAware={roomAware}
             hueReachable={hueReachable}
+            hueStreaming={hueStreaming}
             onEdit={() => {
               handleFace(ROOM_FACES.EDIT);
               setEditTakesFocus(true);
