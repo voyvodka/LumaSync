@@ -491,6 +491,12 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- The scene chips are one Tab stop and the arrow keys move between them, as the mode buttons above
+  do; they were six Tab stops and the arrows did nothing. Choosing Edit in the scenes library puts
+  the cursor in the scene's name, where it used to drop focus on the page and leave Escape dead.
+- The colour picker's labels are in sentence case, its hex field is a full-height field, the "+"
+  beside the scenes says "New scene from this light", the colour correction rows read "Red gamma"
+  and "White point (K)", and Turkish says "Sinema bantları" for letterbox.
 - An unplugged strip reads "Unplugged" with a still dot instead of a spinner that never stopped,
   and without a red "Port not found" under it that grew the row; it still reconnects by itself.
 - Typing the address of the WLED device already added opens its strip instead of adding it a

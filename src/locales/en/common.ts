@@ -25,7 +25,7 @@ export default {
       rootAriaLabel: "Colour picker",
       hueLabel: "Hue",
       svLabel: "Saturation and brightness",
-      hexLabel: "HEX",
+      hexLabel: "Hex",
       hexPlaceholder: "RRGGBB",
       recentColors: "Recent",
       recentItemAriaLabel: "Use {{hex}}",

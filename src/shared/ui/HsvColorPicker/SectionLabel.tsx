@@ -3,7 +3,7 @@ import type { ComponentPropsWithoutRef, ElementType, ReactNode } from "react";
 type SectionLabelTone = "dim";
 
 const TONE_CLASSNAME: Record<SectionLabelTone, string> = {
-  dim: "text-[10px] uppercase tracking-wide text-ink-dim",
+  dim: "text-[11.5px] text-ink-dim",
 };
 
 type SectionLabelOwnProps<T extends ElementType> = {
@@ -16,7 +16,7 @@ type SectionLabelOwnProps<T extends ElementType> = {
 type SectionLabelProps<T extends ElementType> = SectionLabelOwnProps<T> &
   Omit<ComponentPropsWithoutRef<T>, keyof SectionLabelOwnProps<T>>;
 
-/** The picker's uppercase micro-labels. */
+/** The picker's small labels, in sentence case like every other label. */
 export function SectionLabel<T extends ElementType = "span">({
   as,
   tone,

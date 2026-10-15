@@ -637,7 +637,7 @@ export function HsvColorPicker({
               "focus-within:border-amber",
               "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-amber/60",
               "forced-colors:border-[color:CanvasText]",
-              compact ? "min-w-0 px-1.5 py-0.5 text-[10.5px]" : "max-w-[120px] px-2 py-1 text-[11px]",
+              compact ? "h-8 min-w-0 px-1.5 text-[11px]" : "h-8 max-w-[120px] px-2 text-[11px]",
             ].join(" ")}
           >
             <span aria-hidden="true" className="select-none text-ink-faint">

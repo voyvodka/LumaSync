@@ -29,6 +29,18 @@ describe("ScenesRow", () => {
     expect(list).toHaveAttribute("data-more", "start");
   });
 
+  // Six chips were six tab stops, and the arrows did nothing.
+  it("is one tab stop, and the arrow keys move to the next scene and play it", () => {
+    const onPick = vi.fn<(id: string) => void>();
+    const scenes = chips.map((chip) => ({ ...chip, active: chip.id === "b" }));
+    render(<ScenesRow scenes={scenes} onPick={onPick} />);
+    const radios = screen.getAllByRole("radio");
+    expect(radios.map((radio) => radio.tabIndex)).toEqual([-1, 0, -1, -1]);
+    fireEvent.keyDown(radios[1]!, { key: "ArrowRight" });
+    expect(onPick).toHaveBeenCalledWith("c");
+    expect(radios[2]).toHaveFocus();
+  });
+
   it("fades nothing when every chip fits", () => {
     render(<ScenesRow scenes={chips} onPick={() => {}} />);
     expect(screen.getByRole("radiogroup")).not.toHaveAttribute("data-more");

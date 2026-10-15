@@ -28,7 +28,7 @@ const common: Catalogue<typeof enCommon> = {
       rootAriaLabel: "Renk seçici",
       hueLabel: "Renk tonu",
       svLabel: "Doygunluk ve parlaklık",
-      hexLabel: "HEX",
+      hexLabel: "Hex",
       hexPlaceholder: "RRGGBB",
       recentColors: "Son kullanılanlar",
       recentItemAriaLabel: "{{hex}} rengini kullan",

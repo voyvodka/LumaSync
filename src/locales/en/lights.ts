@@ -33,7 +33,7 @@ export default {
     unavailableShort: "needs an update",
     unknown: "Unknown scene",
     whiteName: "White {{kelvin}} K",
-    save: "New scene",
+    save: "New scene from this light",
     saveFirst: "Save as scene",
     editing: "Editing {{name}}",
     nameField: "Scene name",
@@ -202,10 +202,10 @@ export default {
   },
   led: {
     colorCorrection: {
-      gammaR: "Gamma Red",
-      gammaG: "Gamma Green",
-      gammaB: "Gamma Blue",
-      kelvin: "White Point (K)",
+      gammaR: "Red gamma",
+      gammaG: "Green gamma",
+      gammaB: "Blue gamma",
+      kelvin: "White point (K)",
       saturation: "Saturation",
       reset: "Reset to defaults",
       kelvinHint: "Lower = warmer, higher = cooler",

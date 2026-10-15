@@ -38,11 +38,19 @@ interface ScenesProps {
   onApply: (next: LightingModeConfig) => void;
 }
 
-/** Focus after the swap has landed; a control that is gone or disabled hands it to the library button. */
-const focusByTestId = (testId: string) =>
+/**
+ * Focus once the swap has landed; a control that is gone or disabled hands it to the library button.
+ * Focusing a field not yet rendered, or one inside a face still inert, silently does nothing — an Edit
+ * chosen in the library left focus on the page — so it waits a few frames for the target to be live.
+ */
+const focusByTestId = (testId: string, framesLeft = 12) =>
   requestAnimationFrame(() => {
     const target = document.querySelector<HTMLElement>(`[data-testid="${testId}"]`);
-    const usable = target && !target.matches(":disabled") ? target : null;
+    if ((target === null || target.closest("[inert]") !== null) && framesLeft > 0) {
+      focusByTestId(testId, framesLeft - 1);
+      return;
+    }
+    const usable = target && !target.matches(":disabled") && target.closest("[inert]") === null ? target : null;
     (usable ?? document.querySelector<HTMLElement>('[data-testid="scene-library-open"]'))?.focus({ preventScroll: true });
   });
 

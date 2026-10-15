@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { useArrivals } from "@/shared/lib/useArrivals";
 import { useFlip } from "@/shared/lib/useFlip";
+import { useRadioGroup } from "@/shared/lib/useRadioGroup";
 import { useSideScroll } from "@/shared/lib/useSideScroll";
 
 import styles from "./ScenesRow.module.css";
@@ -43,6 +44,13 @@ export function ScenesRow({ scenes, disabled = false, onPick, trailing, placehol
   const listRef = useRef<HTMLDivElement | null>(null);
   useFlip(listRef, ids);
   const activeId = scenes.find((scene) => scene.active)?.id;
+  // One tab stop and the arrow keys, as the mode strip above: six chips were six tab stops.
+  const { itemProps } = useRadioGroup({
+    values: ids,
+    value: activeId ?? null,
+    onChange: onPick,
+    isDisabled: (id) => disabled || scenes.find((scene) => scene.id === id)?.unavailable === true,
+  });
   // Names too: a renamed chip changes width, and the edges' fades are measured afresh.
   const more = useSideScroll(
     listRef,
@@ -66,12 +74,11 @@ export function ScenesRow({ scenes, disabled = false, onPick, trailing, placehol
             <button
               key={scene.id}
               type="button"
-              role="radio"
+              {...itemProps(scene.id)}
               aria-checked={scene.active}
               className={styles.chip}
               disabled={disabled || scene.unavailable}
               title={scene.unavailable ? t("lights:scenes.unavailable") : scene.name}
-              onClick={() => onPick(scene.id)}
               data-arrived={arrived.has(scene.id) || undefined}
               data-flip-id={scene.id}
               onAnimationEnd={(event) => {

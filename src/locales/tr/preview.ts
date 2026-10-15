@@ -26,7 +26,7 @@ const preview: Catalogue<typeof enPreview> = {
       spiral: "Spiral",
       sunset: "Gün batımı",
       colorFields: "Renk alanları",
-      letterbox: "Letterbox",
+      letterbox: "Sinema bantları",
       latency: "Gecikme",
     },
     stop: "{{name}} sahnesini durdur",

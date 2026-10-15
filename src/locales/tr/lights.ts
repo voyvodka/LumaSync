@@ -36,7 +36,7 @@ const lights: Catalogue<typeof enLights> = {
     unavailableShort: "güncelleme gerekir",
     unknown: "Bilinmeyen sahne",
     whiteName: "Beyaz {{kelvin}} K",
-    save: "Yeni sahne",
+    save: "Bu ışıktan yeni sahne",
     saveFirst: "Sahne olarak kaydet",
     editing: "{{name}} düzenleniyor",
     nameField: "Sahne adı",
