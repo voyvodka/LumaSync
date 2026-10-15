@@ -13,6 +13,8 @@ import {
   resolveFurnitureTone,
   resolveFurnitureTop,
   resolveStripMountHeight,
+  resolveStripDensity,
+  fitStripLength,
   type UsbStripPlacement,
   resolveFurnitureType,
   resolveFurnitureVariant,
@@ -150,6 +152,23 @@ describe("height and screen kind resolvers", () => {
     expect(resolveStripMountHeight(strip(2.4))).toBe(2.4);
     expect(resolveStripMountHeight(strip(4.5))).toBe(4.5);
     for (const bad of [undefined, null, -0.1, Number.NaN, Number.POSITIVE_INFINITY, "1"]) expect(resolveStripMountHeight(strip(bad))).toBeUndefined();
+  });
+
+  it("keeps only a density tape could have", () => {
+    const strip = (ledsPerMeter: unknown) =>
+      ({ stripId: "s", startX: 0, startY: 0, endX: 1, endY: 0, ledCount: 30, ledsPerMeter }) as UsbStripPlacement;
+    expect(resolveStripDensity(strip(60))).toBe(60);
+    for (const bad of [undefined, null, 0, 0.5, 301, Number.NaN, "60"]) expect(resolveStripDensity(strip(bad))).toBeUndefined();
+  });
+
+  // 90 LEDs on 60-a-metre tape is a metre and a half, whatever was drawn.
+  it("fits a strip's length to its LEDs at its density, along the way it runs", () => {
+    const strip: UsbStripPlacement = { stripId: "s", startX: 1, startY: 2, endX: 1, endY: 2.4, ledCount: 90, ledsPerMeter: 60 };
+    expect(fitStripLength(strip)).toMatchObject({ startX: 1, startY: 2, endX: 1, endY: 3.5 });
+    const plain = { ...strip, ledsPerMeter: null };
+    expect(fitStripLength(plain)).toBe(plain);
+    const still = { ...strip, endY: 2 };
+    expect(fitStripLength(still)).toBe(still);
   });
 
   it("reads an unknown screen kind as Auto", () => {

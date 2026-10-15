@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 
-import { resolveStripMountHeight, type UsbStripPlacement } from "@/shared/contracts/roomMap";
+import { resolveStripDensity, resolveStripMountHeight, type UsbStripPlacement } from "@/shared/contracts/roomMap";
 import { IconLed } from "@/shared/ui/icons";
 import { InfoTip } from "@/shared/ui/InfoTip/InfoTip";
 import { StateWord } from "@/shared/ui/StateWord/StateWord";
@@ -29,6 +29,8 @@ export function UsbStripInspector({
   onManage,
   height,
   onStickToWall,
+  fitTo,
+  onFitLength,
 }: {
   strip: UsbStripPlacement;
   connectionStatus: UsbStripConnectionStatus;
@@ -46,6 +48,9 @@ export function UsbStripInspector({
   height?: { placeholder: string; max: number };
   /** Lays the strip along its nearest wall; absent when it is there already or cannot move. */
   onStickToWall?: () => void;
+  /** The length its LEDs at its density make, in metres, when the drawn run is not that long. */
+  fitTo?: number;
+  onFitLength?: () => void;
 }) {
   const { t } = useTranslation();
   const locked = !!strip.locked;
@@ -70,6 +75,9 @@ export function UsbStripInspector({
             )}
             {port && <Meta>{port}</Meta>}
           </Status>
+          {fitTo !== undefined && onFitLength && (
+            <RowLink onClick={onFitLength}>{t("roomMap:inspector.usbFitLength", { metres: fitTo.toFixed(2) })}</RowLink>
+          )}
           {onStickToWall && <RowLink onClick={onStickToWall}>{t("roomMap:inspector.usbStickToWall")}</RowLink>}
           {onManage && <RowLink onClick={onManage}>{t("roomMap:inspector.usbManage")}</RowLink>}
           <Spacer />
@@ -107,6 +115,19 @@ export function UsbStripInspector({
               disabled={locked}
               onCommit={(ledCount) => onUpdate({ ledCount })}
             />
+            <DecimalField
+              optional
+              label={t("roomMap:inspector.usbDensityLabel")}
+              value={resolveStripDensity(strip)}
+              placeholder="–"
+              decimals={0}
+              step={1}
+              min={1}
+              max={300}
+              unit="LED/m"
+              disabled={locked}
+              onCommit={(ledsPerMeter) => onUpdate({ ledsPerMeter: ledsPerMeter ?? null })}
+            />
             {height && (
               <DecimalField
                 optional
@@ -123,7 +144,7 @@ export function UsbStripInspector({
             )}
           </FieldRow>
           <InfoTip label={t("common:hintFor", { label: t("roomMap:inspector.usbLedCountLabel") })}>
-            {height ? `${t("roomMap:inspector.usbHint")} ${t("roomMap:inspector.usbHeightHint")}` : t("roomMap:inspector.usbHint")}
+            {[t("roomMap:inspector.usbHint"), t("roomMap:inspector.usbDensityHint"), height ? t("roomMap:inspector.usbHeightHint") : null].filter(Boolean).join(" ")}
           </InfoTip>
         </>
       }

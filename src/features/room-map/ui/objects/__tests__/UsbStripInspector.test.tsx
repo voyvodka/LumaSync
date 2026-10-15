@@ -15,7 +15,7 @@ function renderInspector(
   overrides: Partial<UsbStripPlacement> = {},
   connectionStatus: UsbStripConnectionStatus = "unknown",
   port: string | null = null,
-  extra: { height?: { placeholder: string; max: number }; onStickToWall?: () => void } = {},
+  extra: { height?: { placeholder: string; max: number }; onStickToWall?: () => void; fitTo?: number; onFitLength?: () => void } = {},
 ) {
   const handlers = {
     onUpdate: vi.fn<(patch: Partial<UsbStripPlacement>) => void>(),
@@ -52,6 +52,23 @@ describe("UsbStripInspector", () => {
     expect(onUpdate).toHaveBeenLastCalledWith({ mountHeightMeters: 2.1 });
     enter("roomMap:inspector.usbHeightLabel", "");
     expect(onUpdate).toHaveBeenLastCalledWith({ mountHeightMeters: null });
+  });
+
+  it("takes the tape's LEDs per metre, and clearing it forgets the density", () => {
+    const { onUpdate } = renderInspector();
+    enter("roomMap:inspector.usbDensityLabel", "60");
+    expect(onUpdate).toHaveBeenLastCalledWith({ ledsPerMeter: 60 });
+    cleanup();
+    const second = renderInspector({ ledsPerMeter: 60 });
+    enter("roomMap:inspector.usbDensityLabel", "");
+    expect(second.onUpdate).toHaveBeenLastCalledWith({ ledsPerMeter: null });
+  });
+
+  it("offers to fit the drawn run to the length its LEDs make", () => {
+    const onFitLength = vi.fn<() => void>();
+    renderInspector({ ledsPerMeter: 60, ledCount: 90 }, "unknown", null, { fitTo: 1.5, onFitLength });
+    fireEvent.click(screen.getByText("roomMap:inspector.usbFitLength"));
+    expect(onFitLength).toHaveBeenCalledTimes(1);
   });
 
   it("lays the strip on its wall from the link, shown only when there is somewhere to go", () => {

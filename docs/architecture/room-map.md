@@ -288,6 +288,13 @@ backlight drawn as a stray line along the wall.
   the floor. "Onto the wall" (`stickStripToWall`) lays a strip along its nearest wall 1 cm inside it,
   at its length and running the way it ran. A template moves the strip to its own placement, so the
   height goes with the old place.
+- **LEDs per metre make the length; the length never makes the count.** `ledsPerMeter` (1–300,
+  `resolveStripDensity`) is the tape's, so a template carries it with the linked strip's LED count.
+  With it set, an LED count or density committed in the card or on the canvas refits the run
+  (`fitStripLength`, then `keepStripInside`): 90 LEDs at 60 a metre is 1.5 m, the end moved along the
+  way the strip runs. Dragging an end changes the run, never `ledCount`, and LED Setup's count sync
+  writes `ledCount` alone — refitting there would write the geometry the editor writes and lose a
+  drag to last-writer-wins — so a run that no longer matches shows "Fit to … m" in the card instead.
 - **Editor shortcuts stand aside for form fields.** The editor root owns Delete/Backspace, Cmd+Z,
   arrows and the rest, and the dock's fields sit inside it: Backspace in the on-canvas LED count
   deleted the strip, and Cmd+Z in a field ran the editor's undo instead of the field's own.

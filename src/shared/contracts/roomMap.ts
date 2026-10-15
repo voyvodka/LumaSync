@@ -238,6 +238,38 @@ export interface UsbStripPlacement {
   /** The strip's height above the floor in metres; absent ⇒ at the skirting. Drawing-only: Rust
    *  reads a strip's id and port alone. Read through `resolveStripMountHeight`. */
   mountHeightMeters?: number | null;
+  /** The tape's LEDs per metre; set, the strip's drawn length follows `ledCount` (`fitStripLength`).
+   *  Drawing-only, read through `resolveStripDensity`. */
+  ledsPerMeter?: number | null;
+}
+
+/** The densities tape is sold in, offered first. */
+export const STRIP_DENSITIES = [30, 60, 96, 144] as const;
+const MAX_STRIP_DENSITY = 300;
+
+/** The stored density when it is a usable one (finite, 1 to 300 LEDs per metre), else none. */
+export function resolveStripDensity(strip: UsbStripPlacement): number | undefined {
+  const density: unknown = strip.ledsPerMeter;
+  return typeof density === "number" && Number.isFinite(density) && density >= 1 && density <= MAX_STRIP_DENSITY ? density : undefined;
+}
+
+/** The strip's length in metres from its LEDs and density, or none without a density. */
+export function stripLengthFromDensity(strip: UsbStripPlacement): number | undefined {
+  const density = resolveStripDensity(strip);
+  return density === undefined ? undefined : strip.ledCount / density;
+}
+
+/** The strip with its end moved along its run so it is as long as its LEDs at its density; one
+ *  with no density, or no run to follow, comes back as it was. */
+export function fitStripLength<T extends UsbStripPlacement>(strip: T): T {
+  const length = stripLengthFromDensity(strip);
+  const dx = strip.endX - strip.startX;
+  const dy = strip.endY - strip.startY;
+  const run = Math.hypot(dx, dy);
+  if (length === undefined || run < 1e-6) return strip;
+  const k = length / run;
+  const round = (v: number) => Math.round(v * 1000) / 1000;
+  return { ...strip, endX: round(strip.startX + dx * k), endY: round(strip.startY + dy * k) };
 }
 
 /** The stored height when it is a usable one (finite, not below the floor), else none. No cap: a

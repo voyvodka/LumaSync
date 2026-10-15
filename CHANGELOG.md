@@ -216,6 +216,9 @@ https://keepachangelog.com/en/1.1.0/
   - Room settings → "Templates…" opens the templates over a furnished room too, with a way back;
     a template picked there is one undo step. A new "Showroom" template lays out every kind of
     furniture in every model it comes in, side by side, in a 10 × 8 m room.
+  - A strip's card takes its tape's LEDs per metre: with it set, the strip's length follows its LED
+    count (90 LEDs at 60 a metre is 1.5 m), and a strip drawn longer or shorter offers "Fit to … m".
+    Close up in the 3D view a strip shows each of its LEDs.
   - A USB strip is drawn at its real width, about a centimetre, flat on its wall or the floor, and
     its card takes a height for the 3D room (empty runs it at the skirting along a wall, on the floor
     elsewhere) and offers "Onto the wall" to lay it along the nearest wall.

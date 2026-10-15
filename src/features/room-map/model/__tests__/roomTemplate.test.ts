@@ -96,6 +96,11 @@ describe("applyRoomTemplate", () => {
     ]);
   });
 
+  it("keeps the connected tape's density with it", () => {
+    const connected = strip({ stripId: "usb-conn", portName: PORT, ledsPerMeter: 60 });
+    expect(applyRoomTemplate(map({ usbStrips: [connected] }), TV_TEMPLATE).usbStrips[0]?.ledsPerMeter).toBe(60);
+  });
+
   it("keeps a second controller's strip beside it", () => {
     const first = strip({ stripId: "usb-1", portName: PORT });
     const second = strip({ stripId: "usb-2", portName: "/dev/cu.usbserial-9" });

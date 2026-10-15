@@ -16,6 +16,7 @@ import type {
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
 import {
+  fitStripLength,
   replaceHueChannel,
   resolveRoomFootprint,
   ROOM_MAP_BACKGROUND_ERROR,
@@ -244,7 +245,10 @@ export function RoomMapEditor({
     (updated: UsbStripPlacement, continuous?: boolean) => {
       apply(
         (cfg) => ({
-          usbStrips: cfg.usbStrips.map((s) => (s.stripId === updated.stripId ? updated : s)),
+          // A new LED count on tape of a known density is a new length.
+          usbStrips: cfg.usbStrips.map((s) =>
+            s.stripId !== updated.stripId ? s : s.ledCount !== updated.ledCount ? keepStripInside(fitStripLength(updated), roomBoxOf(cfg)) : updated,
+          ),
         }),
         continuous ? { gesture: `usb:${updated.stripId}:ledCount` } : undefined,
       );
@@ -644,7 +648,11 @@ export function RoomMapEditor({
     },
     onUpdateUsbStrip: (stripId, patch) => {
       apply({
-        usbStrips: config.usbStrips.map((s) => (s.stripId === stripId ? keepStripInside({ ...s, ...patch }, roomBoxOf(config)) : s)),
+        usbStrips: config.usbStrips.map((s) => {
+          if (s.stripId !== stripId) return s;
+          const next = { ...s, ...patch };
+          return keepStripInside("ledCount" in patch || "ledsPerMeter" in patch ? fitStripLength(next) : next, roomBoxOf(config));
+        }),
       });
     },
     onUpdateImageLayer: (id, patch) => {

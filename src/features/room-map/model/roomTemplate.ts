@@ -37,7 +37,14 @@ export function applyRoomTemplate(current: RoomMapConfig, template: RoomMapConfi
     usbStrips = [first, ...others];
   } else {
     usbStrips = [
-      { ...placement, stripId: first.stripId, portName: first.portName, ledCount: first.ledCount },
+      {
+        ...placement,
+        stripId: first.stripId,
+        portName: first.portName,
+        ledCount: first.ledCount,
+        // The density is the tape's, like its LED count; the template's run is still drawn as is.
+        ...(first.ledsPerMeter !== undefined ? { ledsPerMeter: first.ledsPerMeter } : {}),
+      },
       ...others,
       ...otherTemplateStrips,
     ];
