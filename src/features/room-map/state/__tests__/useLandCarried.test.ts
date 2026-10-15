@@ -5,6 +5,7 @@ import { DEFAULT_ROOM_MAP, type RoomMapConfig } from "@/shared/contracts/roomMap
 
 import { furnitureObjectId } from "../../model/objectId";
 import { useLandCarried } from "../useLandCarried";
+import type { RoomMapDocument } from "../useRoomMapDocument";
 
 const config: RoomMapConfig = {
   ...DEFAULT_ROOM_MAP,
@@ -18,7 +19,7 @@ const config: RoomMapConfig = {
 describe("useLandCarried", () => {
   // The 3D room puts a piece back where it was picked up when it is told the landing was refused.
   it("says whether the piece was put down, and writes only when it was", () => {
-    const apply = vi.fn();
+    const apply = vi.fn<RoomMapDocument["apply"]>();
     const { result } = renderHook(() => useLandCarried({ apply, config, hueAreaId: null, scopedConfig: config }));
     expect(result.current(furnitureObjectId("bed"), 0, 0, 0)).toBe(false);
     expect(apply).not.toHaveBeenCalled();
