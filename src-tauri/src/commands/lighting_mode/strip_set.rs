@@ -1,7 +1,7 @@
 //! Which strips the "usb" channel drives: the connected local outputs in connect order, each
-//! matched to the saved strip it is and carrying that strip's own setup. The worker still drives
-//! only the first of them (`primary`), as the single-output runtime always has; `payload_index`,
-//! `fan_out` and `for_plan` are the rules the fan-out will drive by.
+//! matched to the saved strip it is and carrying that strip's own setup. The mode is for one of
+//! them (`payload_index`, `primary`); an Ambilight run also drives the strips `fan_out` lets beside
+//! it.
 //! docs/architecture/device-output.md ("Which strips are driven").
 
 use std::net::Ipv4Addr;
@@ -29,6 +29,9 @@ pub(super) struct StripSpec {
     pub profile: FirmwareProfile,
     pub chip: LedChipType,
     pub correction: ColorCorrectionConfig,
+    /// A strip's own saved colour order, fixed for the run; `None` follows the live setting, as
+    /// the strip the mode is for does.
+    pub color_order: Option<LedColorOrder>,
 }
 
 /// A connected output and the saved strip it is. A port connected with no `ledStrips` row is
@@ -114,9 +117,9 @@ pub(crate) struct StripSet {
 }
 
 impl StripSet {
-    /// What the "usb" channel drives until the worker fans out: the earliest connected output.
+    /// What the "usb" channel drives: the output of the strip the mode is for (`payload_index`).
     pub fn primary(&self) -> Option<&DrivenLocal> {
-        self.driven.first().map(|strip| &strip.output)
+        self.payload_index().map(|index| &self.driven[index].output)
     }
 
     /// Which driven strip the mode is for: the saved primary (`primary_strip`, the first enabled
@@ -185,8 +188,6 @@ impl StripSet {
     /// The set a run with `plan` drives: this one when its primary is that plan, else the plan on
     /// its own with no saved strip behind it — what a caller that names the output itself (a stop,
     /// a test calling the transition directly) has always meant. Empty with no plan.
-    // Planned with once the worker drives every strip of the set (3b-2b-ii); tested until then.
-    #[allow(dead_code)]
     pub fn for_plan(&self, plan: Option<&UsbOutputPlan>) -> StripSet {
         let Some(plan) = plan else {
             return StripSet::default();

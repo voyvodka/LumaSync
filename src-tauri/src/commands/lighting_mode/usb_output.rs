@@ -7,6 +7,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use super::config::{LightingModeConfig, SolidColorPayload};
+use crate::commands::led_calibration::LedCalibrationConfig;
 use crate::commands::led_output::{
     encode_packet_for_output, ColorCorrectionConfig, EncoderPlan, FirmwareProfile, LedChipType,
     LedColorOrder, LedOutputBridge, SerialSink,
@@ -81,6 +82,46 @@ impl From<crate::commands::local_outputs::DrivenLocal> for UsbOutputPlan {
     }
 }
 
+/// One strip a run drives, as it was set up when the run started: what an Off paints black with,
+/// what a release blanks before it lets the port go, and what a retune compares to decide whether
+/// the run can stay.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct ActiveStrip {
+    pub(super) plan: UsbOutputPlan,
+    pub(super) layout: Option<LedCalibrationConfig>,
+    /// Every LED, so a black frame reaches the end of the strip.
+    pub(super) led_count: usize,
+    pub(super) profile: FirmwareProfile,
+    pub(super) chip: LedChipType,
+    pub(super) color_order: LedColorOrder,
+    pub(super) correction: ColorCorrectionConfig,
+}
+
+impl ActiveStrip {
+    /// The strip a mode is for, stamped as `SolidUsbOutput::for_mode` reads the mode.
+    pub(super) fn of_mode(plan: UsbOutputPlan, mode: &LightingModeConfig) -> Self {
+        Self {
+            plan,
+            layout: mode.led_calibration.clone(),
+            led_count: mode_led_count(mode),
+            profile: mode.firmware_profile.unwrap_or_default(),
+            chip: mode.chip_type.unwrap_or_default(),
+            color_order: mode.color_order.unwrap_or_default(),
+            correction: mode.color_correction.clone().unwrap_or_default(),
+        }
+    }
+}
+
+/// Must paint EVERY LED, not just LED #0 (historical bug: a 1-element slice left 58/59 LEDs dark).
+/// Falls back to a 1-LED frame when no calibration is on record yet.
+fn mode_led_count(mode: &LightingModeConfig) -> usize {
+    mode.led_calibration
+        .as_ref()
+        .map(|cal| cal.total_leds as usize)
+        .filter(|n| *n > 0)
+        .unwrap_or(1)
+}
+
 /// A solid frame's destination on the "usb" channel and how that strip wants
 /// it encoded — taken from the mode when it starts, so a colour retune can
 /// repaint the strip without the runtime lock.
@@ -115,15 +156,21 @@ impl SolidUsbOutput {
             profile: mode.firmware_profile.unwrap_or_default(),
             chip: mode.chip_type.unwrap_or_default(),
             color_order: mode.color_order.unwrap_or_default(),
-            // Must paint EVERY LED, not just LED #0 (historical bug: a
-            // 1-element slice left 58/59 LEDs dark). Falls back to a
-            // 1-LED frame when no calibration is on record yet.
-            led_count: mode
-                .led_calibration
-                .as_ref()
-                .map(|cal| cal.total_leds as usize)
-                .filter(|n| *n > 0)
-                .unwrap_or(1),
+            led_count: mode_led_count(mode),
+            hold: None,
+        }
+    }
+
+    /// The output for a strip a run drove, from its own record rather than the mode's.
+    pub(super) fn for_strip(bridge: &LedOutputBridge, strip: &ActiveStrip) -> Self {
+        Self {
+            bridge: bridge.clone(),
+            plan: strip.plan.clone(),
+            corrections: strip.correction.clone(),
+            profile: strip.profile,
+            chip: strip.chip,
+            color_order: strip.color_order,
+            led_count: strip.led_count,
             hold: None,
         }
     }

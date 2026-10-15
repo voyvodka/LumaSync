@@ -114,7 +114,8 @@ fn the_connect_order_decides_what_comes_first_not_the_saved_order() {
             driven(serial("COM3"), Some("strip-1")),
         ]
     );
-    assert_eq!(set.primary(), Some(&serial("COM4")));
+    // The mode is still for the saved primary, wherever it came in the connect order.
+    assert_eq!(set.primary(), Some(&serial("COM3")));
 }
 
 #[test]
@@ -324,8 +325,8 @@ fn the_mode_is_for_the_saved_primary_when_it_is_connected() {
     );
     assert_eq!(set.primary_saved.as_deref(), Some("strip-1"));
     assert_eq!(set.payload_index(), Some(1));
-    // `primary` and the plan still take the earliest connected until the worker fans out.
-    assert_eq!(set.primary(), Some(&serial("COM4")));
+    assert_eq!(set.primary(), Some(&serial("COM3")));
+    assert_eq!(set.plan_args(), (true, Some("COM3"), None));
 }
 
 #[test]

@@ -617,6 +617,7 @@ fn assert_worker_matches_reference(profile: FirmwareProfile, chip_type: LedChipT
             profile,
             chip: chip_type,
             correction: color_correction(),
+            color_order: None,
         }],
         Arc::clone(&live),
         Box::new(ScriptedFrameSource {
@@ -981,6 +982,7 @@ fn a_frame_is_analysed_once_however_often_the_worker_looks() {
             profile: FirmwareProfile::LumaSyncV1,
             chip: LedChipType::Ws2812bGrb,
             correction: color_correction(),
+            color_order: None,
         }],
         live_settings(),
         Box::new(StillScreen {
@@ -1483,6 +1485,7 @@ fn a_strip_that_stops_taking_frames_is_reported_by_its_code() {
             profile: FirmwareProfile::LumaSyncV1,
             chip: LedChipType::Ws2812bGrb,
             correction: color_correction(),
+            color_order: None,
         }],
         live_settings(),
         Box::new(StillScreen {
@@ -2097,6 +2100,7 @@ fn a_worker_that_panics_is_counted_out_and_its_stop_returns() {
             profile: FirmwareProfile::LumaSyncV1,
             chip: LedChipType::Ws2812bGrb,
             correction: color_correction(),
+            color_order: None,
         }],
         Arc::clone(&live),
         Box::new(PanickingFrameSource {
@@ -2259,6 +2263,7 @@ fn a_strip_with_no_layout_shows_the_picture_not_its_own_spot() {
             profile: FirmwareProfile::LumaSyncV1,
             chip: LedChipType::Ws2812bGrb,
             correction: color_correction(),
+            color_order: None,
         }],
         live_settings(),
         Box::new(StillScreen {

@@ -22,12 +22,12 @@ use super::preview::{build_preview_emit_context, build_twin_sink, TwinFrameSink}
 use super::runtime::{AmbilightCaptureRequest, LightingRuntimeOwner, LightingRuntimeState};
 use super::snapshot;
 use super::strip_set::{strips_from, StripSpec};
-use super::usb_output::{SolidHold, SolidUsbOutput, UsbOutputPlan};
+use super::usb_output::{ActiveStrip, SolidHold, SolidUsbOutput, UsbOutputPlan};
 use super::worker::{start_ambilight_worker, WorkerPacing};
 use super::SOLID_OUTPUT_ATTEMPTS;
 use crate::commands::hue::state_store::{apply_hue_color_with_context, HueOutputLive};
 use crate::commands::led_output::apply_color_correction_rgb;
-use crate::commands::local_outputs::LocalOutputRegistry;
+use crate::commands::local_outputs::{DrivenLocal, LocalOutputRegistry};
 use crate::commands::preview::PreviewSessionState;
 use crate::commands::runtime_telemetry::{RuntimeTelemetryState, SharedRuntimeTelemetry};
 use crate::commands::shell_state;
@@ -58,57 +58,107 @@ fn push_trace(trace: &mut Option<&mut Vec<&'static str>>, step: &'static str) {
     }
 }
 
-/// What was running before this apply: the mode, and the output it wrote to.
+/// What was running before this apply: the mode, the output it wrote to, and every strip it drove.
 pub(super) struct Outgoing {
     pub(super) mode: LightingModeConfig,
     pub(super) plan: Option<UsbOutputPlan>,
+    pub(super) strips: Vec<ActiveStrip>,
 }
 
-/// Records the newly active serial port, releasing the previous port's
-/// cached session first if it differs. Same-port overwrites (a mode
-/// restart on the port already in use) are left untouched — that is the
-/// DTR invariant `stop_previous` also protects, see
-/// docs/architecture/device-output.md (DTR reset). Only a genuine port
-/// *switch* should release a handle, so an abandoned port can be opened by
-/// another app (e.g. the Arduino IDE) instead of staying locked until
-/// LumaSync quits.
+/// The strips an Ambilight run drives beside the mode's own, from the set the apply planned with:
+/// Ambilight on a serial strip only, and never for a test pattern, a preview scene or a latency
+/// run, which are the mode's strip's alone. An effect draws its first strip only until the engine
+/// draws per strip, and a WLED device beside another is left for when it can be switched off.
+fn planned_extras(
+    owner: &LightingRuntimeOwner,
+    next: &LightingModeConfig,
+    plan: Option<&UsbOutputPlan>,
+    is_test: bool,
+) -> Vec<(StripSpec, ActiveStrip)> {
+    let fans_out = next.kind == LightingModeKind::Ambilight
+        && !is_test
+        && owner.preview.scene.is_none()
+        && owner.preview.latency_sink.is_none()
+        && matches!(plan, Some(UsbOutputPlan::Serial(_)));
+    if !fans_out {
+        return Vec::new();
+    }
+    let set = owner.strips.for_plan(plan);
+    let fan = set.fan_out();
+    fan.others
+        .iter()
+        .filter_map(|&index| {
+            let strip = &set.driven[index];
+            let setup = strip.saved.as_ref()?;
+            let DrivenLocal::Serial(port) = &strip.output else {
+                return None;
+            };
+            let plan = UsbOutputPlan::Serial(port.clone());
+            let layout = setup.layout.clone()?;
+            let record = ActiveStrip {
+                plan: plan.clone(),
+                led_count: usize::from(layout.total_leds),
+                layout: Some(layout.clone()),
+                profile: setup.profile,
+                chip: setup.chip,
+                color_order: setup.color_order,
+                correction: strip.correction.clone(),
+            };
+            let spec = StripSpec {
+                plan: Some(plan),
+                layout: Some(layout),
+                profile: setup.profile,
+                chip: setup.chip,
+                correction: strip.correction.clone(),
+                color_order: Some(setup.color_order),
+            };
+            Some((spec, record))
+        })
+        .collect()
+}
+
+/// Records the serial ports a run now holds, releasing every previous port it no longer uses
+/// first. A port that stays — a mode restart on the ports already in use — is left untouched:
+/// that is the DTR invariant `stop_previous` also protects, see docs/architecture/device-output.md
+/// (DTR reset). Only a genuine switch releases a handle, so an abandoned port can be opened by
+/// another app (e.g. the Arduino IDE) instead of staying locked until LumaSync quits.
 ///
-/// A released port the outgoing mode was lighting is painted black first,
-/// through the session still cached: after the release a black frame would
-/// reopen the port, and the reopen resets the board. The outgoing mode is
-/// passed in because the Ambilight branch has already replaced the owner's
-/// by now, and a black frame sized for the new strip is the wrong length.
-/// The write runs under the runtime lock, bounded by the serial write timeout;
-/// its duration is logged so a slow controller shows up in the log.
-pub(super) fn set_active_port(
+/// A released port the outgoing run was lighting is painted black first, through the session
+/// still cached: after the release a black frame would reopen the port, and the reopen resets the
+/// board. Each strip is blanked with its own record, the length and encoding it ran with; the
+/// outgoing mode is the fallback for a run recorded without one. The writes run under the runtime
+/// lock, each bounded by the serial write timeout, and each duration is logged so a slow
+/// controller shows up in the log.
+pub(super) fn set_active_ports(
     owner: &mut LightingRuntimeOwner,
-    new_port: String,
+    new_ports: Vec<String>,
     outgoing: &Outgoing,
 ) {
-    if owner.active_port.as_deref() != Some(new_port.as_str()) {
-        if let Some(old_port) = owner.active_port.take() {
-            if outgoing.plan.as_ref() == Some(&UsbOutputPlan::Serial(old_port.clone())) {
-                let started = std::time::Instant::now();
-                let output = SolidUsbOutput::for_mode(
-                    &owner.output_bridge,
-                    UsbOutputPlan::Serial(old_port.clone()),
-                    &outgoing.mode,
-                );
-                match output.blank() {
-                    Ok(()) => info!(
-                        "[set_active_port] {old_port} blanked on release in {}ms led_count={}",
-                        started.elapsed().as_millis(),
-                        output.led_count
-                    ),
-                    Err(reason) => {
-                        warn!("[set_active_port] {old_port} kept its last frame: {reason}")
-                    }
-                }
-            }
-            owner.output_bridge.disconnect_session(&old_port);
+    for old_port in std::mem::take(&mut owner.active_ports) {
+        if new_ports.contains(&old_port) {
+            continue;
         }
+        let plan = UsbOutputPlan::Serial(old_port.clone());
+        let output = match outgoing.strips.iter().find(|strip| strip.plan == plan) {
+            Some(strip) => Some(SolidUsbOutput::for_strip(&owner.output_bridge, strip)),
+            None => (outgoing.plan.as_ref() == Some(&plan)).then(|| {
+                SolidUsbOutput::for_mode(&owner.output_bridge, plan.clone(), &outgoing.mode)
+            }),
+        };
+        if let Some(output) = output {
+            let started = std::time::Instant::now();
+            match output.blank() {
+                Ok(()) => info!(
+                    "[set_active_ports] {old_port} blanked on release in {}ms led_count={}",
+                    started.elapsed().as_millis(),
+                    output.led_count
+                ),
+                Err(reason) => warn!("[set_active_ports] {old_port} kept its last frame: {reason}"),
+            }
+        }
+        owner.output_bridge.disconnect_session(&old_port);
     }
-    owner.active_port = Some(new_port);
+    owner.active_ports = new_ports;
 }
 
 /// A worker kind's start, as a literal per kind so the contract verifier finds each code.
@@ -162,13 +212,13 @@ pub(super) fn stop_previous(
     // Do NOT close the cached serial port handle here — reopening the port
     // toggles DTR and resets the MCU before the packet lands. See
     // docs/architecture/device-output.md (DTR reset).
-    // `active_port` is deliberately kept: it is the only record of which port
-    // holds a cached session, and `set_active_port` needs it after this stop
-    // to release that port when the next mode switches to a different one.
+    // `active_ports` is deliberately kept: it is the only record of which ports
+    // hold a cached session, and `set_active_ports` needs it after this stop
+    // to release those the next mode no longer uses.
     let total_ms = t0.elapsed().as_millis();
     info!(
-        "[stop_previous] completed in {total_ms}ms had_worker={had_worker} last_port={:?} (cached serial session preserved to avoid DTR-reset cycle)",
-        owner.active_port
+        "[stop_previous] completed in {total_ms}ms had_worker={had_worker} last_ports={:?} (cached serial sessions preserved to avoid DTR-reset cycle)",
+        owner.active_ports
     );
 }
 
@@ -363,6 +413,9 @@ fn apply_mode_change_inner(
     // restart would re-open capture for what is a byte shuffle.
     // The output the next worker would write to; a retune keeps the running one only when it matches.
     let next_usb_plan = usb_plan.clone().filter(|_| needs_usb);
+    // The strips the next run would drive beside the mode's; a retune keeps the running worker
+    // only when they are the ones it was asked for, in the same order.
+    let next_extras = planned_extras(owner, &normalized_next, next_usb_plan.as_ref(), is_test);
     let worker_kind = matches!(
         normalized_next.kind,
         LightingModeKind::Ambilight | LightingModeKind::Effect
@@ -371,6 +424,10 @@ fn apply_mode_change_inner(
         && normalized_next.kind == owner.active_mode.kind
         && owner.worker.is_some()
         && next_usb_plan == owner.active_usb_plan
+        && next_extras
+            .iter()
+            .map(|(_, record)| record)
+            .eq(owner.requested_extras.iter())
         && normalized_next.targets == owner.active_mode.targets
         && normalized_next.display_id == owner.active_mode.display_id
         && normalized_next.led_calibration == owner.active_mode.led_calibration
@@ -432,7 +489,14 @@ fn apply_mode_change_inner(
     let outgoing = Outgoing {
         mode: owner.active_mode.clone(),
         plan: owner.active_usb_plan.take(),
+        strips: std::mem::take(&mut owner.active_strips),
     };
+    owner.requested_extras.clear();
+    // Kept past the stop for the Off that may follow, which paints each of them black; an apply
+    // after a run that drove nothing leaves the last record standing.
+    if !outgoing.strips.is_empty() {
+        owner.ended_run = outgoing.strips.clone();
+    }
     stop_previous(owner, &mut trace);
 
     match normalized_next.kind {
@@ -524,9 +588,12 @@ fn apply_mode_change_inner(
                         ),
                     }
                 }
+                // Solid writes the mode's strip alone: a strip the run before drove beside it is
+                // blanked and let go here, rather than left on its last frame.
                 if let UsbOutputPlan::Serial(port_name) = &plan {
-                    set_active_port(owner, port_name.clone(), &outgoing);
+                    set_active_ports(owner, vec![port_name.clone()], &outgoing);
                 }
+                owner.active_strips = vec![ActiveStrip::of_mode(plan.clone(), &normalized_next)];
                 owner.active_usb_plan = Some(plan);
             }
 
@@ -633,6 +700,19 @@ fn apply_mode_change_inner(
                 Some(UsbOutputPlan::Wled(_)) => vec![StripRate::Unpaced],
                 None => Vec::new(),
             };
+            let strip_rates: Vec<StripRate> = strip_rates
+                .into_iter()
+                .chain(next_extras.iter().map(|(_, record)| {
+                    StripRate::Wire {
+                        wire_ms: SerialSendBudget::for_strip(
+                            u16::try_from(record.led_count).unwrap_or(u16::MAX),
+                            record.profile,
+                            record.chip,
+                        )
+                        .wire_ms,
+                    }
+                }))
+                .collect();
             let capture_interval = capture_interval_for(&strip_rates);
             let frame_source = {
                 let req = AmbilightCaptureRequest {
@@ -691,15 +771,19 @@ fn apply_mode_change_inner(
             let preview_ctx = build_preview_emit_context(owner.preview.preview_gate.clone());
             let room_geometry_live = RoomGeometryLive::new(normalized_next.room_geometry.clone());
 
-            // One strip until the worker fans out: the one the "usb" channel drives, or a layout
-            // sampled for the preview with no output.
-            let strips = vec![StripSpec {
+            // The mode's strip first — the one the "usb" channel drives, or a layout sampled for
+            // the preview with no output — then every strip driven beside it.
+            let mut strips = vec![StripSpec {
                 plan: usb_plan_for_worker.clone(),
                 layout: normalized_next.led_calibration.clone(),
                 profile,
                 chip,
                 correction: corrections,
+                color_order: None,
             }];
+            let (extra_specs, extra_records): (Vec<StripSpec>, Vec<ActiveStrip>) =
+                next_extras.into_iter().unzip();
+            strips.extend(extra_specs);
             match start_ambilight_worker(
                 owner.output_bridge.clone(),
                 strips,
@@ -737,9 +821,35 @@ fn apply_mode_change_inner(
                     owner.preview.pattern_live = pattern_live;
                     owner.preview.scene_worker = owner.preview.scene.is_some();
                     owner.preview.latency_worker = owner.preview.latency_sink.is_some();
+                    // What runs is what started: a strip beside the mode's that would not open is
+                    // neither held nor recorded.
+                    let started: Vec<&ActiveStrip> = extra_records
+                        .iter()
+                        .enumerate()
+                        .filter(|(index, _)| {
+                            owner
+                                .worker
+                                .as_ref()
+                                .is_some_and(|w| w.started.contains(&(index + 1)))
+                        })
+                        .map(|(_, record)| record)
+                        .collect();
                     if let Some(UsbOutputPlan::Serial(port)) = &usb_plan_for_worker {
-                        set_active_port(owner, port.clone(), &outgoing);
+                        let mut ports = vec![port.clone()];
+                        ports.extend(started.iter().filter_map(|strip| match &strip.plan {
+                            UsbOutputPlan::Serial(port) => Some(port.clone()),
+                            UsbOutputPlan::Wled(_) => None,
+                        }));
+                        set_active_ports(owner, ports, &outgoing);
                     }
+                    let mut active_strips: Vec<ActiveStrip> = usb_plan_for_worker
+                        .clone()
+                        .map(|plan| ActiveStrip::of_mode(plan, &owner.active_mode))
+                        .into_iter()
+                        .collect();
+                    active_strips.extend(started.into_iter().cloned());
+                    owner.active_strips = active_strips;
+                    owner.requested_extras = extra_records;
                     owner.active_usb_plan = usb_plan_for_worker;
                     make_result(owner.active_mode.clone(), worker_started(worker_kind))
                 }
@@ -977,11 +1087,22 @@ pub(crate) fn blank_usb_after_off<R: Runtime>(
     if !drove_usb {
         return None;
     }
-    let plan = UsbOutputPlan::from(
-        app.try_state::<LocalOutputRegistry>()
-            .and_then(|registry| registry.driven())?,
-    );
-    Some(blank_plan(app, plan, ended))
+    // Every strip the run drove, each with its own record; taken, so a second Off paints nothing.
+    let ran: Vec<ActiveStrip> = app
+        .try_state::<LightingRuntimeState>()
+        .map(|state| std::mem::take(&mut state.lock_owner_recovered().ended_run))
+        .unwrap_or_default();
+    let Some((first, beside)) = ran.split_first() else {
+        let plan = UsbOutputPlan::from(
+            app.try_state::<LocalOutputRegistry>()
+                .and_then(|registry| registry.driven())?,
+        );
+        return Some(blank_plan(app, plan, ended));
+    };
+    for strip in beside {
+        blank_recorded(app, strip);
+    }
+    Some(blank_recorded(app, first))
 }
 
 /// Paints `port` black with the layout of the mode that last drove it: a strip let go of while lit
@@ -991,7 +1112,11 @@ pub(crate) fn blank_serial_port<R: Runtime>(
     port: &str,
     ended: &LightingModeConfig,
 ) -> Result<(), String> {
-    blank_plan(app, UsbOutputPlan::Serial(port.to_string()), ended).black_frame
+    let plan = UsbOutputPlan::Serial(port.to_string());
+    match recorded_strip(app, &plan) {
+        Some(strip) => blank_recorded(app, &strip).black_frame,
+        None => blank_plan(app, plan, ended).black_frame,
+    }
 }
 
 /// Paints a WLED device black with the layout of the mode that last drove it, before it is switched
@@ -1001,7 +1126,35 @@ pub(crate) fn blank_wled<R: Runtime>(
     config: crate::commands::wled_sink::WledSinkConfig,
     ended: &LightingModeConfig,
 ) -> Result<(), String> {
-    blank_plan(app, UsbOutputPlan::Wled(config), ended).black_frame
+    let plan = UsbOutputPlan::Wled(config);
+    match recorded_strip(app, &plan) {
+        Some(strip) => blank_recorded(app, &strip).black_frame,
+        None => blank_plan(app, plan, ended).black_frame,
+    }
+}
+
+/// The record of the strip on `plan` in the run now going, else in the run that went last.
+fn recorded_strip<R: Runtime>(app: &AppHandle<R>, plan: &UsbOutputPlan) -> Option<ActiveStrip> {
+    let state = app.try_state::<LightingRuntimeState>()?;
+    let owner = state.lock_owner_recovered();
+    owner
+        .active_strips
+        .iter()
+        .chain(owner.ended_run.iter())
+        .find(|strip| &strip.plan == plan)
+        .cloned()
+}
+
+fn blank_recorded<R: Runtime>(app: &AppHandle<R>, strip: &ActiveStrip) -> UsbOff {
+    let bridge = app
+        .state::<LightingRuntimeState>()
+        .lock_owner_recovered()
+        .output_bridge
+        .clone();
+    finish_blank(
+        SolidUsbOutput::for_strip(&bridge, strip),
+        strip.plan.clone(),
+    )
 }
 
 fn blank_plan<R: Runtime>(
@@ -1014,7 +1167,10 @@ fn blank_plan<R: Runtime>(
         .lock_owner_recovered()
         .output_bridge
         .clone();
-    let output = SolidUsbOutput::for_mode(&bridge, plan.clone(), ended);
+    finish_blank(SolidUsbOutput::for_mode(&bridge, plan.clone(), ended), plan)
+}
+
+fn finish_blank(output: SolidUsbOutput, plan: UsbOutputPlan) -> UsbOff {
     let black_frame = output.blank();
     match &black_frame {
         Ok(()) => info!(

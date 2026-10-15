@@ -11,7 +11,7 @@ use super::live::AmbilightLiveSettings;
 use super::pacing::resolve_quality_config;
 use super::runtime::LightingRuntimeOwner;
 use super::strip_set::StripSpec;
-use super::transition::{apply_mode_change, set_active_port, stop_previous, Outgoing};
+use super::transition::{apply_mode_change, set_active_ports, stop_previous, Outgoing};
 use super::tuning::solid_output_for;
 use super::usb_output::UsbOutputPlan;
 use super::worker::start_ambilight_worker;
@@ -195,13 +195,14 @@ fn owner_with_recording_sender() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
 }
 
 // -----------------------------------------------------------------------
-// set_active_port — release the old port's cached session only on switch
+// set_active_ports — release an old port's cached session only on switch
 // -----------------------------------------------------------------------
 
 fn nothing_running() -> Outgoing {
     Outgoing {
         mode: LightingModeConfig::default(),
         plan: None,
+        strips: Vec::new(),
     }
 }
 
@@ -209,17 +210,18 @@ fn lighting(port: &str, total_leds: u16) -> Outgoing {
     Outgoing {
         mode: ambilight_mode_with_calibration(total_leds),
         plan: Some(UsbOutputPlan::Serial(port.to_string())),
+        strips: Vec::new(),
     }
 }
 
-/// The black frame `set_active_port` paints on `COM_A` when the mode that lit it had `total_leds`.
+/// The black frame `set_active_ports` paints on `COM_A` when the mode that lit it had `total_leds`.
 fn black_frame_on_release(total_leds: u16) -> Vec<u8> {
     let (mut owner, recorder) = owner_with_recording_sender();
-    set_active_port(&mut owner, "COM_A".to_string(), &nothing_running());
+    set_active_ports(&mut owner, vec!["COM_A".to_string()], &nothing_running());
 
-    set_active_port(
+    set_active_ports(
         &mut owner,
-        "COM_B".to_string(),
+        vec!["COM_B".to_string()],
         &lighting("COM_A", total_leds),
     );
 
@@ -240,9 +242,13 @@ fn a_released_port_the_outgoing_mode_lit_is_blanked_through_its_session() {
 #[test]
 fn a_released_port_nothing_lit_is_only_let_go() {
     let (mut owner, recorder) = owner_with_recording_sender();
-    set_active_port(&mut owner, "COM_A".to_string(), &nothing_running());
+    set_active_ports(&mut owner, vec!["COM_A".to_string()], &nothing_running());
 
-    set_active_port(&mut owner, "COM_B".to_string(), &lighting("COM_C", 60));
+    set_active_ports(
+        &mut owner,
+        vec!["COM_B".to_string()],
+        &lighting("COM_C", 60),
+    );
 
     assert!(recorder.writes.lock().expect("writes").is_empty());
     assert_eq!(recorder.disconnected_ports(), vec!["COM_A".to_string()]);
@@ -252,8 +258,8 @@ fn a_released_port_nothing_lit_is_only_let_go() {
 fn set_active_port_preserves_same_port_but_releases_a_different_one() {
     let (mut owner, recorder) = owner_with_recording_sender();
 
-    set_active_port(&mut owner, "COM_A".to_string(), &nothing_running());
-    assert_eq!(owner.active_port.as_deref(), Some("COM_A"));
+    set_active_ports(&mut owner, vec!["COM_A".to_string()], &nothing_running());
+    assert_eq!(owner.active_ports, vec!["COM_A".to_string()]);
     assert!(
         recorder.disconnected_ports().is_empty(),
         "first-ever port assignment has nothing to release"
@@ -261,7 +267,7 @@ fn set_active_port_preserves_same_port_but_releases_a_different_one() {
 
     // Same port again — a mode restart on the port already in use. The
     // cached session must be left alone (DTR invariant).
-    set_active_port(&mut owner, "COM_A".to_string(), &nothing_running());
+    set_active_ports(&mut owner, vec!["COM_A".to_string()], &nothing_running());
     assert!(
         recorder.disconnected_ports().is_empty(),
         "re-assigning the SAME port must not release its cached session"
@@ -270,8 +276,8 @@ fn set_active_port_preserves_same_port_but_releases_a_different_one() {
     // A genuine switch — COM_A's cached session must be released so
     // another app (e.g. the Arduino IDE) can open it, and COM_B becomes
     // the new active port without being touched itself.
-    set_active_port(&mut owner, "COM_B".to_string(), &nothing_running());
-    assert_eq!(owner.active_port.as_deref(), Some("COM_B"));
+    set_active_ports(&mut owner, vec!["COM_B".to_string()], &nothing_running());
+    assert_eq!(owner.active_ports, vec!["COM_B".to_string()]);
     assert_eq!(
         recorder.disconnected_ports(),
         vec!["COM_A".to_string()],
@@ -481,7 +487,7 @@ fn switching_ports_through_apply_mode_change_releases_the_old_port_only() {
 
     assert_eq!(apply(&mut owner, "COM_B").status.code, "SOLID_MODE_APPLIED");
     assert_eq!(recorder.disconnected_ports(), vec!["COM_A".to_string()]);
-    assert_eq!(owner.active_port.as_deref(), Some("COM_B"));
+    assert_eq!(owner.active_ports, vec!["COM_B".to_string()]);
 }
 
 #[test]
@@ -570,7 +576,7 @@ fn a_preview_only_test_pattern_never_writes_to_an_unconnected_port() {
     wait_for_worker_count(0);
 
     assert_eq!(writes, 0, "a preview-only test must not open the port");
-    assert_eq!(owner.active_port, None);
+    assert!(owner.active_ports.is_empty());
 }
 
 #[test]
@@ -579,7 +585,7 @@ fn set_ambilight_stops_previous_then_starts_new_runtime() {
     let mut owner = owner_with_fake_sender();
     owner = LightingRuntimeOwner {
         active_mode: ambilight_mode(),
-        active_port: Some("COM1".to_string()),
+        active_ports: vec!["COM1".to_string()],
         worker: Some(
             start_ambilight_worker(
                 owner.output_bridge.clone(),
@@ -589,6 +595,7 @@ fn set_ambilight_stops_previous_then_starts_new_runtime() {
                     profile: crate::commands::led_output::FirmwareProfile::default(),
                     chip: crate::commands::led_output::LedChipType::default(),
                     correction: crate::commands::led_output::ColorCorrectionConfig::default(),
+                    color_order: None,
                 }],
                 AmbilightLiveSettings::new(0.8, false, 0.35, 1.0),
                 (owner.frame_source_factory)(super::runtime::AmbilightCaptureRequest {
@@ -1266,7 +1273,7 @@ fn a_retune_after_the_driven_output_moved_restarts_the_worker_on_the_new_one() {
     let result = apply_driving(&mut owner, mode.clone(), "COM-B");
 
     assert_eq!(result.status.code, "AMBILIGHT_MODE_STARTED");
-    assert_eq!(owner.active_port.as_deref(), Some("COM-B"));
+    assert_eq!(owner.active_ports, vec!["COM-B".to_string()]);
     assert_eq!(
         owner.active_usb_plan,
         Some(UsbOutputPlan::Serial("COM-B".to_string()))

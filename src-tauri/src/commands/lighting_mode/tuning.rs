@@ -482,7 +482,12 @@ pub(crate) fn accepting_for_running<R: Runtime>(
         LightingModeKind::Solid => {
             let targets = owner.active_mode.targets.clone().unwrap_or_default();
             let needs_usb = targets.is_empty() || targets.iter().any(|t| t == "usb");
-            let plan = driven.map(UsbOutputPlan::from);
+            // The strip the running Solid wrote, which is the mode's strip of its set rather than
+            // the earliest connected; the registry's answer only when it recorded none.
+            let plan = owner
+                .active_usb_plan
+                .clone()
+                .or_else(|| driven.map(UsbOutputPlan::from));
             Some(Accepting::Solid {
                 usb: plan
                     .filter(|_| needs_usb)

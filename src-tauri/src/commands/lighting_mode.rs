@@ -122,6 +122,9 @@ mod led_test_pattern_tests;
 mod strip_set_tests;
 
 #[cfg(test)]
+mod fan_out_tests;
+
+#[cfg(test)]
 mod test_support;
 #[cfg(test)]
 pub(crate) use test_support::{

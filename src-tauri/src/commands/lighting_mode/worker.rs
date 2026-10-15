@@ -32,7 +32,7 @@ use crate::commands::hue::state_store::{
 };
 use crate::commands::led_calibration::sample_frame_for_sequence;
 use crate::commands::led_output::{
-    scale_brightness, FirmwareProfile, LedChipType, LedOutputBridge, SerialSink,
+    scale_brightness, FirmwareProfile, LedChipType, LedColorOrder, LedOutputBridge, SerialSink,
 };
 use crate::commands::preview::feed::{twin_colour, twin_colour_linear};
 use crate::commands::runtime_telemetry::{RuntimeTelemetryWindow, SharedRuntimeTelemetry};
@@ -170,6 +170,8 @@ struct StripOutput {
     /// The pipeline stage it sends.
     stage: usize,
     sink: ActiveUsbSink,
+    /// Its own colour order, or `None` to follow the live one.
+    color_order: Option<LedColorOrder>,
     gate: AmbilightWorkerQualityState,
     /// This output step's send time, for its gate's cost on a new frame.
     send_ms: f32,
@@ -187,8 +189,10 @@ fn read_frame_settings(live_settings: &AmbilightLiveSettings) -> FrameSettings {
 }
 
 /// `strips` are sampled and sent in order; one with no plan is sampled for the preview and sent
-/// nowhere. `hue_output` is the Hue runtime's slot, handed over only when the mode's targets name
-/// Hue.
+/// nowhere. The first is the strip the mode is for: an output of it that cannot start fails the
+/// worker, as the one strip always did. Any other that cannot is left out with a warning, and
+/// `started` says which ran. `hue_output` is the Hue runtime's slot, handed over only when the
+/// mode's targets name Hue.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn start_ambilight_worker(
     output_bridge: LedOutputBridge,
@@ -244,6 +248,8 @@ pub(super) fn start_ambilight_worker(
     let mut stages = Vec::with_capacity(strips.len());
     let mut initial_sampled = Vec::with_capacity(strips.len());
     let mut outputs: Vec<StripOutput> = Vec::new();
+    // The link the slowest strip leaves: what the telemetry reports for the run.
+    let mut worst_budget: Option<(f32, bool)> = None;
     for (stage, spec) in strips.iter().enumerate() {
         // Per-LED calibration: build the strip sequence once at worker start. Each iteration calls
         // sample_frame_for_sequence to produce per-LED colours from edge regions of the captured frame.
@@ -283,7 +289,13 @@ pub(super) fn start_ambilight_worker(
         // session must report `link_max_fps: 0.0` / unconstrained, the same as
         // a Hue-only session (see contract note on `RuntimeTelemetrySnapshot`).
         if let Some(budget) = serial_budget {
-            telemetry_window.set_link_budget(budget.link_max_fps, budget.is_link_constrained());
+            worst_budget = Some(match worst_budget {
+                None => (budget.link_max_fps, budget.is_link_constrained()),
+                Some((fps, constrained)) => (
+                    fps.min(budget.link_max_fps),
+                    constrained || budget.is_link_constrained(),
+                ),
+            });
         }
         // Built once at worker start; brightness and colour order are synced each
         // output step via `set_brightness` / `set_color_order` before `send_frame`.
@@ -300,15 +312,25 @@ pub(super) fn start_ambilight_worker(
                 ActiveUsbSink::Wled(CorrectedWledSink::new(cfg.build(), spec.correction.clone()))
             }
         };
-        sink.start()?;
+        if let Err(reason) = sink.start() {
+            if stage == 0 {
+                return Err(reason);
+            }
+            warn!("[start_ambilight_worker] strip {stage} left out — its output did not start: {reason}");
+            continue;
+        }
         outputs.push(StripOutput {
             stage,
             sink,
+            color_order: spec.color_order,
             gate: AmbilightWorkerQualityState::new(quality_config),
             send_ms: 0.0,
             send_count: 0,
             fail_count: 0,
         });
+    }
+    if let Some((fps, constrained)) = worst_budget {
+        telemetry_window.set_link_budget(fps, constrained);
     }
     telemetry_window.record_capture();
     // With no strip output, a Hue-only gate keeps the capture cost for the latency report.
@@ -320,17 +342,35 @@ pub(super) fn start_ambilight_worker(
 
     let send_started = Instant::now();
     let mut warmed = false;
-    for output in &mut outputs {
+    let mut first_frame_failed = Vec::new();
+    for (index, output) in outputs.iter_mut().enumerate() {
         output.sink.set_brightness(live_settings.read_brightness());
-        output
-            .sink
-            .set_color_order(live_settings.read_color_order());
+        output.sink.set_color_order(
+            output
+                .color_order
+                .unwrap_or_else(|| live_settings.read_color_order()),
+        );
         if output.gate.should_send_now(Instant::now()) {
             AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
-            output.sink.send_frame(&initial_sampled[output.stage])?;
-            warmed = true;
+            match output.sink.send_frame(&initial_sampled[output.stage]) {
+                Ok(()) => warmed = true,
+                Err(reason) if output.stage == 0 => return Err(reason),
+                Err(reason) => {
+                    warn!(
+                        "[start_ambilight_worker] strip {} left out — its first frame failed: {reason}",
+                        output.stage
+                    );
+                    first_frame_failed.push(index);
+                }
+            }
         }
     }
+    for index in first_frame_failed.into_iter().rev() {
+        let mut dropped = outputs.remove(index);
+        let _ = dropped.sink.stop();
+    }
+    // The strips whose outputs run, by their place in `strips`.
+    let started: Vec<usize> = outputs.iter().map(|output| output.stage).collect();
     if warmed {
         telemetry_window.record_send();
     }
@@ -585,7 +625,9 @@ pub(super) fn start_ambilight_worker(
                 }
                 let output_started = Instant::now();
                 output.sink.set_brightness(brightness);
-                output.sink.set_color_order(color_order);
+                output
+                    .sink
+                    .set_color_order(output.color_order.unwrap_or(color_order));
                 AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
                 let strip = pipeline.strip_frame(output.stage);
                 match output.sink.send_frame(strip) {
@@ -726,6 +768,7 @@ pub(super) fn start_ambilight_worker(
     Ok(LightingWorkerRuntime {
         cancel,
         handle,
+        started,
         telemetry: telemetry_snapshot_for_stop,
         _frame_source: frame_source_arc,
     })

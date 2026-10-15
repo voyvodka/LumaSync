@@ -87,12 +87,24 @@ the saved `ledStrips` — a port by name, a WLED device by its address alone, as
 device again keeps its place whatever port or LED count its saved sink carries. Every connected
 output is driven, with its strip or with none (a port connected before a strip was saved for it is
 driven as it always was); a saved strip that matches no connected output is left out as
-`NotConnected`, and a second one on a port already taken as `DuplicateTransport`. Whether a strip is
-enabled or has a layout decides nothing yet. The mode apply, a preview scene and the test pattern
-plan from it — `StripSet::plan_args` is the three channel arguments `apply_mode_change` takes, from
-the earliest connected output, so the worker still drives one — and the set the last apply was
-planned with stays on the runtime owner (`strips`) and in its log line, for the fan-out to drive the
-rest. `active_port` and `active_usb_plan` still say what the running mode writes.
+`NotConnected`, and a second one on a port already taken as `DuplicateTransport`. The mode is for
+one of them (`payload_index`): the saved primary — the first enabled saved strip, the one every
+setting with no strip named applies to — when it is connected, else the earliest connected, so a
+setup whose primary is unplugged still lights the strip that is there. `plan_args` is that strip's
+channel arguments. Before, the earliest connected took the mode whatever was saved, and with two
+connected the first port in could be sent the other strip's layout. An Ambilight run also drives the
+strips `fan_out` lets beside it: saved, enabled, laid out with more than one LED, on a serial port
+like the mode's own — checked in that order and named when one is left out (`Disabled`, `NoLayout`,
+`InvalidLayout`, `OtherTransport`); a connected port no strip names is not driven beside it. Each runs
+from its own saved layout, profile, chip and colour order, and the one top-level colour correction;
+a strip's own copy of the correction is not read yet. An effect, a test pattern, a preview scene and
+a latency run stay on the mode's strip alone, an effect until its engine draws per strip, and a WLED
+device beside another waits until it can be switched off when let go. A caller that names its own
+output (`for_plan`: a stop, a test calling the transition directly) gets that output alone. The
+runtime owner keeps what each run actually started (`active_strips`, `active_ports`), not what it
+asked for: a strip beside the mode's that would not open or take its first frame is left out with a
+warning and the run goes on, while the mode's own strip failing still fails the run. A retune keeps
+the worker only when the next apply would ask for the same strips beside it, in the same order.
 
 **One registry holds what is connected: `LocalOutputRegistry` (`local_outputs.rs`).** It keeps a
 status per serial port that passed admission (connected, failed, lost, let go of) and the bound WLED
@@ -111,9 +123,9 @@ the snapshot in one store (`features/device/state/localOutputsStore.ts`) that li
 read — a change between the two is then in the read or in a later event — and keeps the newest
 revision it has seen, since events are sent outside the lock and can arrive out of order. A failed
 attempt on a port that is connected leaves it connected: two reconnects of one port race on the
-open, and the loser must not mark the strip that lights as off. Several outputs can be connected, but
-one is driven until the worker drives several: the earliest connected (a connect stamps its place;
-connecting a connected port again keeps it). A connect never moves the drive — a strip lighting a
+open, and the loser must not mark the strip that lights as off. Several outputs can be connected; the
+registry's own `driven` is the earliest connected (a connect stamps its place; connecting a connected
+port again keeps it), and what a mode drives is the strip set above. A connect never moves the drive — a strip lighting a
 running mode keeps lighting it when a WLED device is bound beside it — only a leave does, and every
 leave (`let_go` in `local_outputs.rs`: a disconnect, a WLED forget, an unplug the watcher sees) runs
 the same way: if the running mode wrote to what left, it re-applies onto the earliest that remains
@@ -267,9 +279,12 @@ nothing else: `SerialSink::stop` writes nothing, so the strip kept the last fram
 unless its firmware blanks on its own after a quiet spell, and a Solid colour stayed up
 indefinitely. A WLED device held the last frame until it left realtime mode (the DRGB packet asks
 for 2 s; DDP uses the device's own timeout), then went back to its own effect or preset — lit.
-Now, once the mode has stopped, `blank_usb_after_off` sends one all-black frame through the same
-Solid path (`SolidUsbOutput::blank`), so profile, chip type, colour order and length all apply and
-the cached serial session is reused rather than reopened. Black pixels at full brightness rather
+Now, once the mode has stopped, `blank_usb_after_off` sends one all-black frame to every strip the
+run drove through the same Solid path (`SolidUsbOutput::blank`), each from the record the run left
+(`ended_run`), so its own profile, chip type, colour order and length apply and its cached serial
+session is reused rather than reopened. A port let go of while lit, by a switch or an unplug, is
+blanked the same way from its record; a Solid after a run of several strips blanks and releases the
+ones beside its own. Black pixels at full brightness rather
 than a zero brightness byte: a firmware may read brightness 0 as "unchanged", never a black pixel as
 anything but off. For WLED the black frame covers the realtime window and
 `power_off_wled` (`wled_discovery.rs`) then sends `POST /json/state {"on":false}`, so the device

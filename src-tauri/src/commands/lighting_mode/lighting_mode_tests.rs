@@ -250,7 +250,7 @@ fn a_recorded_port_without_a_connection_does_not_arm_serial_output() {
     );
 
     assert_eq!(result.status.code, "DEVICE_NOT_CONNECTED");
-    assert_eq!(owner.active_port, None);
+    assert!(owner.active_ports.is_empty());
 }
 
 #[test]

@@ -17,7 +17,7 @@ use super::preview::PreviewRuntime;
 use super::snapshot::LightingSnapshotCell;
 use super::strip_set::StripSet;
 use super::tuning::TuningCell;
-use super::usb_output::{SolidHold, UsbOutputPlan};
+use super::usb_output::{ActiveStrip, SolidHold, UsbOutputPlan};
 use crate::commands::ambilight_capture::{
     create_live_frame_source_at, AmbilightCaptureError, AmbilightFrameSource,
 };
@@ -59,6 +59,8 @@ type AmbilightFrameSourceFactory = dyn Fn(AmbilightCaptureRequest) -> Result<Box
 pub(super) struct LightingWorkerRuntime {
     pub(super) cancel: Arc<AtomicBool>,
     pub(super) handle: JoinHandle<()>,
+    /// The strips whose outputs started, by their place in the strips the worker was given.
+    pub(super) started: Vec<usize>,
     /// Holds the frame source alongside the worker thread.
     ///
     /// The worker thread captures a clone of this Arc. When the thread exits it
@@ -95,17 +97,25 @@ impl LightingWorkerRuntime {
 
 pub(crate) struct LightingRuntimeOwner {
     pub(super) active_mode: LightingModeConfig,
-    /// Port name for the currently active LED session. Cleared in
-    /// `stop_previous`, which deliberately leaves the cached serial handle
-    /// open — reopening the port toggles DTR and resets the MCU.
-    pub(super) active_port: Option<String>,
+    /// The serial ports whose cached sessions the runtime holds, the mode's strip first. Kept by
+    /// `stop_previous`, which deliberately leaves the cached serial handles open — reopening a port
+    /// toggles DTR and resets the MCU; `set_active_ports` lets go of the ones a new run drops.
+    pub(super) active_ports: Vec<String>,
     /// The output the running mode writes the "usb" channel to, `None` when it writes none. The
     /// Ambilight fast path compares against it: a retune must not keep a worker on an output that is
     /// no longer the driven one.
     pub(super) active_usb_plan: Option<UsbOutputPlan>,
-    /// The strips the last apply was planned with. Only the primary is driven until the worker fans
-    /// out; `active_port` and `active_usb_plan` still say what the running mode writes.
+    /// The strips the last apply was planned with.
     pub(super) strips: StripSet,
+    /// Every strip the running mode writes, the mode's strip first — what actually started, not
+    /// what was asked for.
+    pub(super) active_strips: Vec<ActiveStrip>,
+    /// The strips the running Ambilight asked for beside the mode's strip, whether or not each
+    /// started: a retune keeps the run only when the next apply would ask for the same.
+    pub(super) requested_extras: Vec<ActiveStrip>,
+    /// The strips the last run that drove anything wrote, kept past its stop so an Off can paint
+    /// each of them black; taken by the Off that does.
+    pub(super) ended_run: Vec<ActiveStrip>,
     /// Resends a Solid colour to a WLED device while Solid runs there (`SolidHold`).
     pub(super) solid_hold: Option<SolidHold>,
     pub(super) worker: Option<LightingWorkerRuntime>,
@@ -134,9 +144,12 @@ impl Default for LightingRuntimeOwner {
     fn default() -> Self {
         Self {
             active_mode: LightingModeConfig::default(),
-            active_port: None,
+            active_ports: Vec::new(),
             active_usb_plan: None,
             strips: StripSet::default(),
+            active_strips: Vec::new(),
+            requested_extras: Vec::new(),
+            ended_run: Vec::new(),
             solid_hold: None,
             worker: None,
             ambilight_live: None,
@@ -224,25 +237,31 @@ impl LightingRuntimeState {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    /// The running mode writes the "usb" channel to this serial port.
+    /// The running mode writes the "usb" channel, or one of the strips beside it, to this port.
     pub fn drives_serial(&self, port_name: &str) -> bool {
-        matches!(
-            &self.lock_owner_recovered().active_usb_plan,
-            Some(UsbOutputPlan::Serial(port)) if port == port_name
-        )
+        let owner = self.lock_owner_recovered();
+        let names =
+            |plan: &UsbOutputPlan| matches!(plan, UsbOutputPlan::Serial(port) if port == port_name);
+        owner.active_usb_plan.as_ref().is_some_and(names)
+            || owner.active_strips.iter().any(|strip| names(&strip.plan))
     }
 
-    /// The running mode writes the "usb" channel to the WLED device at `ip`.
+    /// The running mode writes the "usb" channel, or one of the strips beside it, to the WLED
+    /// device at `ip`.
     pub fn drives_wled(&self, ip: std::net::Ipv4Addr) -> bool {
-        matches!(
-            &self.lock_owner_recovered().active_usb_plan,
-            Some(UsbOutputPlan::Wled(config)) if config.ip == ip
-        )
+        let owner = self.lock_owner_recovered();
+        let names =
+            |plan: &UsbOutputPlan| matches!(plan, UsbOutputPlan::Wled(config) if config.ip == ip);
+        owner.active_usb_plan.as_ref().is_some_and(names)
+            || owner.active_strips.iter().any(|strip| names(&strip.plan))
     }
 
-    /// `port_name` is the port whose cached writer the runtime holds as its active one.
+    /// `port_name` is one of the ports whose cached writers the runtime holds.
     pub fn holds_port(&self, port_name: &str) -> bool {
-        self.lock_owner_recovered().active_port.as_deref() == Some(port_name)
+        self.lock_owner_recovered()
+            .active_ports
+            .iter()
+            .any(|port| port == port_name)
     }
 
     /// Drops `port_name`'s cached serial writer, for a strip that was unplugged: the next write

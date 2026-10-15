@@ -351,6 +351,13 @@ https://keepachangelog.com/en/1.1.0/
   plan gets that height back. A number applies when you leave it or press Enter, takes a comma or a
   point, and steps with the arrow keys (ten steps with Shift); one out of range, like Esc, puts the
   old value back.
+- Several USB strips at once. Ambilight now lights every saved, enabled strip that is connected
+  and laid out, each from its own layout, firmware, chip and colour order, from one screen capture —
+  the slower strip skips frames on its own link instead of slowing the others. The settings you
+  change without naming a strip are for your first enabled strip, and that strip now gets the mode
+  even when another one was plugged in first. A strip that will not open is left out and the others
+  keep running. Off paints every strip the mode lit black, and Solid, effects, the test pattern and
+  the preview scene still use the first strip alone.
 - Room map: a room can be L-, U- or T-shaped. Room settings has a Shape row — rectangle, L, U or T,
   which corner or wall the cut is at, and its size in metres — and the plan draws the walls along
   that outline with the cut-away part hatched. A wall of the cut can be dragged on the plan, and a

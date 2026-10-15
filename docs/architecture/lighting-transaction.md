@@ -164,8 +164,10 @@ a retry. A target change made while Off stops nothing.
 mode (`reconcile_off`, `user_off`) — ends each output it finds driven with its lights dark, rather
 than letting go and leaving them as the last frame or the device's own state had them:
 
-- **The strip** gets one all-black frame once the mode has stopped (`blank_usb_after_off` in
-  `transition.rs`), encoded like any Solid frame for its profile, chip, order and length. Stopping
+- **Every strip the run drove** gets one all-black frame once the mode has stopped
+  (`blank_usb_after_off` in `transition.rs`), each encoded like any Solid frame for its own profile,
+  chip, order and length from the record the run left on the owner (`ended_run`, taken by the Off
+  that blanks it, so a second Off paints nothing). Stopping
   a mode only stops writing, and a strip holds the last frame it was sent — a Solid colour
   indefinitely. `device-output.md` has the transport detail.
 - **A WLED device** gets the black frame and then `POST /json/state {"on":false}`, beside the Hue
