@@ -231,7 +231,7 @@ describe("making and editing a scene", () => {
     const name = screen.getByTestId("scene-edit-name");
     expect(bar()).toHaveAccessibleName("lights:scenes.save");
     expect(name).toHaveFocus();
-    expect(name).toHaveAttribute("placeholder", "#FF0000");
+    expect(name).toHaveAttribute("placeholder", "lights:scenes.colourNames.red");
     // Nothing is written while it is open.
     expect(getScenes()).toHaveLength(1);
 
@@ -306,6 +306,26 @@ describe("making and editing a scene", () => {
     expect(getScenes()).toEqual([movie]);
     expect(bar()).not.toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Movie" })).toHaveFocus();
+  });
+
+  // The scene's smoothing was still being written when Cancel came: Cancel saw nothing moved, and
+  // the scene landed after it and stayed.
+  it("keeps the scene from landing when Cancel comes while it is still opening", async () => {
+    const movie: StoredScene = {
+      id: "m",
+      kind: "ambilight",
+      name: "Movie",
+      ambilight: { brightness: 0.8, lightingSmoothingPreset: "subtle" },
+    };
+    seed([movie]);
+    const { onApply } = renderPage(RED);
+    await editFromLibrary("m");
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("scene-edit-cancel"));
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    expect(onApply).not.toHaveBeenCalledWith(toModeConfig(movie));
+    expect(getPreference("lightingIntensityPreset")).toBe("moderate");
   });
 
   it("takes a library scene back to its suggested look, once it has moved away from it", async () => {

@@ -82,12 +82,19 @@ export function Scenes({ mode, disabled, busy = false, onApply }: ScenesProps) {
     if (orphaned) setSceneEdit(null);
   }, [orphaned]);
 
-  /** Plays a scene: Rust reads Ambilight's smoothing from the preference, so that lands first. */
-  const play = async (scene: StoredScene) => {
+  // The scene an edit opened on is played as it opens; a Cancel before that lands must stop it
+  // landing, or the scene stayed applied with Cancel believing nothing had moved.
+  const playToken = useRef(0);
+  const opening = useRef<Promise<void> | null>(null);
+
+  /** Plays a scene: Rust reads Ambilight's smoothing from the preference, so that lands first. A
+   *  `token` that is no longer the latest drops the light change. */
+  const play = async (scene: StoredScene, token?: number) => {
     const config = toModeConfig(scene);
     if (!config) return;
     const preset = sceneSmoothing(scene);
     if (preset && preset !== smoothing) await setPreference("lightingIntensityPreset", preset);
+    if (token !== undefined && token !== playToken.current) return;
     onApply(config);
   };
 
@@ -105,7 +112,8 @@ export function Scenes({ mode, disabled, busy = false, onApply }: ScenesProps) {
     setSceneEdit({ sceneId, name: scene?.name ?? "", before: { mode, smoothing } });
     focusByTestId("scene-edit-name");
     if (scene && scene.id !== activeId) {
-      void play(scene).catch((error: unknown) => console.error("[LumaSync] applying the scene failed:", error));
+      const token = ++playToken.current;
+      opening.current = play(scene, token).catch((error: unknown) => console.error("[LumaSync] applying the scene failed:", error));
     }
   };
 
@@ -145,19 +153,24 @@ export function Scenes({ mode, disabled, busy = false, onApply }: ScenesProps) {
   const cancel = () => {
     if (!edit || busy) return;
     const { before, sceneId } = edit;
+    const pending = opening.current;
+    opening.current = null;
+    playToken.current += 1;
     closeEdit(sceneId ? `scene-${sceneId}` : "scene-save");
     // Turned off meanwhile — the power switch, the tray, ⌥1: Cancel does not turn the lights back on.
     if (mode.kind === "off") return;
-    const moved = JSON.stringify(before.mode) !== JSON.stringify(mode) || before.smoothing !== smoothing;
-    if (!moved) return;
+    const moved = JSON.stringify(before.mode) !== JSON.stringify(mode);
+    if (!moved && before.smoothing === smoothing && !pending) return;
     void (async () => {
-      if (before.smoothing !== smoothing) {
+      // The opening play may still be writing the scene's smoothing; it lands first, then goes back.
+      if (pending !== null) await pending;
+      if (getPreference("lightingIntensityPreset") !== before.smoothing) {
         await setPreference("lightingIntensityPreset", before.smoothing);
         // A write that failed puts the preference back where the edit left it: say so, since the
         // light comes back without its response.
         if (getPreference("lightingIntensityPreset") !== before.smoothing) say(t("lights:scenes.restoreFailed"));
       }
-      onApply(before.mode);
+      if (moved || before.smoothing !== smoothing) onApply(before.mode);
     })().catch((error: unknown) => console.error("[LumaSync] putting the light back failed:", error));
   };
 
