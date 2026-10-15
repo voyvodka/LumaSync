@@ -77,7 +77,7 @@ export function ViewStage({
   const handlePick = useCallback(
     (objectId: string | null) => {
       const ref = objectId ? parseObjectId(objectId) : null;
-      if (objectId && ref && (ref.kind === "hue" || ref.kind === "tv")) selectLight(objectId);
+      if (objectId && ref && (ref.kind === "hue" || ref.kind === "tv" || ref.kind === "usb")) selectLight(objectId);
       // A piece of furniture is not empty ground: a click on the sofa kept nothing and dropped the light.
       else if (objectId === null && viewSelectedId !== null) select(null);
       // OrbitControls takes the press, so the root is focused here for Esc to reach it.

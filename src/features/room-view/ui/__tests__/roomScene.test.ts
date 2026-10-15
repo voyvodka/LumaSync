@@ -190,6 +190,22 @@ describe("buildRoomScene — picking and the selection mark", () => {
     disposeScene(room.scene);
   });
 
+  // A strip was listed in the dock and could be picked nowhere in the room.
+  it("offers a strip behind the screen at the screen, and one along a wall where it runs", () => {
+    const strips = [
+      { stripId: "behind", startX: furnished.tvAnchor!.x, startY: furnished.tvAnchor!.y, endX: furnished.tvAnchor!.x + furnished.tvAnchor!.width, endY: furnished.tvAnchor!.y, ledCount: 60 },
+      { stripId: "wall", startX: 0.2, startY: 3.5, endX: 2.2, endY: 3.5, ledCount: 60 },
+    ];
+    const room = buildRoomScene({ ...furnished, usbStrips: strips }, OPTIONS);
+    const ids = room.pickables.map((p) => p.id);
+    expect(ids).toContain("usb-behind");
+    expect(ids).toContain("usb-wall");
+    const behind = room.pickables.find((p) => p.id === "usb-behind")!;
+    const tv = room.pickables.find((p) => p.id === "tv")!;
+    expect(behind.centre).toEqual(tv.centre);
+    disposeScene(room.scene);
+  });
+
   it("moves the mark without adding to the scene, and reports only a change", () => {
     const room = buildRoomScene(furnished, OPTIONS);
     const count = () => {

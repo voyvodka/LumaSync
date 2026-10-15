@@ -175,6 +175,8 @@ https://keepachangelog.com/en/1.1.0/
   - Camera moves ease in about a third of a second instead of jumping: the 3D view's zoom buttons,
     "Whole room" and a double-click's focus, and the plan's zoom buttons, fit and arrow-key pans.
     What the pointer drives — a drag, the wheel, a pinch — still follows it at once.
+  - A USB strip shows in the 3D view: one behind the screen is picked there as its backlight, one
+    along a wall runs as a thin lit line at skirting height, and either one clicked opens its card.
   - In the 3D view each light's chip is filled with the colour its lamp glows in the room, the inner
     walls of a U- or T-shaped room drop when they stand between the camera and the room, Blink waits
     with its reason while Hue streams instead of failing on the press, a table lamp stays on what is

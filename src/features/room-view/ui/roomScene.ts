@@ -4,6 +4,7 @@
 import { lampColour } from "../model/lampColours";
 import {
   AdditiveBlending,
+  BoxGeometry,
   type BufferGeometry,
   DirectionalLight,
   DoubleSide,
@@ -21,7 +22,7 @@ import {
 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
-import { furnitureObjectId, hueChannelObjectId, TV_ANCHOR_OBJECT_ID } from "@/features/room-map/model/objectId";
+import { furnitureObjectId, hueChannelObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "@/features/room-map/model/objectId";
 import { type RoomMapConfig, resolveFurnitureTop, resolveRoomFootprint } from "@/shared/contracts/roomMap";
 
 import type { Pickable } from "../model/picking";
@@ -39,6 +40,11 @@ import { buildScreen } from "./scene/screen";
 import { buildSelectionMark } from "./scene/selection";
 
 /** A wall between the camera and the room drops to this, so the room reads as a cutaway. */
+/** A strip this close to the screen's middle is its backlight. */
+const STRIP_BACKLIGHT_REACH = 1.0;
+/** Where a strip along a wall runs: about skirting height. */
+const STRIP_HEIGHT = 0.08;
+const STRIP_GLOW = 0xffc46b;
 const WALL_CUT_HEIGHT = 0.2;
 /** Parts in these colours are metal or glass: a satin finish instead of the matte one. */
 const SATIN = new Set<number>([PALETTE.metal, PALETTE.metalSoft, PALETTE.bezel, PALETTE.keyboard, PALETTE.handle]);
@@ -194,6 +200,31 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     for (const f of screen.footprints) shadows.push(contactShadow(f.hw, f.hd, f.shade, new Matrix4().makeTranslation(f.x, 0, f.z)));
     scene.add(new Mesh(screen.panel, new MeshBasicMaterial({ vertexColors: true })));
   }
+  // The USB strips: one behind the screen is its backlight, picked there; one along a wall or the
+  // floor runs as a thin lit line at skirting height. A strip was listed in the dock and drawn nowhere.
+  const tvCentre = config.tvAnchor
+    ? { x: config.tvAnchor.x + config.tvAnchor.width / 2, y: config.tvAnchor.y + config.tvAnchor.height / 2 }
+    : null;
+  for (const strip of config.usbStrips) {
+    const mx = (strip.startX + strip.endX) / 2;
+    const my = (strip.startY + strip.endY) / 2;
+    const id = usbStripObjectId(strip.stripId);
+    if (tvCentre && screen && Math.hypot(mx - tvCentre.x, my - tvCentre.y) <= STRIP_BACKLIGHT_REACH) {
+      const { centre, width, height } = screen.layout;
+      pickables.push({ id, kind: "light", centre, half: [width / 2 + 0.05, height / 2 + 0.05, 0.08], angle: 0 });
+      continue;
+    }
+    const length = Math.hypot(strip.endX - strip.startX, strip.endY - strip.startY);
+    if (length < 0.05) continue;
+    const angle = Math.atan2(strip.endY - strip.startY, strip.endX - strip.startX);
+    const centre = roomToScene(mx, my, STRIP_HEIGHT, dims);
+    const bar = new Mesh(new BoxGeometry(length, 0.018, 0.018), new MeshBasicMaterial({ color: STRIP_GLOW }));
+    bar.position.set(centre.x, centre.y, centre.z);
+    bar.rotation.y = -angle;
+    scene.add(bar);
+    pickables.push({ id, kind: "light", centre, half: [length / 2, 0.12, 0.12], angle });
+  }
+
   const matteMesh = mergeParts(matte, solid(0.82));
   if (matteMesh) scene.add(matteMesh);
   const satinMesh = mergeParts(satin, solid(0.38, 0.25));
