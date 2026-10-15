@@ -357,7 +357,8 @@ https://keepachangelog.com/en/1.1.0/
   change without naming a strip are for your first enabled strip, and that strip now gets the mode
   even when another one was plugged in first. A strip that will not open is left out and the others
   keep running. Off paints every strip the mode lit black, and Solid, effects, the test pattern and
-  the preview scene still use the first strip alone.
+  the preview scene still use the first strip alone. The Lights and Devices pages still name one
+  strip as the connected one — the one plugged in first — whichever strips are lit.
 - Room map: a room can be L-, U- or T-shaped. Room settings has a Shape row — rectangle, L, U or T,
   which corner or wall the cut is at, and its size in metres — and the plan draws the walls along
   that outline with the cut-away part hatched. A wall of the cut can be dragged on the plan, and a
