@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { LampFamily } from "@/features/room-view/model/lampFamily";
 import type { CameraCommand } from "@/features/room-view/ui/RoomView3D";
 import { RoomView3DHost } from "@/features/room-view/ui/RoomView3DHost";
-import { roomMood } from "@/features/room-view/model/roomMood";
+import { hexCss, roomMood } from "@/features/room-view/model/roomMood";
 import { useRunningLightingMode } from "@/features/mode/state/lightingControl";
 
 import { deriveHueAreaState } from "../../model/hueAreaState";
@@ -52,6 +52,7 @@ export function ViewStage({
   const identify = useHueIdentify(hueBridgeIp);
   const running = useRunningLightingMode();
   const mood = useMemo(() => roomMood(running), [running]);
+  const lit = useMemo(() => (mood.level > 0 ? { colour: hexCss(mood.lamp), brightness: mood.brightness } : null), [mood]);
 
   const zones = useMemo(
     () => (hueAreaId ? scopedConfig.zones.filter((zone) => zone.entertainmentAreaId === hueAreaId) : scopedConfig.zones),
@@ -183,6 +184,7 @@ export function ViewStage({
         identify={identify}
         canIdentify={hueBridgeConfigured && hueBridgeIp !== null}
         hueStreaming={hueStreaming}
+        lit={lit}
         onSelect={selectLight}
         onBack={() => select(null)}
         onEdit={(id) => {

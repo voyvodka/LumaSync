@@ -165,21 +165,22 @@ describe("RoomView3D", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(100);
     });
-    const orbit = gl.orbits[0]!;
-    const before = orbit.target.clone();
+    const target = () => ({ ...gl.orbits[0]!.target });
+    const distance = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) =>
+      Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+    const before = target();
 
     rerender(<RoomView3D config={config} label="Room" selectedId={hueChannelObjectId(0)} onFail={onFail} />);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1500);
     });
-    const picked = orbit.target.clone();
-    expect(picked.distanceTo(before)).toBeGreaterThan(0.3);
+    expect(distance(target(), before)).toBeGreaterThan(0.3);
 
     rerender(<RoomView3D config={config} label="Room" selectedId={null} onFail={onFail} />);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1500);
     });
-    expect(orbit.target.distanceTo(before)).toBeLessThan(1e-3);
+    expect(distance(target(), before)).toBeLessThan(1e-3);
     unmount();
   });
 

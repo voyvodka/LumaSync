@@ -1,4 +1,4 @@
-import { type MouseEvent, useRef } from "react";
+import { type CSSProperties, type MouseEvent, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 import { cx } from "@/shared/lib/cx";
@@ -13,8 +13,16 @@ import { Disc } from "../dock/InspectorParts";
 import styles from "./ViewLightRow.module.css";
 import { useViewLightLabel } from "./viewLightLabel";
 
+/** The lamps' state in the room: their colour as CSS and the brightness they run at, 0–1. */
+export interface LitLamps {
+  colour: string;
+  brightness: number;
+}
+
 export interface ViewLightRowProps {
   lights: readonly ViewLight[];
+  /** Lit lamps glow in their chips, with their level under the name; null while the lights are off. */
+  lit?: LitLamps | null;
   /** The Hue side of the room; an area not ready says why in place of the lights. */
   hue: PaletteHueArea | null;
   onSelect: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
@@ -22,7 +30,7 @@ export interface ViewLightRowProps {
 
 /** The room's lights as one row of chips that scrolls sideways, then the strips and the screen
  *  with a hint beside them. One tab stop; the arrows walk the chips. */
-export function ViewLightRow({ lights, hue: hueArea, onSelect }: ViewLightRowProps) {
+export function ViewLightRow({ lights, hue: hueArea, lit = null, onSelect }: ViewLightRowProps) {
   const { t } = useTranslation();
   const hue = lights.filter((light) => light.kind === "hue");
   const rest = lights.filter((light) => light.kind !== "hue");
@@ -45,6 +53,7 @@ export function ViewLightRow({ lights, hue: hueArea, onSelect }: ViewLightRowPro
             <Chip
               key={light.id}
               light={light}
+              lit={light.ghost ? null : lit}
               {...tileProps(light.id)}
               onClick={(event) => onSelect(light.id, event)}
             />
@@ -63,10 +72,12 @@ export function ViewLightRow({ lights, hue: hueArea, onSelect }: ViewLightRowPro
 
 function Chip({
   light,
+  lit = null,
   onClick,
   ...roving
 }: {
   light: ViewLight;
+  lit?: LitLamps | null;
   onClick: (event: MouseEvent<HTMLButtonElement>) => void;
 } & ReturnType<ReturnType<typeof usePaletteKeys>["tileProps"]>) {
   const describe = useViewLightLabel();
@@ -75,6 +86,8 @@ function Chip({
     <button
       type="button"
       className={cx(styles.chip, light.ghost && styles.ghost)}
+      data-lit={lit ? "" : undefined}
+      style={lit ? ({ "--chip-glow": lit.colour, "--chip-level": lit.brightness } as CSSProperties) : undefined}
       aria-label={label}
       title={label}
       data-testid={`view-light-${light.id}`}
@@ -91,7 +104,7 @@ function Chip({
       <span className={styles.mark} aria-hidden="true">
         {light.kind === "hue" ? (
           // Filled with the colour its lamp glows in the room, so the chip and the lamp read as one.
-          <Disc ghost={light.ghost} fill={light.glow ?? undefined} />
+          <Disc ghost={light.ghost} fill={lit?.colour ?? light.glow ?? undefined} />
         ) : (
           <span style={{ color: light.kind === "tv" ? TYPE_DOT_COLOR.tv : TYPE_DOT_COLOR.usb, display: "grid" }}>
             {light.kind === "tv" ? <IconTv /> : <IconLed />}

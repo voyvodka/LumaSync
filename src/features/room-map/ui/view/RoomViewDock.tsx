@@ -10,7 +10,7 @@ import type { UsbStripStatus } from "../../state/useUsbStripStatus";
 import { DockFrame } from "../dock/DockFrame";
 import type { PaletteHueArea } from "../dock/HueAreaNote";
 import { ViewLightCard } from "./ViewLightCard";
-import { ViewLightRow } from "./ViewLightRow";
+import { type LitLamps, ViewLightRow } from "./ViewLightRow";
 
 /** Where focus goes once the page a dock press asked for is up. */
 type Pending = "first" | "root" | `chip:${string}`;
@@ -26,6 +26,8 @@ export interface RoomViewDockProps {
   canIdentify: boolean;
   /** Hue is streaming: the bridge will not blink a light, so the card says so before the press. */
   hueStreaming?: boolean;
+  /** The lamps lit in this colour at this brightness (0–1), or null while the lights are off. */
+  lit?: LitLamps | null;
   onSelect: (id: string) => void;
   onBack: () => void;
   onEdit: (id: string) => void;
@@ -48,6 +50,7 @@ export function RoomViewDock({
   identify,
   canIdentify,
   hueStreaming = false,
+  lit = null,
   onSelect,
   onBack,
   onEdit,
@@ -122,6 +125,7 @@ export function RoomViewDock({
       page={page}
       onKeyDown={onKeyDown}
       testId="room-view-dock"
+      glass
       extra={
         <span className="sr-only" role="status" aria-live="polite">
           {announcement}
@@ -160,7 +164,7 @@ export function RoomViewDock({
           onEdit={() => onEdit(selected.id)}
         />
       ) : (
-        <ViewLightRow lights={lights} hue={hue} onSelect={select} />
+        <ViewLightRow lights={lights} hue={hue} lit={lit} onSelect={select} />
       )}
     </DockFrame>
   );

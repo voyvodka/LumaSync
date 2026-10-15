@@ -20,6 +20,13 @@
     transform: translateX(-50%);
   }
   .single { grid-template-columns: minmax(0, 1fr); }
+  /* The View dock floats over a lit room: glass, so the room's light reaches under it. */
+  .glass {
+    border-color: color-mix(in srgb, var(--lm-ink) 10%, transparent);
+    background: color-mix(in srgb, var(--lm-panel-2) 64%, transparent);
+    backdrop-filter: blur(20px) saturate(1.5);
+    box-shadow: 0 16px 40px rgb(0 0 0 / 45%), inset 0 1px 0 color-mix(in srgb, var(--lm-ink) 6%, transparent);
+  }
 
   .separator {
     align-self: stretch;
@@ -40,6 +47,7 @@
     .dock {
       border-color: CanvasText;
       background: Canvas;
+      backdrop-filter: none;
     }
     .separator { background: CanvasText; }
   }

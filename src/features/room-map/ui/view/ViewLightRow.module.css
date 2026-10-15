@@ -51,6 +51,26 @@
   }
   .ghost { color: var(--lm-ink-faint); }
 
+  /* A lit lamp's chip glows in its colour, with its brightness as a bar under the name. */
+  .chip[data-lit] {
+    position: relative;
+    color: var(--lm-ink);
+    background: color-mix(in srgb, var(--chip-glow, var(--lm-amber)) 13%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip-glow, var(--lm-amber)) 22%, transparent);
+  }
+  .chip[data-lit]::after {
+    position: absolute;
+    bottom: 3px;
+    left: 8px;
+    width: calc((100% - 16px) * var(--chip-level, 1));
+    height: 2px;
+    border-radius: 1px;
+    background: var(--chip-glow, var(--lm-amber));
+    box-shadow: 0 0 6px var(--chip-glow, var(--lm-amber));
+    content: "";
+    transition: width var(--lm-dur-quick) var(--lm-ease-out);
+  }
+
   .mark {
     display: grid;
     flex-shrink: 0;
@@ -87,6 +107,8 @@
   @media (forced-colors: active) {
     .scroll[data-more] { mask-image: none; }
     .chip:focus-visible { outline: 2px solid Highlight; }
+    .chip[data-lit] { box-shadow: none; border: 1px solid CanvasText; }
+    .chip[data-lit]::after { background: CanvasText; box-shadow: none; }
     .zone { forced-color-adjust: none; border: 1px solid CanvasText; }
   }
 }
