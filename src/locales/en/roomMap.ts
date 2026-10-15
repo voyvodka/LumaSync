@@ -188,6 +188,8 @@ export default {
     walls: "Walls",
     roomHeight: "Room height",
     roomHeightHint: "Floor to ceiling. Sets how high Hue lights sample the screen.",
+    templates: "Templates…",
+    templatesHint: "Lay the room out from a template. Undo brings this one back.",
     resetMap: "Reset map",
     resetMapHint: "Clears the TV, furniture and images. Strips connected in Devices and your Hue lights stay.",
     resetConfirm: "Reset",
@@ -406,9 +408,14 @@ export default {
       name: "Full room",
       desc: "TV, sofa, coffee table, and armchair",
     },
+    showroom: {
+      name: "Showroom",
+      desc: "Every kind of furniture, side by side",
+    },
     empty: {
       name: "Blank room",
       desc: "Start from scratch",
     },
+    back: "Back to the room",
   },
 };

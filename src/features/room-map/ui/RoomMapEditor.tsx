@@ -87,6 +87,8 @@ export interface RoomMapEditorProps {
   focusOnMount?: boolean;
   /** Each Hue channel's fixture as the bridge names it, for the inspector's model choice. */
   lampFamilies?: ReadonlyMap<number, LampFamily>;
+  /** Opens the template picker over the room. */
+  onTemplates?: () => void;
 }
 
 const IS_MAC = navigator.platform.includes("Mac");
@@ -116,6 +118,7 @@ export function RoomMapEditor({
   roomAware = null,
   focusOnMount = false,
   lampFamilies = NO_FAMILIES,
+  onTemplates,
 }: RoomMapEditorProps) {
   const { t } = useTranslation();
   const {
@@ -934,6 +937,7 @@ export function RoomMapEditor({
               : undefined,
           }}
           onReset={reset}
+          onTemplates={onTemplates}
           onSelect={selectFromList}
           onSelectZone={selectHueZone}
           onPopSelection={popSelection}

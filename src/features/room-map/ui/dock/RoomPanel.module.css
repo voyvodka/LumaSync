@@ -88,6 +88,7 @@
   }
 
   /* Starting over asks first, so the button itself stays a quiet line of red text. */
+  .templates,
   .reset {
     align-self: flex-start;
     height: 32px;
@@ -100,16 +101,25 @@
     cursor: pointer;
     transition: background var(--lm-dur-quick);
   }
+  .templates { color: var(--lm-ink-dim); }
+  .templates:hover {
+    background: var(--lm-panel-2);
+    color: var(--lm-ink);
+  }
   .reset:hover { background: color-mix(in srgb, var(--lm-red) 10%, transparent); }
+  .templates:focus-visible,
   .reset:focus-visible {
     outline: 2px solid transparent;
     box-shadow: var(--lm-focus-ring-inset);
   }
 
+  :global(:root[data-reduced-motion]) .templates,
   :global(:root[data-reduced-motion]) .reset { transition: none; }
 
   @media (forced-colors: active) {
+    .templates,
     .reset { color: LinkText; }
+    .templates:focus-visible,
     .reset:focus-visible { outline: 2px solid Highlight; }
   }
 }

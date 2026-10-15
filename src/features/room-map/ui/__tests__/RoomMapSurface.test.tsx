@@ -31,13 +31,14 @@ vi.mock("@/features/persistence/shellStore", () => ({
 // The plan stands in as a button that edits the map and a readout of its history, so a test can
 // tell whether the map outlived a switch.
 vi.mock("../RoomMapEditor", () => ({
-  RoomMapEditor: ({ doc }: { doc: RoomMapDocument }) => (
-    <div data-testid="plan" data-can-undo={String(doc.canUndo)}>
+  RoomMapEditor: ({ doc, onTemplates }: { doc: RoomMapDocument; onTemplates?: () => void }) => (
+    <div data-testid="plan" data-can-undo={String(doc.canUndo)} data-furniture={doc.config.furniture.length}>
       <button
         type="button"
         data-testid="plan-edit"
         onClick={() => doc.apply({ dimensions: { ...doc.config.dimensions, widthMeters: 6 } })}
       />
+      <button type="button" data-testid="plan-templates" onClick={onTemplates} />
     </div>
   ),
 }));
@@ -63,7 +64,12 @@ vi.mock("../../state/useHueLampFamilies", () => ({
 }));
 
 vi.mock("../TemplateSelector", () => ({
-  TemplateSelector: () => <div data-testid="templates" />,
+  TemplateSelector: ({ onSelect, onBack }: { onSelect: (config: RoomMapConfig) => void; onBack?: () => void }) => (
+    <div data-testid="templates">
+      <button type="button" data-testid="template-pick" onClick={() => onSelect({ ...DEFAULT_ROOM_MAP, furniture: [{ id: "f", type: "bed", x: 0, y: 0, width: 1.6, height: 2 }] })} />
+      {onBack && <button type="button" data-testid="template-back" onClick={onBack} />}
+    </div>
+  ),
 }));
 
 const TV = { x: 2, y: 0.2, width: 1.2, height: 0.1 };
@@ -156,6 +162,23 @@ describe("RoomMapSurface — faces", () => {
     expect(screen.getByTestId("templates")).toBeInTheDocument();
     expect(screen.queryByRole("radiogroup")).toBeNull();
     expect(screen.queryByTestId("room-view-3d")).toBeNull();
+  });
+
+  it("opens the templates over a furnished room from the plan, back unchanged or with the pick as one undo step", async () => {
+    await renderSurface({ view3dAvailable: false });
+    fireEvent.click(screen.getByTestId("plan-templates"));
+    expect(screen.getByTestId("templates")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("template-back"));
+    expect(screen.getByTestId("plan")).toHaveAttribute("data-can-undo", "false");
+
+    fireEvent.click(screen.getByTestId("plan-templates"));
+    // The pick saves the map; its write settles inside act.
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("template-pick"));
+    });
+    const plan = screen.getByTestId("plan");
+    expect(plan).toHaveAttribute("data-furniture", "1");
+    expect(plan).toHaveAttribute("data-can-undo", "true");
   });
 
   it("keeps the templates for a map holding only the Hue channels the bridge seeded", async () => {

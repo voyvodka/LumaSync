@@ -52,6 +52,7 @@ export interface RoomDockProps {
   hue: PaletteHueArea | null;
   room: RoomSettings;
   onReset: () => void;
+  onTemplates?: () => void;
   onSelect: (objectId: string) => void;
   onSelectZone: (zoneId: string) => void;
   /** ✕: back one step — an object to its zone, a zone to the palette. */
@@ -257,6 +258,13 @@ export function RoomDock(props: RoomDockProps) {
               setRoomOpen(false);
               setConfirmReset(true);
             }}
+            onTemplates={
+              props.onTemplates &&
+              (() => {
+                setRoomOpen(false);
+                props.onTemplates?.();
+              })
+            }
           />
           <ConfirmPopover
             open={confirmReset}

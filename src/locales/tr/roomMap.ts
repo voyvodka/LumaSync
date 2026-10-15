@@ -191,6 +191,8 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     walls: "Duvarlar",
     roomHeight: "Oda yüksekliği",
     roomHeightHint: "Zeminden tavana. Hue ışıklarının ekranı hangi yükseklikten örnekleyeceğini belirler.",
+    templates: "Şablonlar…",
+    templatesHint: "Odayı bir şablondan kur. Geri al bu odayı geri getirir.",
     resetMap: "Haritayı sıfırla",
     resetMapHint: "TV'yi, mobilyaları ve görselleri temizler. Cihazlar'da bağladığın şeritler ve Hue ışıkların kalır.",
     resetConfirm: "Sıfırla",
@@ -408,10 +410,15 @@ const roomMap: Catalogue<typeof enRoomMap> = {
       name: "Tam oda",
       desc: "TV, koltuk, sehpa ve tekli koltuk",
     },
+    showroom: {
+      name: "Vitrin",
+      desc: "Her eşya türü yan yana",
+    },
     empty: {
       name: "Boş oda",
       desc: "Sıfırdan başla",
     },
+    back: "Odaya dön",
   },
 };
 

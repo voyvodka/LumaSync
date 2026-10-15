@@ -70,6 +70,7 @@ export function RoomMapSurface({
   const [face, setFace] = useState<RoomFace>(view3dAvailable && !viewFailed ? ROOM_FACES.VIEW : ROOM_FACES.EDIT);
   // The first face appears as the map opens; only a switch fades one in.
   const [switched, setSwitched] = useState(false);
+  const [picking, setPicking] = useState(false);
   // Edit opened from the light card takes the keys, or they would fall to the page with the card.
   const [editTakesFocus, setEditTakesFocus] = useState(false);
   // Edit reads them too: a Hue light's inspector names the model the bridge reports.
@@ -92,6 +93,8 @@ export function RoomMapSurface({
     (template: RoomMapConfig) => {
       const next = applyRoomTemplate(config, template);
       replace(next);
+      setPicking(false);
+      setEditTakesFocus(true);
       // A blank room has nothing to look at: it opens where it is drawn.
       if (isRoomMapEmpty(next)) setFace(ROOM_FACES.EDIT);
     },
@@ -110,6 +113,17 @@ export function RoomMapSurface({
   // template keeps the editor: its Redo is the way back, and the picker had none.
   if (isRoomMapEmpty(config) && !doc.canUndo && !doc.canRedo) {
     return <TemplateSelector onSelect={handleTemplateSelect} />;
+  }
+  if (picking) {
+    return (
+      <TemplateSelector
+        onSelect={handleTemplateSelect}
+        onBack={() => {
+          setPicking(false);
+          setEditTakesFocus(true);
+        }}
+      />
+    );
   }
 
   const roomAware = roomAwareStatus(config.tvAnchor, outputTargets, {
@@ -144,6 +158,7 @@ export function RoomMapSurface({
             roomAware={roomAware}
             focusOnMount={editTakesFocus}
             lampFamilies={lampFamilies}
+            onTemplates={() => setPicking(true)}
           />
         )}
       </div>

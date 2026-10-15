@@ -213,6 +213,9 @@ https://keepachangelog.com/en/1.1.0/
     and a fridge, read from the piece's shape unless one is picked. Chairs can be stools or a
     beanbag and storage a chest of drawers. Like a bed, a kitchen shows an error screen in versions
     before this one.
+  - Room settings → "Templates…" opens the templates over a furnished room too, with a way back;
+    a template picked there is one undo step. A new "Showroom" template lays out every kind of
+    furniture in every model it comes in, side by side, in a 10 × 8 m room.
   - A USB strip is drawn at its real width, about a centimetre, flat on its wall or the floor, and
     its card takes a height for the 3D room (empty runs it at the skirting along a wall, on the floor
     elsewhere) and offers "Onto the wall" to lay it along the nearest wall.

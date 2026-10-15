@@ -54,6 +54,7 @@ export function RoomPanel({
   id,
   settings,
   onReset,
+  onTemplates,
 }: {
   open: boolean;
   onClose: () => void;
@@ -62,6 +63,8 @@ export function RoomPanel({
   settings: RoomSettings;
   /** Asks first: the panel closes and the question takes its place. */
   onReset: () => void;
+  /** Opens the template picker over the room; a pick is one undo step. */
+  onTemplates?: () => void;
 }) {
   const { t } = useTranslation();
   const hintId = useId();
@@ -147,6 +150,14 @@ export function RoomPanel({
 
         <hr className={styles.rule} />
 
+        {onTemplates && (
+          <>
+            <button type="button" className={styles.templates} aria-describedby={`${hintId}-templates`} onClick={onTemplates}>
+              {t("roomMap:settings.templates")}
+            </button>
+            <FieldHint id={`${hintId}-templates`}>{t("roomMap:settings.templatesHint")}</FieldHint>
+          </>
+        )}
         <button type="button" className={styles.reset} aria-describedby={`${hintId}-reset`} onClick={onReset}>
           {t("roomMap:settings.resetMap")}
         </button>

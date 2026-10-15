@@ -1,6 +1,6 @@
 // Room height drives Hue's vertical sampling, every metre readout on a Hue
 // channel, and the TV's "above the ceiling" check — and had no field at all.
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -29,14 +29,14 @@ function settings(overrides: Partial<RoomSettings> = {}): RoomSettings {
   };
 }
 
-function Harness({ values, onReset }: { values: RoomSettings; onReset: () => void }) {
+function Harness({ values, onReset, onTemplates }: { values: RoomSettings; onReset: () => void; onTemplates?: () => void }) {
   const anchorRef = useRef<HTMLButtonElement | null>(null);
   return (
     <>
       <button ref={anchorRef} type="button">
         anchor
       </button>
-      <RoomPanel open onClose={vi.fn<() => void>()} anchorRef={anchorRef} id="room" settings={values} onReset={onReset} />
+      <RoomPanel open onClose={vi.fn<() => void>()} anchorRef={anchorRef} id="room" settings={values} onReset={onReset} onTemplates={onTemplates} />
     </>
   );
 }
@@ -89,6 +89,16 @@ describe("RoomPanel — what the plan draws", () => {
     fireEvent.click(screen.getByRole("switch", { name: "roomMap:settings.showHueZones" }));
     expect(values.onShowGridChange).toHaveBeenCalledWith(true);
     expect(values.onShowHueZonesChange).toHaveBeenCalledWith(false);
+  });
+
+  it("opens the templates from the panel where the editor offers them", () => {
+    renderPanel();
+    expect(screen.queryByRole("button", { name: "roomMap:settings.templates" })).toBeNull();
+    cleanup();
+    const onTemplates = vi.fn<() => void>();
+    render(<Harness values={settings()} onReset={vi.fn<() => void>()} onTemplates={onTemplates} />);
+    fireEvent.click(screen.getByRole("button", { name: "roomMap:settings.templates" }));
+    expect(onTemplates).toHaveBeenCalledTimes(1);
   });
 
   it("asks before a reset rather than resetting from the panel", () => {
