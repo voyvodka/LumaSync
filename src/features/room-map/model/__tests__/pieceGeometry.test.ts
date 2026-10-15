@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { clampInsideRoom, keepPlacedInside, keepStripInside, landCarriedPiece, resizeFromHandle } from "../pieceGeometry";
+import { clampInsideRoom, freeSpotFor, keepPlacedInside, keepStripInside, landCarriedPiece, resizeFromHandle } from "../pieceGeometry";
 
 const room = { width: 5, depth: 4 };
 
@@ -72,5 +72,22 @@ describe("keepStripInside", () => {
   it("slides a strip whole until both its ends are inside", () => {
     expect(keepStripInside({ startX: 4.5, startY: 1, endX: 5.5, endY: 1 }, room)).toEqual({ startX: 4, startY: 1, endX: 5, endY: 1 });
     expect(keepStripInside({ startX: 1, startY: -1, endX: 1, endY: 0.5 }, room)).toEqual({ startX: 1, startY: 0, endX: 1, endY: 1.5 });
+  });
+});
+
+describe("freeSpotFor", () => {
+  it("takes the middle of an empty room", () => {
+    expect(freeSpotFor(1, 1, room, [])).toEqual({ x: 2, y: 1.5 });
+  });
+
+  it("keeps clear of what stands there, and of the cut", () => {
+    const table = { x: 2, y: 1.5, width: 1, height: 1 };
+    const spot = freeSpotFor(1, 1, room, [table], (x) => x <= 2.5)!;
+    expect(spot.x + 1).toBeLessThanOrEqual(2.5);
+    expect(spot.x + 1 <= table.x - 0.05 || spot.y + 1 <= table.y - 0.05 || spot.y >= table.y + 1.05).toBe(true);
+  });
+
+  it("says when the room has no room left", () => {
+    expect(freeSpotFor(1, 1, room, [{ x: 0, y: 0, width: 5, height: 4 }])).toBeNull();
   });
 });

@@ -6,7 +6,10 @@ import type {
   TvAnchorPlacement,
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
+import { resolveFurnitureType, resolveRoomFootprint } from "@/shared/contracts/roomMap";
 import { FURNITURE_DEFAULT_SIZE } from "../model/furnitureKinds";
+import { freeSpotFor } from "../model/pieceGeometry";
+import { outsideOutline } from "../model/roomFootprint";
 import { furnitureObjectId, parseObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "../model/objectId";
 import { roomObjectAdapter, type NudgeDirection } from "../model/roomObjectKinds";
 import type { ApplyOptions } from "./useRoomMapState";
@@ -69,11 +72,20 @@ export function useRoomMapObjects({
     (type: FurniturePlacement["type"]) => {
       const id = `furniture-${crypto.randomUUID()}`;
       const size = FURNITURE_DEFAULT_SIZE[type];
-      // The room's middle, stepped 30 cm down-right past every piece already sitting there, so a
-      // second one added does not land exactly on the first and hide it.
-      let x = widthMeters / 2 - size.width / 2;
-      let y = depthMeters / 2 - size.depth / 2;
-      for (let tries = 0; tries < 8 && config.furniture.some((f) => Math.abs(f.x - x) < 0.05 && Math.abs(f.y - y) < 0.05); tries++) {
+      // The free place nearest the room's middle: a rug may go under furniture, so it keeps clear of
+      // other rugs only; anything else keeps clear of every piece but the rugs, and of the TV.
+      const rug = type === "rug";
+      const around = [
+        ...config.furniture.filter((f) => (resolveFurnitureType(f.type) === "rug") === rug),
+        ...(config.tvAnchor && !rug ? [config.tvAnchor] : []),
+      ];
+      const outline = resolveRoomFootprint(config);
+      const spot = freeSpotFor(size.width, size.depth, { width: widthMeters, depth: depthMeters }, around, (px, py) => !outsideOutline(px, py, outline));
+      let x = spot?.x ?? widthMeters / 2 - size.width / 2;
+      let y = spot?.y ?? depthMeters / 2 - size.depth / 2;
+      // A full room: the middle, stepped 30 cm down-right past every piece already sitting there, so
+      // a second one added does not land exactly on the first and hide it.
+      for (let tries = 0; !spot && tries < 8 && config.furniture.some((f) => Math.abs(f.x - x) < 0.05 && Math.abs(f.y - y) < 0.05); tries++) {
         x = Math.min(x + 0.3, Math.max(0, widthMeters - size.width));
         y = Math.min(y + 0.3, Math.max(0, depthMeters - size.depth));
       }
@@ -89,7 +101,7 @@ export function useRoomMapObjects({
       apply({ furniture: [...config.furniture, newItem] });
       select(furnitureObjectId(id));
     },
-    [widthMeters, depthMeters, config.furniture, apply, select, t],
+    [widthMeters, depthMeters, config, apply, select, t],
   );
 
   const handleAddUsb = useCallback(() => {

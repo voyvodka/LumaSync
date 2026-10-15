@@ -226,15 +226,27 @@ describe("useRoomMapObjects — an added object comes selected", () => {
   });
 });
 
-describe("useRoomMapObjects — a second piece does not land on the first", () => {
-  it("steps a piece added onto an occupied middle down and right", () => {
+describe("useRoomMapObjects — a new piece lands where nothing stands", () => {
+  const overlaps = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
+    a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
+  // A new plant used to land on the coffee table, over the lights standing on it.
+  it("puts a second piece beside the first instead of on it", () => {
     const { result, written } = renderObjects(DEFAULT_ROOM_MAP);
     act(() => result.current.handleAddFurniture("sofa"));
     const first = written(0).furniture[0]!;
     const { result: again, written: writtenAgain } = renderObjects({ ...DEFAULT_ROOM_MAP, furniture: [first] });
-    act(() => again.current.handleAddFurniture("sofa"));
+    act(() => again.current.handleAddFurniture("plant"));
     const second = writtenAgain(0).furniture[1]!;
-    expect(second.x).toBeCloseTo(first.x + 0.3);
-    expect(second.y).toBeCloseTo(first.y + 0.3);
+    expect(overlaps(first, second)).toBe(false);
+  });
+
+  it("lets a rug go under furniture, where it belongs", () => {
+    const { result, written } = renderObjects(DEFAULT_ROOM_MAP);
+    act(() => result.current.handleAddFurniture("sofa"));
+    const sofa = written(0).furniture[0]!;
+    const { result: again, written: writtenAgain } = renderObjects({ ...DEFAULT_ROOM_MAP, furniture: [sofa] });
+    act(() => again.current.handleAddFurniture("rug"));
+    expect(overlaps(sofa, writtenAgain(0).furniture[1]!)).toBe(true);
   });
 });

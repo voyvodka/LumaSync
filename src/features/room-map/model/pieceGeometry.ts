@@ -147,3 +147,52 @@ export function keepStripInside<T extends { startX: number; startY: number; endX
     endY: mm(strip.endY + dy),
   };
 }
+
+interface Footprint {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation?: number;
+}
+
+const GAP_M = 0.05;
+const STEP_M = 0.1;
+
+/**
+ * The top-left for a new `w` × `h` piece nearest the room's middle where it covers nothing in
+ * `around` and lies inside the outline (`inside` says whether a point is in the room); `null` when
+ * the room has no such place. A new plant used to land on the coffee table, over its lights.
+ */
+export function freeSpotFor(
+  w: number,
+  h: number,
+  room: RoomBox,
+  around: readonly Footprint[],
+  inside: (x: number, y: number) => boolean = () => true,
+): { x: number; y: number } | null {
+  const boxes = around.map((p) => {
+    const { hx, hy } = coveredHalf({ w: p.width, h: p.height, r: p.rotation ?? 0 });
+    return { cx: p.x + p.width / 2, cy: p.y + p.height / 2, hx, hy };
+  });
+  const candidates: { x: number; y: number; d: number }[] = [];
+  for (let x = 0; x + w <= room.width + 1e-9; x += STEP_M) {
+    for (let y = 0; y + h <= room.depth + 1e-9; y += STEP_M) {
+      const cx = x + w / 2;
+      const cy = y + h / 2;
+      candidates.push({ x, y, d: Math.hypot(cx - room.width / 2, cy - room.depth / 2) });
+    }
+  }
+  candidates.sort((a, b) => a.d - b.d);
+  for (const c of candidates) {
+    const cx = c.x + w / 2;
+    const cy = c.y + h / 2;
+    const clear = boxes.every(
+      (b) => Math.abs(cx - b.cx) >= w / 2 + b.hx + GAP_M || Math.abs(cy - b.cy) >= h / 2 + b.hy + GAP_M,
+    );
+    if (!clear) continue;
+    if (![c.x, c.x + w].every((px) => [c.y, c.y + h].every((py) => inside(px, py)))) continue;
+    return { x: Math.round(c.x * 100) / 100, y: Math.round(c.y * 100) / 100 };
+  }
+  return null;
+}
