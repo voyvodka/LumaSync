@@ -105,6 +105,11 @@ describe("CornerControls", () => {
     expect(Array.from(dialog.querySelectorAll("kbd"), (key) => key.textContent)).not.toContain("F");
   });
 
+  it("names no carrying in View's camera hint, since View moves nothing", () => {
+    render(<CornerControls roomAware={null} view={{ onZoomIn: vi.fn<() => void>(), onZoomOut: vi.fn<() => void>(), onReset: vi.fn<() => void>() }} />);
+    expect(screen.getByRole("button", { name: "roomMap:view.resetCamera" })).toHaveAttribute("title", "roomMap:view.cameraHint");
+  });
+
   // Editing in 3D: the plan's zoom means nothing to the room, but undo still does.
   it("offers the stage, the camera and the history alone while the room is edited in 3D", () => {
     const onChange = vi.fn<(stage: EditStage) => void>();
@@ -113,7 +118,7 @@ describe("CornerControls", () => {
       <CornerControls
         roomAware={null}
         stage={{ value: EDIT_STAGES.ROOM, onChange }}
-        view={{ onZoomIn: vi.fn<() => void>(), onZoomOut: vi.fn<() => void>(), onReset: vi.fn<() => void>() }}
+        view={{ onZoomIn: vi.fn<() => void>(), onZoomOut: vi.fn<() => void>(), onReset: vi.fn<() => void>(), carries: true }}
         history={{ canUndo: true, canRedo: false, onUndo, onRedo: vi.fn<() => void>() }}
       />,
     );
@@ -123,7 +128,7 @@ describe("CornerControls", () => {
     fireEvent.click(screen.getByRole("button", { name: "roomMap:toolbar.undo" }));
     expect(onUndo).toHaveBeenCalledOnce();
     expect(screen.queryByRole("button", { name: "roomMap:zoomControl.fit" })).toBeNull();
-    expect(screen.getByRole("button", { name: "roomMap:view.resetCamera" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "roomMap:view.resetCamera" })).toHaveAttribute("title", "roomMap:view.cameraCarryHint");
     // One capsule, as on the plan, so undo stays put across a stage switch.
     expect(screen.getByRole("button", { name: "roomMap:toolbar.undo" }).parentElement).toContainElement(
       screen.getByRole("button", { name: "roomMap:view.resetCamera" }),

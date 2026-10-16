@@ -199,12 +199,11 @@ https://keepachangelog.com/en/1.1.0/
     switch's plate slides as View | Edit's does. The room map's other switches move as well: the
     right-click menu rises in, the Room-aware note opens as a popover (and as a growing row on
     Lights), and the lights button's mode name and dot fade from one mode to the next.
-  - In the 3D view a piece of furniture can be picked up and carried across the floor: the piece
-    itself follows the pointer in an amber frame, a desk taking its monitor along, and it lands
-    there on release, inside the walls (Esc puts it back); a Hue lamp moves as the frame alone.
-    While it
-    is held the wheel or R turns it in 15° steps (⇧R the other way); a drag on anything else still
-    turns the room. Wardrobes are drawn as a run of doors standing proud of the
+  - In Edit's 3D room a piece of furniture can be picked up and carried across the floor: the
+    piece itself follows the pointer in an amber frame, a desk taking its monitor along, and it
+    lands there on release, inside the walls (Esc puts it back); a Hue lamp moves as the frame
+    alone. While it is held the wheel or R turns it in 15° steps (⇧R the other way); a drag on
+    anything else still turns the room. View only looks: there a drag always turns the room. Wardrobes are drawn as a run of doors standing proud of the
     carcass with shadow gaps, long bar handles, a cornice and a set-back plinth.
   - The plan opens already framed instead of sliding into place, and switching between the plan and
     the 3D view keeps where each was looking for the session (a resized room is framed afresh).

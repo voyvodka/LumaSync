@@ -62,8 +62,9 @@ they are a page's choice, and the popover keeps to what the room changes as you 
 — 3D | Plan in its corner — swaps only what the room is drawn as: `RoomView3DHost` or
 `RoomMapCanvas` in the same slot, under the same dock, history, keys and save. So everything the dock
 does is done in 3D too: the palette adds a piece on free floor, a pick in the room opens its card,
-Delete, ⌘Z and the arrows work, and a selected piece or light is carried and turned as in View
-(`useLandCarried`, the one landing both 3D stages share). What only the plan draws stays there — the
+Delete, ⌘Z and the arrows work, and a selected piece or light is carried and turned
+(`useLandCarried`). View carries nothing: it is for looking at the room and its lights, and a drag
+there that moved the sofa while turning the room was a layout change made by accident. What only the plan draws stays there — the
 walls' handles, a strip's ends and corners, image layers and Hue zones — so picking or adding an image
 or a zone opens the plan for it (an image only once the file dialog returns one), and going back to 3D
 closes that card. The plan's own switches and keys step aside in 3D: the grid and zone-outline switches
@@ -213,8 +214,8 @@ scene hands back one oriented box per light, piece and screen (`room-view/model/
 click tests the ray against those. A light the ray passes through wins over a nearer piece, so a
 lamp on a desk or half behind the sofa is still the one clicked, and a light is picked as if it were
 at least 32 px across at the current zoom. A press that moves more than 3 px turns the room instead,
-as on the plan. A click on furniture reads as the ground — View has nothing to say about a piece, and
-Edit is one switch away — and a furniture or image selection made in Edit is shown as nothing in
+as on the plan. A click on furniture keeps the light that was selected — View has nothing to say
+about a piece, and Edit is one switch away — and a furniture or image selection made in Edit is shown as nothing in
 View but left stored for the way back. The selection's mark (`scene/selection.ts`) is moved, never
 rebuilt: a floor outline under a piece, a frame in front of the screen, and for a light a ring that
 faces the camera, never under 20 px, with a faint copy drawn through whatever stands in front. The
@@ -290,7 +291,7 @@ near its start. Esc mid-drag restores the start and writes nothing, caught on th
 the editor's own Esc so the selection survives. A drag also stops at the room's walls, the same
 `keepPlacedInside` / `keepStripInside` that typed positions and arrow nudges go through.
 
-In the 3D room only the selected object is carried (`pressStartsCarry` in
+In Edit's 3D room only the selected object is carried (`pressStartsCarry` in
 `room-view/model/carryIntent.ts`); a drag that starts on anything else turns the room. Carrying from
 any press made turning the room from over the sofa move the sofa — most of the view is furniture.
 The cost is one click before a move, and the camera hint says so. Furniture, the TV, a strip and a

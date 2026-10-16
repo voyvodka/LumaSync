@@ -47,6 +47,8 @@ export interface CornerViewControls {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onReset: () => void;
+  /** Edit's 3D stage, where the selected object can be carried; its hint names that. */
+  carries?: boolean;
 }
 
 /** The top-right corner over either face: in Edit, the stage, then history, zoom and the keys in
@@ -161,7 +163,7 @@ function CameraButtons({ view }: { view: CornerViewControls }) {
       <IconButton
         className={styles.button}
         label={t("roomMap:view.resetCamera")}
-        title={t("roomMap:view.cameraHint")}
+        title={t(view.carries ? "roomMap:view.cameraCarryHint" : "roomMap:view.cameraHint")}
         icon={<IconResetView />}
         onClick={view.onReset}
         data-testid="view-reset-camera"

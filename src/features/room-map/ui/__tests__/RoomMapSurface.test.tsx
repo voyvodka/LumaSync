@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 
+import { furnitureObjectId, TV_ANCHOR_OBJECT_ID } from "../../model/objectId";
 import type { RoomMapDocument } from "../../state/useRoomMapDocument";
 import { __resetRoomViewFailure, RoomMapSurface } from "../RoomMapSurface";
 
@@ -43,12 +44,20 @@ vi.mock("../RoomMapEditor", () => ({
   ),
 }));
 
-const viewer = vi.hoisted(() => ({ fail: null as ((error: unknown) => void) | null }));
+interface ViewerProps {
+  onFail: (error: unknown) => void;
+  onPick?: (objectId: string | null) => void;
+  onMovePiece?: unknown;
+  selectedId?: string | null;
+}
+
+const viewer = vi.hoisted(() => ({ fail: null as ((error: unknown) => void) | null, props: null as ViewerProps | null }));
 
 vi.mock("@/features/room-view/ui/RoomView3DHost", () => ({
   ROOM_VIEW_3D_AVAILABLE: true,
-  RoomView3DHost: ({ onFail }: { onFail: (error: unknown) => void }) => {
-    viewer.fail = onFail;
+  RoomView3DHost: (props: ViewerProps) => {
+    viewer.fail = props.onFail;
+    viewer.props = props;
     return <div data-testid="room-view-3d" />;
   },
 }));
@@ -90,6 +99,7 @@ beforeEach(() => {
   stored({ tvAnchor: TV });
   lampReads.enabled = [];
   viewer.fail = null;
+  viewer.props = null;
 });
 
 afterEach(() => {
@@ -113,6 +123,18 @@ describe("RoomMapSurface — faces", () => {
     act(() => radio("roomMap:face.view").click());
     expect(screen.getByTestId("room-view-3d")).toBeInTheDocument();
     expect(screen.queryByTestId("plan")).toBeNull();
+  });
+
+  it("carries nothing in View, and a click on a piece there keeps the light", async () => {
+    stored({ tvAnchor: TV, furniture: [{ id: "sofa", type: "sofa", x: 1, y: 2, width: 2, height: 0.9 }] });
+    await renderSurface();
+    expect(viewer.props?.onMovePiece).toBeUndefined();
+
+    act(() => viewer.props?.onPick?.(TV_ANCHOR_OBJECT_ID));
+    expect(viewer.props?.selectedId).toBe(TV_ANCHOR_OBJECT_ID);
+
+    act(() => viewer.props?.onPick?.(furnitureObjectId("sofa")));
+    expect(viewer.props?.selectedId).toBe(TV_ANCHOR_OBJECT_ID);
   });
 
   it("keeps the map's history across a switch, because the map is the surface's", async () => {

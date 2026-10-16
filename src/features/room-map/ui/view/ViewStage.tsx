@@ -8,11 +8,10 @@ import { hexCss, roomMood } from "@/features/room-view/model/roomMood";
 import { useRunningLightingMode } from "@/features/mode/state/lightingControl";
 
 import { deriveHueAreaState } from "../../model/hueAreaState";
-import { furnitureObjectId, parseObjectId } from "../../model/objectId";
+import { parseObjectId } from "../../model/objectId";
 import type { RoomAwareStatus } from "../../model/roomAware";
 import { buildViewLights, resolveViewSelection } from "../../model/viewLights";
 import { useHueIdentify } from "../../state/useHueIdentify";
-import { useLandCarried } from "../../state/useLandCarried";
 import type { RoomMapDocument } from "../../state/useRoomMapDocument";
 import { useUsbStripStatus } from "../../state/useUsbStripStatus";
 import { CornerControls } from "../CornerControls";
@@ -73,9 +72,6 @@ export function ViewStage({
     [scopedConfig, zones, hue.areaChannels, hue.liveChannelIds, lampFamilies, t],
   );
   const viewSelectedId = resolveViewSelection(scopedConfig, selectedId);
-  // A piece of furniture can be selected here too — to be carried — but it has no card in the dock.
-  const pieceSelectedId =
-    selectedId !== null && scopedConfig.furniture.some((f) => furnitureObjectId(f.id) === selectedId) ? selectedId : null;
   const selected = lights.find((light) => light.id === viewSelectedId) ?? null;
   const hasHue = hueBridgeConfigured || !!hueAreaId || scopedConfig.hueChannels.length > 0;
 
@@ -110,12 +106,11 @@ export function ViewStage({
     [select, selectHueZone],
   );
 
-  // A light opens its card; a piece of furniture is selected so it can be carried, with no card.
+  // View looks and picks lights; pieces are moved in Edit, so a click on one keeps the light.
   const handlePick = useCallback(
     (objectId: string | null) => {
       const ref = objectId ? parseObjectId(objectId) : null;
       if (objectId && ref && (ref.kind === "hue" || ref.kind === "tv" || ref.kind === "usb")) selectLight(objectId);
-      else if (objectId && ref?.kind === "furniture") selectLight(objectId);
       else if (objectId === null && (viewSelectedId !== null || selectedId !== null)) select(null);
       // OrbitControls takes the press, so the root is focused here for Esc to reach it.
       focusStage();
@@ -123,10 +118,8 @@ export function ViewStage({
     [select, selectLight, viewSelectedId, selectedId, focusStage],
   );
 
-  const handleMovePiece = useLandCarried(doc);
-
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "Escape" || event.target !== event.currentTarget || (viewSelectedId === null && pieceSelectedId === null)) return;
+    if (event.key !== "Escape" || event.target !== event.currentTarget || viewSelectedId === null) return;
     event.preventDefault();
     select(null);
   };
@@ -137,14 +130,13 @@ export function ViewStage({
         config={scopedConfig}
         lampFamilies={lampFamilies}
         label={t("roomMap:face.viewLabel")}
-        selectedId={viewSelectedId ?? pieceSelectedId}
+        selectedId={viewSelectedId}
         bottomInset={ROOM_MAP_FIT_INSETS.bottom}
         topInset={ROOM_MAP_FIT_INSETS.top}
         cameraCommand={cameraCommand}
         mood={mood}
         onPick={handlePick}
         onHover={handleHover}
-        onMovePiece={handleMovePiece}
         onFail={onFail}
       />
       {hovered && (
