@@ -26,13 +26,11 @@ export function zoneRect(zone: Footprint, widthM: number, depthM: number): ZoneR
   return { x0: clamp(a.x, 0, widthM), y0: clamp(a.y, 0, depthM), x1: clamp(b.x, 0, widthM), y1: clamp(b.y, 0, depthM) };
 }
 
-/** The smallest a zone may be along each side, in metres. */
 export function zoneMinSize(widthM: number, depthM: number): { w: number; d: number } {
   return { w: ZONE_SCALE_MIN * widthM, d: ZONE_SCALE_MIN * depthM };
 }
 
-/** A rectangle as the cube centre and half-scales the bridge's frame stores, inside the room and
- *  no smaller than the Rust band allows, so the backend never refuses it. */
+/** Clamped into the room and the Rust scale band, so the backend never refuses it. */
 export function rectToZone(rect: ZoneRect, widthM: number, depthM: number): Footprint {
   const min = zoneMinSize(widthM, depthM);
   const side = (a: number, b: number, size: number, least: number) => {
@@ -56,8 +54,7 @@ export function rectToZone(rect: ZoneRect, widthM: number, depthM: number): Foot
   };
 }
 
-/** `start` with the edges `handle` holds moved by (`dx`, `dy`) metres and kept inside the room.
- *  `square` keeps the start's proportions, measured in metres. */
+/** `square` keeps the start's proportions, measured in metres. */
 export function resizeZoneRect(
   start: ZoneRect,
   handle: ZoneHandle,
@@ -103,7 +100,6 @@ export function resizeZoneRect(
   return { x0: nx0, y0: ny0, x1: nx0 + w, y1: ny0 + d };
 }
 
-/** The rectangle a press-and-drag from `from` to `to` draws; `square` makes it square in metres. */
 export function drawnZoneRect(
   from: { x: number; y: number },
   to: { x: number; y: number },

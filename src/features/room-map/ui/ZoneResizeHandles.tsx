@@ -5,11 +5,7 @@ import { pastSlop } from "./objects/dragIntent";
 
 type Footprint = Pick<HueZone, "centerX" | "centerY" | "scaleX" | "scaleY">;
 
-/**
- * The eight grips on the active zone's bounds box. A drag reshapes the box, its centre marker, its
- * name chip and every light bound to it in place, and writes the zone once on release. Pointer
- * only: the dock's width and depth fields are the keyboard's way.
- */
+/** Pointer only: the dock's width and depth fields are the keyboard's way. */
 export function ZoneResizeHandles({
   zone,
   widthM,

@@ -218,7 +218,6 @@ export function RoomMapEditor({
     [planFor, select],
   );
   // The other way, the card of something the room does not draw closes with the plan.
-  // "Add zone" on the plan arms a draw; the room view keeps placing the default box.
   const [drawingZone, setDrawingZone] = useState(false);
   const changeStage = useCallback(
     (next: EditStage) => {

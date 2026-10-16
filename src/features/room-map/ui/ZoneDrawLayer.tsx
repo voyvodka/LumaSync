@@ -5,7 +5,6 @@ import { CLICK_SLOP_PX } from "../model/snapGeometry";
 import { clickedZoneRect, drawnZoneRect, type ZoneRect } from "../model/zoneRect";
 import styles from "./ZoneDrawLayer.module.css";
 
-/** Over the plan while a zone is being added: a drag draws it, a click drops the default size. */
 export function ZoneDrawLayer({
   widthM,
   depthM,
