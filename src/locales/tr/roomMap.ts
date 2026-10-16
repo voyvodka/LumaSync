@@ -8,11 +8,19 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     redo: "Yinele",
   },
   dock: {
+    add: "Ekle",
     label: "Oda düzenleme araçları",
     objects: "Nesneler",
     room: "Oda ayarları",
     close: "Kapat",
     selected: "{{type}}: {{name}}",
+  },
+  library: {
+    label: "Kütüphane",
+    shelves: "Raflar",
+    furniture: "Mobilya",
+    light: "Işık",
+    screen: "Ekran ve şerit",
   },
   palette: {
     label: "Odaya ekle",
@@ -225,6 +233,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     daylightBand: { night: "gece", dusk: "akşam", day: "gündüz" },
     roomHeight: "Oda yüksekliği",
     roomHeightHint: "Zeminden tavana. Hue ışıklarının ekranı hangi yükseklikten örnekleyeceğini belirler.",
+    addImage: "Görsel ekle…",
     templates: "Şablonlar…",
     templatesHint: "Odayı bir şablondan kur. Geri al bu odayı geri getirir.",
     resetMap: "Haritayı sıfırla",

@@ -1,0 +1,128 @@
+@layer components {
+  .body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 2px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--lm-line);
+  }
+  .tab {
+    height: 32px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    font: 500 12px/1 var(--lm-sans);
+    cursor: pointer;
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+  }
+  .tab:hover { color: var(--lm-ink); }
+  .tab[aria-checked="true"] {
+    color: var(--lm-amber);
+    background: rgb(255 255 255 / 4%);
+  }
+  .tab:focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--lm-focus-ring-inset);
+  }
+
+  /* Sized to the fullest shelf, the furniture's two rows, so a change of shelf never moves it. */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    grid-auto-rows: 72px;
+    align-content: start;
+    gap: 4px;
+    height: calc(72px * 2 + 4px);
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 6px;
+    border: 0;
+    border-radius: 8px;
+    background: rgb(255 255 255 / 2%);
+    color: var(--lm-ink-dim);
+    font: 500 11.5px/1 var(--lm-sans);
+    cursor: pointer;
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+  }
+  .card:hover:not(.unavailable) {
+    color: var(--lm-ink);
+    background: rgb(255 255 255 / 6%);
+  }
+  .card:active:not(.unavailable) { color: var(--lm-amber); }
+  .card:focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--lm-focus-ring-inset);
+  }
+  .unavailable {
+    color: var(--lm-ink-faint);
+    cursor: not-allowed;
+  }
+
+  .glyph {
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 36px;
+    opacity: 0.85;
+    transition: opacity var(--lm-dur-quick);
+  }
+  .glyph svg { max-width: 56px; max-height: 36px; }
+  .card:hover:not(.unavailable) .glyph { opacity: 1; }
+  .unavailable .glyph { opacity: 0.45; }
+
+  .drawn {
+    position: relative;
+    display: grid;
+  }
+  .badge {
+    position: absolute;
+    top: -3px;
+    right: 1px;
+    display: grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--lm-panel);
+    color: var(--lm-green);
+    box-shadow: 0 0 0 1px currentColor;
+  }
+
+  .name {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .grid > :not(.card) {
+    grid-column: span 4;
+    align-self: center;
+  }
+
+  :global(:root[data-reduced-motion]) .tab,
+  :global(:root[data-reduced-motion]) .card,
+  :global(:root[data-reduced-motion]) .glyph { transition: none; }
+
+  @media (forced-colors: active) {
+    .tab[aria-checked="true"] { outline: 1px solid Highlight; }
+    .tab:focus-visible,
+    .card:focus-visible { outline: 2px solid Highlight; }
+    .card { border: 1px solid CanvasText; }
+    .unavailable { color: GrayText; }
+  }
+}

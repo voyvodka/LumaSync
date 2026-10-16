@@ -1,4 +1,4 @@
-import { type RefObject, useId } from "react";
+import { type MouseEvent, type RefObject, useId } from "react";
 import { useTranslation } from "react-i18next";
 
 import { floorSwatchCss, wallSwatchCss } from "@/features/room-view/model/surfaceColours";
@@ -57,6 +57,7 @@ export function RoomPanel({
   settings,
   onReset,
   onTemplates,
+  onAddImage,
 }: {
   open: boolean;
   onClose: () => void;
@@ -67,6 +68,7 @@ export function RoomPanel({
   onReset: () => void;
   /** Opens the template picker over the room; a pick is one undo step. */
   onTemplates?: () => void;
+  onAddImage?: (event: MouseEvent<HTMLButtonElement>) => void;
 }) {
   const { t } = useTranslation();
   const hintId = useId();
@@ -156,6 +158,11 @@ export function RoomPanel({
 
         <hr className={styles.rule} />
 
+        {onAddImage && (
+          <button type="button" className={styles.templates} data-testid="room-add-image" onClick={onAddImage}>
+            {t("roomMap:settings.addImage")}
+          </button>
+        )}
         {onTemplates && (
           <>
             <button type="button" className={styles.templates} aria-describedby={`${hintId}-templates`} onClick={onTemplates}>

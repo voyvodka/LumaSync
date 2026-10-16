@@ -198,9 +198,12 @@ it, the way X and Y have them.
 above, chips down the left, a 300 px side dock and a coordinate readout used to take a quarter of the
 window and every fit's zoom with it. Now the plan fills the face; the View|Edit switch, a corner
 capsule (undo, redo, zoom, the keys) and the room-aware pill float over its top, and one 92 px dock
-floats over its foot (`ui/dock/`). The dock's slot shows what can be added — two rows of tiles, each
-piece drawn as the plan draws it — while nothing is selected, and the selection's two-row inspector
-when something is; its rail opens the objects list and the room's settings as popovers above it.
+floats over its foot (`ui/dock/`). While nothing is selected the dock's slot is one quiet row — Add,
+the templates and the Hue area's state — and Add opens the library above it: shelves of cards, each
+piece drawn as the plan draws it, at a fixed height so a change of shelf moves nothing. Two rows of
+tiles in the slot left no room for kinds the room gains, and the image, which traces the room
+rather than furnishing it, moved to the room's settings. With a selection the slot holds its
+two-row inspector; the rail opens the objects list and the room's settings as popovers above it.
 The height never changes with what it shows, so nothing above it moves, and `ROOM_MAP_FIT_INSETS`
 keeps a fit's room clear of both bands. The objects list is the keyboard's way to select furniture,
 the TV, strips and images at all, and the way to reach a piece the dock covers. A selection made

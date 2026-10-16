@@ -19,7 +19,6 @@ function renderPalette(overrides: Partial<DockPaletteProps> = {}) {
     onAddTv: vi.fn<() => void>(),
     onSelectTv: vi.fn<() => void>(),
     onAddStrip: vi.fn<() => void>(),
-    onAddImage: vi.fn<() => void>(),
     onAddZone: vi.fn<() => void>(),
     hue: null,
     ...overrides,
@@ -29,28 +28,48 @@ function renderPalette(overrides: Partial<DockPaletteProps> = {}) {
 }
 
 const tile = (testId: string) => screen.getByTestId(testId);
+const shelf = (tab: "furniture" | "light" | "screen") => {
+  if (tile("palette-add").getAttribute("aria-expanded") !== "true") fireEvent.click(tile("palette-add"));
+  fireEvent.click(tile(`library-tab-${tab}`));
+};
 const ready: PaletteHueArea = { state: { kind: "ready", orphanedAreaId: false }, zoneCount: 2, lightCount: 4, channelsStatus: null, refreshing: false };
 
 describe("DockPalette", () => {
-  // The templates sat behind Room settings alone, where the maintainer could not find them.
-  it("offers the room templates in the palette where the editor has them", () => {
+  it("is one row: Add, the templates where the editor has them, and the Hue area's state", () => {
     const onTemplates = vi.fn<() => void>();
-    renderPalette({ onTemplates });
+    renderPalette({ onTemplates, hue: ready });
+    expect(screen.queryByTestId("library-cards")).toBeNull();
     fireEvent.click(tile("palette-templates"));
     expect(onTemplates).toHaveBeenCalledOnce();
+    expect(screen.getByText('roomMap:hueZones.areaState.readyZones {"count":4,"zones":2}')).toBeInTheDocument();
     cleanup();
     renderPalette();
     expect(screen.queryByTestId("palette-templates")).toBeNull();
   });
 
-  it("adds a piece of the pressed type", () => {
+  it("opens the library from Add, its own press closing it", () => {
+    renderPalette();
+    const add = tile("palette-add");
+    expect(add).toHaveAttribute("aria-haspopup", "dialog");
+    fireEvent.click(add);
+    expect(add).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("dialog", { name: "roomMap:library.label" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { checked: true })).toHaveFocus();
+    fireEvent.click(add);
+    expect(add).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("adds a piece of the pressed type and closes the library", () => {
     const props = renderPalette();
+    shelf("furniture");
     fireEvent.click(tile("palette-table"));
     expect(props.onAddFurniture).toHaveBeenCalledWith("table", expect.anything());
+    expect(tile("palette-add")).toHaveAttribute("aria-expanded", "false");
   });
 
   it("names each piece's size in its tooltip", () => {
     renderPalette();
+    shelf("furniture");
     expect(tile("palette-sofa").getAttribute("title")).toBe(
       'roomMap:palette.size {"name":"roomMap:furniture.type.sofa","width":"2.0","depth":"0.9"}',
     );
@@ -58,24 +77,30 @@ describe("DockPalette", () => {
 
   it("takes you to the TV there is instead of adding a second", () => {
     const props = renderPalette({ hasTv: true });
+    shelf("screen");
     expect(tile("palette-tv")).toHaveAccessibleName("roomMap:palette.selectTv");
     fireEvent.click(tile("palette-tv"));
     expect(props.onSelectTv).toHaveBeenCalledTimes(1);
     expect(props.onAddTv).not.toHaveBeenCalled();
   });
 
-  it("offers a zone only to a room with a Hue side, and says how the area stands", () => {
+  it("adds a strip from the screen shelf", () => {
+    const props = renderPalette();
+    shelf("screen");
+    fireEvent.click(tile("palette-strip"));
+    expect(props.onAddStrip).toHaveBeenCalledTimes(1);
+  });
+
+  it("has a Light shelf only in a room with a Hue side", () => {
     renderPalette();
-    expect(screen.queryByTestId("palette-zone")).toBeNull();
+    fireEvent.click(tile("palette-add"));
+    expect(screen.queryByTestId("library-tab-light")).toBeNull();
 
     cleanup();
-    const onRefresh = vi.fn<() => void>();
-    const props = renderPalette({ hue: { ...ready, onRefresh } });
+    const props = renderPalette({ hue: ready });
+    shelf("light");
     fireEvent.click(tile("palette-zone"));
     expect(props.onAddZone).toHaveBeenCalledTimes(1);
-    expect(screen.getByText('roomMap:hueZones.areaState.readyZones {"count":4,"zones":2}')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "roomMap:hueZones.areaState.refresh" }));
-    expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 
   it("sends a zone pressed with no area to the way to get one", () => {
@@ -83,36 +108,49 @@ describe("DockPalette", () => {
     const props = renderPalette({
       hue: { state: { kind: "no-area", orphanedAreaId: false }, zoneCount: 0, lightCount: 0, channelsStatus: null, refreshing: false, onNavigateToDevices },
     });
+    shelf("light");
     const zone = tile("palette-zone");
     expect(zone).toHaveAttribute("aria-disabled", "true");
     fireEvent.click(zone);
     expect(props.onAddZone).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "roomMap:hueZones.areaState.noAreaCta" })).toHaveFocus();
+    const ctas = screen.getAllByRole("button", { name: "roomMap:hueZones.areaState.noAreaCta" });
+    expect(ctas.some((cta) => cta === document.activeElement)).toBe(true);
   });
 
-  it("is one tab stop: arrows walk the tiles and change row at the nearest column, and never add", () => {
-    const props = renderPalette();
-    const tiles = screen.getAllByRole("button");
-    expect(tiles.filter((b) => b.tabIndex === 0)).toHaveLength(1);
+  it("closes when Tab leaves it, handing focus back to Add", () => {
+    renderPalette();
+    shelf("furniture");
+    fireEvent.blur(tile("palette-sofa"), { relatedTarget: null });
+    expect(tile("palette-add")).toHaveAttribute("aria-expanded", "false");
+    expect(tile("palette-add")).toHaveFocus();
+  });
 
+  it("opens on the shelf it was last left on", () => {
+    renderPalette();
+    shelf("screen");
+    cleanup();
+    renderPalette();
+    fireEvent.click(tile("palette-add"));
+    expect(tile("library-tab-screen")).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByTestId("palette-strip")).toBeInTheDocument();
+  });
+
+  it("walks the cards with the arrows as one tab stop, and never adds", () => {
+    const props = renderPalette();
+    shelf("furniture");
+    const cards = Array.from(tile("library-cards").querySelectorAll("button"));
+    expect(cards.filter((b) => b.tabIndex === 0)).toHaveLength(1);
     const sofa = tile("palette-sofa");
     sofa.focus();
     fireEvent.keyDown(sofa, { key: "ArrowRight" });
-    expect(tile("palette-table")).toHaveFocus();
-    fireEvent.keyDown(tile("palette-table"), { key: "ArrowDown" });
-    expect(tile("palette-strip")).toHaveFocus();
-    fireEvent.keyDown(tile("palette-strip"), { key: "ArrowUp" });
-    expect(tile("palette-table")).toHaveFocus();
-    fireEvent.keyDown(tile("palette-table"), { key: "End" });
-    expect(tile("palette-image")).toHaveFocus();
-    fireEvent.keyDown(tile("palette-image"), { key: "Home" });
+    expect(cards[1]).toHaveFocus();
+    fireEvent.keyDown(cards[1]!, { key: "ArrowDown" });
+    expect(cards[6]).toHaveFocus();
+    const last = cards[cards.length - 1]!;
+    fireEvent.keyDown(cards[6]!, { key: "End" });
+    expect(last).toHaveFocus();
+    fireEvent.keyDown(last, { key: "Home" });
     expect(sofa).toHaveFocus();
-    // From the end of the first row, ↓ lands on the last tile of the shorter second row.
-    fireEvent.keyDown(sofa, { key: "End" });
-    fireEvent.keyDown(tile("palette-image"), { key: "ArrowUp" });
-    expect(tile("palette-chair")).toHaveFocus();
-    fireEvent.keyDown(tile("palette-chair"), { key: "End" });
     expect(props.onAddFurniture).not.toHaveBeenCalled();
-    expect(tile("palette-image").tabIndex).toBe(0);
   });
 });

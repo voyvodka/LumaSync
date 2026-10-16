@@ -265,6 +265,14 @@ export function RoomDock(props: RoomDockProps) {
                 props.onTemplates?.();
               })
             }
+            onAddImage={(event) =>
+              fromDock(event, () => {
+                setRoomOpen(false);
+                // A cancelled picker selects nothing to land on; the rail keeps focus instead.
+                roomRef.current?.focus();
+                add.onAddImage();
+              })
+            }
           />
           <ConfirmPopover
             open={confirmReset}
@@ -292,7 +300,6 @@ export function RoomDock(props: RoomDockProps) {
           onAddTv={(event) => fromDock(event, add.onAddTv)}
           onSelectTv={(event) => fromDock(event, add.onSelectTv)}
           onAddStrip={(event) => fromDock(event, add.onAddStrip)}
-          onAddImage={(event) => fromDock(event, add.onAddImage)}
           onAddZone={(event) => fromDock(event, add.onAddZone)}
           onTemplates={props.onTemplates}
           hue={props.hue}

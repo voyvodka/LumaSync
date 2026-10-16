@@ -1,88 +1,60 @@
 @layer components {
   .palette {
-    display: grid;
-    grid-template-rows: 32px 32px;
-    gap: 6px;
-    width: 100%;
-    min-width: 0;
-  }
-  .row {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 4px;
+    width: 100%;
+    height: 100%;
     min-width: 0;
   }
 
-  /* The furniture keeps whole names and scrolls sideways: squeezed to the dock, every name became
-     "Kan…", "Sand…". The edge with more past it fades. */
-  .scroll {
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
-  }
-  .scroll::-webkit-scrollbar { display: none; }
-  .scroll > .tile { flex-shrink: 0; }
-  .scroll[data-more="end"] { mask-image: linear-gradient(90deg, black calc(100% - 24px), transparent); }
-  .scroll[data-more="start"] { mask-image: linear-gradient(90deg, transparent, black 24px); }
-  .scroll[data-more="both"] { mask-image: linear-gradient(90deg, transparent, black 24px, black calc(100% - 24px), transparent); }
-
-  /* A piece as the plan draws it and its name: no frame at rest, a tint on hover. */
-  .tile {
+  .action {
     display: inline-flex;
-    flex: 0 1 auto;
-    min-width: 0;
+    flex-shrink: 0;
     align-items: center;
     gap: 6px;
     height: 32px;
-    padding: 0 8px;
+    padding: 0 10px 0 8px;
     border: 0;
-    border-radius: 7px;
+    border-radius: 8px;
     background: transparent;
     color: var(--lm-ink-dim);
-    font: 500 11.5px/1 var(--lm-sans);
+    font: 500 12px/1 var(--lm-sans);
     white-space: nowrap;
     cursor: pointer;
     transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
   }
-  .tile:hover:not(.unavailable) {
+  .action:hover {
     color: var(--lm-ink);
     background: rgb(255 255 255 / 4%);
   }
-  .tile:active:not(.unavailable) { color: var(--lm-amber); }
-  .tile:focus-visible {
+  .open,
+  .open:hover {
+    color: var(--lm-amber);
+    background: rgb(255 255 255 / 4%);
+  }
+  .action:focus-visible {
     outline: 2px solid transparent;
     box-shadow: var(--lm-focus-ring-inset);
-  }
-  .unavailable {
-    color: var(--lm-ink-faint);
-    cursor: not-allowed;
   }
 
   .glyph {
     display: grid;
-    flex-shrink: 0;
     place-items: center;
-    width: 26px;
-    height: 22px;
-    opacity: 0.8;
-    transition: opacity var(--lm-dur-quick);
+    width: 16px;
+    height: 16px;
   }
-  .glyph svg { max-width: 26px; max-height: 22px; }
-  .tile:hover:not(.unavailable) .glyph { opacity: 1; }
-  .unavailable .glyph { opacity: 0.45; }
 
-  .name {
+  .note {
+    display: flex;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    margin-left: auto;
   }
 
-  :global(:root[data-reduced-motion]) .tile,
-  :global(:root[data-reduced-motion]) .glyph { transition: none; }
+  :global(:root[data-reduced-motion]) .action { transition: none; }
 
   @media (forced-colors: active) {
-    .tile:focus-visible { outline: 2px solid Highlight; }
-    .unavailable { color: GrayText; }
-    .scroll[data-more] { mask-image: none; }
+    .open { outline: 1px solid Highlight; }
+    .action:focus-visible { outline: 2px solid Highlight; }
   }
 }

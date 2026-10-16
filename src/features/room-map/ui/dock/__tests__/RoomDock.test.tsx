@@ -46,6 +46,7 @@ const spies = {
   onFocusEditor: vi.fn<() => void>(),
   onReset: vi.fn<() => void>(),
   onAddFurniture: vi.fn<(type: string) => void>(),
+  onAddImage: vi.fn<() => void>(),
 };
 
 /** The dock over a selection it shares with "the canvas": `select` stands for a click there. */
@@ -88,7 +89,7 @@ function Harness({
       onAddTv: vi.fn<() => void>(),
       onSelectTv: vi.fn<() => void>(),
       onAddStrip: vi.fn<() => void>(),
-      onAddImage: vi.fn<() => void>(),
+      onAddImage: spies.onAddImage,
       onAddZone: vi.fn<() => void>(),
     },
     hue: null,
@@ -155,7 +156,9 @@ describe("RoomDock", () => {
 
   it("lands a keyboard pick from the dock on the inspector's first field, without announcing it", () => {
     render(<Harness />);
-    // A click with no pointer behind it is Enter or Space on the tile.
+    fireEvent.click(screen.getByTestId("palette-add"));
+    fireEvent.click(screen.getByTestId("library-tab-furniture"));
+    // A click with no pointer behind it is Enter or Space on the card.
     fireEvent.click(screen.getByTestId("palette-sofa"), { detail: 0 });
     expect(spies.onAddFurniture).toHaveBeenCalledWith("sofa");
     expect(screen.getByRole("textbox", { name: "roomMap:inspector.furnitureNameLabel" })).toHaveFocus();
@@ -164,6 +167,8 @@ describe("RoomDock", () => {
 
   it("hands the keys back to the editor after a pointer pick", () => {
     render(<Harness />);
+    fireEvent.click(screen.getByTestId("palette-add"));
+    fireEvent.click(screen.getByTestId("library-tab-furniture"));
     fireEvent.click(screen.getByTestId("palette-sofa"), { detail: 1 });
     expect(spies.onFocusEditor).toHaveBeenCalledTimes(1);
   });
@@ -202,6 +207,16 @@ describe("RoomDock", () => {
     expect(spies.onReset).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId("room-reset-confirm-yes"));
     expect(spies.onReset).toHaveBeenCalledTimes(1);
+  });
+
+  it("adds an image from the room panel, which closes for it", () => {
+    render(<Harness />);
+    const room = screen.getByRole("button", { name: "roomMap:dock.room" });
+    fireEvent.click(room);
+    fireEvent.click(screen.getByTestId("room-add-image"));
+    expect(spies.onAddImage).toHaveBeenCalledTimes(1);
+    expect(room).toHaveAttribute("aria-expanded", "false");
+    expect(room).toHaveFocus();
   });
 
   // The focused button goes with the inspector it was in; the keys must not be left with nowhere.

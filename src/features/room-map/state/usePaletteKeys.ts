@@ -8,7 +8,7 @@ export interface PaletteTileProps {
 }
 
 /**
- * One tab stop for the palette's two rows of tiles. ←/→ walk them in reading order, ↑/↓ change
+ * One tab stop for rows of tiles. ←/→ walk them in reading order, ↑/↓ change
  * row at the nearest column, Home/End go to the first and the last. Arrows only move: a tile adds
  * on Enter or Space, as the button it is.
  */

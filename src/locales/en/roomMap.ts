@@ -5,11 +5,19 @@ export default {
     redo: "Redo",
   },
   dock: {
+    add: "Add",
     label: "Room editing tools",
     objects: "Objects",
     room: "Room settings",
     close: "Close",
     selected: "{{type}}: {{name}}",
+  },
+  library: {
+    label: "Library",
+    shelves: "Shelves",
+    furniture: "Furniture",
+    light: "Light",
+    screen: "Screen & strip",
   },
   palette: {
     label: "Add to the room",
@@ -222,6 +230,7 @@ export default {
     daylightBand: { night: "night", dusk: "dusk", day: "day" },
     roomHeight: "Room height",
     roomHeightHint: "Floor to ceiling. Sets how high Hue lights sample the screen.",
+    addImage: "Add image…",
     templates: "Templates…",
     templatesHint: "Lay the room out from a template. Undo brings this one back.",
     resetMap: "Reset map",
