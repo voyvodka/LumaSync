@@ -77,6 +77,8 @@
     cursor: grabbing !important;
     user-select: none;
   }
+  :global(:root[data-library-drag="refused"]),
+  :global(:root[data-library-drag="refused"] *) { cursor: not-allowed !important; }
   .unavailable {
     color: var(--lm-ink-faint);
     cursor: not-allowed;

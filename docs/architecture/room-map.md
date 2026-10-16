@@ -216,9 +216,11 @@ palette.
 
 **A furniture or TV card dragged out of the library is the piece itself until it is let go.** Past
 the click slop the drawer closes and the card's real model floats on the 3D floor under the pointer
-(the plan draws its glyph instead), outlined amber, red where its middle falls outside the room.
-Letting go adds it there in one history step and selects it; Escape, or letting go over the dock or
-off the room, adds nothing. Nothing reaches the map, the history or the selection while it is held,
+(the plan draws its glyph instead), warm-tinted over an amber footprint band, so it never reads as
+a placed piece; where its middle falls outside the room the band turns red (dashed on the plan) and
+the cursor says no. Letting go adds it there in one history step and selects it, the 3D ghost
+sinking the last 12 cm onto it; Escape, letting go over the dock or off the room, or the window
+losing the pointer adds nothing. Nothing reaches the map, the history or the selection while it is held,
 and the view only moves a ghost (`RoomDropTarget.preview`): a build per pointer move is what the
 carry's lift was made to avoid. The drag listens on the window, since the card goes with the drawer;
 it eats the one click the drag ends with, which on the plan's floor would deselect what just landed,

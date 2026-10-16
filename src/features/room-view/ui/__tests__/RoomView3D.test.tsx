@@ -238,6 +238,13 @@ describe("RoomView3D", () => {
       dropRef.current!.preview(null);
       expect(scene.children).toHaveLength(before);
       expect(builds.count).toBe(0);
+
+      // Let go: it sinks onto the floor, then goes.
+      dropRef.current!.preview({ piece, model: { kind: "box" }, valid: true });
+      dropRef.current!.settle();
+      expect(scene.children).toHaveLength(before + 1);
+      await rest();
+      expect(scene.children).toHaveLength(before);
       unmount();
       expect(dropRef.current).toBeNull();
     });

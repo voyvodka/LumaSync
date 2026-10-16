@@ -30,6 +30,7 @@ export function useCardDrag(drop: LibraryDrop | undefined, { onStart, onAbandon 
         window.removeEventListener("pointerup", up);
         window.removeEventListener("pointercancel", cancel);
         window.removeEventListener("keydown", key, true);
+        window.removeEventListener("blur", cancel);
         document.documentElement.removeAttribute(LIBRARY_DRAG_ATTR);
         stop.current = null;
       };
@@ -44,13 +45,18 @@ export function useCardDrag(drop: LibraryDrop | undefined, { onStart, onAbandon 
       };
       const move = (e: PointerEvent) => {
         if (e.pointerId !== id) return;
+        // A release the window never saw — it lost focus mid-drag — must not leave the card held.
+        if (e.buttons === 0) {
+          cancel();
+          return;
+        }
         if (!dragging) {
           if (Math.hypot(e.clientX - from.x, e.clientY - from.y) < CLICK_SLOP_PX) return;
           dragging = true;
           document.documentElement.setAttribute(LIBRARY_DRAG_ATTR, "");
           handlers.current.onStart();
         }
-        drop.hover(card, e.clientX, e.clientY);
+        document.documentElement.setAttribute(LIBRARY_DRAG_ATTR, drop.hover(card, e.clientX, e.clientY) ? "" : "refused");
       };
       const up = (e: PointerEvent) => {
         if (e.pointerId !== id) return;
@@ -77,6 +83,7 @@ export function useCardDrag(drop: LibraryDrop | undefined, { onStart, onAbandon 
       window.addEventListener("pointerup", up);
       window.addEventListener("pointercancel", cancel);
       window.addEventListener("keydown", key, true);
+      window.addEventListener("blur", cancel);
       stop.current = cancel;
     },
   };

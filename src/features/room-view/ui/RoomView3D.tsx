@@ -5,14 +5,19 @@ import { type MutableRefObject, useEffect, useRef } from "react";
 import {
   BoxGeometry,
   Color,
+  DoubleSide,
   Group,
   EdgesGeometry,
   LineBasicMaterial,
   LineSegments,
+  Mesh,
+  MeshBasicMaterial,
+  type MeshStandardMaterial,
   NeutralToneMapping,
   OrthographicCamera,
   PCFShadowMap,
   Plane,
+  PlaneGeometry,
   Raycaster,
   SRGBColorSpace,
   Vector2,
@@ -42,6 +47,7 @@ import type { LiftedPiece } from "./scene/lift";
 import { PALETTE } from "./scene/palette";
 import { block, mergeParts } from "./scene/parts";
 import { type Plumb, PLUMB_FROM, plumbGuide } from "./scene/plumb";
+import { floorBand } from "./scene/selection";
 import styles from "./RoomView3D.module.css";
 
 /** What a measuring run varies; absent fields take the defaults below. */
@@ -90,6 +96,8 @@ export interface RoomDropTarget {
   /** The floor under a client point, in the scene frame. */
   floorAt(clientX: number, clientY: number): { x: number; z: number } | null;
   preview(ghost: DropGhost | null): void;
+  /** Lets the held card down where it was dropped, then takes it away. */
+  settle(): void;
 }
 
 interface RoomView extends RoomDropTarget {
@@ -125,7 +133,12 @@ const roomKey = (config: RoomMapConfig) => `${config.dimensions.widthMeters}x${c
 const CARRY_COLOUR = 0xffb020;
 const REFUSED_COLOUR = 0xff5a4f;
 // A held card floats this far off the floor, so it reads as not yet put down.
-const DROP_FLOAT_M = 0.05;
+const DROP_FLOAT_M = 0.12;
+// Warm on a held card, red on a refused one, so neither reads as a placed piece.
+const DROP_TINT = 0x2a1a00;
+const REFUSED_TINT = 0x3a0a08;
+const DROP_TINT_INTENSITY = 0.6;
+const LAND_MS = 200;
 /** A camera move from the corner buttons or a double-click: short and settling, as the app's
  *  motion is (`--lm-dur-slow`, an ease-out); a jump read as the view breaking. */
 const CAMERA_MOVE_MS = 320;
@@ -609,6 +622,8 @@ function openRoomView(
     // A piece slid in place while the room it was built in waits to be built again.
     let nudged: { id: string; lifted: LiftedPiece; dx: number; dz: number } | null = null;
     let settle: ReturnType<typeof setTimeout> | null = null;
+    // Out of the scene before it is disposed: a held card's buffers outlive the room it floats in.
+    let detachDrop = () => {};
     const settleLater = () => {
       if (settle !== null) clearTimeout(settle);
       settle = setTimeout(() => {
@@ -673,7 +688,10 @@ function openRoomView(
         drop(false);
       }
       const first = room === null;
-      if (room) disposeScene(room.scene);
+      if (room) {
+        detachDrop();
+        disposeScene(room.scene);
+      }
       room = buildRoomScene(config, { shadows, lambert: options.lambert ?? false, coldKey: options.coldKey, lampFamilies });
       // Only on opening, or when the room is resized: an edit (a piece carried, a light moved)
       // rebuilds the scene, and taking the target back to the middle threw the view across the room.
@@ -741,21 +759,40 @@ function openRoomView(
     };
 
     // A held library card: built once per card, then only moved.
-    let dropGhost: { key: string; group: Group; outline: LineSegments } | null = null;
-    const dropMaterial = finishMaterial("matte", { lambert: options.lambert ?? false });
+    let dropGhost: { key: string; group: Group; mesh: Mesh | null } | null = null;
+    let settleFrame = 0;
+    const dropMaterial = finishMaterial("matte", { lambert: options.lambert ?? false }) as MeshStandardMaterial;
+    dropMaterial.emissiveIntensity = DROP_TINT_INTENSITY;
+    // WebGL draws every line 1 px wide, so the footprint is the selection's band, filled faintly.
+    const bandMaterial = new MeshBasicMaterial({
+      color: CARRY_COLOUR,
+      transparent: true,
+      opacity: 0.95,
+      depthWrite: false,
+      toneMapped: false,
+      side: DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+    });
+    const fillMaterial = bandMaterial.clone();
+    fillMaterial.opacity = 0.2;
     const dropFloor = new Plane(new Vector3(0, 1, 0), 0);
+    detachDrop = () => dropGhost?.group.removeFromParent();
     const clearDrop = () => {
+      cancelAnimationFrame(settleFrame);
+      settleFrame = 0;
       if (!dropGhost) return;
       dropGhost.group.removeFromParent();
       dropGhost.group.traverse((node) => {
-        if ("geometry" in node) (node as LineSegments).geometry.dispose();
+        if (node instanceof Mesh) node.geometry.dispose();
       });
-      (dropGhost.outline.material as LineBasicMaterial).dispose();
       dropGhost = null;
     };
     closeHooks.push(() => {
       clearDrop();
       dropMaterial.dispose();
+      bandMaterial.dispose();
+      fillMaterial.dispose();
     });
     const previewDrop = (ghost: DropGhost | null) => {
       if (!room || !shownConfig || !ghost) {
@@ -766,6 +803,7 @@ function openRoomView(
         }
         return;
       }
+      if (settleFrame) clearDrop();
       const { piece, model } = ghost;
       const dims = shownConfig.dimensions;
       const key = `${model ? piece.type : "screen"}:${piece.width}:${piece.height}`;
@@ -776,26 +814,56 @@ function openRoomView(
           ? furnitureParts({ ...piece, x: 0, y: 0 }, model)
           : [block(piece.width, tall, 0.04, 0, dims.heightMeters * 0.4 - tall / 2, 0, PALETTE.bezel, 0.005)];
         const group = new Group();
-        const mesh = mergeParts(parts, dropMaterial, false);
+        const mesh = mergeParts(parts, dropMaterial);
         if (mesh) {
           mesh.castShadow = true;
           mesh.position.y = DROP_FLOAT_M;
           group.add(mesh);
         }
-        const outline = new LineSegments(
-          new EdgesGeometry(new BoxGeometry(piece.width, 0.01, piece.height)),
-          new LineBasicMaterial({ color: CARRY_COLOUR }),
-        );
-        outline.position.y = 0.006;
-        group.add(outline);
+        for (const floor of [new Mesh(floorBand(piece.width, piece.height), bandMaterial), new Mesh(new PlaneGeometry(piece.width, piece.height), fillMaterial)]) {
+          floor.rotation.x = -Math.PI / 2;
+          floor.position.y = 0.006;
+          group.add(floor);
+        }
         room.scene.add(group);
-        dropGhost = { key, group, outline };
+        dropGhost = { key, group, mesh };
       }
       const centre = roomToScene(piece.x + piece.width / 2, piece.y + piece.height / 2, 0, dims);
       dropGhost.group.position.set(centre.x, 0, centre.z);
-      (dropGhost.outline.material as LineBasicMaterial).color.setHex(ghost.valid ? CARRY_COLOUR : REFUSED_COLOUR);
+      const colour = ghost.valid ? CARRY_COLOUR : REFUSED_COLOUR;
+      bandMaterial.color.setHex(colour);
+      fillMaterial.color.setHex(colour);
+      dropMaterial.emissive.setHex(ghost.valid ? DROP_TINT : REFUSED_TINT);
+      dropMaterial.emissiveIntensity = DROP_TINT_INTENSITY;
       renderer.shadowMap.needsUpdate = shadows;
       request();
+    };
+    // The landed card sinks onto the piece just added under it, its tint going as it touches down.
+    const settleDrop = () => {
+      const held = dropGhost;
+      if (!held || settleFrame || !held.mesh || prefersReducedMotion()) {
+        previewDrop(null);
+        return;
+      }
+      const mesh = held.mesh;
+      const start = performance.now();
+      const step = () => {
+        const t = Math.min((performance.now() - start) / LAND_MS, 1);
+        if (t >= 1 || closed || dropGhost !== held || !room) {
+          settleFrame = 0;
+          if (dropGhost === held) previewDrop(null);
+          return;
+        }
+        // A rebuild for the new piece swaps the scene: the ghost follows it.
+        if (held.group.parent !== room.scene) room.scene.add(held.group);
+        const k = easeOut(t);
+        mesh.position.y = DROP_FLOAT_M * (1 - k);
+        dropMaterial.emissiveIntensity = DROP_TINT_INTENSITY * (1 - k);
+        renderer.shadowMap.needsUpdate = shadows;
+        request();
+        settleFrame = requestAnimationFrame(step);
+      };
+      settleFrame = requestAnimationFrame(step);
     };
 
     return {
@@ -805,6 +873,7 @@ function openRoomView(
         return hit ? { x: hit.x, z: hit.z } : null;
       },
       preview: previewDrop,
+      settle: settleDrop,
       setMood(mood) {
         const same = (m: RoomMood | null) =>
           m !== null &&

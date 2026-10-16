@@ -163,7 +163,7 @@ describe("DockPalette", () => {
     const fakeDrop = (lands = true): LibraryDrop => ({ hover: vi.fn<LibraryDrop["hover"]>(() => true), land: vi.fn<LibraryDrop["land"]>(() => lands), cancel: vi.fn<() => void>() });
     const pointer = (type: string, x: number, y: number) =>
       act(() => {
-        window.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, pointerId: 1, bubbles: true }));
+        window.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, pointerId: 1, buttons: type === "pointermove" ? 1 : 0, bubbles: true }));
       });
     const press = (testId: string) => fireEvent.pointerDown(tile(testId), { button: 0, clientX: 10, clientY: 10, pointerId: 1 });
 
@@ -212,6 +212,40 @@ describe("DockPalette", () => {
       expect(tile("palette-add")).toHaveFocus();
       // The drag's click guard lasts until the next task; no click came to spend it.
       await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    it("says where letting go would add nothing", async () => {
+      const drop = fakeDrop();
+      drop.hover = vi.fn<LibraryDrop["hover"]>(() => false);
+      renderPalette({ drop });
+      await shelf("furniture");
+      press("palette-sofa");
+      pointer("pointermove", 200, 120);
+      expect(document.documentElement).toHaveAttribute("data-library-drag", "refused");
+      pointer("pointerup", 200, 120);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    it("lets go of a card when the window loses the pointer or its focus", async () => {
+      const drop = fakeDrop();
+      renderPalette({ drop });
+      await shelf("furniture");
+      press("palette-sofa");
+      pointer("pointermove", 200, 120);
+      act(() => {
+        window.dispatchEvent(new Event("blur"));
+      });
+      expect(drop.cancel).toHaveBeenCalledOnce();
+      expect(document.documentElement).not.toHaveAttribute("data-library-drag");
+
+      press("palette-chair");
+      pointer("pointermove", 200, 120);
+      act(() => {
+        window.dispatchEvent(new PointerEvent("pointermove", { clientX: 220, clientY: 130, pointerId: 1, buttons: 0 }));
+      });
+      expect(drop.cancel).toHaveBeenCalledTimes(2);
+      pointer("pointerup", 220, 130);
+      expect(drop.land).not.toHaveBeenCalled();
     });
 
     it("keeps a press that stays put a click, and a placed TV unheld", async () => {

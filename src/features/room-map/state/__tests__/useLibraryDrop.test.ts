@@ -39,7 +39,7 @@ function setup(overrides: Partial<LibraryDropArgs> & { inRoom?: boolean; outline
   const inRoom = overrides.inRoom ?? false;
   const root = stage(inRoom);
   const ghost: PlanDropGhostHandle = { show: vi.fn<PlanDropGhostHandle["show"]>() };
-  const room: RoomDropTarget = { floorAt: vi.fn<RoomDropTarget["floorAt"]>(() => ({ x: 0.5, z: -0.5 })), preview: vi.fn<RoomDropTarget["preview"]>() };
+  const room: RoomDropTarget = { floorAt: vi.fn<RoomDropTarget["floorAt"]>(() => ({ x: 0.5, z: -0.5 })), preview: vi.fn<RoomDropTarget["preview"]>(), settle: vi.fn<() => void>() };
   const args: LibraryDropArgs = {
     rootRef: { current: root },
     inRoom,
@@ -111,7 +111,7 @@ describe("useLibraryDrop", () => {
       { x: 0, y: 3 },
     ];
     const { drop, args, ghost } = setup({ outline });
-    drop.hover({ kind: "furniture", type: "chair" }, ...planPoint(3, 0.5));
+    expect(drop.hover({ kind: "furniture", type: "chair" }, ...planPoint(3, 0.5))).toBe(false);
     expect(ghost.show).toHaveBeenLastCalledWith(expect.objectContaining({ valid: false }));
     expect(drop.land({ kind: "furniture", type: "chair" }, ...planPoint(3, 0.5))).toBe(false);
     expect(args.onAddFurniture).not.toHaveBeenCalled();
@@ -129,7 +129,7 @@ describe("useLibraryDrop", () => {
     });
     expect(drop.land({ kind: "tv" }, 100, 100)).toBe(true);
     expect(args.onAddTv).toHaveBeenCalledWith({ x: 2.5 - TV_DEFAULT_FOOTPRINT.width / 2, y: 1 - TV_DEFAULT_FOOTPRINT.depth / 2 });
-    expect(room.preview).toHaveBeenLastCalledWith(null);
+    expect(room.settle).toHaveBeenCalledOnce();
   });
 
   it("clears the ghost on cancel", () => {

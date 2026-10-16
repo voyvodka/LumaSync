@@ -16,7 +16,11 @@
     width: 100%;
     height: 100%;
   }
-  .ghost[data-refused] { outline-color: var(--lm-red); }
+  .ghost[hidden] { display: none; }
+  .ghost[data-refused] {
+    outline-color: var(--lm-red);
+    outline-style: dashed;
+  }
   .screen { border-radius: 2px; }
 
   @media (forced-colors: active) {

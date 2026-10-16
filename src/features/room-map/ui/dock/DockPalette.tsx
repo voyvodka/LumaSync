@@ -63,6 +63,7 @@ export function DockPalette({ hasTv, onAddFurniture, onAddTv, onSelectTv, onAddS
         aria-controls={open ? libraryId : undefined}
         data-testid="palette-add"
         onPointerEnter={() => void loadLibrary()}
+        onFocusCapture={() => void loadLibrary()}
         onClick={() => {
           setWanted(true);
           setOpen((was) => !was);

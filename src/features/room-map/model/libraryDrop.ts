@@ -31,7 +31,7 @@ export function dropRect(card: LibraryCard, centre: { x: number; y: number }, ro
 }
 
 export interface LibraryDrop {
-  /** Shows where the card would land; false off the stage. */
+  /** Shows where the card would land; false where letting go would add nothing. */
   hover(card: LibraryCard, clientX: number, clientY: number): boolean;
   /** Adds the card's piece there; false, and nothing added, off the stage or outside the room. */
   land(card: LibraryCard, clientX: number, clientY: number): boolean;

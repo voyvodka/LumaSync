@@ -80,7 +80,7 @@ export function useLibraryDrop(args: LibraryDropArgs): LibraryDrop {
             model: tile?.model ?? null,
             valid,
           });
-          return true;
+          return valid;
         }
         const stage = rootRef.current?.querySelector(STAGE)?.getBoundingClientRect();
         const box = surface.getBoundingClientRect();
@@ -93,12 +93,16 @@ export function useLibraryDrop(args: LibraryDropArgs): LibraryDrop {
           height: rect.depth * scale,
           valid,
         });
-        return true;
+        return valid;
       },
       land(card, clientX, clientY) {
-        clear();
         const at = rectAt(card, clientX, clientY);
-        if (!at || !fits(at.rect)) return false;
+        if (!at || !fits(at.rect)) {
+          clear();
+          return false;
+        }
+        latest.current.ghostRef.current?.show(null);
+        latest.current.roomDropRef.current?.settle();
         const spot = { x: at.rect.x, y: at.rect.y };
         if (card.kind === "tv") latest.current.onAddTv(spot);
         else latest.current.onAddFurniture(card.type, spot);

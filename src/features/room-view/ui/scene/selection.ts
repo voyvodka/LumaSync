@@ -22,7 +22,7 @@ const STRIP_MARGIN = 0.025;
 const STRIP_LINE = 0.012;
 
 /** A rounded-rectangle band `line` wide around a `w` × `d` rectangle, in the xy plane. */
-function outline(w: number, d: number, margin = MARGIN, line = LINE): ShapeGeometry {
+export function floorBand(w: number, d: number, margin = MARGIN, line = LINE): ShapeGeometry {
   const rect = <P extends Path>(hw: number, hd: number, r: number, path: P): P => {
     path.moveTo(-hw + r, -hd);
     path.lineTo(hw - r, -hd);
@@ -127,7 +127,7 @@ export function buildSelectionMark(pickables: readonly Pickable[]): SelectionMar
         for (const leg of item.legs ?? [item]) {
           const [lx, ly, lz] = leg.half;
           const lying = ly < lz;
-          const frame = new Mesh(outline(lx * 2, Math.max(ly, lz) * 2, STRIP_MARGIN, STRIP_LINE), material);
+          const frame = new Mesh(floorBand(lx * 2, Math.max(ly, lz) * 2, STRIP_MARGIN, STRIP_LINE), material);
           if (lying) frame.rotation.set(-Math.PI / 2, -leg.angle, 0, "YXZ");
           else frame.rotation.set(0, -leg.angle, 0);
           frame.position.set(leg.centre.x, lying ? FLOOR_LIFT : leg.centre.y, leg.centre.z);
@@ -142,7 +142,7 @@ export function buildSelectionMark(pickables: readonly Pickable[]): SelectionMar
           ring.position.set(item.centre.x, item.centre.y, item.centre.z);
         }
         scaleHalo();
-        floor = new Mesh(outline(radius * 2 - MARGIN * 2, radius * 2 - MARGIN * 2), material);
+        floor = new Mesh(floorBand(radius * 2 - MARGIN * 2, radius * 2 - MARGIN * 2), material);
         floor.rotation.set(-Math.PI / 2, 0, 0);
         floor.position.set(item.centre.x, FLOOR_LIFT, item.centre.z);
         // A light high on a wall or the ceiling is shown its floor by a plumb line instead.
@@ -158,10 +158,10 @@ export function buildSelectionMark(pickables: readonly Pickable[]): SelectionMar
         haloThrough.visible = false;
         if (item.kind === "tv") {
           // The screen is marked where it hangs: a frame standing just in front of the panel.
-          floor = new Mesh(outline(hx * 2, hy * 2), material);
+          floor = new Mesh(floorBand(hx * 2, hy * 2), material);
           floor.position.set(item.centre.x, item.centre.y, item.centre.z + hz + 0.01);
         } else {
-          floor = new Mesh(outline(hx * 2, hz * 2), material);
+          floor = new Mesh(floorBand(hx * 2, hz * 2), material);
           floor.rotation.set(-Math.PI / 2, -item.angle, 0, "YXZ");
           floor.position.set(item.centre.x, FLOOR_LIFT, item.centre.z);
         }
