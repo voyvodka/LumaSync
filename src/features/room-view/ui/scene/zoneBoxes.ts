@@ -54,7 +54,9 @@ function nameTexture(name: string, colour: string): { texture: CanvasTexture; as
   // Drawn at twice the screen's pixels, so it stays sharp shrunk to `LABEL_PX`.
   const height = Math.round(LABEL_PX * 2 * Math.max(window.devicePixelRatio || 1, 1));
   const text = Math.round(height * 0.5);
-  const font = `600 ${text}px ${getComputedStyle(document.body).fontFamily || "sans-serif"}`;
+  const css = getComputedStyle(document.body);
+  const font = `600 ${text}px ${css.fontFamily || "sans-serif"}`;
+  const ink = css.getPropertyValue("--lm-ink").trim() || "white";
   const r = height / 2;
   canvas.height = height;
   canvas.width = height;
@@ -76,7 +78,7 @@ function nameTexture(name: string, colour: string): { texture: CanvasTexture; as
     context.arc(r, r, text * 0.24, 0, Math.PI * 2);
     context.fill();
     context.font = font;
-    context.fillStyle = "#f4f4f6";
+    context.fillStyle = ink;
     context.textBaseline = "middle";
     context.fillText(name, r * 1.7, r + 1);
     texture.needsUpdate = true;
