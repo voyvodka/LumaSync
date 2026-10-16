@@ -57,7 +57,6 @@ describe("TemplateSelector", () => {
     }
   });
 
-  // A piece's front is its plan top, so one backed onto the TV wall at 0° faced the wall.
   it("turns every showroom piece backed onto a wall to face the room", () => {
     cleanup();
     const room = pick("roomMap:templates.showroom.name");

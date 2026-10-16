@@ -873,8 +873,7 @@ export function RoomMapEditor({
       ref={rootRef}
       className="lm-room-editor relative h-full"
       onKeyDown={handleKeyDown}
-      // Ringed only when Tab brought focus here: WebKit's :focus-visible also ringed the whole room
-      // when an action handed focus back to it. Tab's keyup lands on the element it focused.
+      // Not :focus-visible, which WebKit sets on focus an action hands back; Tab's keyup lands here.
       onKeyUp={(event) => {
         if (event.key === "Tab" && event.target === event.currentTarget) event.currentTarget.dataset.tabbed = "";
       }}
