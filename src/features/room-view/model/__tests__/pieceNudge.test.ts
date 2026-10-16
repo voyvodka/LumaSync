@@ -43,6 +43,32 @@ describe("pieceNudge", () => {
     expect(pieceNudge(built, { ...built, usbStrips: [{ ...strip, startY: 1.5, endY: 3.5, corners: [{ x: 0, y: 2 }] }] })).toBeNull();
   });
 
+  it("reads the screen resized or raised a step as a reshape about its built centre", () => {
+    const tv = built.tvAnchor!;
+    const aboutY = DEFAULT_ROOM_MAP.dimensions.heightMeters * 0.4;
+    expect(pieceNudge(built, { ...built, tvAnchor: { ...tv, width: 1.32 } })).toEqual({
+      objectId: "tv",
+      dx: expect.closeTo(0.06),
+      dy: 0,
+      reshape: { scaleX: expect.closeTo(1.1), scaleY: expect.closeTo(1.1), aboutY: expect.closeTo(aboutY), raise: 0 },
+    });
+    expect(pieceNudge(built, { ...built, tvAnchor: { ...tv, mountHeightMeters: aboutY + 0.05 } })).toEqual({
+      objectId: "tv",
+      dx: 0,
+      dy: 0,
+      reshape: { scaleX: 1, scaleY: 1, aboutY: expect.closeTo(aboutY), raise: expect.closeTo(0.05) },
+    });
+  });
+
+  it("builds again for a screen resized or raised too far to stretch, or changed otherwise", () => {
+    const tv = built.tvAnchor!;
+    expect(pieceNudge(built, { ...built, tvAnchor: { ...tv, width: 1.8 } })).toBeNull();
+    expect(pieceNudge(built, { ...built, tvAnchor: { ...tv, mountHeightMeters: 2 } })).toBeNull();
+    expect(pieceNudge(built, { ...built, tvAnchor: { ...tv, height: 0.3 } })).toBeNull();
+    expect(pieceNudge(built, { ...built, tvAnchor: { ...tv, screenKind: "monitor" } })).toBeNull();
+    expect(pieceNudge(built, { ...built, tvAnchor: { ...tv, width: 0 } })).toBeNull();
+  });
+
   it("reads a piece stepped back to where the room was built as a nudge of nothing", () => {
     expect(pieceNudge(built, { ...built, furniture: [{ ...sofa }, chair] })).toEqual({ objectId: "furniture-sofa", dx: 0, dy: 0 });
   });

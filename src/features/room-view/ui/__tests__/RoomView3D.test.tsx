@@ -208,6 +208,21 @@ describe("RoomView3D", () => {
       unmount();
     });
 
+    it("stretches the screen in place while its size steps, and builds the latest once they rest", async () => {
+      const furnished = room(1);
+      const tv = (width: number) => ({ ...furnished, tvAnchor: { x: 1.5, y: 0, width, height: 0.08 } });
+      const { rerender, unmount, view } = await open();
+      rerender(view(tv(1.2)));
+      await rest();
+      builds.count = 0;
+      for (let i = 1; i <= 6; i++) rerender(view(tv(1.2 + i * 0.02)));
+      expect(builds.count).toBe(0);
+      await rest();
+      expect(builds.count).toBe(1);
+      expect((builds.last as ReturnType<typeof tv>).tvAnchor.width).toBeCloseTo(1.32);
+      unmount();
+    });
+
     it("waits for the rest with any edit under 200 ms after a build, and builds new fixtures at once", async () => {
       const { rerender, unmount, view } = await open();
       rerender(view(room(1, 2.2)));

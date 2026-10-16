@@ -624,6 +624,8 @@ function openRoomView(
         if (nudge && lifted) {
           nudged = { id: nudge.objectId, lifted, dx: nudge.dx, dz: nudge.dy };
           lifted.moveTo(lifted.pivot.x + nudge.dx, lifted.pivot.z + nudge.dy);
+          const shape = nudge.reshape;
+          lifted.reshape(shape?.scaleX ?? 1, shape?.scaleY ?? 1, shape?.aboutY ?? 0, shape?.raise ?? 0);
           if (selected === nudge.objectId) room.shiftMark(nudge.dx, nudge.dy);
           renderer.shadowMap.needsUpdate = shadows;
           request();

@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, Mesh, MeshBasicMaterial, Scene } from "three";
+import { BufferAttribute, BufferGeometry, Mesh, MeshBasicMaterial, Scene, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 
 import { type Liftable, liftPiece, spansOf } from "../lift";
@@ -33,7 +33,7 @@ describe("liftPiece", () => {
     scene.add(mesh);
     const piece: Liftable = { spans: [{ mesh, start: 4, count: 4 }], extras: [], pivot: { x: 0, z: 0 } };
     const lifted = liftPiece(scene, piece);
-    const copy = scene.children[1]!.children[0]!.children[0] as Mesh;
+    const copy = scene.children[1]!.children[0]!.children[0]!.children[0] as Mesh;
     expect(Array.from(copy.geometry.index!.array)).toEqual([0, 1, 2, 0, 2, 3]);
     expect(copy.geometry.getAttribute("position").count).toBe(4);
     const position = mesh.geometry.getAttribute("position").array as Float32Array;
@@ -51,8 +51,21 @@ describe("liftPiece", () => {
     expect(lifted.riders).toEqual(["tv"]);
     lifted.moveTo(0.5, 0.25);
     lifted.turnTo(Math.PI / 2);
-    const riderPivot = rider.extras[0]!.parent!.parent!;
+    const riderPivot = rider.extras[0]!.parent!.parent!.parent!;
     expect([riderPivot.position.x, riderPivot.position.z]).toEqual([1.5, -1.75]);
     expect(riderPivot.rotation.y).toBe(0);
+  });
+
+  it("reshapes a piece about a height: across and up from its centre there, then raised", () => {
+    const scene = new Scene();
+    const point = new Mesh();
+    point.position.set(2.5, 1.5, -1);
+    const lifted = liftPiece(scene, { spans: [], extras: [point], pivot: { x: 2, z: -1 } });
+    lifted.reshape(2, 2, 1, 0.25);
+    scene.updateMatrixWorld(true);
+    expect(point.getWorldPosition(new Vector3()).toArray()).toEqual([3, 2.25, -1]);
+    lifted.reshape(1, 1, 0, 0);
+    scene.updateMatrixWorld(true);
+    expect(point.getWorldPosition(new Vector3()).toArray()).toEqual([2.5, 1.5, -1]);
   });
 });

@@ -20,6 +20,8 @@ export interface LiftedPiece {
   moveTo(x: number, z: number): void;
   /** On top of the turn it was built with. */
   turnTo(radians: number): void;
+  /** Scaled across and up about the height `aboutY`, then raised: a screen resized in place. */
+  reshape(scaleX: number, scaleY: number, aboutY: number, raise: number): void;
   restore(): void;
 }
 
@@ -82,9 +84,11 @@ export function liftPiece(scene: Scene, piece: Liftable, riders: ReadonlyMap<str
   const carried = [...riders].map(([id, rider]) => ({ id, rider, lifted: liftPiece(scene, rider) }));
   const pivot = new Group();
   pivot.position.set(piece.pivot.x, 0, piece.pivot.z);
+  const stretch = new Group();
+  pivot.add(stretch);
   const inner = new Group();
   inner.position.set(-piece.pivot.x, 0, -piece.pivot.z);
-  pivot.add(inner);
+  stretch.add(inner);
   const saved = piece.spans.map((span) => {
     const copy = new Mesh(copySpan(span), span.mesh.material);
     copy.castShadow = span.mesh.castShadow;
@@ -112,6 +116,11 @@ export function liftPiece(scene: Scene, piece: Liftable, riders: ReadonlyMap<str
     },
     turnTo(radians) {
       pivot.rotation.y = -radians;
+    },
+    reshape(scaleX, scaleY, aboutY, raise) {
+      stretch.scale.set(scaleX, scaleY, 1);
+      stretch.position.y = aboutY + raise;
+      inner.position.y = -aboutY;
     },
     restore() {
       for (const { lifted } of carried) lifted.restore();
