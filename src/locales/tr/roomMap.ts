@@ -450,6 +450,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     },
   },
   templates: {
+    applied: "{{name}} yerleştirildi. Geri al odanı geri getirir.",
     title: "Şablon seç",
     subtitle: "İsteğe bağlı: TV'ni ve ışıklarını gerçek yerlerine koy, Hue ışıkları görüntüyü takip etsin. Hazır bir düzenle ya da boş bir odayla başla.",
     tv55: {

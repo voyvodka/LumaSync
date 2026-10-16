@@ -141,7 +141,7 @@ vi.mock("../RoomMapCanvas", () => ({
 }));
 
 vi.mock("../objects/FurnitureObject", () => ({
-  FurnitureObject: () => null,
+  FurnitureObject: () => <i data-testid="plan-piece" />,
 }));
 
 vi.mock("../objects/TvAnchorObject", () => ({
@@ -792,11 +792,14 @@ describe("RoomMapEditor — the 3D room as the editing stage", () => {
     persistState.configOverride = { furniture: [{ id: "mine", type: "chair", x: 1, y: 1, width: 0.5, height: 0.5 }] };
     const view = await openEdit();
     const stage = view.getByTestId("room-map-stage");
+    await act(async () => stageRadio(view, "roomMap:stage.plan").click());
     await act(async () => view.getByTestId("preview-template").click());
-    expect(view.getByTestId("room-dock")).toHaveAttribute("data-furniture", "2");
+    expect(view.getAllByTestId("plan-piece")).toHaveLength(2);
+    // The dock goes on showing the room as it is.
+    expect(view.getByTestId("room-dock")).toHaveAttribute("data-furniture", "1");
     expect(stage).toHaveAttribute("data-previewing");
     await act(async () => view.getByTestId("leave-template").click());
-    expect(view.getByTestId("room-dock")).toHaveAttribute("data-furniture", "1");
+    expect(view.getAllByTestId("plan-piece")).toHaveLength(1);
     expect(stage).not.toHaveAttribute("data-previewing");
     expect(persistState.apply).not.toHaveBeenCalled();
     expect(persistState.replace).not.toHaveBeenCalled();

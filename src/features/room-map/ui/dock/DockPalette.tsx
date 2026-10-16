@@ -28,11 +28,12 @@ export interface DockPaletteProps {
   /** Opens the room templates, where the editor offers them. */
   onTemplates?: Press;
   templatesOpen?: boolean;
+  templatesId?: string;
   hue: PaletteHueArea | null;
   drop?: LibraryDrop;
 }
 
-export function DockPalette({ hasTv, onAddFurniture, onAddTv, onSelectTv, onAddStrip, onAddZone, onTemplates, templatesOpen = false, hue, drop }: DockPaletteProps) {
+export function DockPalette({ hasTv, onAddFurniture, onAddTv, onSelectTv, onAddStrip, onAddZone, onTemplates, templatesOpen = false, templatesId, hue, drop }: DockPaletteProps) {
   const { t } = useTranslation();
   const addRef = useRef<HTMLButtonElement | null>(null);
   const noteRef = useRef<HTMLSpanElement | null>(null);
@@ -82,6 +83,7 @@ export function DockPalette({ hasTv, onAddFurniture, onAddTv, onSelectTv, onAddS
           className={cx(styles.action, templatesOpen && styles.open)}
           aria-expanded={templatesOpen}
           aria-haspopup="dialog"
+          aria-controls={templatesOpen ? templatesId : undefined}
           title={t("roomMap:palette.templatesHint")}
           data-testid="palette-templates"
           onClick={onTemplates}

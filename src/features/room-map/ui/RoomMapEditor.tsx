@@ -73,7 +73,7 @@ import { ROOM_MAP_PX_PER_METER, ROOM_MAP_VIEWPORT_ATTR, useRoomMapViewport } fro
 import { useSnapGuides } from "../state/useSnapGuides";
 import { ContextMenu, type ContextMenuAction } from "./ContextMenu";
 import { CornerControls, EDIT_STAGES, type EditStage } from "./CornerControls";
-import { ROOM_MAP_FIT_INSETS } from "./dock/dockGeometry";
+import { ROOM_MAP_FIT_INSETS, ROOM_MAP_PREVIEW_INSETS } from "./dock/dockGeometry";
 import type { InspectorActions } from "./dock/DockInspector";
 import { RoomDock } from "./dock/RoomDock";
 import { HueChannelOverlay } from "./HueChannelOverlay";
@@ -274,7 +274,7 @@ export function RoomMapEditor({
   }, [config.furniture, furnitureModels]);
 
   const { setCanvasContainer, canvasSize, zoom, setZoom, panOffset, setPanOffset, spaceHeld, fitToView, handleArrowPan } =
-    useRoomMapViewport(config.dimensions, ROOM_MAP_FIT_INSETS);
+    useRoomMapViewport(config.dimensions, preview ? ROOM_MAP_PREVIEW_INSETS : ROOM_MAP_FIT_INSETS);
 
   // The plan fits a previewed template, goes back to where it was left, and fits an applied one.
   const planView = useRef<{ zoom: number; pan: { x: number; y: number } } | null>(null);
@@ -853,7 +853,8 @@ export function RoomMapEditor({
     onManageUsb: onNavigateToDevices,
   };
 
-  const hasTv = !!config.tvAnchor;
+  // The dock shows the room as it is: a preview is the stage's alone.
+  const hasTv = !!docConfig.tvAnchor;
   const hasHue = hueBridgeConfigured || hueAreaId !== null || visibleHueChannels.length > 0 || hueZones.length > 0;
   const freeHeight = Math.max(0, canvasSize.h - ROOM_MAP_FIT_INSETS.top - ROOM_MAP_FIT_INSETS.bottom);
 
@@ -873,7 +874,7 @@ export function RoomMapEditor({
             lampFamilies={lampFamilies}
             label={t("roomMap:face.editLabel")}
             selectedId={selectedId}
-            bottomInset={ROOM_MAP_FIT_INSETS.bottom}
+            bottomInset={(preview ? ROOM_MAP_PREVIEW_INSETS : ROOM_MAP_FIT_INSETS).bottom}
             topInset={ROOM_MAP_FIT_INSETS.top}
             cameraCommand={cameraCommand}
             mood={mood}
@@ -1080,9 +1081,9 @@ export function RoomMapEditor({
         )}
 
         <RoomDock
-          config={scopedConfig}
+          config={docScopedConfig}
           zones={areaZones}
-          selectedId={selectedId}
+          selectedId={docSelectedId}
           activeHueZoneId={activeHueZoneId}
           channels={visibleHueChannels}
           areaChannels={areaChannels}

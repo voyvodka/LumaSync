@@ -110,6 +110,8 @@ export function RoomDock(props: RoomDockProps) {
   const [roomOpen, setRoomOpen] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [announcement, setAnnouncement] = useState("");
+  // An applied template is said once, even when the selection it clears says "" in the same commit.
+  const announcing = useRef<string | null>(null);
   const pending = useRef<Pending | null>(null);
   // Whether the last focus anywhere was inside the dock, so a swap that takes the focused control
   // away can give the keys back without touching focus that was elsewhere.
@@ -197,7 +199,7 @@ export function RoomDock(props: RoomDockProps) {
       const lost = !focused || focused === document.body || !focused.isConnected || focused.closest("[inert]") !== null;
       if (lost && focusInDock.current) onFocusEditor();
     }
-    setAnnouncement(asked === null && target.kind !== "empty" ? describe(target, t) : "");
+    setAnnouncement(announcing.current ?? (asked === null && target.kind !== "empty" ? describe(target, t) : ""));
   }, [key]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
@@ -325,9 +327,15 @@ export function RoomDock(props: RoomDockProps) {
                 anchorRef={templatesAnchor}
                 id={templatesId}
                 onPreview={props.templates.onPreview}
-                onApply={(template) => {
+                onApply={(template, name) => {
                   setTemplatesOpen(false);
                   props.templates?.onApply(template);
+                  const said = t("roomMap:templates.applied", { name });
+                  announcing.current = said;
+                  setAnnouncement(said);
+                  setTimeout(() => {
+                    if (announcing.current === said) announcing.current = null;
+                  }, 0);
                   onFocusEditor();
                 }}
               />
@@ -346,6 +354,7 @@ export function RoomDock(props: RoomDockProps) {
           onAddZone={(event) => fromDock(event, add.onAddZone)}
           onTemplates={props.templates && ((event) => openTemplates(event.currentTarget))}
           templatesOpen={templatesOpen}
+          templatesId={templatesId}
           hue={props.hue}
           drop={add.drop}
         />

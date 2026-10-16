@@ -274,6 +274,23 @@ describe("RoomDock", () => {
       fireEvent.click(screen.getByTestId("template-fullroom"));
       expect(spies.onApply).toHaveBeenCalledWith(expect.objectContaining({ dimensions: expect.objectContaining({ widthMeters: 5 }) }));
       expect(spies.onFocusEditor).toHaveBeenCalled();
+      expect(screen.getByText('roomMap:templates.applied {"name":"roomMap:templates.fullroom.name"}')).toBeInTheDocument();
+    });
+
+    it("shows the room again when Escape or a press outside closes it", async () => {
+      render(<Harness />);
+      fireEvent.click(screen.getByTestId("palette-templates"));
+      const dialog = await drawer();
+      spies.onPreview.mockClear();
+      fireEvent.keyDown(dialog, { key: "Escape" });
+      expect(spies.onPreview).toHaveBeenLastCalledWith(null);
+      expect(screen.getByTestId("palette-templates")).toHaveFocus();
+
+      fireEvent.click(screen.getByTestId("palette-templates"));
+      await drawer();
+      spies.onPreview.mockClear();
+      fireEvent.pointerDown(document.body);
+      expect(spies.onPreview).toHaveBeenLastCalledWith(null);
     });
   });
 });

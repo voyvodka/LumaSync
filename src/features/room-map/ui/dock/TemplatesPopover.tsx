@@ -1,4 +1,4 @@
-import { type RefObject, useEffect, useMemo, useRef } from "react";
+import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
@@ -18,7 +18,7 @@ export interface TemplatesPopoverProps {
   anchorRef: RefObject<HTMLElement | null>;
   id: string;
   onPreview: (template: RoomMapConfig | null) => void;
-  onApply: (template: RoomMapConfig) => void;
+  onApply: (template: RoomMapConfig, name: string) => void;
 }
 
 export function TemplatesPopover({ open, onClose, anchorRef, id, onPreview, onApply }: TemplatesPopoverProps) {
@@ -27,16 +27,26 @@ export function TemplatesPopover({ open, onClose, anchorRef, id, onPreview, onAp
   const { tileProps } = usePaletteKeys([templates.map((template) => template.id)]);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const intent = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const want = (template: RoomMapConfig | null) => {
+  const [previewed, setPreviewed] = useState<string | null>(null);
+  // Opening is not a change: the focus the drawer lands on shows nothing until it moves.
+  const landing = useRef(false);
+  const want = (id: string | null, template: RoomMapConfig | null) => {
     if (intent.current !== null) clearTimeout(intent.current);
     intent.current = setTimeout(() => {
       intent.current = null;
+      setPreviewed(id);
       onPreview(template);
     }, PREVIEW_INTENT_MS);
   };
   useEffect(() => {
-    if (open) gridRef.current?.querySelector<HTMLElement>('[tabindex="0"]')?.focus({ preventScroll: true });
-    else if (intent.current !== null) clearTimeout(intent.current);
+    if (open) {
+      landing.current = true;
+      gridRef.current?.querySelector<HTMLElement>('[tabindex="0"]')?.focus({ preventScroll: true });
+      landing.current = false;
+    } else {
+      if (intent.current !== null) clearTimeout(intent.current);
+      setPreviewed(null);
+    }
   }, [open]);
   useEffect(
     () => () => {
@@ -51,7 +61,7 @@ export function TemplatesPopover({ open, onClose, anchorRef, id, onPreview, onAp
         ref={gridRef}
         className={styles.grid}
         data-testid="templates-cards"
-        onPointerLeave={() => want(null)}
+        onPointerLeave={() => want(null, null)}
         onBlur={(event) => {
           const next = event.relatedTarget as Node | null;
           if (!open || (next && (gridRef.current?.contains(next) || anchorRef.current?.contains(next)))) return;
@@ -68,17 +78,17 @@ export function TemplatesPopover({ open, onClose, anchorRef, id, onPreview, onAp
               {...keys}
               onFocus={() => {
                 keys.onFocus();
-                want(template.built);
+                if (!landing.current) want(template.id, template.built);
               }}
-              onPointerEnter={() => want(template.built)}
+              onPointerEnter={() => want(template.id, template.built)}
               className={styles.card}
-              aria-label={t(template.nameKey)}
+              data-previewing={previewed === template.id || undefined}
               aria-describedby={`${id}-${template.id}`}
               title={t(template.descKey)}
               data-testid={`template-${template.id}`}
               onClick={() => {
                 if (intent.current !== null) clearTimeout(intent.current);
-                onApply(template.built);
+                onApply(template.built, t(template.nameKey));
               }}
             >
               <span className={styles.thumb} aria-hidden="true">

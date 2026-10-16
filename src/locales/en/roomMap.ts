@@ -448,6 +448,7 @@ export default {
     },
   },
   templates: {
+    applied: "{{name}} laid out. Undo brings your room back.",
     title: "Choose a template",
     subtitle: "Optional: put your TV and lights where they really are, so Hue lights follow the picture. Start from a layout or a blank room.",
     tv55: {
