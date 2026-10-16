@@ -23,7 +23,6 @@ const disk: {
   saveFails: boolean;
   /** The next update fails once this resolves: a write still in flight while the user moves on. */
   slowFailure: Promise<void> | null;
-  /** Saves wait for this: a write held in flight for as long as a test needs. */
   saveGate: Promise<void> | null;
 } = {
   state: {},
