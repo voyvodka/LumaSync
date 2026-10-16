@@ -62,6 +62,12 @@ function showroomStructures(t: TFunction): RoomStructure[] {
     { id: "show-door-back", kind: "door", label: label("door"), x: 11.4, y: 8, width: 0.9, heightMeters: 2.05, hinge: "right", swing: "in" },
     { id: "show-door-right", kind: "door", label: label("door"), x: 12.5, y: 1.6, width: 0.9, heightMeters: 2.05, hinge: "left", swing: "out" },
     { id: "show-niche", kind: "niche", label: label("niche"), x: 12.5, y: 4.4, width: 0.8, bottomMeters: 0.5, heightMeters: 1.1, depth: 0.25 },
+    { id: "show-light-living", kind: "light", label: label("light"), x: 4.1, y: 2.2, fixture: "ceiling" },
+    { id: "show-light-dining", kind: "light", label: label("light"), x: 1.1, y: 5.05, fixture: "pendant" },
+    { id: "show-light-kitchen-1", kind: "light", label: label("light"), x: 0.7, y: 7.1, fixture: "spot", kelvin: 3000 },
+    { id: "show-light-kitchen-2", kind: "light", label: label("light"), x: 1.4, y: 7.1, fixture: "spot", kelvin: 3000 },
+    { id: "show-light-kitchen-3", kind: "light", label: label("light"), x: 2.1, y: 7.1, fixture: "spot", kelvin: 3000 },
+    { id: "show-light-bulb", kind: "light", label: label("light"), x: 11.4, y: 3.0, fixture: "bulb", kelvin: 2200 },
   ];
 }
 

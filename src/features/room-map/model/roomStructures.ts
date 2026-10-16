@@ -8,6 +8,7 @@ export const STRUCTURE_NAME_KEYS = {
   window: "roomMap:structure.kind.window",
   door: "roomMap:structure.kind.door",
   niche: "roomMap:structure.kind.niche",
+  light: "roomMap:structure.kind.light",
 } as const satisfies Record<StructureKind, string>;
 
 export interface WallAnchor {

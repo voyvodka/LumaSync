@@ -5,19 +5,22 @@
 import { BoxGeometry, BufferAttribute, type BufferGeometry, Color, CylinderGeometry, Matrix4 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
+import { hangHeight } from "@/features/room-map/model/hueHang";
 import { anchorWallItem } from "@/features/room-map/model/roomStructures";
 import {
   type BeamStructure,
   type ColumnStructure,
+  DECOR_LIGHT_KELVIN,
+  type DecorLightFixture,
   type DoorStructure,
-  isWallStructure,
   type NicheStructure,
   type RoomMapConfig,
-  resolveRoomStructures,
   STRUCTURE_KINDS,
   type WallColor,
   type WindowStructure,
 } from "@/shared/contracts/roomMap";
+import { isWallStructure, resolveRoomStructures } from "@/shared/contracts/roomStructureResolver";
+import { kelvinToRgb } from "@/shared/lib/color";
 
 import type { OutlineEdge } from "../../model/roomOutline";
 import { WALL_PALETTE } from "../../model/surfaceColours";
@@ -156,6 +159,26 @@ function doorParts(p: Placed, item: DoorStructure, standing: number, paint: Wall
     slab(p, p.along, p.width, height, CASING, 0, 0.02, FRAME),
   );
   return parts;
+}
+
+export interface DecorLight {
+  x: number;
+  y: number;
+  fixture: DecorLightFixture;
+  /** Its lit part's height, metres. */
+  height: number;
+  colour: number;
+}
+
+export function decorLights(config: RoomMapConfig, ceiling: number): DecorLight[] {
+  const out: DecorLight[] = [];
+  for (const s of resolveRoomStructures(config)) {
+    if (s.kind !== STRUCTURE_KINDS.LIGHT) continue;
+    const { r, g, b } = kelvinToRgb(s.kelvin ?? DECOR_LIGHT_KELVIN);
+    const height = s.dropMeters !== undefined ? Math.max(ceiling - s.dropMeters, 0.3) : (hangHeight(s.fixture, ceiling) ?? ceiling);
+    out.push({ x: s.x, y: s.y, fixture: s.fixture, height, colour: (r << 16) | (g << 8) | b });
+  }
+  return out;
 }
 
 /** How high the walls must stand to keep every window and niche under their top, or 0. */

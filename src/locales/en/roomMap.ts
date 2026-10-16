@@ -203,6 +203,7 @@ export default {
       window: "Window",
       door: "Door",
       niche: "Niche",
+      light: "Ceiling light",
     },
   },
   settings: {

@@ -6,7 +6,7 @@ import { DEFAULT_ROOM_MAP, type RoomMapConfig, type RoomStructure } from "@/shar
 import { roomEdges } from "../../../model/roomOutline";
 import { floorParts, openRuns, wallFootShade } from "../environment";
 import { PALETTE } from "../palette";
-import { doorGaps, gappedWallGeometry, openingsTop, planStructures, thresholds } from "../structures";
+import { decorLights, doorGaps, gappedWallGeometry, openingsTop, planStructures, thresholds } from "../structures";
 
 const room = (structures: RoomStructure[]): RoomMapConfig => ({ ...DEFAULT_ROOM_MAP, structures });
 const edges = roomEdges(5, 4, null);
@@ -57,6 +57,24 @@ describe("planStructures", () => {
     expect(plan.columns.map((c) => c.id)).toEqual(["c"]);
     expect(plan.beams.map((b) => b.id)).toEqual(["b"]);
     expect(plan.wallParts.size).toBe(0);
+  });
+});
+
+describe("decorLights", () => {
+  it("hangs each light where its fixture hangs, or its drop below the ceiling, in its own white", () => {
+    const lights = decorLights(
+      room([
+        { id: "p", kind: "light", x: 1, y: 1, fixture: "pendant" },
+        { id: "s", kind: "light", x: 2, y: 1, fixture: "spot", dropMeters: 0.4, kelvin: 6500 },
+      ]),
+      2.7,
+    );
+    expect(lights[0]!.height).toBeLessThan(2.7);
+    expect(lights[1]!.height).toBeCloseTo(2.3);
+    const blue = (c: number) => c & 0xff;
+    const red = (c: number) => c >> 16;
+    expect(red(lights[0]!.colour)).toBeGreaterThan(blue(lights[0]!.colour));
+    expect(blue(lights[1]!.colour)).toBeGreaterThan(blue(lights[0]!.colour));
   });
 });
 

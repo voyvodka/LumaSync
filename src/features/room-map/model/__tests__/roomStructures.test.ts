@@ -44,11 +44,13 @@ describe("moveStructures", () => {
       { id: "c", kind: "column", x: 1, y: 1, width: 0.3, depth: 0.3 },
       { id: "b", kind: "beam", x1: 0, y1: 1, x2: 5, y2: 1, width: 0.2, dropMeters: 0.3 },
       { id: "s", kind: "skylight", x: 2, y: 2, glazing: "triple" },
+      { id: "l", kind: "light", x: 3, y: 2, fixture: "pendant", kelvin: 3000 },
     ];
     expect(moveStructures(stored, { x: 0.5, y: -0.25 }, room, room)).toEqual([
       { id: "c", kind: "column", x: 1.5, y: 0.75, width: 0.3, depth: 0.3 },
       { id: "b", kind: "beam", x1: 0.5, y1: 0.75, x2: 5.5, y2: 0.75, width: 0.2, dropMeters: 0.3 },
       { id: "s", kind: "skylight", x: 2.5, y: 1.75, glazing: "triple" },
+      { id: "l", kind: "light", x: 3.5, y: 1.75, fixture: "pendant", kelvin: 3000 },
     ]);
     expect(moveStructures(undefined, { x: 1, y: 1 }, room, room)).toBeUndefined();
   });

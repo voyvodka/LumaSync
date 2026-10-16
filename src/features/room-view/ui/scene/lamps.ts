@@ -80,9 +80,10 @@ export function lampFixture(family: LampFamily, at: ScenePoint, surface: number,
       };
     }
     case "ceiling":
+      // The diffuser stands proud of its rim: under a plate, the camera from above saw a grey disc.
       return {
-        body: overhead([rod(0.2, 0.2, 0.03, x, ceiling - 0.03, z, CANOPY, 32)]),
-        glow: { at: { x, y: ceiling - 0.04, z }, radii: [0.19, 0.025, 0.19], shape: "drum" },
+        body: overhead([ring(0.17, 0.2, 0.012, x, ceiling - 0.012, z, CANOPY)]),
+        glow: { at: { x, y: ceiling - 0.01, z }, radii: [0.18, 0.012, 0.18], shape: "drum" },
       };
     case "go": {
       // A Go is a pebble on its cradle: wider than tall, lit all over.

@@ -1162,9 +1162,10 @@ export interface RoomMapConfig {
    *  warm white. Read through `resolveRoomSurfaces`; a writer spreads the stored value, so a newer
    *  build's choice survives an edit of the other. */
   surfaces?: RoomSurfaces;
-  /** The room's own build — columns, beams, windows, doors, niches — for the plan and the 3D view
-   *  alone. Read through `resolveRoomStructures`, which skips a kind or an entry this build cannot
-   *  draw and never writes back; an edit goes by id on the stored array, so those survive it. A
+  /** The room's own build — columns, beams, windows, doors, niches and the ceiling's own lights — for
+   *  the plan and the 3D view alone; Rust carries it untouched, so nothing in it is ever streamed.
+   *  Read through `resolveRoomStructures`, which skips a kind or an entry this build cannot draw and
+   *  never writes back; an edit goes by id on the stored array, so those survive it. A
    *  resize moves every entry's `x`/`y` and `x1`…`y2` by name, an unknown kind's too: a kind keeps
    *  its plan points under those names and gives them no other meaning. */
   structures?: RoomStructure[];
@@ -1232,10 +1233,11 @@ export const STRUCTURE_KINDS = {
   WINDOW: "window",
   DOOR: "door",
   NICHE: "niche",
+  LIGHT: "light",
 } as const;
 export type StructureKind = (typeof STRUCTURE_KINDS)[keyof typeof STRUCTURE_KINDS];
 
-interface StructureBase {
+export interface StructureBase {
   id: string;
   label?: string;
   locked?: boolean;
@@ -1294,85 +1296,32 @@ export interface NicheStructure extends WallItemBase {
   depth: number;
 }
 
-export type RoomStructure = ColumnStructure | BeamStructure | WindowStructure | DoorStructure | NicheStructure;
+/** The ceiling's own fixtures a decor light can be: its own set, so a fixture added for Hue lights
+ *  does not widen it unseen. */
+export const DECOR_LIGHT_FIXTURES = {
+  PENDANT: HUE_FIXTURES.PENDANT,
+  CEILING: HUE_FIXTURES.CEILING,
+  SPOT: HUE_FIXTURES.SPOT,
+  BULB: HUE_FIXTURES.BULB,
+} as const satisfies Record<string, HueFixture>;
+export type DecorLightFixture = (typeof DECOR_LIGHT_FIXTURES)[keyof typeof DECOR_LIGHT_FIXTURES];
+
+/** A light the house has and LumaSync does not drive: drawn lit in the 3D room, never streamed. */
+export interface LightStructure extends StructureBase {
+  kind: typeof STRUCTURE_KINDS.LIGHT;
+  x: number;
+  y: number;
+  fixture: DecorLightFixture;
+  /** Below the ceiling; absent ⇒ where the fixture hangs. */
+  dropMeters?: number;
+  /** Absent ⇒ 2700; read within `SOLID_KELVIN_RANGE`. */
+  kelvin?: number;
+}
+
+export const DECOR_LIGHT_KELVIN = 2700;
+
+export type RoomStructure = ColumnStructure | BeamStructure | WindowStructure | DoorStructure | NicheStructure | LightStructure;
 export type WallStructure = WindowStructure | DoorStructure | NicheStructure;
-
-export function isWallStructure(structure: RoomStructure): structure is WallStructure {
-  return structure.kind === STRUCTURE_KINDS.WINDOW || structure.kind === STRUCTURE_KINDS.DOOR || structure.kind === STRUCTURE_KINDS.NICHE;
-}
-
-const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
-const positive = (value: unknown): value is number => finite(value) && value > 0;
-const atLeastZero = (value: unknown): value is number => finite(value) && value >= 0;
-
-function structureBase(entry: Record<string, unknown>): StructureBase | null {
-  if (typeof entry.id !== "string" || entry.id === "") return null;
-  return {
-    id: entry.id,
-    ...(typeof entry.label === "string" ? { label: entry.label } : {}),
-    ...(entry.locked === true ? { locked: true } : {}),
-  };
-}
-
-function resolveStructure(entry: Record<string, unknown>): RoomStructure | null {
-  const base = structureBase(entry);
-  if (!base) return null;
-  const e = entry;
-  switch (e.kind) {
-    case STRUCTURE_KINDS.COLUMN:
-      if (!finite(e.x) || !finite(e.y) || !positive(e.width) || !positive(e.depth)) return null;
-      return {
-        ...base,
-        kind: STRUCTURE_KINDS.COLUMN,
-        x: e.x,
-        y: e.y,
-        width: e.width,
-        depth: e.depth,
-        ...(finite(e.rotation) ? { rotation: e.rotation } : {}),
-        ...(e.shape === "round" || e.shape === "square" ? { shape: e.shape } : {}),
-      };
-    case STRUCTURE_KINDS.BEAM:
-      if (![e.x1, e.y1, e.x2, e.y2].every(finite) || !positive(e.width) || !positive(e.dropMeters)) return null;
-      return { ...base, kind: STRUCTURE_KINDS.BEAM, x1: e.x1 as number, y1: e.y1 as number, x2: e.x2 as number, y2: e.y2 as number, width: e.width, dropMeters: e.dropMeters };
-    case STRUCTURE_KINDS.WINDOW:
-      if (!finite(e.x) || !finite(e.y) || !positive(e.width) || !atLeastZero(e.sillMeters) || !positive(e.heightMeters)) return null;
-      return { ...base, kind: STRUCTURE_KINDS.WINDOW, x: e.x, y: e.y, width: e.width, sillMeters: e.sillMeters, heightMeters: e.heightMeters };
-    case STRUCTURE_KINDS.DOOR:
-      if (!finite(e.x) || !finite(e.y) || !positive(e.width) || !positive(e.heightMeters)) return null;
-      return {
-        ...base,
-        kind: STRUCTURE_KINDS.DOOR,
-        x: e.x,
-        y: e.y,
-        width: e.width,
-        heightMeters: e.heightMeters,
-        hinge: e.hinge === "right" ? "right" : "left",
-        swing: e.swing === "out" ? "out" : "in",
-      };
-    case STRUCTURE_KINDS.NICHE:
-      if (!finite(e.x) || !finite(e.y) || !positive(e.width) || !atLeastZero(e.bottomMeters) || !positive(e.heightMeters) || !positive(e.depth)) return null;
-      return { ...base, kind: STRUCTURE_KINDS.NICHE, x: e.x, y: e.y, width: e.width, bottomMeters: e.bottomMeters, heightMeters: e.heightMeters, depth: e.depth };
-    default:
-      return null;
-  }
-}
-
-/** The structures this build can draw, in stored order, the first of any repeated id. Read-only:
- *  an unknown kind or a malformed entry is skipped here and left on disk. */
-export function resolveRoomStructures(config: Pick<RoomMapConfig, "structures">): RoomStructure[] {
-  const stored: unknown = config.structures;
-  if (!Array.isArray(stored)) return [];
-  const out: RoomStructure[] = [];
-  const seen = new Set<string>();
-  for (const entry of stored) {
-    if (typeof entry !== "object" || entry === null) continue;
-    const structure = resolveStructure(entry as Record<string, unknown>);
-    if (!structure || seen.has(structure.id)) continue;
-    seen.add(structure.id);
-    out.push(structure);
-  }
-  return out;
-}
 
 // ---------------------------------------------------------------------------
 // Defaults

@@ -485,7 +485,8 @@ light and glow are built into the scene, so it moves as the amber frame alone.
   or a bulb on nothing, is offered "Hang from the ceiling". The plan rings a light that hangs
   overhead in a dashed circle, as a reflected ceiling plan draws what is above the floor, and its
   name reads "— overhead".
-- **The room's own build — columns, beams, windows, doors, niches — is `RoomMapConfig.structures`**,
+- **The room's own build — columns, beams, windows, doors, niches, and the house's own ceiling
+  lights — is `RoomMapConfig.structures`**,
   one list keyed on `kind` (`STRUCTURE_KINDS`), drawn in the plan and the 3D view and read by
   nothing else; Rust carries it through a Hue forget untouched (`forget.rs` pins it).
   `resolveRoomStructures` reads it and never writes: an unknown kind or a malformed entry is skipped
@@ -513,7 +514,19 @@ light and glow are built into the scene, so it moves as the amber frame alone.
   shape on the floor) and are cut only in the camera's line to the room — cut for being on the near
   side, one read as a stool; a beam rests on the walls' tops and goes once every wall it rests on
   is cut. The plan draws them as a plan does: glass across the wall line, a door's gap, leaf and
-  dashed swing, a niche dashed behind the wall, a column solid, a beam dashed overhead.
+  dashed swing, a niche dashed behind the wall, a column solid, a beam dashed overhead, a ceiling
+  light a dashed ring with a cross. A ceiling light (`kind: "light"`, `DECOR_LIGHT_FIXTURES`) is
+  one of the house's, not a Hue light: never streamed, no channel, no pick. In 3D it is a Hue
+  lamp's fixture glowing in its own white (`kelvin`, 2700 K by default) at a fixed level whatever
+  the mode — Off darkens what LumaSync drives, not the house's lights — and it takes glow only,
+  after the Hue lamps: no real light (the six are the Hue lights'), and it leaves the room's rig
+  alone, so a room with only these keeps the evening one. By a wall a floor pool moves in up to
+  40 cm and then narrows to stay on the floor, and a wall wash stays under the cut walls' top: both
+  hung past the room's edge onto the backdrop, and narrowed alone a light on the wall lost its pool.
+  A light thrown straight down washes no wall — washed, a downlight read as a sconce — and a flush
+  ceiling light's diffuser stands proud of its rim, which hid it from a camera always above. The
+  readers live in `contracts/roomStructureResolver.ts`, apart from the types: `roomMap.ts` is in the
+  entry chunk, and only the lazy room map and 3D view read structures.
 - **The running mode sets the room's mood.** `roomMood` (`room-view/model/roomMood.ts`) reads what
   runs from the lighting control state: Off leaves the lamps dark — the rig falls to the unlit room (below),
   the bulbs to frosted glass, the TV's backlight out; Solid lights every lamp in

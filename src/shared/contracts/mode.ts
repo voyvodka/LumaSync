@@ -217,6 +217,10 @@ export const DEFAULT_SOLID_COLOR: Readonly<SolidColorPayload> = { r: 255, g: 255
 /** Solid's White tab. `solid_kelvin_range` in `config.rs`. */
 export const SOLID_KELVIN_RANGE = { min: 2000, max: 6500 } as const;
 
+export function clampKelvin(kelvin: number): number {
+  return Math.max(SOLID_KELVIN_RANGE.min, Math.min(SOLID_KELVIN_RANGE.max, Math.round(kelvin)));
+}
+
 export function normalizeSolidColorPayload(input?: Partial<SolidColorPayload>): SolidColorPayload {
   return {
     r: clampInt(input?.r, 0, 255, DEFAULT_SOLID_COLOR.r),
@@ -225,7 +229,7 @@ export function normalizeSolidColorPayload(input?: Partial<SolidColorPayload>): 
     brightness: clampFloat(input?.brightness, 0, 1, DEFAULT_SOLID_COLOR.brightness),
     // Rust drops a kelvin that is not a number and rounds the rest; so does this.
     ...(typeof input?.kelvin === "number" && Number.isFinite(input.kelvin)
-      ? { kelvin: Math.max(SOLID_KELVIN_RANGE.min, Math.min(SOLID_KELVIN_RANGE.max, Math.round(input.kelvin))) }
+      ? { kelvin: clampKelvin(input.kelvin) }
       : {}),
   };
 }

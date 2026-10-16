@@ -206,6 +206,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
       window: "Pencere",
       door: "Kapı",
       niche: "Niş",
+      light: "Tavan ışığı",
     },
   },
   settings: {

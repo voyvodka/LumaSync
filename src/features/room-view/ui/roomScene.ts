@@ -56,7 +56,7 @@ import { mergeParts, type Part, transformParts } from "./scene/parts";
 import { lampFixture } from "./scene/lamps";
 import { lampLights } from "./scene/lampLights";
 import { type Liftable, type LiftedPiece, liftPiece, spanHider, spansOf } from "./scene/lift";
-import { beamGeometry, columnGeometry, doorGaps, gappedWallGeometry, openingsTop, planStructures, thresholds } from "./scene/structures";
+import { beamGeometry, columnGeometry, decorLights, doorGaps, gappedWallGeometry, openingsTop, planStructures, thresholds } from "./scene/structures";
 import { buildScreen } from "./scene/screen";
 import { buildSelectionMark } from "./scene/selection";
 import { type LedTape, ledTape, TAPE_DEPTH as STRIP_DEPTH, TAPE_WIDTH as STRIP_WIDTH } from "./scene/ledTape";
@@ -294,6 +294,25 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     };
   });
 
+  // The house's own lights after the Hue ones, so a palette's stops still fall on the Hue lights by index.
+  const hueLamps = lamps.length;
+  for (const light of decorLights(config, H)) {
+    const point = roomToScene(light.x, light.y, light.height, dims);
+    const fixture = lampFixture(light.fixture, point, surfaceUnder(point.x, point.z, point.y, surfaces), H, 0);
+    sort(fixture.body);
+    const outside = corners !== null && outsideOutline(fixture.glow.at.x + W / 2, fixture.glow.at.z + D / 2, corners);
+    lamps.push({
+      at: fixture.glow.at,
+      radii: fixture.glow.radii,
+      shape: fixture.glow.shape,
+      rotation: fixture.glow.rotation,
+      beam: fixture.beam,
+      color: light.colour,
+      own: true,
+      outside,
+    });
+  }
+
   const screen = buildScreen(config, models);
   if (screen) {
     sort(screen.parts, TV_ANCHOR_OBJECT_ID);
@@ -463,12 +482,13 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     halfLength: e.length / 2,
   }));
 
-  const lampLit = lamps.some((lamp) => !lamp.outside);
-  const real = lampLit ? lampLights(lamps, Math.max(W, D) * 1.1, options.shadows) : null;
+  // Only the Hue lights get the few real lights and set the rig; the house's own are a glow.
+  const lampLit = lamps.slice(0, hueLamps).some((lamp) => !lamp.outside);
+  const real = lampLit ? lampLights(lamps.slice(0, hueLamps), Math.max(W, D) * 1.1, options.shadows) : null;
   if (real) scene.add(...real.objects);
 
   const surface = poolTexture(128);
-  const glow = buildGlow(lamps, planes, H, surface);
+  const glow = buildGlow(lamps, planes, H, surface, standing);
   if (glow) scene.add(...glow.objects);
   else surface.dispose();
 

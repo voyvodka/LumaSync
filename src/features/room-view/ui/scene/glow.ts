@@ -36,7 +36,17 @@ export interface Lamp {
   /** A one-sided fixture's cone. */
   beam?: { aim: Vector3; spread: number };
   color: number;
+  /** One of the house's own lights: its own white at its own level, whatever mode runs. */
+  own?: boolean;
 }
+
+/** The share of a pool's half-width that must stay on the floor; the rest has faded out. */
+const POOL_INSIDE = 0.95;
+/** How far a pool may move off its light to stay on the floor before it narrows instead. */
+const POOL_SHIFT_MAX = 0.4;
+
+/** How bright the house's own lights burn: on, a little under a Hue light at full. */
+const OWN_LEVEL = 0.8;
 
 /** A wall's inner plane: `normal` points into the room. */
 export interface WallPlane {
@@ -142,6 +152,8 @@ export function buildGlow(
   walls: readonly WallPlane[],
   heightM: number,
   surface: Texture,
+  // The walls are cut below the ceiling: a wash placed by the ceiling hung in the air above them.
+  wallTop = heightM,
 ): Glow | null {
   if (lamps.length === 0) return null;
   const m = new Matrix4();
@@ -168,15 +180,27 @@ export function buildGlow(
     const height = Math.min(Math.max(lamp.at.y, 0), heightM);
     // Thrown straight down, the pool is the cone's footprint rather than a wide wash.
     const down = lamp.beam && lamp.beam.aim.y < -0.9 ? Math.min(Math.max(1.4 * height * Math.tan(lamp.beam.spread), 0.7), 2.6) : null;
-    const size = lamp.outside ? 0 : (down ?? 1.6 + height * 0.9);
-    pools.setMatrixAt(i, m.compose(new Vector3(lamp.at.x, 0.006, lamp.at.z), FLAT, new Vector3(size, size, 1)));
+    // By a wall a pool moves in, then narrows: it lit the backdrop, and narrowed alone a wall light lost it.
+    let size = lamp.outside ? 0 : (down ?? 1.6 + height * 0.9);
+    const at = new Vector3(lamp.at.x, 0.006, lamp.at.z);
+    for (const wall of lamp.outside ? [] : walls) {
+      if (Math.abs((wall.normal.z !== 0 ? at.x : at.z) - wall.centre) > wall.halfLength) continue;
+      const room = wall.offset + at.dot(wall.normal);
+      const over = (size / 2) * POOL_INSIDE - room;
+      if (over <= 0) continue;
+      const shift = Math.min(over, POOL_SHIFT_MAX);
+      at.addScaledVector(wall.normal, shift);
+      if (over > shift) size = (2 * (room + shift)) / POOL_INSIDE;
+    }
+    pools.setMatrixAt(i, m.compose(at, FLAT, new Vector3(size, size, 1)));
   });
 
   const washes: Array<{ wall: number; matrix: Matrix4 }> = [];
   const washLamps: Array<{ lamp: number; fade: number }> = [];
   const p = new Vector3();
   lamps.forEach((lamp, lampIndex) => {
-    if (lamp.outside || lamp.litByLight) return;
+    // A light thrown straight down lights the floor, not the wall beside it: washed, a downlight read as a sconce.
+    if (lamp.outside || lamp.litByLight || (lamp.beam && lamp.beam.aim.y < -0.9)) return;
     p.set(lamp.at.x, lamp.at.y, lamp.at.z);
     walls.forEach((wall, wallIndex) => {
       const distance = wall.offset + p.dot(wall.normal);
@@ -188,7 +212,7 @@ export function buildGlow(
       const fade = 1 - distance / WASH_REACH;
       const size = WASH_SIZE * (0.6 + 0.4 * fade);
       const onWall = p.clone().addScaledVector(wall.normal, -distance + 0.004);
-      onWall.y = Math.min(Math.max(lamp.at.y, size * 0.35), heightM - size * 0.35);
+      onWall.y = Math.min(Math.max(lamp.at.y, size * 0.35), wallTop - size * 0.35);
       // Kept off the wall's ends, so a lamp in a corner does not wash the air outside the room.
       const reach = Math.max(wall.halfLength - size / 2, 0);
       if (wall.normal.z !== 0) onWall.x = Math.min(Math.max(onWall.x, wall.centre - reach), wall.centre + reach);
@@ -204,17 +228,19 @@ export function buildGlow(
   }
 
   const paint = (lampColour: number | null, level: number, palette?: readonly number[]) => {
-    const hue = (lamp: Lamp | undefined, i: number) => paletteColour(palette, i) ?? lampColour ?? lamp?.color ?? 0;
+    const hue = (lamp: Lamp | undefined, i: number) => (lamp?.own ? lamp.color : (paletteColour(palette, i) ?? lampColour ?? lamp?.color ?? 0));
+    const levelOf = (lamp: Lamp | undefined) => (lamp?.own ? OWN_LEVEL : level);
     lamps.forEach((lamp, i) => {
+      const at = levelOf(lamp);
       const gain = lamp.shape === "drum" || lamp.shape === "flare" ? SHADE_BRIGHTNESS : BULB_BRIGHTNESS;
       // Steeper than the level: a dimmed bulb still blew out at a third and bloomed like a full one.
-      const lit = colour.set(hue(lamp, i)).lerp(WHITE, 0.2).multiplyScalar(gain * level ** 1.5);
-      lit.lerp(UNLIT_BULB, 1 - level);
+      const lit = colour.set(hue(lamp, i)).lerp(WHITE, 0.2).multiplyScalar(gain * at ** 1.5);
+      lit.lerp(UNLIT_BULB, 1 - at);
       for (const { mesh } of shapes) mesh.setColorAt(i, lit);
-      pools.setColorAt(i, colour.set(hue(lamp, i)).multiplyScalar(level * (lamp.litByLight ? LIT_POOL_SHARE : 1)));
+      pools.setColorAt(i, colour.set(hue(lamp, i)).multiplyScalar(at * (lamp.litByLight ? LIT_POOL_SHARE : 1)));
     });
     washLamps.forEach(({ lamp, fade }, i) => {
-      washMesh?.setColorAt(i, colour.set(hue(lamps[lamp], lamp)).multiplyScalar(fade * level));
+      washMesh?.setColorAt(i, colour.set(hue(lamps[lamp], lamp)).multiplyScalar(fade * levelOf(lamps[lamp])));
     });
     for (const mesh of [...shapes.map((entry) => entry.mesh), pools, washMesh]) if (mesh?.instanceColor) mesh.instanceColor.needsUpdate = true;
   };
