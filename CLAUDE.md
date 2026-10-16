@@ -85,6 +85,7 @@ Learned across the v1.5 frontend decomposition, where each of these cost a cycle
 
 - **Work lands on `main` through pull requests, one per feature.** A PR carries one change that stands and reverts on its own — a feature, a screen pass, a fix with its test — never one per task-list item. Inside it, commit at every logical step and push freely; open the PR once the feature works, then auto-merge on green CI, sync and prune, each without a separate go-ahead. The next feature starts on a fresh branch from `main` in this checkout. A small fix found on the way rides along when it touches the same code; otherwise it goes to `devdocs/backlog.md`. The current branch is `feat/effects` (PR #522).
 - **A PR does not touch `CHANGELOG.md`.** Its body carries one `User-visible:` sentence instead — what a user notices, in about 25 words, or `none`. The `release` skill writes the version's notes from those lines.
+- **Commit subjects stay short.** A conventional-commit line of about 72 characters; detail, when needed, goes briefly in the body.
 - **Releases** follow the `release` skill; the reasoning and the version and CI rules are in `build-and-release.md`.
 
 ## Key constraints
