@@ -53,8 +53,7 @@ export function moveTvWithBacklight(
   return changed ? moved : null;
 }
 
-/** Null when the bound strip already sits behind the screen or there is none. A lock does not
- *  exempt it: a locked strip left off the screen would still be lit and picked as the backlight. */
+/** No lock exemption: the 3D room would still light and pick a locked strip left off the screen. */
 export function seatBacklight(
   config: BacklightSource,
   keepInside: (strip: UsbStripPlacement) => UsbStripPlacement,
