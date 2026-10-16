@@ -28,7 +28,16 @@ function makeTemplate(
 }
 
 /** A showroom piece, named by its model so each one can be told apart in the list. */
-function shown(t: TFunction, type: FurnitureType, variant: FurnitureVariant | null, x: number, y: number, width: number, height: number): FurniturePlacement {
+function shown(
+  t: TFunction,
+  type: FurnitureType,
+  variant: FurnitureVariant | null,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  rotation = 0,
+): FurniturePlacement {
   return {
     id: `show-${type}-${variant ?? "plain"}`,
     type,
@@ -36,7 +45,7 @@ function shown(t: TFunction, type: FurnitureType, variant: FurnitureVariant | nu
     y,
     width,
     height,
-    rotation: 0,
+    rotation,
     label: variant ? t(`roomMap:furniture.variant.${variant}`) : t(`roomMap:furniture.type.${type}`),
     ...(variant ? { variant } : {}),
   };
@@ -67,6 +76,8 @@ function showroomStructures(t: TFunction): RoomStructure[] {
  *  structure past them. */
 function showroom(t: TFunction): RoomMapConfig {
   const s = (type: FurnitureType, variant: FurnitureVariant | null, x: number, y: number, w: number, h: number) => shown(t, type, variant, x, y, w, h);
+  // A piece's front is its plan top: one backed onto the TV wall is turned round to face the room.
+  const onTvWall = (type: FurnitureType, variant: FurnitureVariant, x: number, w: number, h: number) => shown(t, type, variant, x, 0, w, h, 180);
   return makeTemplate({
     dimensions: { widthMeters: 12.5, depthMeters: 8, heightMeters: 2.7 },
     structures: showroomStructures(t),
@@ -79,12 +90,12 @@ function showroom(t: TFunction): RoomMapConfig {
     furniture: [
       s("rug", "rectangle", 5.0, 4.6, 2.0, 1.4),
       s("rug", "round", 7.3, 4.6, 1.4, 1.4),
-      s("storage", "bookshelf", 0.2, 0, 1.0, 0.32),
-      s("storage", "sideboard", 1.4, 0, 1.6, 0.45),
-      s("storage", "tvUnit", 3.3, 0, 2.0, 0.45),
-      s("storage", "dresser", 5.6, 0, 1.0, 0.5),
-      s("storage", "wardrobe", 6.9, 0, 2.0, 0.6),
-      s("storage", "nightstand", 9.2, 0, 0.45, 0.4),
+      onTvWall("storage", "bookshelf", 0.2, 1.0, 0.32),
+      onTvWall("storage", "sideboard", 1.4, 1.6, 0.45),
+      onTvWall("storage", "tvUnit", 3.3, 2.0, 0.45),
+      onTvWall("storage", "dresser", 5.6, 1.0, 0.5),
+      onTvWall("storage", "wardrobe", 6.9, 2.0, 0.6),
+      onTvWall("storage", "nightstand", 9.2, 0.45, 0.4),
       s("sofa", "straight", 0.3, 1.2, 2.1, 0.9),
       s("sofa", "cornerLeft", 2.8, 1.2, 2.6, 1.6),
       s("sofa", "cornerRight", 5.8, 1.2, 2.6, 1.6),

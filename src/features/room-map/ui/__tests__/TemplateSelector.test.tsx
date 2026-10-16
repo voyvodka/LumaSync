@@ -56,4 +56,15 @@ describe("TemplateSelector", () => {
       }
     }
   });
+
+  // A piece's front is its plan top, so one backed onto the TV wall at 0° faced the wall.
+  it("turns every showroom piece backed onto a wall to face the room", () => {
+    cleanup();
+    const room = pick("roomMap:templates.showroom.name");
+    const { depthMeters } = room.dimensions;
+    for (const f of room.furniture) {
+      if (f.y <= 0.05) expect(f.rotation, f.id).toBe(180);
+      if (f.y + f.height >= depthMeters - 0.05) expect(f.rotation ?? 0, f.id).toBe(0);
+    }
+  });
 });
