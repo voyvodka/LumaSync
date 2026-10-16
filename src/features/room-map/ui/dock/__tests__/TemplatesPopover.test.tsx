@@ -69,6 +69,14 @@ describe("TemplatesPopover", () => {
     expect(onPreview).not.toHaveBeenCalled();
   });
 
+  // The editor leaves every key alone while a template is on show: Escape is the drawer's own.
+  it("closes on Escape from a card", () => {
+    const onClose = vi.fn<() => void>();
+    render(<Harness onPreview={vi.fn<(template: RoomMapConfig | null) => void>()} onApply={vi.fn<Apply>()} onClose={onClose} />);
+    fireEvent.keyDown(card("tv55"), { key: "Escape" });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it("closes when Tab leaves it, handing focus back to its anchor", () => {
     const onClose = vi.fn<() => void>();
     render(<Harness onPreview={vi.fn<(template: RoomMapConfig | null) => void>()} onApply={vi.fn<Apply>()} onClose={onClose} />);

@@ -840,6 +840,17 @@ describe("RoomMapEditor — the 3D room as the editing stage", () => {
     persistState.configOverride = {};
   });
 
+  it("edits a saved piece from the inspector without writing the template on show", async () => {
+    persistState.apply.mockClear();
+    persistState.configOverride = { furniture: [{ id: "mine", type: "chair", x: 1, y: 1, width: 0.5, height: 0.5 }] };
+    const view = await openEdit();
+    await act(async () => view.getByTestId("preview-template").click());
+    await act(async () => view.getByTestId("widen-first").click());
+    const patch = persistState.apply.mock.calls[0]![0] as { furniture: Array<{ id: string; width: number }> };
+    expect(patch.furniture.map((f) => [f.id, f.width])).toEqual([["mine", 3]]);
+    persistState.configOverride = {};
+  });
+
   // The drawer's cards sit in a portal, and their keys still bubble to the editor through React.
   it("leaves Cmd+Z unanswered while a template is previewed", async () => {
     persistState.undo.mockClear();

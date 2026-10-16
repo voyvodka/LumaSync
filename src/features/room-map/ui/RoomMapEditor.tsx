@@ -244,7 +244,7 @@ export function RoomMapEditor({
     handleHueZoneCenterChange,
     handleHueZoneUpdate,
   } = useRoomMapHueZones({
-    config,
+    config: docConfig,
     apply,
     adopt,
     activeHueZoneId,
@@ -328,7 +328,7 @@ export function RoomMapEditor({
     handleArrowNudge,
     handleUpdatePosition,
     handleRename,
-  } = useRoomMapObjects({ config, hueAreaId, apply, selectedId, select });
+  } = useRoomMapObjects({ config: docConfig, hueAreaId, apply, selectedId: docSelectedId, select });
 
   const { handleAddImage, imageError, imageErrorCode } = useRoomMapImageLayers({ apply, select: selectShowingPlan });
 
@@ -797,33 +797,33 @@ export function RoomMapEditor({
   }, [contextMenu, t, handleDuplicate, handleRotate, deleteById, select]);
 
   // Inline closures on purpose: the dock is not memoised, and every one of these reads the
-  // config as it is now.
+  // saved room as it is now, never a preview on the stage.
   const inspectorActions: InspectorActions = {
     // A chip or swatch group selects on every arrow key; the gesture keeps a run of them one
     // undo step and one save, as the zone inspector's fields do.
     onUpdateTvAnchor: (patch) => {
-      if (!config.tvAnchor) return;
-      apply({ tvAnchor: keepPlacedInside({ ...config.tvAnchor, ...patch }, roomBoxOf(config)) }, { gesture: `tv:${Object.keys(patch).sort().join(",")}` });
+      if (!docConfig.tvAnchor) return;
+      apply({ tvAnchor: keepPlacedInside({ ...docConfig.tvAnchor, ...patch }, roomBoxOf(docConfig)) }, { gesture: `tv:${Object.keys(patch).sort().join(",")}` });
     },
     onUpdateFurniture: (id, patch) => {
       apply(
-        { furniture: config.furniture.map((f) => (f.id === id ? keepPlacedInside({ ...f, ...patch }, roomBoxOf(config)) : f)) },
+        { furniture: docConfig.furniture.map((f) => (f.id === id ? keepPlacedInside({ ...f, ...patch }, roomBoxOf(docConfig)) : f)) },
         { gesture: `furniture:${id}:${Object.keys(patch).sort().join(",")}` },
       );
     },
     onUpdateUsbStrip: (stripId, patch) => {
       apply({
-        usbStrips: config.usbStrips.map((s) => {
+        usbStrips: docConfig.usbStrips.map((s) => {
           if (s.stripId !== stripId) return s;
           const next = { ...s, ...patch };
-          return keepStripInside(refitRetapedStrip(s, next, config), roomBoxOf(config));
+          return keepStripInside(refitRetapedStrip(s, next, docConfig), roomBoxOf(docConfig));
         }),
       });
     },
     onUpdateImageLayer: (id, patch) => {
       // The opacity slider lands here per input event.
       apply(
-        { imageLayers: config.imageLayers.map((l) => (l.id === id ? { ...l, ...patch } : l)) },
+        { imageLayers: docConfig.imageLayers.map((l) => (l.id === id ? { ...l, ...patch } : l)) },
         { gesture: imageLayerGestureKey(id, Object.keys(patch).sort().join(",")) },
       );
     },
@@ -835,7 +835,7 @@ export function RoomMapEditor({
       if (!target) return;
       const next = { ...target, ...patch };
       apply(
-        { hueChannels: replaceHueChannel(config.hueChannels, worldZ === undefined ? next : setHueChannelWorldZ(next, config.zones, worldZ)) },
+        { hueChannels: replaceHueChannel(docConfig.hueChannels, worldZ === undefined ? next : setHueChannelWorldZ(next, docConfig.zones, worldZ)) },
         { gesture: `hue:${channelIndex}:${Object.keys(patch).sort().join(",")}` },
       );
     },
@@ -844,14 +844,14 @@ export function RoomMapEditor({
       if (!target) return;
       // A slider, like the opacity one.
       apply(
-        { hueChannels: replaceHueChannel(config.hueChannels, setHueChannelWorldZ(target, config.zones, worldZ)) },
+        { hueChannels: replaceHueChannel(docConfig.hueChannels, setHueChannelWorldZ(target, docConfig.zones, worldZ)) },
         { gesture: `hue-height:${channelIndex}` },
       );
     },
     onRename: handleRename,
     onToggleLock: (id) => {
       const ref = parseObjectId(id);
-      const patch = ref ? roomObjectAdapter(ref).toggleLock(config, ref, visibleHueChannels) : null;
+      const patch = ref ? roomObjectAdapter(ref).toggleLock(docConfig, ref, visibleHueChannels) : null;
       if (patch) apply(patch);
     },
     onDuplicate: handleDuplicate,
