@@ -54,6 +54,7 @@ export function floorParts(
   corners: readonly PlanCorner[] | null = null,
   edges: readonly OutlineEdge[] = [],
   finish: FloorFinish = FLOOR_FINISHES.OAK,
+  gaps: ReadonlyMap<number, readonly WallGap[]> = new Map(),
 ): Part[] {
   const look: FloorLook = FLOOR_PALETTE[finish] ?? FLOOR_PALETTE.oak;
   const rects = outlineRects(widthM, depthM, corners);
@@ -62,12 +63,12 @@ export function floorParts(
   );
   if ("slab" in look) {
     slabs(parts, rects, widthM, depthM, look.slab, look.size, look.alternate);
-    skirting(parts, edges);
+    skirting(parts, edges, gaps);
     return parts;
   }
   if (look.herringbone) {
     herringbone(parts, rects, widthM, depthM, look.planks);
-    skirting(parts, edges);
+    skirting(parts, edges, gaps);
     return parts;
   }
   const planks = look.planks;
@@ -111,21 +112,43 @@ export function floorParts(
       }
     }
   }
-  skirting(parts, edges);
+  skirting(parts, edges, gaps);
   return parts;
 }
 
-/** Skirting along the inside of every wall. */
-function skirting(parts: Part[], edges: readonly OutlineEdge[]): void {
-  for (const e of edges) {
-    const x = (e.ax + e.bx) / 2 - e.outwardX * 0.007;
-    const z = (e.az + e.bz) / 2 - e.outwardZ * 0.007;
-    parts.push(
-      e.outwardZ !== 0
-        ? block(e.length, SKIRTING_HEIGHT, 0.014, x, 0, z, PALETTE.skirting, 0.004)
-        : block(0.014, SKIRTING_HEIGHT, e.length, x, 0, z, PALETTE.skirting, 0.004),
-    );
+export interface WallGap {
+  /** Along the wall's axis, in scene metres: x for a wall along x, z otherwise. */
+  from: number;
+  to: number;
+}
+
+/** The runs of `lo`…`hi` that no gap covers, shorter than a centimetre dropped. */
+export function openRuns(lo: number, hi: number, gaps: readonly WallGap[] = []): Array<[number, number]> {
+  const runs: Array<[number, number]> = [];
+  let at = lo;
+  for (const gap of [...gaps].sort((a, b) => a.from - b.from)) {
+    const end = Math.min(Math.max(gap.from, lo), hi);
+    if (end - at > 0.01) runs.push([at, end]);
+    at = Math.max(at, Math.min(gap.to, hi));
   }
+  if (hi - at > 0.01) runs.push([at, hi]);
+  return runs;
+}
+
+/** Skirting along the inside of every wall, broken at its doors. */
+function skirting(parts: Part[], edges: readonly OutlineEdge[], gaps: ReadonlyMap<number, readonly WallGap[]>): void {
+  edges.forEach((e, i) => {
+    const alongX = e.outwardZ !== 0;
+    const [lo, hi] = alongX ? [Math.min(e.ax, e.bx), Math.max(e.ax, e.bx)] : [Math.min(e.az, e.bz), Math.max(e.az, e.bz)];
+    for (const [from, to] of openRuns(lo, hi, gaps.get(i))) {
+      const mid = (from + to) / 2;
+      parts.push(
+        alongX
+          ? block(to - from, SKIRTING_HEIGHT, 0.014, mid, 0, e.az - e.outwardZ * 0.007, PALETTE.skirting, 0.004)
+          : block(0.014, SKIRTING_HEIGHT, to - from, e.ax - e.outwardX * 0.007, 0, mid, PALETTE.skirting, 0.004),
+      );
+    }
+  });
 }
 
 /** Square slabs on a grid from the room's corner, cut to the outline; `size` 0 is one even sheet
@@ -266,20 +289,25 @@ const CORNER_SHADE = 0.2;
 
 /** A soft dark band along the foot of every wall, deepest where two walls meet: the occlusion a
  *  real room has there, which a room drawn without it looks pasted onto the floor for lacking. */
-export function wallFootShade(edges: readonly OutlineEdge[]): BufferGeometry {
+export function wallFootShade(edges: readonly OutlineEdge[], gaps: ReadonlyMap<number, readonly WallGap[]> = new Map()): BufferGeometry {
   const positions: number[] = [];
   const colours: number[] = [];
   const index: number[] = [];
   const y = 0.0025;
   const r = CORNER_SHADE_REACH;
-  for (const e of edges) {
+  edges.forEach((e, i) => {
     const nx = -e.outwardX;
     const nz = -e.outwardZ;
-    const base = positions.length / 3;
-    positions.push(e.ax, y, e.az, e.bx, y, e.bz, e.bx + nx * r, y, e.bz + nz * r, e.ax + nx * r, y, e.az + nz * r);
-    colours.push(0, 0, 0, CORNER_SHADE, 0, 0, 0, CORNER_SHADE, 0, 0, 0, 0, 0, 0, 0, 0);
-    index.push(base, base + 1, base + 2, base, base + 2, base + 3);
-  }
+    const alongX = e.outwardZ !== 0;
+    const [lo, hi] = alongX ? [Math.min(e.ax, e.bx), Math.max(e.ax, e.bx)] : [Math.min(e.az, e.bz), Math.max(e.az, e.bz)];
+    for (const [from, to] of openRuns(lo, hi, gaps.get(i))) {
+      const [ax, az, bx, bz] = alongX ? [from, e.az, to, e.az] : [e.ax, from, e.ax, to];
+      const base = positions.length / 3;
+      positions.push(ax, y, az, bx, y, bz, bx + nx * r, y, bz + nz * r, ax + nx * r, y, az + nz * r);
+      colours.push(0, 0, 0, CORNER_SHADE, 0, 0, 0, CORNER_SHADE, 0, 0, 0, 0, 0, 0, 0, 0);
+      index.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
+  });
   const geometry = new BufferGeometry();
   geometry.setAttribute("position", new BufferAttribute(new Float32Array(positions), 3));
   geometry.setAttribute("color", new BufferAttribute(new Float32Array(colours), 4));

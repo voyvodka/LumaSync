@@ -195,6 +195,15 @@ export default {
       armchair: "Armchair",
     },
   },
+  structure: {
+    kind: {
+      column: "Column",
+      beam: "Beam",
+      window: "Window",
+      door: "Door",
+      niche: "Niche",
+    },
+  },
   settings: {
     showGrid: "Show grid",
     gridStrokeWidth: "Grid thickness",

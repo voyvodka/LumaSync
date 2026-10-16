@@ -6,6 +6,7 @@ import { type FurnitureModel, modelTop } from "@/features/room-view/model/furnit
 import type { LampFamily } from "@/features/room-view/model/lampFamily";
 import { hueFacings } from "../model/hueFacing";
 import { hueOverhead } from "../model/hueHang";
+import { moveStructures } from "../model/roomStructures";
 import { seatMovedLight } from "../model/lightSeat";
 import { ROOM_VIEW_3D_AVAILABLE, RoomView3DHost } from "@/features/room-view/ui/RoomView3DHost";
 import type { CameraCommand } from "@/features/room-view/ui/RoomView3D";
@@ -45,6 +46,7 @@ import { useLandCarried } from "../state/useLandCarried";
 import type { RoomMapDocument } from "../state/useRoomMapDocument";
 import { useRoomMapGridSettings } from "../state/useRoomMapGridSettings";
 import { useRoomMood } from "../state/useRoomMood";
+import { StructurePlan } from "./objects/StructurePlan";
 import { useUsbStripStatus } from "../state/useUsbStripStatus";
 import { FootprintWalls } from "./objects/FootprintWalls";
 import {
@@ -587,7 +589,7 @@ export function RoomMapEditor({
   /** Everything in the room moved by (`dxM`, `dyM`) metres, as a patch. Hue channels and zones live
    *  in the bridge's [-1, 1] cube, which spans the room, so they follow its size without a shift. */
   const shiftedContents = useCallback(
-    (from: typeof config, dxM: number, dyM: number): Partial<typeof config> => {
+    (from: typeof config, dxM: number, dyM: number, to: Pick<typeof config, "dimensions" | "footprint">): Partial<typeof config> => {
       const patch: Partial<typeof config> = {};
       if (from.tvAnchor) patch.tvAnchor = { ...from.tvAnchor, x: from.tvAnchor.x + dxM, y: from.tvAnchor.y + dyM };
       if (from.furniture.length > 0) patch.furniture = from.furniture.map((f) => ({ ...f, x: f.x + dxM, y: f.y + dyM }));
@@ -597,6 +599,8 @@ export function RoomMapEditor({
       if (from.imageLayers.length > 0) {
         patch.imageLayers = from.imageLayers.map((l) => ({ ...l, offsetX: l.offsetX + dxM * pxPerMeter, offsetY: l.offsetY + dyM * pxPerMeter }));
       }
+      const structures = moveStructures(from.structures, { x: dxM, y: dyM }, from, to);
+      if (structures && structures.length > 0) patch.structures = structures as typeof from.structures;
       return patch;
     },
     [],
@@ -618,7 +622,7 @@ export function RoomMapEditor({
         y: start.pan.y - next.shift.y * pxPerMeter * zoom,
       });
       apply(
-        { dimensions: next.dimensions, footprint: next.footprint, ...shiftedContents(start.config, next.shift.x, next.shift.y) },
+        { dimensions: next.dimensions, footprint: next.footprint, ...shiftedContents(start.config, next.shift.x, next.shift.y, next) },
         { gesture },
       );
     },
@@ -639,11 +643,13 @@ export function RoomMapEditor({
       const dxM = (d.widthMeters - widthMeters) / 2;
       const dyM = (d.depthMeters - depthMeters) / 2;
 
-      const patch: Partial<typeof config> = { dimensions: d, ...shiftedContents(config, dxM, dyM) };
       // A height-only change leaves the outline as it is stored.
-      if (config.footprint !== undefined && (d.widthMeters !== widthMeters || d.depthMeters !== depthMeters)) {
-        patch.footprint = resizeFootprint(config.footprint, config.dimensions, d);
-      }
+      const footprint =
+        config.footprint !== undefined && (d.widthMeters !== widthMeters || d.depthMeters !== depthMeters)
+          ? resizeFootprint(config.footprint, config.dimensions, d)
+          : config.footprint;
+      const patch: Partial<typeof config> = { dimensions: d, ...shiftedContents(config, dxM, dyM, { dimensions: d, footprint }) };
+      if (footprint !== config.footprint) patch.footprint = footprint;
 
       apply(patch);
     },
@@ -841,6 +847,8 @@ export function RoomMapEditor({
                 apply({ footprint: buildFootprint(shape, config.dimensions) }, gesture ? { gesture } : undefined)
               }
             />
+
+            <StructurePlan config={config} pxPerMeter={pxPerMeter} />
 
             {/* Origin crosshair marker — always centered, extends to edges */}
             <OriginMarker widthM={widthMeters} depthM={depthMeters} pxPerMeter={pxPerMeter} />

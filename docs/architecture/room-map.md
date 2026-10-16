@@ -485,6 +485,32 @@ light and glow are built into the scene, so it moves as the amber frame alone.
   or a bulb on nothing, is offered "Hang from the ceiling". The plan rings a light that hangs
   overhead in a dashed circle, as a reflected ceiling plan draws what is above the floor, and its
   name reads "— overhead".
+- **The room's own build — columns, beams, windows, doors, niches — is `RoomMapConfig.structures`**,
+  one list keyed on `kind` (`STRUCTURE_KINDS`), drawn in the plan and the 3D view and read by
+  nothing else; Rust carries it through a Hue forget untouched (`forget.rs` pins it).
+  `resolveRoomStructures` reads it and never writes: an unknown kind or a malformed entry is skipped
+  for drawing and stays on disk, and a room resize shifts every stored entry's plan points, a
+  newer build's kind included (`moveStructures`) — so every kind keeps its points in `x`/`y` or
+  `x1`…`y2`, and no kind gives those names another meaning. A window, door or niche stores a point
+  and a width, not a wall: the wall is read when it is drawn (`anchorWallItem`, the nearest wall it
+  stands in front of, else the nearest by its ends, moved in so its width fits), so a reshaped room
+  keeps it on a wall. A resize puts it back on the wall it was on: shifted with the room alone, an
+  item on a wall pulled 3 m out was nearer the TV wall and jumped to it. A template lays out its own structures and Reset clears them, and a room with one
+  is no longer empty. This pass draws them only; nothing picks, moves or adds one yet. In 3D, after
+  the reference: a door is a real gap in its wall, with a lintel to the wall's top, a casing and a
+  wooden leaf 30° open — at 12° and in slate it read as a shut door, the same dark as a pane — and
+  the skirting and the foot shade stop at its jambs, a sill across it staying when the wall is cut;
+  a window is a frame and a pane on the wall's face, dusk sky above and darker below, and the walls
+  stand 15 cm above the tallest one, up to 85% of the ceiling, past which its head is cut — a hole
+  in a wall standing lower than the window notched its top, which no reference frame shows; a
+  niche is a back a shade darker with a shadow under its head and a ledge, since a box behind a
+  10 cm wall would poke out of the room and lips round it read as a picture frame. What is on a cut
+  wall's face hides with it (`spanHider`, the lift's own trick, so the draw count holds). Columns
+  stand at the walls' height, cast no shadow (the walls cast none, and a column's was the heaviest
+  shape on the floor) and are cut only in the camera's line to the room — cut for being on the near
+  side, one read as a stool; a beam rests on the walls' tops and goes once every wall it rests on
+  is cut. The plan draws them as a plan does: glass across the wall line, a door's gap, leaf and
+  dashed swing, a niche dashed behind the wall, a column solid, a beam dashed overhead.
 - **The running mode sets the room's mood.** `roomMood` (`room-view/model/roomMood.ts`) reads what
   runs from the lighting control state: Off leaves the lamps dark — the rig falls to the unlit room (below),
   the bulbs to frosted glass, the TV's backlight out; Solid lights every lamp in

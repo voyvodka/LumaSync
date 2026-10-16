@@ -42,7 +42,7 @@ import {
 } from "@/shared/contracts/roomMap";
 
 import type { PickLeg, Pickable } from "../model/picking";
-import { nearestWallFacing, roomEdges } from "../model/roomOutline";
+import { nearestWallFacing, type OutlineEdge, roomEdges } from "../model/roomOutline";
 import { hueChannelScenePoint, roomToScene, tvMountHeight } from "../model/roomSpace";
 import { contactShadow, floorParts, roomLights, WALL_THICKNESS, wallFootShade, wallGeometry } from "./scene/environment";
 import { classifyFurniture, contactShade, modelTop, surfaceTop } from "../model/furnitureModel";
@@ -55,7 +55,8 @@ import { type FinishKind, finishMaterial } from "./scene/finishes";
 import { mergeParts, type Part, transformParts } from "./scene/parts";
 import { lampFixture } from "./scene/lamps";
 import { lampLights } from "./scene/lampLights";
-import { type Liftable, type LiftedPiece, liftPiece, spansOf } from "./scene/lift";
+import { type Liftable, type LiftedPiece, liftPiece, spanHider, spansOf } from "./scene/lift";
+import { beamGeometry, columnGeometry, doorGaps, gappedWallGeometry, openingsTop, planStructures, thresholds } from "./scene/structures";
 import { buildScreen } from "./scene/screen";
 import { buildSelectionMark } from "./scene/selection";
 import { type LedTape, ledTape, TAPE_DEPTH as STRIP_DEPTH, TAPE_WIDTH as STRIP_WIDTH } from "./scene/ledTape";
@@ -94,6 +95,19 @@ const UNLIT_STRIP = new Color(0x2a2a2e);
 const WALL_CUT_HEIGHT = 0.2;
 /** At full height the walls hid the far half of the floor from a raised view. */
 const WALL_STANDING_SHARE = 0.7;
+const WALL_OPENINGS_SHARE = 0.85;
+/** A column is cut only this near the line from the room's middle to the camera, past its own half-width. */
+const COLUMN_SIGHT = 0.3;
+/** A beam's end within this of a wall rests on it. */
+const BEAM_REST = 0.3;
+
+const wallItemsId = (edge: number) => `wall-items:${edge}`;
+
+function distanceToEdge(x: number, z: number, e: OutlineEdge): number {
+  const t = Math.min(Math.max(((x - e.ax) * (e.bx - e.ax) + (z - e.az) * (e.bz - e.az)) / (e.length * e.length), 0), 1);
+  return Math.hypot(x - (e.ax + (e.bx - e.ax) * t), z - (e.az + (e.bz - e.az) * t));
+}
+
 /** Parts in these colours are metal or glass: a satin finish instead of the matte one. */
 const SATIN = new Set<number>([PALETTE.metal, PALETTE.metalSoft, PALETTE.bezel, PALETTE.keyboard, PALETTE.handle]);
 
@@ -177,7 +191,8 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   const corners = footprint.length > 4 ? footprint : null;
   const edges = roomEdges(W, D, corners);
   const finish = resolveRoomSurfaces(config);
-  const floor = mergeParts(floorParts(W, D, corners, edges, finish.floor), solid(finish.floor === "carpet" ? 0.95 : 0.72), false);
+  const gaps = doorGaps(config, edges);
+  const floor = mergeParts([...floorParts(W, D, corners, edges, finish.floor, gaps), ...thresholds(gaps, edges)], solid(finish.floor === "carpet" ? 0.95 : 0.72), false);
   if (floor) {
     floor.castShadow = false;
     scene.add(floor);
@@ -185,7 +200,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
 
   const models = classifyFurniture(config);
   const byFinish = new Map<string, { kind: FinishKind; castShadow: boolean; parts: Part[]; owners: (string | null)[] }>();
-  const shadows: BufferGeometry[] = [wallFootShade(edges)];
+  const shadows: BufferGeometry[] = [wallFootShade(edges, gaps)];
   const shadowOwners: (string | null)[] = [null];
   const liftables = new Map<string, Liftable>();
   const liftable = (id: string, x: number, z: number) => {
@@ -340,6 +355,16 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     }
   }
 
+  // Never below a mounted screen's top edge, nor so low a window's top would notch it.
+  const screenTop = screen ? screen.layout.centre.y + screen.layout.height / 2 + 0.12 : 0;
+  // Past 85% of the ceiling a window's head is cut instead: the walls would no longer read as cut away.
+  const standing = Math.min(H, Math.max(H * WALL_STANDING_SHARE, screenTop, Math.min(openingsTop(config), H * WALL_OPENINGS_SHARE)));
+  const build = planStructures(config, edges, finish.walls, standing);
+  for (const [edge, parts] of build.wallParts) {
+    liftable(wallItemsId(edge), 0, 0);
+    sort(parts, wallItemsId(edge));
+  }
+
   // One mesh per material: a room is still a handful of draws.
   const defines = options.coldKey !== undefined ? { SPIKE_COLD_KEY: options.coldKey } : undefined;
   // Counted before merging: a part goes in unindexed, a shadow as it is.
@@ -385,25 +410,46 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   // corner it turns in at, the next wall already covers the joint from outside, and a wrap would
   // poke into the room.
   const wallMaterial = solid(0.95);
-  // Never below a mounted screen's top edge.
-  const screenTop = screen ? screen.layout.centre.y + screen.layout.height / 2 + 0.12 : 0;
-  const standing = Math.min(H, Math.max(H * WALL_STANDING_SHARE, screenTop));
-  const walls = edges.map((e) => {
+  const walls = edges.map((e, i) => {
     const alongX = e.outwardZ !== 0;
     const wrapA = alongX && e.convexA ? WALL_THICKNESS : 0;
     const wrapB = alongX && e.convexB ? WALL_THICKNESS : 0;
     const dx = (e.bx - e.ax) / e.length;
     const dz = (e.bz - e.az) / e.length;
-    const mesh = new Mesh(wallGeometry(alongX, e.length + wrapA + wrapB, finish.walls), wallMaterial);
-    mesh.position.set(
-      (e.ax + e.bx) / 2 + (dx * (wrapB - wrapA)) / 2 + (e.outwardX * WALL_THICKNESS) / 2,
-      0,
-      (e.az + e.bz) / 2 + (dz * (wrapB - wrapA)) / 2 + (e.outwardZ * WALL_THICKNESS) / 2,
-    );
+    const x = (e.ax + e.bx) / 2 + (dx * (wrapB - wrapA)) / 2 + (e.outwardX * WALL_THICKNESS) / 2;
+    const z = (e.az + e.bz) / 2 + (dz * (wrapB - wrapA)) / 2 + (e.outwardZ * WALL_THICKNESS) / 2;
+    const span = e.length + wrapA + wrapB;
+    const gapsHere = build.gaps.get(i);
+    const geometry = gapsHere ? gappedWallGeometry(alongX, span, alongX ? x : z, gapsHere, WALL_THICKNESS, finish.walls) : wallGeometry(alongX, span, finish.walls);
+    const mesh = new Mesh(geometry ?? wallGeometry(alongX, 0.01, finish.walls), wallMaterial);
+    mesh.position.set(x, 0, z);
     mesh.scale.y = standing;
     mesh.receiveShadow = true;
     scene.add(mesh);
-    return { mesh, outward: new Vector3(e.outwardX, 0, e.outwardZ) };
+    const items = liftables.get(wallItemsId(i));
+    return { mesh, outward: new Vector3(e.outwardX, 0, e.outwardZ), items: items ? spanHider(items.spans) : null };
+  });
+  // A column is cut only where it stands in the camera's line to the room: cut for being on the near
+  // side, it read as a stool. A beam rests on the walls' tops and goes once every wall under it is cut.
+  const columns = build.columns.map((column) => {
+    const mesh = new Mesh(columnGeometry(column, finish.walls), wallMaterial);
+    const at = roomToScene(column.x, column.y, 0, dims);
+    mesh.position.set(at.x, 0, at.z);
+    mesh.rotation.y = -((column.rotation ?? 0) * Math.PI) / 180;
+    mesh.scale.y = standing;
+    // Walls cast none, so a column's 2 m shadow was the heaviest shape on the floor.
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+    return { mesh, reach: Math.hypot(column.width, column.depth) / 2 + COLUMN_SIGHT };
+  });
+  const beams = build.beams.map((beam) => {
+    const mesh = new Mesh(beamGeometry(beam, dims, standing, finish.walls), wallMaterial);
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+    const ends = [roomToScene(beam.x1, beam.y1, 0, dims), roomToScene(beam.x2, beam.y2, 0, dims)];
+    const restsOn = edges.flatMap((e, i) => (ends.some((end) => distanceToEdge(end.x, end.z, e) <= BEAM_REST) ? [i] : []));
+    return { mesh, restsOn };
   });
   const planes: WallPlane[] = edges.map((e) => ({
     normal: new Vector3(-e.outwardX, 0, -e.outwardZ),
@@ -506,7 +552,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     radius: Math.hypot(W, D, H) / 2,
     cutWalls(direction: Vector3) {
       let changed = false;
-      const cut = walls.map(({ mesh, outward }) => {
+      const cut = walls.map(({ mesh, outward, items }) => {
         // Its outer side faces the camera, or it stands on the camera's side of the room's middle:
         // a U's or T's inner wall faces away from the camera yet still hid the room behind it.
         const nearSide = mesh.position.x * direction.x + mesh.position.z * direction.z > 0.15;
@@ -514,10 +560,28 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
         const height = isCut ? WALL_CUT_HEIGHT : standing;
         if (mesh.scale.y !== height) {
           mesh.scale.y = height;
+          items?.(isCut);
           changed = true;
         }
         return isCut;
       });
+      const flat = Math.hypot(direction.x, direction.z) || 1;
+      for (const { mesh: column, reach } of columns) {
+        const toward = (column.position.x * direction.x + column.position.z * direction.z) / flat;
+        const aside = Math.abs(column.position.x * direction.z - column.position.z * direction.x) / flat;
+        const height = toward > 0.15 && aside <= reach ? WALL_CUT_HEIGHT : standing;
+        if (column.scale.y !== height) {
+          column.scale.y = height;
+          changed = true;
+        }
+      }
+      for (const beam of beams) {
+        const shown = beam.restsOn.length === 0 || !beam.restsOn.every((i) => cut[i]);
+        if (beam.mesh.visible !== shown) {
+          beam.mesh.visible = shown;
+          changed = true;
+        }
+      }
       if (glow?.setCutWalls(cut)) changed = true;
       return changed;
     },

@@ -198,6 +198,15 @@ const roomMap: Catalogue<typeof enRoomMap> = {
       armchair: "Tekli Koltuk",
     },
   },
+  structure: {
+    kind: {
+      column: "Kolon",
+      beam: "Kiriş",
+      window: "Pencere",
+      door: "Kapı",
+      niche: "Niş",
+    },
+  },
   settings: {
     showGrid: "Izgarayı göster",
     gridStrokeWidth: "Izgara kalınlığı",

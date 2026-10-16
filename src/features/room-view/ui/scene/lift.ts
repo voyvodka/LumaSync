@@ -33,6 +33,32 @@ export function spansOf(mesh: Mesh, counts: readonly number[], owners: readonly 
   });
 }
 
+/** Hides the spans by folding their points to the origin, as a lift does, and brings them back. */
+export function spanHider(spans: readonly Span[]): (hidden: boolean) => void {
+  let kept: Float32Array[] | null = null;
+  return (hidden) => {
+    if (hidden === (kept !== null)) return;
+    if (hidden) {
+      kept = spans.map(({ mesh, start, count }) => {
+        const position = mesh.geometry.getAttribute("position") as BufferAttribute;
+        const saved = (position.array as Float32Array).slice(start * 3, (start + count) * 3);
+        position.array.fill(0, start * 3, (start + count) * 3);
+        position.addUpdateRange(start * 3, count * 3);
+        position.needsUpdate = true;
+        return saved;
+      });
+      return;
+    }
+    spans.forEach(({ mesh, start, count }, i) => {
+      const position = mesh.geometry.getAttribute("position") as BufferAttribute;
+      (position.array as Float32Array).set(kept![i]!, start * 3);
+      position.addUpdateRange(start * 3, count * 3);
+      position.needsUpdate = true;
+    });
+    kept = null;
+  };
+}
+
 function copySpan({ mesh, start, count }: Span): BufferGeometry {
   const source = mesh.geometry;
   const copy = new BufferGeometry();

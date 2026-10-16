@@ -54,6 +54,78 @@ describe("buildRoomScene", () => {
   });
 });
 
+describe("buildRoomScene — structures", () => {
+  const built: RoomMapConfig = {
+    ...DEFAULT_ROOM_MAP,
+    structures: [
+      { id: "w", kind: "window", x: 2.5, y: 0, width: 1.2, sillMeters: 0.9, heightMeters: 1.2 },
+      { id: "b", kind: "beam", x1: 1, y1: 0, x2: 1, y2: 4, width: 0.2, dropMeters: 0.3 },
+      { id: "c", kind: "column", x: 4, y: 3, width: 0.4, depth: 0.4 },
+    ],
+  };
+  const meshes = (scene: Scene) => {
+    const out: Mesh[] = [];
+    scene.traverse((object) => {
+      if (object instanceof Mesh && !(object instanceof InstancedMesh)) out.push(object);
+    });
+    return out;
+  };
+  // Points of what is drawn on the TV wall's face above the sill: the window, in the finish meshes.
+  const windowPoints = (scene: Scene) =>
+    meshes(scene)
+      .filter((mesh) => mesh.scale.y === 1)
+      .reduce((n, mesh) => {
+        const position = mesh.geometry.getAttribute("position");
+        for (let i = 0; i < position.count; i++) if (position.getY(i) > 1 && Math.abs(position.getX(i)) < 0.7 && Math.abs(position.getZ(i) + 1.98) < 0.04) n += 1;
+        return n;
+      }, 0);
+
+  it("hides a cut wall's window and a column in the camera's line, keeps a beam while one wall under it stands, and brings them back", () => {
+    const room = buildRoomScene(built, OPTIONS);
+    const beam = meshes(room.scene).find((mesh) => {
+      const box = new Box3().setFromObject(mesh);
+      return box.getSize(new Vector3()).z > 3.9 && box.min.y > 1;
+    })!;
+    const column = meshes(room.scene).find((mesh) => Math.abs(mesh.position.x - 1.5) < 1e-6 && Math.abs(mesh.position.z - 1) < 1e-6)!;
+    const standing = column.scale.y;
+    expect(windowPoints(room.scene)).toBeGreaterThan(0);
+    expect(beam.visible).toBe(true);
+
+    room.cutWalls(new Vector3(0.3, 0, -1).normalize());
+    expect(windowPoints(room.scene)).toBe(0);
+    expect(beam.visible).toBe(true);
+    expect(column.scale.y).toBe(standing);
+
+    room.cutWalls(new Vector3(1, 0, 1).normalize());
+    expect(windowPoints(room.scene)).toBeGreaterThan(0);
+    expect(column.scale.y).toBeLessThan(standing);
+
+    // Off the camera's line, a near column stands: cut for being near, it read as a stool.
+    room.cutWalls(new Vector3(1, 0, -1).normalize());
+    expect(column.scale.y).toBe(standing);
+    disposeScene(room.scene);
+  });
+
+  it("hides a beam once every wall it rests on is cut", () => {
+    const corner: RoomMapConfig = { ...DEFAULT_ROOM_MAP, structures: [{ id: "b", kind: "beam", x1: 0, y1: 1, x2: 2, y2: 0, width: 0.2, dropMeters: 0.3 }] };
+    const room = buildRoomScene(corner, OPTIONS);
+    const beam = meshes(room.scene).find((mesh) => new Box3().setFromObject(mesh).min.y > 1 && mesh.scale.y === 1 && mesh.geometry.getAttribute("position").count === 24)!;
+    room.cutWalls(new Vector3(-1, 0, 0));
+    expect(beam.visible).toBe(true);
+    room.cutWalls(new Vector3(-1, 0, -1).normalize());
+    expect(beam.visible).toBe(false);
+    disposeScene(room.scene);
+  });
+
+  // The walls stood at 70% of a 2.5 m room, 1.75 m: a window 0.9 + 1.2 m tall ran through their top.
+  it("stands the walls above the tallest window, up to 85% of the ceiling", () => {
+    const room = buildRoomScene(built, OPTIONS);
+    const column = meshes(room.scene).find((mesh) => Math.abs(mesh.position.x - 1.5) < 1e-6)!;
+    expect(column.scale.y).toBeCloseTo(2.125);
+    disposeScene(room.scene);
+  });
+});
+
 describe("buildRoomScene — draw budget", () => {
   const drawables = (config: RoomMapConfig) => {
     const { scene } = buildRoomScene(config, OPTIONS);

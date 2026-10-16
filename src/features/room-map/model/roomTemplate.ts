@@ -15,6 +15,7 @@ export function isRoomMapEmpty(config: RoomMapConfig): boolean {
     resolveRoomFootprint(config).length === 4 &&
     !config.tvAnchor &&
     config.furniture.length === 0 &&
+    !(Array.isArray(config.structures) && config.structures.length > 0) &&
     config.usbStrips.every((strip) => Boolean(strip.portName))
   );
 }
@@ -50,6 +51,6 @@ export function applyRoomTemplate(current: RoomMapConfig, template: RoomMapConfi
     ];
   }
 
-  // A template lays out the furniture; the room's finish is the user's and stays.
+  // A template lays out the furniture and the room's build; the room's finish is the user's and stays.
   return { ...template, usbStrips, hueChannels: current.hueChannels, zones: current.zones, surfaces: current.surfaces };
 }

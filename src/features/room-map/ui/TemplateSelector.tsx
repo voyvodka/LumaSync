@@ -2,8 +2,17 @@ import type { TFunction } from "i18next";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type { TranslationKey } from "@/features/i18n/catalogue";
-import type { FurnitureType, FurnitureVariant, RoomMapConfig, FurniturePlacement, UsbStripPlacement, TvAnchorPlacement } from "@/shared/contracts/roomMap";
+import type {
+  FurnitureType,
+  FurnitureVariant,
+  RoomMapConfig,
+  FurniturePlacement,
+  RoomStructure,
+  UsbStripPlacement,
+  TvAnchorPlacement,
+} from "@/shared/contracts/roomMap";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
+import { STRUCTURE_NAME_KEYS } from "../model/roomStructures";
 import { RoomPreview } from "./RoomPreview";
 import styles from "./TemplateSelector.module.css";
 
@@ -41,15 +50,32 @@ function shown(t: TFunction, type: FurnitureType, variant: FurnitureVariant | nu
   };
 }
 
-/** Every type and every model it takes, in rows facing the TV wall like a shop floor. */
+/** Every structure the room can be built with, on the walls and in the free end past the furniture. */
+function showroomStructures(t: TFunction): RoomStructure[] {
+  const label = (kind: RoomStructure["kind"]) => t(STRUCTURE_NAME_KEYS[kind]);
+  return [
+    { id: "show-beam", kind: "beam", label: label("beam"), x1: 10, y1: 0, x2: 10, y2: 8, width: 0.25, dropMeters: 0.3 },
+    { id: "show-column-square", kind: "column", label: label("column"), x: 10.9, y: 4.6, width: 0.4, depth: 0.4 },
+    { id: "show-column-round", kind: "column", label: label("column"), x: 11.6, y: 6.6, width: 0.36, depth: 0.36, shape: "round" },
+    { id: "show-window-left", kind: "window", label: label("window"), x: 0, y: 4.0, width: 1.2, sillMeters: 0.9, heightMeters: 1.2 },
+    { id: "show-window-back", kind: "window", label: label("window"), x: 8.9, y: 8, width: 1.6, sillMeters: 0.8, heightMeters: 1.3 },
+    { id: "show-door-back", kind: "door", label: label("door"), x: 11.4, y: 8, width: 0.9, heightMeters: 2.05, hinge: "right", swing: "in" },
+    { id: "show-door-right", kind: "door", label: label("door"), x: 12.5, y: 1.6, width: 0.9, heightMeters: 2.05, hinge: "left", swing: "out" },
+    { id: "show-niche", kind: "niche", label: label("niche"), x: 12.5, y: 4.4, width: 0.8, bottomMeters: 0.5, heightMeters: 1.1, depth: 0.25 },
+  ];
+}
+
+/** Every type and every model it takes, in rows facing the TV wall like a shop floor, and every
+ *  structure past them. */
 function showroom(t: TFunction): RoomMapConfig {
   const s = (type: FurnitureType, variant: FurnitureVariant | null, x: number, y: number, w: number, h: number) => shown(t, type, variant, x, y, w, h);
   return makeTemplate({
-    dimensions: { widthMeters: 10, depthMeters: 8, heightMeters: 2.7 },
+    dimensions: { widthMeters: 12.5, depthMeters: 8, heightMeters: 2.7 },
+    structures: showroomStructures(t),
     tvAnchor: { x: 3.6, y: 0.12, width: 1.4, height: 0.08 },
     usbStrips: [
       { stripId: "usb-tv", startX: 3.7, startY: 0.1, endX: 4.9, endY: 0.1, ledCount: 60 },
-      { stripId: "usb-wall", startX: 9.99, startY: 1.2, endX: 9.99, endY: 4.2, ledCount: 180, mountHeightMeters: 1.2 },
+      { stripId: "usb-wall", startX: 12.49, startY: 2.4, endX: 12.49, endY: 3.9, ledCount: 90, mountHeightMeters: 1.2 },
     ],
     // Rugs first, so the plan draws them under what stands near them.
     furniture: [

@@ -43,6 +43,13 @@ describe("isRoomMapEmpty", () => {
     expect(isRoomMapEmpty(map({ usbStrips: [strip()] }))).toBe(false);
     expect(isRoomMapEmpty(map({ tvAnchor: TV_TEMPLATE.tvAnchor }))).toBe(false);
     expect(isRoomMapEmpty(map({ furniture: TV_TEMPLATE.furniture }))).toBe(false);
+    expect(isRoomMapEmpty(map({ structures: [{ id: "c", kind: "column", x: 1, y: 1, width: 0.3, depth: 0.3 }] }))).toBe(false);
+  });
+
+  it("lays out the template's structures, and clears the room's own when it has none", () => {
+    const column = { id: "c", kind: "column" as const, x: 1, y: 1, width: 0.3, depth: 0.3 };
+    expect(applyRoomTemplate(map({ structures: [column] }), map({})).structures).toBeUndefined();
+    expect(applyRoomTemplate(map({}), map({ structures: [column] })).structures).toEqual([column]);
   });
 
   it("does not once the room is drawn into another shape, and does for a footprint it cannot read", () => {
