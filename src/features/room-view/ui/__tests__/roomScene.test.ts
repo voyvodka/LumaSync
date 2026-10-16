@@ -106,6 +106,33 @@ describe("buildRoomScene — structures", () => {
     disposeScene(room.scene);
   });
 
+  it("eases a wall down and up as the camera turns, its window gone for the whole way", () => {
+    const room = buildRoomScene(built, OPTIONS);
+    const tvWall = meshes(room.scene).find((mesh) => mesh.position.z < -2 && mesh.scale.y > 1)!;
+    const standing = tvWall.scale.y;
+    const settle = (direction: Vector3) => {
+      for (let i = 0; i < 60 && room.settling(); i++) room.cutWalls(direction, 16);
+    };
+    const front = new Vector3(0.3, 0, -1).normalize();
+    room.cutWalls(front, 16);
+    expect(tvWall.scale.y).toBeLessThan(standing);
+    expect(tvWall.scale.y).toBeGreaterThan(1);
+    expect(room.settling()).toBe(true);
+    expect(windowPoints(room.scene)).toBe(0);
+    settle(front);
+    expect(room.settling()).toBe(false);
+    expect(tvWall.scale.y).toBeCloseTo(0.2);
+
+    const back = new Vector3(1, 0, 1).normalize();
+    room.cutWalls(back, 16);
+    expect(tvWall.scale.y).toBeGreaterThan(0.2);
+    expect(windowPoints(room.scene)).toBe(0);
+    settle(back);
+    expect(tvWall.scale.y).toBe(standing);
+    expect(windowPoints(room.scene)).toBeGreaterThan(0);
+    disposeScene(room.scene);
+  });
+
   it("hides a beam once every wall it rests on is cut", () => {
     const corner: RoomMapConfig = { ...DEFAULT_ROOM_MAP, structures: [{ id: "b", kind: "beam", x1: 0, y1: 1, x2: 2, y2: 0, width: 0.2, dropMeters: 0.3 }] };
     const room = buildRoomScene(corner, OPTIONS);

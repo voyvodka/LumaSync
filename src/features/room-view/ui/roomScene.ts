@@ -93,6 +93,8 @@ function lerpRig(out: Rig, a: Rig, b: Rig, t: number): void {
 const UNLIT_STRIP = new Color(0x2a2a2e);
 /** A wall between the camera and the room drops to this, so the room reads as a cutaway. */
 const WALL_CUT_HEIGHT = 0.2;
+/** How quickly a wall eases to its new height as the camera turns: most of the way in about 0.2 s. */
+const CUT_EASE_MS = 70;
 /** At full height the walls hid the far half of the floor from a raised view. */
 const WALL_STANDING_SHARE = 0.7;
 const WALL_OPENINGS_SHARE = 0.85;
@@ -148,8 +150,11 @@ function surfaceUnder(x: number, z: number, y: number, surfaces: readonly Surfac
 
 export interface RoomScene {
   scene: Scene;
-  /** Lowers the walls standing between the camera and the room; true when anything changed. */
-  cutWalls(cameraDirection: Vector3): boolean;
+  /** Lowers the walls standing between the camera and the room, eased over `dtMs` since the last
+   *  call (omitted: at once); true when anything changed. */
+  cutWalls(cameraDirection: Vector3, dtMs?: number): boolean;
+  /** A wall or column is still on its way to the height the last cut asked for. */
+  settling(): boolean;
   setPixelsPerMetre(ppm: number): void;
   /** What a click can land on: every light, piece of furniture and the screen. */
   pickables: readonly Pickable[];
@@ -426,7 +431,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     mesh.receiveShadow = true;
     scene.add(mesh);
     const items = liftables.get(wallItemsId(i));
-    return { mesh, outward: new Vector3(e.outwardX, 0, e.outwardZ), items: items ? spanHider(items.spans) : null };
+    return { mesh, outward: new Vector3(e.outwardX, 0, e.outwardZ), items: items ? spanHider(items.spans) : null, lowered: false };
   });
   // A column is cut only in the camera's line to the room: cut for merely being near, it read as a stool.
   const columns = build.columns.map((column) => {
@@ -449,6 +454,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     const restsOn = edges.flatMap((e, i) => (ends.some((end) => distanceToEdge(end.x, end.z, e) <= BEAM_REST) ? [i] : []));
     return { mesh, restsOn };
   });
+  let settling = false;
   const planes: WallPlane[] = edges.map((e) => ({
     normal: new Vector3(-e.outwardX, 0, -e.outwardZ),
     offset: e.ax * e.outwardX + e.az * e.outwardZ,
@@ -548,26 +554,42 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     setMood,
     target: new Vector3(0, H * 0.3, 0),
     radius: Math.hypot(W, D, H) / 2,
-    cutWalls(direction: Vector3) {
+    settling: () => settling,
+    cutWalls(direction: Vector3, dtMs = Number.POSITIVE_INFINITY) {
       let changed = false;
-      const cut = walls.map(({ mesh, outward, items }) => {
+      settling = false;
+      const ease = (from: number, to: number) => {
+        const next = from + (to - from) * (1 - Math.exp(-dtMs / CUT_EASE_MS));
+        const height = Math.abs(to - next) < 0.004 ? to : next;
+        if (height !== to) settling = true;
+        return height;
+      };
+      const cut = walls.map((wall) => {
+        const { mesh, outward, items } = wall;
         // Its outer side faces the camera, or it stands on the camera's side of the room's middle:
         // a U's or T's inner wall faces away from the camera yet still hid the room behind it.
         const nearSide = mesh.position.x * direction.x + mesh.position.z * direction.z > 0.15;
         const isCut = outward.dot(direction) > 0.05 || (nearSide && outward.dot(direction) < -0.05);
-        const height = isCut ? WALL_CUT_HEIGHT : standing;
+        const height = ease(mesh.scale.y, isCut ? WALL_CUT_HEIGHT : standing);
         if (mesh.scale.y !== height) {
           mesh.scale.y = height;
-          items?.(isCut);
           changed = true;
         }
-        return isCut;
+        // What is on its face goes as it starts down and comes back once it stands again: drawn on a
+        // moving wall, it floated over the wall's top.
+        const lowered = isCut || height < standing;
+        if (wall.lowered !== lowered) {
+          wall.lowered = lowered;
+          items?.(lowered);
+          changed = true;
+        }
+        return lowered;
       });
       const flat = Math.hypot(direction.x, direction.z) || 1;
       for (const { mesh: column, reach } of columns) {
         const toward = (column.position.x * direction.x + column.position.z * direction.z) / flat;
         const aside = Math.abs(column.position.x * direction.z - column.position.z * direction.x) / flat;
-        const height = toward > 0.15 && aside <= reach ? WALL_CUT_HEIGHT : standing;
+        const height = ease(column.scale.y, toward > 0.15 && aside <= reach ? WALL_CUT_HEIGHT : standing);
         if (column.scale.y !== height) {
           column.scale.y = height;
           changed = true;

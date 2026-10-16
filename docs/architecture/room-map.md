@@ -505,7 +505,10 @@ light and glow are built into the scene, so it moves as the amber frame alone.
   in a wall standing lower than the window notched its top, which no reference frame shows; a
   niche is a back a shade darker with a shadow under its head and a ledge, since a box behind a
   10 cm wall would poke out of the room and lips round it read as a picture frame. What is on a cut
-  wall's face hides with it (`spanHider`, the lift's own trick, so the draw count holds). Columns
+  wall's face hides with it (`spanHider`, the lift's own trick, so the draw count holds). A wall or
+  column eases to its new height as the camera turns (`CUT_EASE_MS`, most of the way in 0.2 s) —
+  snapping, it flickered while orbiting — and what is on its face goes as it starts down and
+  returns once it stands again, since it cannot follow a merged mesh's scale. Columns
   stand at the walls' height, cast no shadow (the walls cast none, and a column's was the heaviest
   shape on the floor) and are cut only in the camera's line to the room — cut for being on the near
   side, one read as a stool; a beam rests on the walls' tops and goes once every wall it rests on

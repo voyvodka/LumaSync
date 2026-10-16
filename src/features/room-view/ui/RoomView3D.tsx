@@ -204,9 +204,14 @@ function openRoomView(
       camera.lookAt(current.target);
     };
     const direction = new Vector3();
-    const cut = (current: RoomScene) => {
+    let lastCut = 0;
+    // Without `now` (a room just built) the walls take their heights at once.
+    const cut = (current: RoomScene, now?: number) => {
       direction.subVectors(camera.position, current.target).setY(0).normalize();
-      if (current.cutWalls(direction) && shadows) renderer.shadowMap.needsUpdate = true;
+      // Idle frames between two moves count as one frame, so a wall starting to move eases from where it stood.
+      const dt = now === undefined || prefersReducedMotion() ? Number.POSITIVE_INFINITY : lastCut === 0 ? 1000 / 60 : Math.min(now - lastCut, 1000 / 30);
+      if (current.cutWalls(direction, dt) && shadows) renderer.shadowMap.needsUpdate = true;
+      lastCut = current.settling() && now !== undefined ? now : 0;
     };
 
     let ready = false;
@@ -216,7 +221,7 @@ function openRoomView(
       const t0 = performance.now();
       // Damping moves the camera a little on every update; keep drawing only while it does.
       const moving = orbit.update();
-      cut(room);
+      cut(room, t0);
       pixelsPerMetre = host.clientHeight / ((camera.top - camera.bottom) / camera.zoom);
       room.setPixelsPerMetre(pixelsPerMetre);
       room.faceCamera(camera.quaternion);
@@ -229,7 +234,7 @@ function openRoomView(
         host.setAttribute("data-ready", "");
       }
       timings.draws.push(now - t0);
-      if (moving) request();
+      if (moving || room.settling()) request();
     };
     let away = false;
     const request = () => {
@@ -597,6 +602,8 @@ function openRoomView(
         placeCamera(room, Math.PI / 4);
         shownRoom = roomKey(config);
       }
+      // A new scene's walls stand where the camera already cuts them, rather than easing down on its first frame.
+      cut(room);
       renderer.shadowMap.needsUpdate = shadows;
       if (!first) {
         fit();
