@@ -71,7 +71,6 @@ export function RoomMapSurface({
   // The first face appears as the map opens; a switch brings its chrome in, a return from the
   // templates the whole face.
   const [arrival, setArrival] = useState<"chrome" | "whole" | null>(null);
-  const [picking, setPicking] = useState(false);
   // Edit opened from the light card takes the keys, or they would fall to the page with the card.
   const [editTakesFocus, setEditTakesFocus] = useState(false);
   // Edit reads them too: a Hue light's inspector names the model the bridge reports.
@@ -95,13 +94,14 @@ export function RoomMapSurface({
       const next = applyRoomTemplate(config, template);
       replace(next);
       setArrival("whole");
-      setPicking(false);
       setEditTakesFocus(true);
       // A blank room has nothing to look at: it opens where it is drawn.
       if (isRoomMapEmpty(next)) setFace(ROOM_FACES.EDIT);
     },
     [config, replace],
   );
+  // From the editor's drawer: the room changes under it, so nothing fades in again.
+  const handleTemplateApply = useCallback((template: RoomMapConfig) => replace(applyRoomTemplate(config, template)), [config, replace]);
 
   if (doc.loading) {
     return (
@@ -115,20 +115,6 @@ export function RoomMapSurface({
   // template keeps the editor: its Redo is the way back, and the picker had none.
   if (isRoomMapEmpty(config) && !doc.canUndo && !doc.canRedo) {
     return <TemplateSelector onSelect={handleTemplateSelect} />;
-  }
-  if (picking) {
-    return (
-      <div className={cx(styles.surface, styles.arriving)}>
-        <TemplateSelector
-          onSelect={handleTemplateSelect}
-          onBack={() => {
-            setArrival("whole");
-            setPicking(false);
-            setEditTakesFocus(true);
-          }}
-        />
-      </div>
-    );
   }
 
   const roomAware = roomAwareStatus(config.tvAnchor, outputTargets, {
@@ -163,7 +149,7 @@ export function RoomMapSurface({
             roomAware={roomAware}
             focusOnMount={editTakesFocus}
             lampFamilies={lampFamilies}
-            onTemplates={() => setPicking(true)}
+            onApplyTemplate={handleTemplateApply}
             room3d={view3dAvailable && !failed}
             onRoomFail={handleViewFail}
           />

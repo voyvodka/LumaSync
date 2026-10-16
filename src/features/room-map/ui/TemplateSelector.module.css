@@ -12,29 +12,6 @@
     margin: auto;
     padding: 16px;
   }
-  .back {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    height: 32px;
-    margin: 0 0 8px -8px;
-    padding: 0 8px;
-    border: 0;
-    border-radius: 7px;
-    background: transparent;
-    color: var(--lm-ink-dim);
-    font: 500 12px/1 var(--lm-sans);
-    cursor: pointer;
-    transition: background var(--lm-dur-quick), color var(--lm-dur-quick);
-  }
-  .back:hover {
-    background: var(--lm-panel-2);
-    color: var(--lm-ink);
-  }
-  .back:focus-visible {
-    outline: 2px solid transparent;
-    box-shadow: var(--lm-focus-ring-inset);
-  }
   .title {
     margin: 0 0 4px;
     text-align: center;
@@ -91,13 +68,10 @@
     color: var(--lm-ink-faint);
   }
 
-  :global(:root[data-reduced-motion]) .card,
-  :global(:root[data-reduced-motion]) .back { transition: none; }
+  :global(:root[data-reduced-motion]) .card { transition: none; }
 
   @media (forced-colors: active) {
     .card { border-color: CanvasText; }
-    .card:focus-visible,
-    .back:focus-visible { outline: 2px solid Highlight; }
-    .back { color: LinkText; }
+    .card:focus-visible { outline: 2px solid Highlight; }
   }
 }

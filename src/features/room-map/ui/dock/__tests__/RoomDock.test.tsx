@@ -47,6 +47,8 @@ const spies = {
   onReset: vi.fn<() => void>(),
   onAddFurniture: vi.fn<(type: string) => void>(),
   onAddImage: vi.fn<() => void>(),
+  onPreview: vi.fn<(template: RoomMapConfig | null) => void>(),
+  onApply: vi.fn<(template: RoomMapConfig) => void>(),
 };
 
 /** The dock over a selection it shares with "the canvas": `select` stands for a click there. */
@@ -111,6 +113,7 @@ function Harness({
     onSelectZone: vi.fn<(zoneId: string) => void>(),
     onPopSelection: () => setSelectedId(null),
     onFocusEditor: spies.onFocusEditor,
+    templates: { onPreview: spies.onPreview, onApply: spies.onApply },
   };
   return <RoomDock {...props} />;
 }
@@ -247,5 +250,30 @@ describe("RoomDock", () => {
   it("shows no inspector for a zone of another area, whose lights are not these", () => {
     render(<Harness initialZone="zone-elsewhere" />);
     expect(screen.getByRole("toolbar", { name: "roomMap:palette.label" })).toBeInTheDocument();
+  });
+
+  describe("the templates drawer", () => {
+    const drawer = () => screen.findByRole("dialog", { name: "roomMap:palette.templates" });
+
+    it("opens from Templates over the room, its own press closing it and showing the room again", async () => {
+      render(<Harness />);
+      const button = screen.getByTestId("palette-templates");
+      fireEvent.click(button);
+      await drawer();
+      expect(button).toHaveAttribute("aria-expanded", "true");
+      fireEvent.click(button);
+      expect(button).toHaveAttribute("aria-expanded", "false");
+      expect(spies.onPreview).toHaveBeenLastCalledWith(null);
+    });
+
+    it("opens from the room's settings too, and applying hands the keys to the editor", async () => {
+      render(<Harness initial="sofa" />);
+      fireEvent.click(screen.getByRole("button", { name: "roomMap:dock.room" }));
+      fireEvent.click(await screen.findByRole("button", { name: "roomMap:settings.templates" }));
+      await drawer();
+      fireEvent.click(screen.getByTestId("template-fullroom"));
+      expect(spies.onApply).toHaveBeenCalledWith(expect.objectContaining({ dimensions: expect.objectContaining({ widthMeters: 5 }) }));
+      expect(spies.onFocusEditor).toHaveBeenCalled();
+    });
   });
 });

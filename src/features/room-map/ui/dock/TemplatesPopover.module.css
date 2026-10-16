@@ -1,0 +1,59 @@
+@layer components {
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 6px 6px 8px;
+    border: 0;
+    border-radius: 8px;
+    background: rgb(255 255 255 / 2%);
+    color: var(--lm-ink-dim);
+    font: 500 11.5px/1 var(--lm-sans);
+    cursor: pointer;
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+  }
+  .card:hover,
+  .card:focus-visible {
+    color: var(--lm-ink);
+    background: rgb(255 255 255 / 6%);
+  }
+  .card:active { color: var(--lm-amber); }
+  .card:focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--lm-focus-ring-inset);
+  }
+
+  .thumb {
+    display: grid;
+    place-items: center;
+    width: 88px;
+    height: 58px;
+    opacity: 0.85;
+    transition: opacity var(--lm-dur-quick);
+  }
+  .card:hover .thumb,
+  .card:focus-visible .thumb { opacity: 1; }
+
+  .name {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  :global(:root[data-reduced-motion]) .card,
+  :global(:root[data-reduced-motion]) .thumb { transition: none; }
+
+  @media (forced-colors: active) {
+    .card { border: 1px solid CanvasText; }
+    .card:focus-visible { outline: 2px solid Highlight; }
+  }
+}

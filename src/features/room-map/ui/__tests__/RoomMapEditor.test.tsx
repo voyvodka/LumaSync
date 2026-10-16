@@ -53,6 +53,19 @@ const persistState = vi.hoisted(() => ({
   configOverride: {} as Record<string, unknown>,
   apply: vi.fn(),
   undo: vi.fn(),
+  replace: vi.fn<(config: unknown) => void>(),
+}));
+
+const TEMPLATE = vi.hoisted(() => ({
+  dimensions: { widthMeters: 12, depthMeters: 8, heightMeters: 2.6 },
+  furniture: [
+    { id: "a", type: "sofa", x: 1, y: 1, width: 2, height: 0.9 },
+    { id: "b", type: "bed", x: 5, y: 3, width: 1.6, height: 2 },
+  ],
+  usbStrips: [],
+  hueChannels: [],
+  zones: [],
+  imageLayers: [],
 }));
 
 vi.mock("../../state/useRoomMapState", async () => {
@@ -82,7 +95,7 @@ vi.mock("../../state/useRoomMapState", async () => {
         activeHueZoneId,
         apply: persistState.apply,
         adopt: vi.fn(),
-        replace: vi.fn(),
+        replace: persistState.replace,
         reset: vi.fn(),
         undo: persistState.undo,
         redo: vi.fn(),
@@ -157,7 +170,9 @@ vi.mock("../dock/RoomDock", () => ({
     activeHueZoneId,
     onSelectZone,
     onSelect,
+    templates,
   }: {
+    templates?: { onPreview: (template: unknown) => void; onApply: (template: unknown) => void };
     onSelect: (id: string) => void;
     add: { onAddZone: () => void };
     selectedId: string | null;
@@ -170,7 +185,16 @@ vi.mock("../dock/RoomDock", () => ({
       onDimensionsChange: (d: { widthMeters: number; depthMeters: number; heightMeters: number }) => void;
     };
   }) => (
-    <section data-testid="room-dock" data-room-dock="" data-selected={selectedId ?? ""} data-zone={activeHueZoneId ?? ""}>
+    <section
+      data-testid="room-dock"
+      data-room-dock=""
+      data-selected={selectedId ?? ""}
+      data-zone={activeHueZoneId ?? ""}
+      data-furniture={config.furniture.length}
+    >
+      <button type="button" data-testid="preview-template" onClick={() => templates?.onPreview(TEMPLATE)} />
+      <button type="button" data-testid="leave-template" onClick={() => templates?.onPreview(null)} />
+      <button type="button" data-testid="apply-template" onClick={() => templates?.onApply(TEMPLATE)} />
       <button type="button" data-testid="dock-tab" />
       <button type="button" data-testid="pick-zone" onClick={() => onSelectZone("zone-1")} />
       <button type="button" data-testid="add-zone" onClick={add.onAddZone} />
@@ -760,5 +784,28 @@ describe("RoomMapEditor — the 3D room as the editing stage", () => {
     await act(async () => room3d.fail?.(new Error("no WebGL")));
     expect(view.getByTestId("room-map-canvas")).toBeInTheDocument();
     expect(view.queryByRole("radio", { name: "roomMap:stage.plan" })).toBeNull();
+  });
+
+  it("shows a template the drawer rests on without saving it, and lays it out as one step when applied", async () => {
+    persistState.apply.mockClear();
+    persistState.replace.mockClear();
+    persistState.configOverride = { furniture: [{ id: "mine", type: "chair", x: 1, y: 1, width: 0.5, height: 0.5 }] };
+    const view = await openEdit();
+    const stage = view.getByTestId("room-map-stage");
+    await act(async () => view.getByTestId("preview-template").click());
+    expect(view.getByTestId("room-dock")).toHaveAttribute("data-furniture", "2");
+    expect(stage).toHaveAttribute("data-previewing");
+    await act(async () => view.getByTestId("leave-template").click());
+    expect(view.getByTestId("room-dock")).toHaveAttribute("data-furniture", "1");
+    expect(stage).not.toHaveAttribute("data-previewing");
+    expect(persistState.apply).not.toHaveBeenCalled();
+    expect(persistState.replace).not.toHaveBeenCalled();
+
+    await act(async () => view.getByTestId("preview-template").click());
+    await act(async () => view.getByTestId("apply-template").click());
+    expect(persistState.replace).toHaveBeenCalledOnce();
+    expect(persistState.replace).toHaveBeenCalledWith(expect.objectContaining({ furniture: TEMPLATE.furniture }));
+    expect(persistState.apply).not.toHaveBeenCalled();
+    persistState.configOverride = {};
   });
 });

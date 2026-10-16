@@ -56,15 +56,4 @@ describe("TemplateSelector", () => {
       }
     }
   });
-
-  it("goes back to the room from Back or Escape when opened over one", () => {
-    cleanup();
-    const onBack = vi.fn<() => void>();
-    render(<TemplateSelector onSelect={vi.fn<(config: RoomMapConfig) => void>()} onBack={onBack} />);
-    const back = screen.getByRole("button", { name: /roomMap:templates.back/ });
-    expect(back).toHaveFocus();
-    fireEvent.click(back);
-    fireEvent.keyDown(back, { key: "Escape" });
-    expect(onBack).toHaveBeenCalledTimes(2);
-  });
 });

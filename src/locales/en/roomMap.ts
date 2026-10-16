@@ -470,6 +470,5 @@ export default {
       name: "Blank room",
       desc: "Start from scratch",
     },
-    back: "Back to the room",
   },
 };

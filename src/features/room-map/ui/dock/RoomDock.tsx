@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type MouseEvent, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { type KeyboardEvent, lazy, type MouseEvent, Suspense, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -21,6 +21,14 @@ import type { PaletteHueArea } from "./HueAreaNote";
 import { ObjectsPopover } from "./ObjectsPopover";
 import styles from "./RoomDock.module.css";
 import { RoomPanel, type RoomSettings } from "./RoomPanel";
+
+const TemplatesPopover = lazy(() => import("./TemplatesPopover").then((m) => ({ default: m.TemplatesPopover })));
+
+export interface DockTemplates {
+  /** The template to show in the room behind the drawer, or `null` for the room as it is. */
+  onPreview: (template: RoomMapConfig | null) => void;
+  onApply: (template: RoomMapConfig) => void;
+}
 
 export interface DockAdd {
   hasTv: boolean;
@@ -54,7 +62,7 @@ export interface RoomDockProps {
   hue: PaletteHueArea | null;
   room: RoomSettings;
   onReset: () => void;
-  onTemplates?: () => void;
+  templates?: DockTemplates;
   onSelect: (objectId: string) => void;
   onSelectZone: (zoneId: string) => void;
   /** ✕: back one step — an object to its zone, a zone to the palette. */
@@ -106,6 +114,23 @@ export function RoomDock(props: RoomDockProps) {
   // Whether the last focus anywhere was inside the dock, so a swap that takes the focused control
   // away can give the keys back without touching focus that was elsewhere.
   const focusInDock = useRef(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [templatesWanted, setTemplatesWanted] = useState(false);
+  const templatesAnchor = useRef<HTMLElement | null>(null);
+  const closeTemplates = () => {
+    setTemplatesOpen(false);
+    props.templates?.onPreview(null);
+  };
+  const openTemplates = (anchor: HTMLElement | null) => {
+    if (templatesOpen) {
+      closeTemplates();
+      return;
+    }
+    templatesAnchor.current = anchor;
+    setTemplatesWanted(true);
+    setTemplatesOpen(true);
+  };
+  const templatesId = useId();
   const objectsId = useId();
   const roomId = useId();
 
@@ -261,10 +286,10 @@ export function RoomDock(props: RoomDockProps) {
               setConfirmReset(true);
             }}
             onTemplates={
-              props.onTemplates &&
+              props.templates &&
               (() => {
                 setRoomOpen(false);
-                props.onTemplates?.();
+                openTemplates(roomRef.current);
               })
             }
             onAddImage={(event) =>
@@ -292,6 +317,22 @@ export function RoomDock(props: RoomDockProps) {
             }}
             onCancel={() => setConfirmReset(false)}
           />
+          {props.templates && templatesWanted && (
+            <Suspense fallback={null}>
+              <TemplatesPopover
+                open={templatesOpen}
+                onClose={closeTemplates}
+                anchorRef={templatesAnchor}
+                id={templatesId}
+                onPreview={props.templates.onPreview}
+                onApply={(template) => {
+                  setTemplatesOpen(false);
+                  props.templates?.onApply(template);
+                  onFocusEditor();
+                }}
+              />
+            </Suspense>
+          )}
         </>
       }
     >
@@ -303,7 +344,8 @@ export function RoomDock(props: RoomDockProps) {
           onSelectTv={(event) => fromDock(event, add.onSelectTv)}
           onAddStrip={(event) => fromDock(event, add.onAddStrip)}
           onAddZone={(event) => fromDock(event, add.onAddZone)}
-          onTemplates={props.onTemplates}
+          onTemplates={props.templates && ((event) => openTemplates(event.currentTarget))}
+          templatesOpen={templatesOpen}
           hue={props.hue}
           drop={add.drop}
         />

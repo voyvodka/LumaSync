@@ -286,6 +286,7 @@ function openRoomView(
       if (ready && frame === 0 && !closed && !away) frame = requestAnimationFrame(draw);
     };
     let shownRoom = "";
+    const views = new Map<string, { position: Vector3; target: Vector3; zoom: number }>();
     const moodNow = { colour: new Color(LAMP_COLOURS[0]), level: 1, ambient: 1, strip: 1, daylight: DUSK_AT };
     let moodFrame = 0;
     let moodTarget: RoomMood | null = null;
@@ -710,7 +711,17 @@ function openRoomView(
         }
         shownRoom = roomKey(config);
       } else if (roomKey(config) !== shownRoom) {
-        placeCamera(room, Math.PI / 4);
+        // A template looked at and left takes the view back to where the room was being seen from.
+        views.set(shownRoom, { position: camera.position.clone(), target: orbit.target.clone(), zoom: camera.zoom });
+        const back = views.get(roomKey(config));
+        if (back) {
+          camera.position.copy(back.position);
+          orbit.target.copy(back.target);
+          camera.zoom = back.zoom;
+          camera.updateProjectionMatrix();
+        } else {
+          placeCamera(room, Math.PI / 4);
+        }
         shownRoom = roomKey(config);
       }
       // A new scene's walls stand where the camera already cuts them, rather than easing down on its first frame.

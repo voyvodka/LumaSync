@@ -44,8 +44,7 @@ stays mounted for 30 s (`COVERED_KEEP_MS` in `RoomView3DHost.tsx`, read from `us
 flicking between windows rebuilt the room on every return. So the room holds still across View | Edit, and only the chrome arrives: the
 dock's box stays where it was while its content rises 4 px into it, and the corner drops 4 px into
 place. A stage switch fades the new surface, and the corner slot's zoom or camera, under a dock, a
-corner and any alert that stay. A return from the templates fades the whole face in, since a pick
-may have changed the room under it. The distances live in the keyframes, because WebKit drops a
+corner and any alert that stay. A pick from the first-run templates fades the whole face in. The distances live in the keyframes, because WebKit drops a
 `var()` read inside one. The one thing a switch drops is the
 plan's zoom and pan, which fit the room again on return. The View | Edit switch is the surface's
 own, floating over both faces' top bars, so a keyboard switch keeps focus on it. The face is not
@@ -53,6 +52,18 @@ stored: the map always opens on the room, and an empty map with no history opens
 before either face. Empty means nothing the user placed: the strip a connect on Devices links and the
 Hue channels the bridge sync seeds do not count, since the sync lands a moment after the map opens
 and once took the picker away under a first-time Hue user's pointer; a template keeps both.
+
+**Over a room, the templates are a drawer above the dock, and the room behind is the preview.**
+Templates, in the dock or the room's settings, opens them over the room instead of replacing it,
+so a template is judged in the room it would become. The card the pointer or the keys rest on for
+160 ms is shown in place of the room — laid out by `applyRoomTemplate`, so the strips and lights
+kept are the ones a pick would keep — and leaving the cards shows the room again; a sweep across
+them builds nothing on the way. A preview is only looked at: nothing reaches the map or its
+history, the selection reads as none (it may name a piece the template lacks), and the stage
+under the drawer takes no press. A pick is one undo step and leaves the editor where it is. The
+plan fits each previewed size and goes back to the zoom it was left at; the 3D view keeps the
+camera it had for each room size, so leaving a preview finds the room as it was being seen. The
+full-page picker is only the first run's.
 
 **View changes every light at once, never one.** The corner's lights button (`view/RoomLights.tsx`)
 opens `QuickLights` — the column the tray window draws — in a popover: mode, brightness, Solid's

@@ -15,6 +15,7 @@ import type {
   HueChannelPlacement,
   HueZoneStatusCode,
   RoomDimensions,
+  RoomMapConfig,
   TvAnchorPlacement,
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
@@ -40,6 +41,7 @@ import {
   usbStripObjectId,
 } from "../model/objectId";
 import type { RoomAwareStatus } from "../model/roomAware";
+import { applyRoomTemplate } from "../model/roomTemplate";
 import { roomObjectAdapter } from "../model/roomObjectKinds";
 import { useFurnitureModels } from "../state/useFurnitureModels";
 import { useLandCarried } from "../state/useLandCarried";
@@ -98,8 +100,8 @@ export interface RoomMapEditorProps {
   focusOnMount?: boolean;
   /** Each Hue channel's fixture as the bridge names it, for the inspector's model choice. */
   lampFamilies?: ReadonlyMap<number, LampFamily>;
-  /** Opens the template picker over the room. */
-  onTemplates?: () => void;
+  /** Lays a template out over the room, one step back in history. */
+  onApplyTemplate?: (template: RoomMapConfig) => void;
   /** Whether the room can be edited in 3D; a WebGL failure reports through `onRoomFail`. */
   room3d?: boolean;
   onRoomFail?: (error: unknown) => void;
@@ -141,14 +143,14 @@ export function RoomMapEditor({
   roomAware = null,
   focusOnMount = false,
   lampFamilies = NO_FAMILIES,
-  onTemplates,
+  onApplyTemplate,
   room3d = false,
   onRoomFail,
 }: RoomMapEditorProps) {
   const { t } = useTranslation();
   const {
-    config,
-    selectedId,
+    config: docConfig,
+    selectedId: docSelectedId,
     activeHueZoneId,
     apply,
     adopt,
@@ -165,8 +167,18 @@ export function RoomMapEditor({
     hueAreaId,
     hueBridgeConfigured,
     visibleHueChannels,
-    scopedConfig,
+    scopedConfig: docScopedConfig,
   } = doc;
+  // A template the drawer rests on is shown in place of the room; nothing of it is saved until applied.
+  const [template, setTemplate] = useState<RoomMapConfig | null>(null);
+  const preview = useMemo(() => template && applyRoomTemplate(docConfig, template), [template, docConfig]);
+  const config = preview ?? docConfig;
+  const scopedConfig = useMemo(
+    () => (preview ? { ...preview, hueChannels: docScopedConfig.hueChannels } : docScopedConfig),
+    [preview, docScopedConfig],
+  );
+  // A selection may name a piece the template does not have.
+  const selectedId = preview ? null : docSelectedId;
   const { areaChannels, channelsStatus, isLoadingChannels, liveChannelIds, refreshChannels } = doc.hue;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; targetId: string } | null>(null);
@@ -261,6 +273,40 @@ export function RoomMapEditor({
 
   const { setCanvasContainer, canvasSize, zoom, setZoom, panOffset, setPanOffset, spaceHeld, fitToView, handleArrowPan } =
     useRoomMapViewport(config.dimensions, ROOM_MAP_FIT_INSETS);
+
+  // The plan follows a previewed template's size and goes back to where it was left; an applied
+  // template is fitted, as the room it now is.
+  const planView = useRef<{ zoom: number; pan: { x: number; y: number } } | null>(null);
+  const followTemplate = useRef(false);
+  const dockTemplates = useMemo(
+    () => ({
+      onPreview: (next: RoomMapConfig | null) => {
+        if (next && !planView.current) planView.current = { zoom, pan: panOffset };
+        followTemplate.current = true;
+        setTemplate(next);
+      },
+      onApply: (next: RoomMapConfig) => {
+        planView.current = null;
+        followTemplate.current = true;
+        setTemplate(null);
+        onApplyTemplate?.(next);
+      },
+    }),
+    [zoom, panOffset, onApplyTemplate],
+  );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the room's size and the preview are the triggers
+  useEffect(() => {
+    if (!followTemplate.current) return;
+    const kept = planView.current;
+    if (!preview) followTemplate.current = false;
+    if (!preview && kept) {
+      planView.current = null;
+      setZoom(kept.zoom);
+      setPanOffset(kept.pan);
+      return;
+    }
+    fitToView(24);
+  }, [preview, config.dimensions.widthMeters, config.dimensions.depthMeters]);
 
   const { stripStatus, hueBridgeStatus } = useUsbStripStatus(hueReachable);
 
@@ -816,6 +862,7 @@ export function RoomMapEditor({
         data-testid="room-map-stage"
         data-stage={inRoom ? EDIT_STAGES.ROOM : EDIT_STAGES.PLAN}
         data-switched={stageSwitched || undefined}
+        data-previewing={preview ? "" : undefined}
       >
         {inRoom ? (
           <RoomView3DHost
@@ -1096,7 +1143,7 @@ export function RoomMapEditor({
               : undefined,
           }}
           onReset={reset}
-          onTemplates={onTemplates}
+          templates={onApplyTemplate && dockTemplates}
           onSelect={selectFromList}
           onSelectZone={selectZoneShowingPlan}
           onPopSelection={popSelection}

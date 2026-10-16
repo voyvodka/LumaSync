@@ -472,7 +472,6 @@ const roomMap: Catalogue<typeof enRoomMap> = {
       name: "Boş oda",
       desc: "Sıfırdan başla",
     },
-    back: "Odaya dön",
   },
 };
 

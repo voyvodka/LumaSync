@@ -33,14 +33,18 @@ vi.mock("@/features/persistence/shellStore", () => ({
 // The plan stands in as a button that edits the map and a readout of its history, so a test can
 // tell whether the map outlived a switch.
 vi.mock("../RoomMapEditor", () => ({
-  RoomMapEditor: ({ doc, onTemplates }: { doc: RoomMapDocument; onTemplates?: () => void }) => (
+  RoomMapEditor: ({ doc, onApplyTemplate }: { doc: RoomMapDocument; onApplyTemplate?: (template: RoomMapConfig) => void }) => (
     <div data-testid="plan" data-can-undo={String(doc.canUndo)} data-furniture={doc.config.furniture.length}>
       <button
         type="button"
         data-testid="plan-edit"
         onClick={() => doc.apply({ dimensions: { ...doc.config.dimensions, widthMeters: 6 } })}
       />
-      <button type="button" data-testid="plan-templates" onClick={onTemplates} />
+      <button
+        type="button"
+        data-testid="plan-template"
+        onClick={() => onApplyTemplate?.({ ...DEFAULT_ROOM_MAP, furniture: [{ id: "f", type: "bed", x: 0, y: 0, width: 1.6, height: 2 }] })}
+      />
     </div>
   ),
 }));
@@ -74,10 +78,9 @@ vi.mock("../../state/useHueLampFamilies", () => ({
 }));
 
 vi.mock("../TemplateSelector", () => ({
-  TemplateSelector: ({ onSelect, onBack }: { onSelect: (config: RoomMapConfig) => void; onBack?: () => void }) => (
+  TemplateSelector: ({ onSelect }: { onSelect: (config: RoomMapConfig) => void }) => (
     <div data-testid="templates">
       <button type="button" data-testid="template-pick" onClick={() => onSelect({ ...DEFAULT_ROOM_MAP, furniture: [{ id: "f", type: "bed", x: 0, y: 0, width: 1.6, height: 2 }] })} />
-      {onBack && <button type="button" data-testid="template-back" onClick={onBack} />}
     </div>
   ),
 }));
@@ -187,18 +190,13 @@ describe("RoomMapSurface — faces", () => {
     expect(screen.queryByTestId("room-view-3d")).toBeNull();
   });
 
-  it("opens the templates over a furnished room from the plan, back unchanged or with the pick as one undo step", async () => {
+  it("lays a template out over a furnished room from the editor as one undo step, staying in it", async () => {
     await renderSurface({ view3dAvailable: false });
-    fireEvent.click(screen.getByTestId("plan-templates"));
-    expect(screen.getByTestId("templates")).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("template-back"));
-    expect(screen.getByTestId("plan")).toHaveAttribute("data-can-undo", "false");
-
-    fireEvent.click(screen.getByTestId("plan-templates"));
     // The pick saves the map; its write settles inside act.
     await act(async () => {
-      fireEvent.click(screen.getByTestId("template-pick"));
+      fireEvent.click(screen.getByTestId("plan-template"));
     });
+    expect(screen.queryByTestId("templates")).toBeNull();
     const plan = screen.getByTestId("plan");
     expect(plan).toHaveAttribute("data-furniture", "1");
     expect(plan).toHaveAttribute("data-can-undo", "true");

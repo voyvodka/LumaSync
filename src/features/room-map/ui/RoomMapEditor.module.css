@@ -3,6 +3,8 @@
     position: relative;
     height: 100%;
   }
+  /* A previewed template is only looked at: the room under the drawer takes no press. */
+  .stage[data-previewing] > :not([data-room-dock]) { pointer-events: none; }
   /* The surface switched to — a new element either way — fades in under a dock, a corner and any
      alert that stay; the corner's slot crossfades from the zoom to the camera. */
   .stage[data-switched] > :not([data-room-dock], [data-room-corner], .alerts),
