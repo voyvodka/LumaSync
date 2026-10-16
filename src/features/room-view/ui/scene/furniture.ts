@@ -153,6 +153,8 @@ function seatCrown(w: number, d: number, x: number, top: number, z: number, colo
   return crown(w - 0.05, d - 0.05, Math.min(0.03, w * 0.05), x, top - 0.006, z, color);
 }
 
+const THROW_FALL = 0.016;
+
 /** Frame, back, arms, cushions, leaning back cushions and two throw pillows on wider sofas. */
 function upholstered(w: number, d: number, seats: number, arms: boolean, f: Finish): Part[] {
   const legH = arms ? 0.06 : 0.12;
@@ -168,10 +170,16 @@ function upholstered(w: number, d: number, seats: number, arms: boolean, f: Fini
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) parts.push(rod(0.016, 0.022, legH, sx * (w / 2 - inset), 0, sz * (d / 2 - inset), PALETTE.walnut, 10));
   }
-  parts.push(block(w, baseTop - legH, d, 0, legH, 0, f.fabricDeep, 0.035));
+  // The base and right arm stop short of the throw's outer fall: coplanar faces z-fought (flicker).
+  const throwOver = arms && seats >= 3 && d >= 0.75;
+  const fall = throwOver ? THROW_FALL : 0;
+  parts.push(block(w - fall, baseTop - legH, d, -fall / 2, legH, 0, f.fabricDeep, 0.035));
   parts.push(block(w, backTop - baseTop, backD, 0, baseTop, d / 2 - backD / 2, f.fabric, softEdge(backD)));
   if (arms) {
-    for (const sx of [-1, 1]) parts.push(block(armW, armTop - baseTop, d, sx * (w / 2 - armW / 2), baseTop, 0, f.fabric, softEdge(armW)));
+    for (const sx of [-1, 1]) {
+      const cut = sx > 0 ? fall : 0;
+      parts.push(block(armW - cut, armTop - baseTop, d, sx * (w / 2 - armW / 2) - cut / 2, baseTop, 0, f.fabric, softEdge(armW)));
+    }
   }
 
   const inner = w - 2 * armW;
@@ -209,13 +217,16 @@ function upholstered(w: number, d: number, seats: number, arms: boolean, f: Fini
       });
     }
   }
-  if (arms && seats >= 3 && d >= 0.75) {
+  if (throwOver) {
     // A knitted throw folded over the right arm, falling to the seat inside and the floor outside.
     const throwD = Math.min(0.5, d * 0.55);
-    const x = w / 2 - armW / 2;
-    parts.push({ ...block(armW + 0.004, 0.018, throwD, x - 0.002, armTop, -0.02, PALETTE.pillowCream, 0.008), finish: "fabric" });
-    parts.push({ ...block(0.014, armTop - legH - 0.05, throwD, w / 2 - 0.007, legH + 0.05, -0.02, PALETTE.pillowCream, 0.006), finish: "fabric" });
-    parts.push({ ...block(0.014, armTop - seatTop + 0.02, throwD, x - armW / 2 - 0.009, seatTop - 0.02, -0.02, PALETTE.pillowCream, 0.006), finish: "fabric" });
+    const ply = 0.012;
+    const inside = w / 2 - armW;
+    const coverW = armW + 0.017;
+    const fallTop = armTop + 0.012;
+    parts.push({ ...block(coverW, 0.018, throwD, w / 2 - coverW / 2, armTop + 0.001, -0.02, PALETTE.pillowCream, 0.008), finish: "fabric" });
+    parts.push({ ...block(ply, fallTop - legH - 0.05, throwD, w / 2 - 0.0005 - ply / 2, legH + 0.05, -0.02, PALETTE.pillowCream, 0.006), finish: "fabric" });
+    parts.push({ ...block(ply, fallTop - seatTop + 0.02, throwD, inside - 0.0015 - ply / 2, seatTop - 0.02, -0.02, PALETTE.pillowCream, 0.006), finish: "fabric" });
   }
   return parts;
 }

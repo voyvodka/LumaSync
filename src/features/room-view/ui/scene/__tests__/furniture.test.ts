@@ -84,3 +84,25 @@ describe("furnitureParts — every model stays inside its footprint", () => {
     }
   }
 });
+
+describe("furnitureParts — the throw over a sofa's arm", () => {
+  it("lays no face on a face of the sofa it covers", () => {
+    const parts = furnitureParts(piece("p", "sofa", 0, 0, 2.1, 0.9), { kind: "upholstered", seats: 3, arms: true, corner: null });
+    const boxes = parts.map((part) => {
+      part.geometry.computeBoundingBox();
+      return { box: part.geometry.boundingBox!.clone(), color: part.color };
+    });
+    const overlaps = (lo1: number, hi1: number, lo2: number, hi2: number) => Math.min(hi1, hi2) - Math.max(lo1, lo2) > 0.002;
+    const coplanar: string[] = [];
+    boxes.forEach((a, i) => {
+      boxes.forEach((b, j) => {
+        if (j <= i || a.color === b.color) return;
+        if (!overlaps(a.box.min.y, a.box.max.y, b.box.min.y, b.box.max.y) || !overlaps(a.box.min.z, a.box.max.z, b.box.min.z, b.box.max.z)) return;
+        for (const fa of [a.box.min.x, a.box.max.x]) {
+          for (const fb of [b.box.min.x, b.box.max.x]) if (fa > 0 && Math.abs(fa - fb) < 0.001) coplanar.push(`${i}/${j} at x=${fa.toFixed(4)}`);
+        }
+      });
+    });
+    expect(coplanar).toEqual([]);
+  });
+});
