@@ -2,12 +2,15 @@ import { type KeyboardEvent, type MouseEvent, useEffect, useLayoutEffect, useRef
 import { useTranslation } from "react-i18next";
 
 import { HUE_IDENTIFY_STATUS } from "@/shared/contracts/hue";
-import type { UsbStripPlacement } from "@/shared/contracts/roomMap";
+import type { TvAnchorPlacement, UsbStripPlacement } from "@/shared/contracts/roomMap";
 
+import { isBacklightStrip } from "../../model/backlight";
 import type { ViewLight } from "../../model/viewLights";
 import type { HueIdentify } from "../../state/useHueIdentify";
+import type { StripBlink } from "../../state/useStripBlink";
 import type { UsbStripStatus } from "../../state/useUsbStripStatus";
 import { DockFrame } from "../dock/DockFrame";
+import type { UsbStripConnectionStatus } from "../objects/UsbStripInspector";
 import type { PaletteHueArea } from "../dock/HueAreaNote";
 import { ViewLightCard } from "./ViewLightCard";
 import { type LitLamps, ViewLightRow } from "./ViewLightRow";
@@ -21,9 +24,15 @@ export interface RoomViewDockProps {
   /** The light shown as selected, or null for the row. */
   selected: ViewLight | null;
   strips: readonly UsbStripPlacement[];
+  /** The screen, whose backlight strip is how it blinks and reads. */
+  tv: TvAnchorPlacement | null;
   stripStatus: UsbStripStatus["stripStatus"];
+  hueBridgeStatus: UsbStripConnectionStatus;
   identify: HueIdentify;
+  blink: StripBlink;
   canIdentify: boolean;
+  /** How bright the room's lights are, 0–1; null while they are off. */
+  level: number | null;
   /** Hue is streaming: the bridge will not blink a light, so the card says so before the press. */
   hueStreaming?: boolean;
   lit?: LitLamps | null;
@@ -45,9 +54,13 @@ export function RoomViewDock({
   hue,
   selected,
   strips,
+  tv,
   stripStatus,
+  hueBridgeStatus,
   identify,
+  blink,
   canIdentify,
+  level,
   hueStreaming = false,
   lit = null,
   onSelect,
@@ -114,8 +127,48 @@ export function RoomViewDock({
     else onFocusStage();
   };
 
-  const strip = selected?.kind === "usb" ? strips.find((s) => s.stripId === selected.stripId) : undefined;
-  const failure = selected && identify.failure?.id === selected.id ? identify.failure.code : null;
+  const strip =
+    selected?.kind === "usb"
+      ? strips.find((s) => s.stripId === selected.stripId)
+      : selected?.kind === "tv" && tv
+        ? strips.find((s) => isBacklightStrip(s, tv))
+        : undefined;
+  const stripNow = strip ? stripStatus(strip) : undefined;
+  const hueFailure = selected && identify.failure?.id === selected.id ? identify.failure.code : null;
+  const stripFailure = selected && blink.failure?.id === selected.id ? blink.failure.outcome : null;
+  const card = (light: ViewLight) =>
+    light.kind === "hue"
+      ? {
+          connection: hueBridgeStatus,
+          canIdentify: canIdentify && !hueStreaming && light.lightIds.length > 0 && !light.ghost,
+          identifying: identify.busyId === light.id,
+          identifyFailure:
+            hueFailure === null
+              ? null
+              : hueFailure === HUE_IDENTIFY_STATUS.BLOCKED_STREAMING
+                ? t("hue:channelMap.identifyBlocked")
+                : hueFailure === HUE_IDENTIFY_STATUS.PARTIAL
+                  ? t("hue:channelMap.identifyPartial")
+                  : t("hue:channelMap.identifyFailed"),
+          identifyUnavailable: light.ghost
+            ? t("roomMap:inspector.hueGhostShort")
+            : light.lightIds.length === 0
+              ? t("roomMap:view.identifyUnmatched")
+              : !canIdentify
+                ? t("roomMap:view.identifyUnavailable")
+                : hueStreaming
+                  ? t("hue:channelMap.identifyBlocked")
+                  : null,
+          onIdentify: () => identify.identify(light.id, light.lightIds),
+        }
+      : {
+          connection: stripNow?.status,
+          canIdentify: stripNow?.status === "connected",
+          identifying: blink.busyId === light.id,
+          identifyFailure: stripFailure === null ? null : t(stripFailure === "notSent" ? "device:strip.flash.notSent" : "device:strip.flash.failed"),
+          identifyUnavailable: !strip ? t("roomMap:view.blinkNoBacklight") : t("roomMap:view.blinkOffline"),
+          onIdentify: () => void blink.blink(light.id, stripNow?.port ?? null),
+        };
 
   return (
     <DockFrame
@@ -135,31 +188,10 @@ export function RoomViewDock({
         <ViewLightCard
           key={selected.id}
           light={selected}
-          strip={strip ? stripStatus(strip) : undefined}
-          canIdentify={canIdentify && !hueStreaming && selected.lightIds.length > 0 && !selected.ghost}
-          identifying={identify.busyId === selected.id}
-          identifyFailure={
-            failure === null
-              ? null
-              : failure === HUE_IDENTIFY_STATUS.BLOCKED_STREAMING
-                ? t("hue:channelMap.identifyBlocked")
-                : failure === HUE_IDENTIFY_STATUS.PARTIAL
-                  ? t("hue:channelMap.identifyPartial")
-                  : t("hue:channelMap.identifyFailed")
-          }
-          identifyUnavailable={
-            selected.ghost
-              ? t("roomMap:inspector.hueGhostShort")
-              : selected.lightIds.length === 0
-                ? t("roomMap:view.identifyUnmatched")
-                : !canIdentify
-                  ? t("roomMap:view.identifyUnavailable")
-                  : hueStreaming
-                    ? t("hue:channelMap.identifyBlocked")
-                    : null
-          }
+          port={stripNow?.port}
+          level={level}
+          {...card(selected)}
           onBack={(event) => back(event.detail === 0)}
-          onIdentify={() => identify.identify(selected.id, selected.lightIds)}
           onEdit={() => onEdit(selected.id)}
         />
       ) : (

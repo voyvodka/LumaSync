@@ -69,6 +69,8 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     identifyHint: "Gerçek ışığı birkaç saniye yanıp söndür",
     identifyUnavailable: "Bu ışığı yanıp söndürmek için Cihazlar'da bir Hue Bridge eşle",
     identifyUnmatched: "Bu kanal bir Hue Bridge ışığıyla eşleşmemiş",
+    blinkOffline: "Yanıp söndürmek için şeridi Cihazlar'da bağla",
+    blinkNoBacklight: "Bu ekranın yanıp sönecek arka ışık şeridi yok",
     edit: "Düzenle",
     selected: "{{name}} seçildi",
     hover: {

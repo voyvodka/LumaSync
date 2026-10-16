@@ -16,9 +16,13 @@ import { useViewLightFacts } from "./viewLightLabel";
 
 export interface ViewLightCardProps {
   light: ViewLight;
-  /** USB only: how the strip's port reads now. */
-  strip?: { status: UsbStripConnectionStatus; port: string | null };
-  /** Identify is offered for a Hue light with lights to blink and a bridge to ask. */
+  /** How it reads now: the bridge for a Hue light, the strip for a strip or a screen's backlight. */
+  connection?: UsbStripConnectionStatus;
+  /** USB only: the strip's port. */
+  port?: string | null;
+  /** How bright the room's lights are, 0–1; null while they are off. */
+  level: number | null;
+  /** A Hue light blinks through the bridge; a strip, or a screen through its backlight, flashes white. */
   canIdentify: boolean;
   identifying: boolean;
   /** The last identify of this light failed: the short reason. */
@@ -35,7 +39,9 @@ export interface ViewLightCardProps {
  *  facts give way to a brightness bar, so neither moves anything when they arrive. */
 export function ViewLightCard({
   light,
-  strip,
+  connection,
+  port = null,
+  level,
   canIdentify,
   identifying,
   identifyFailure,
@@ -71,18 +77,16 @@ export function ViewLightCard({
           <span className={styles.name} title={light.name} data-testid="view-card-name">
             {light.name}
           </span>
-          {light.kind === "hue" && (
-            <IconButton
-              className={cx(styles.action, identifying && styles.busy)}
-              label={identifying ? t("hue:channelMap.identifying") : t("roomMap:view.identify")}
-              title={canIdentify ? (identifying ? t("hue:channelMap.identifying") : t("roomMap:view.identifyHint")) : (identifyUnavailable ?? undefined)}
-              icon={<IconIdentify />}
-              aria-busy={identifying || undefined}
-              aria-disabled={!canIdentify || undefined}
-              data-testid="view-card-identify"
-              onClick={canIdentify && !identifying ? onIdentify : undefined}
-            />
-          )}
+          <IconButton
+            className={cx(styles.action, identifying && styles.busy)}
+            label={identifying ? t("hue:channelMap.identifying") : t("roomMap:view.identify")}
+            title={canIdentify ? (identifying ? t("hue:channelMap.identifying") : t("roomMap:view.identifyHint")) : (identifyUnavailable ?? undefined)}
+            icon={<IconIdentify />}
+            aria-busy={identifying || undefined}
+            aria-disabled={!canIdentify || undefined}
+            data-testid="view-card-identify"
+            onClick={canIdentify && !identifying ? onIdentify : undefined}
+          />
           <RowLink onClick={onEdit}>{t("roomMap:view.edit")}</RowLink>
         </>
       }
@@ -97,19 +101,24 @@ export function ViewLightCard({
               <Note tone="warning" title={identifyFailure}>
                 {identifyFailure}
               </Note>
-            ) : light.kind === "usb" ? (
+            ) : (
               <Status>
-                {strip && strip.status !== "unknown" && (
-                  <StateWord tone={strip.status === "connected" ? "live" : "idle"}>
-                    {strip.status === "connected"
-                      ? t("roomMap:inspector.usbConnectedFallback")
-                      : t("roomMap:inspector.usbConnectionDisconnected")}
+                {connection && connection !== "unknown" && (
+                  <StateWord tone={connection === "connected" ? "live" : "idle"}>
+                    {connection === "connected" ? t("roomMap:inspector.usbConnectedFallback") : t("roomMap:inspector.usbConnectionDisconnected")}
                   </StateWord>
                 )}
-                {strip?.port && <Meta>{strip.port}</Meta>}
+                <Meta>
+                  {[
+                    light.kind === "usb" ? port : facts,
+                    level === null || connection === "disconnected"
+                      ? t("roomMap:view.hover.off")
+                      : t("roomMap:view.hover.on", { percent: Math.round(level * 100) }),
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </Meta>
               </Status>
-            ) : (
-              facts && <Meta>{facts}</Meta>
             )}
           </span>
           <span className={styles.slot} aria-hidden="true" />

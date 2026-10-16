@@ -2,10 +2,12 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { UsbStripPlacement } from "@/shared/contracts/roomMap";
+import type { TvAnchorPlacement, UsbStripPlacement } from "@/shared/contracts/roomMap";
 
 import type { ViewLight } from "../../../model/viewLights";
 import type { HueIdentify } from "../../../state/useHueIdentify";
+import type { StripBlink } from "../../../state/useStripBlink";
+import type { UsbStripConnectionStatus } from "../../objects/UsbStripInspector";
 import { RoomViewDock } from "../RoomViewDock";
 import { ViewLightRow } from "../ViewLightRow";
 
@@ -34,6 +36,15 @@ const LIGHTS: ViewLight[] = [
   light({ id: "tv", kind: "tv", name: "TV" }),
 ];
 const STRIPS: UsbStripPlacement[] = [{ stripId: "s1", startX: 0, startY: 0, endX: 1, endY: 0, ledCount: 60, portName: "COM3" }];
+// Its middle is the strip's: the strip is its backlight.
+const TV: TvAnchorPlacement = { x: 0, y: -0.05, width: 1, height: 0.1 };
+
+const stripBlink = (over: Partial<StripBlink> = {}): StripBlink => ({
+  busyId: null,
+  failure: null,
+  blink: vi.fn<StripBlink["blink"]>(async () => {}),
+  ...over,
+});
 
 const identify = (over: Partial<HueIdentify> = {}): HueIdentify => ({
   busyId: null,
@@ -51,6 +62,10 @@ function Harness({
   hueIdentify = identify(),
   canIdentify = true,
   hueStreaming = false,
+  blink = stripBlink(),
+  strip = "connected",
+  tv = TV,
+  level = 0.8,
 }: {
   initial?: string | null;
   pickRef?: { current: (id: string | null) => void };
@@ -59,6 +74,10 @@ function Harness({
   hueIdentify?: HueIdentify;
   canIdentify?: boolean;
   hueStreaming?: boolean;
+  blink?: StripBlink;
+  strip?: UsbStripConnectionStatus;
+  tv?: TvAnchorPlacement | null;
+  level?: number | null;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(initial);
   if (pickRef) pickRef.current = setSelectedId;
@@ -68,8 +87,12 @@ function Harness({
       hue={null}
       selected={LIGHTS.find((l) => l.id === selectedId) ?? null}
       strips={STRIPS}
-      stripStatus={() => ({ status: "connected", port: "COM3" })}
+      tv={tv}
+      stripStatus={() => ({ status: strip, port: "COM3" })}
+      hueBridgeStatus="connected"
       identify={hueIdentify}
+      blink={blink}
+      level={level}
       canIdentify={canIdentify}
       hueStreaming={hueStreaming}
       onSelect={setSelectedId}
@@ -80,6 +103,8 @@ function Harness({
   );
 }
 
+// The dock's own announcement, not the card's state word.
+const announced = () => screen.getAllByRole("status").find((element) => element.classList.contains("sr-only"))?.textContent;
 const chip = (id: string) => screen.getByTestId(`view-light-${id}`);
 const liveButton = (testId: string) =>
   screen.getAllByTestId(testId).find((element) => !element.closest("[inert]")) as HTMLElement;
@@ -127,7 +152,7 @@ describe("RoomViewDock", () => {
     render(<Harness initial="hue-0" pickRef={pickRef} />);
     act(() => pickRef.current("tv"));
     expect(screen.getAllByTestId("view-card-name").map((e) => e.textContent)).toEqual(["TV"]);
-    expect(screen.getByRole("status").textContent).toBe('roomMap:view.selected {"name":"TV"}');
+    expect(announced()).toBe('roomMap:view.selected {"name":"TV"}');
   });
 
   it("says why identify is not there for a light the bridge never matched", () => {
@@ -147,7 +172,7 @@ describe("RoomViewDock", () => {
     const focusStage = vi.fn<() => void>();
     render(<Harness pickRef={pickRef} focusStage={focusStage} />);
     act(() => pickRef.current("hue-0"));
-    expect(screen.getByRole("status").textContent).toBe('roomMap:view.selected {"name":"Shelf"}');
+    expect(announced()).toBe('roomMap:view.selected {"name":"Shelf"}');
     expect(focusStage).not.toHaveBeenCalled();
   });
 
@@ -182,13 +207,52 @@ describe("RoomViewDock", () => {
     expect(screen.getByText("hue:channelMap.identifyBlocked")).toBeTruthy();
   });
 
-  it("shows a strip's port and a ghost's warning instead of facts, and no identify for either", () => {
+  it("shows a strip's port and a ghost's warning instead of facts", () => {
     const { unmount } = render(<Harness initial="usb-s1" />);
-    expect(screen.getByText("COM3")).toBeTruthy();
-    expect(screen.queryByTestId("view-card-identify")).toBeNull();
+    expect(screen.getByText('COM3 · roomMap:view.hover.on {"percent":80}')).toBeTruthy();
     unmount();
     render(<Harness initial="hue-1" />);
     expect(screen.getAllByText("roomMap:inspector.hueGhostShort").length).toBeGreaterThan(0);
+  });
+
+  it("says how each light reads now and how bright the room is, or that it is off", () => {
+    const { unmount } = render(<Harness initial="hue-0" />);
+    expect(screen.getByText("roomMap:inspector.usbConnectedFallback")).toBeTruthy();
+    expect(screen.getByText('Sofa · roomMap:view.family.floorLamp · roomMap:view.hover.on {"percent":80}')).toBeTruthy();
+    unmount();
+    render(<Harness initial="tv" strip="disconnected" />);
+    expect(screen.getByText("roomMap:inspector.usbConnectionDisconnected")).toBeTruthy();
+    expect(screen.getByText("roomMap:view.tvBacklight · roomMap:view.hover.off")).toBeTruthy();
+  });
+
+  it("blinks a strip, and a screen through its backlight, on the strip's port", () => {
+    const blink = stripBlink();
+    const { unmount } = render(<Harness initial="usb-s1" blink={blink} />);
+    fireEvent.click(liveButton("view-card-identify"));
+    expect(blink.blink).toHaveBeenCalledWith("usb-s1", "COM3");
+    unmount();
+    render(<Harness initial="tv" blink={blink} />);
+    fireEvent.click(liveButton("view-card-identify"));
+    expect(blink.blink).toHaveBeenLastCalledWith("tv", "COM3");
+  });
+
+  it("offers no blink for a strip offline or a screen with no backlight, and says why", () => {
+    const blink = stripBlink();
+    const { unmount } = render(<Harness initial="usb-s1" strip="disconnected" blink={blink} />);
+    const offline = liveButton("view-card-identify");
+    expect(offline).toHaveAttribute("aria-disabled", "true");
+    expect(offline.getAttribute("title")).toBe("roomMap:view.blinkOffline");
+    fireEvent.click(offline);
+    unmount();
+    render(<Harness initial="tv" tv={{ ...TV, x: 3 }} blink={blink} />);
+    expect(liveButton("view-card-identify").getAttribute("title")).toBe("roomMap:view.blinkNoBacklight");
+    fireEvent.click(liveButton("view-card-identify"));
+    expect(blink.blink).not.toHaveBeenCalled();
+  });
+
+  it("says why a blink did not reach the strip", () => {
+    render(<Harness initial="usb-s1" blink={stripBlink({ failure: { id: "usb-s1", outcome: "notSent" } })} />);
+    expect(screen.getByText("device:strip.flash.notSent")).toBeTruthy();
   });
 
   it("opens the plan on the light", () => {

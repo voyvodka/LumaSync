@@ -12,6 +12,7 @@ import type { RoomAwareStatus } from "../../model/roomAware";
 import { buildViewLights, resolveViewSelection } from "../../model/viewLights";
 import { useHueIdentify } from "../../state/useHueIdentify";
 import { useRoomMood } from "../../state/useRoomMood";
+import { useStripBlink } from "../../state/useStripBlink";
 import type { RoomMapDocument } from "../../state/useRoomMapDocument";
 import { useUsbStripStatus } from "../../state/useUsbStripStatus";
 import { CornerControls } from "../CornerControls";
@@ -47,8 +48,9 @@ export function ViewStage({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [cameraCommand, setCameraCommand] = useState<CameraCommand | undefined>(undefined);
   const { scopedConfig, selectedId, select, selectHueZone, hue, hueAreaId, hueBridgeConfigured, hueBridgeIp } = doc;
-  const { stripStatus } = useUsbStripStatus(hueReachable);
+  const { stripStatus, hueBridgeStatus } = useUsbStripStatus(hueReachable);
   const identify = useHueIdentify(hueBridgeIp);
+  const blink = useStripBlink();
   const mood = useRoomMood();
   const lit = useMemo(() => {
     if (mood.level <= 0) return null;
@@ -166,8 +168,12 @@ export function ViewStage({
         }
         selected={selected}
         strips={scopedConfig.usbStrips}
+        tv={scopedConfig.tvAnchor ?? null}
         stripStatus={stripStatus}
+        hueBridgeStatus={hueBridgeStatus}
         identify={identify}
+        blink={blink}
+        level={mood.level > 0 ? mood.brightness : null}
         canIdentify={hueBridgeConfigured && hueBridgeIp !== null}
         hueStreaming={hueStreaming}
         lit={lit}

@@ -263,8 +263,10 @@ View but left stored for the way back. The selection's mark (`scene/selection.ts
 rebuilt: a floor outline under a piece, a frame in front of the screen, and for a light a ring that
 faces the camera, never under 20 px, with a faint copy drawn through whatever stands in front. The
 View dock is the editor's box (`ui/dock/DockFrame.tsx`) without a rail: the lights as chips, or one
-light's card with identify and the way to the plan. Identify sends an empty key, which the command
-resolves from the keychain, so the room never holds a credential. The card keeps its second row's
+light's card with identify, how it reads now and how bright the room is, and the way to the plan.
+Identify sends an empty key, which the command resolves from the keychain, so the room never holds a
+credential; a strip, or the screen through its backlight strip, blinks through the Devices page's
+flash instead, sized by the layout of the strip on its port. The card keeps its second row's
 end and its facts' width for a power switch and a brightness bar, so neither moves anything when
 per-light control arrives; until the live feed reaches the view, the lamps' colours are placeholders.
 

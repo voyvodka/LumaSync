@@ -37,6 +37,8 @@
     min-width: 0;
     padding-left: 38px;
   }
+  /* The inspector's status is a fixed column; here it has the row to itself. */
+  .facts > :first-child { width: auto; }
   /* Held for the light's power switch. */
   .slot {
     flex-shrink: 0;

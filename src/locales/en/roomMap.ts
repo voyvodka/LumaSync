@@ -66,6 +66,8 @@ export default {
     identifyHint: "Make the real light blink for a few seconds",
     identifyUnavailable: "Pair a Hue Bridge in Devices to blink this light",
     identifyUnmatched: "This channel is not matched to a bridge light",
+    blinkOffline: "Connect the strip in Devices to blink it",
+    blinkNoBacklight: "This screen has no backlight strip to blink",
     edit: "Place on map",
     selected: "{{name}} selected",
     hover: {
