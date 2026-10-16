@@ -245,6 +245,7 @@ const room3d = vi.hoisted(() => ({
   fail: null as ((error: unknown) => void) | null,
   camera: undefined as { kind: string } | undefined,
   config: null as Record<string, unknown> | null,
+  zones: null as { active: string | null; others: readonly string[] } | null | undefined,
 }));
 
 vi.mock("@/features/room-view/ui/RoomView3DHost", () => ({
@@ -256,7 +257,9 @@ vi.mock("@/features/room-view/ui/RoomView3DHost", () => ({
     onPick,
     onFail,
     cameraCommand,
+    zones,
   }: {
+    zones?: { active: string | null; others: readonly string[] } | null;
     config: Record<string, unknown>;
     onPick?: (objectId: string | null) => void;
     onFail: (error: unknown) => void;
@@ -266,6 +269,7 @@ vi.mock("@/features/room-view/ui/RoomView3DHost", () => ({
     room3d.pick = onPick ?? null;
     room3d.camera = cameraCommand;
     room3d.fail = onFail;
+    room3d.zones = zones;
     return <div data-testid="room-view-3d" />;
   },
 }));
@@ -767,20 +771,25 @@ describe("RoomMapEditor — the 3D room as the editing stage", () => {
     expect(view.getByTestId("room-dock")).toHaveAttribute("data-selected", "");
   });
 
-  it("opens the plan for a zone, which only the plan draws", async () => {
-    const view = await openEdit();
-    await act(async () => view.getByTestId("add-zone").click());
-    expect(view.getByTestId("room-map-canvas")).toBeInTheDocument();
-  });
-
-  it("opens the plan for a zone or an image picked from the list, and closes their card going back to 3D", async () => {
+  it("keeps a zone picked from the list in the 3D room, outlined there, and through a stage switch", async () => {
     const view = await openEdit();
     await act(async () => view.getByTestId("pick-zone").click());
-    expect(view.getByTestId("room-map-canvas")).toBeInTheDocument();
+    expect(view.getByTestId("room-view-3d")).toBeInTheDocument();
     expect(view.getByTestId("room-dock")).toHaveAttribute("data-zone", "zone-1");
+    expect(room3d.zones?.active).toBe("zone-1");
+    await act(async () => stageRadio(view, "roomMap:stage.plan").click());
     await act(async () => stageRadio(view, "roomMap:stage.room").click());
-    expect(view.getByTestId("room-dock")).toHaveAttribute("data-zone", "");
+    expect(view.getByTestId("room-dock")).toHaveAttribute("data-zone", "zone-1");
+  });
 
+  it("adds a zone in the 3D room, where it is drawn now", async () => {
+    const view = await openEdit();
+    await act(async () => view.getByTestId("add-zone").click());
+    expect(view.getByTestId("room-view-3d")).toBeInTheDocument();
+  });
+
+  it("opens the plan for an image picked from the list, and closes its card going back to 3D", async () => {
+    const view = await openEdit();
     await act(async () => view.getByTestId("pick-image").click());
     expect(view.getByTestId("room-map-canvas")).toBeInTheDocument();
     expect(view.getByTestId("room-dock")).toHaveAttribute("data-selected", "img-layer-1");

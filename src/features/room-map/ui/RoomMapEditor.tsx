@@ -43,6 +43,7 @@ import {
 import type { RoomAwareStatus } from "../model/roomAware";
 import { applyRoomTemplate } from "../model/roomTemplate";
 import { carryHint } from "../model/carryHint";
+import { zoneMarks } from "../model/zoneMarks";
 import { roomObjectAdapter } from "../model/roomObjectKinds";
 import { useFurnitureModels } from "../state/useFurnitureModels";
 import { useLandCarried } from "../state/useLandCarried";
@@ -195,7 +196,7 @@ export function RoomMapEditor({
     setStageSwitched(true);
   }, []);
   const inRoom = room3d && stage === EDIT_STAGES.ROOM;
-  // An image layer and a Hue zone are drawn on the plan alone: a card for one opens the plan with it.
+  // An image layer is drawn on the plan alone: a card for one opens the plan with it.
   const planFor = useCallback(
     (objectId: string | null) => {
       if (room3d && objectId !== null && parseObjectId(objectId)?.kind === "image") setStage(EDIT_STAGES.PLAN);
@@ -213,19 +214,11 @@ export function RoomMapEditor({
   const changeStage = useCallback(
     (next: EditStage) => {
       if (next === EDIT_STAGES.ROOM) {
-        if (activeHueZoneId !== null) selectHueZone(null);
         if (selectedId !== null && parseObjectId(selectedId)?.kind === "image") select(null);
       }
       setStage(next);
     },
-    [activeHueZoneId, selectedId, select, selectHueZone, setStage],
-  );
-  const selectZoneShowingPlan = useCallback(
-    (zoneId: string | null) => {
-      if (room3d && zoneId !== null) setStage(EDIT_STAGES.PLAN);
-      selectHueZone(zoneId);
-    },
-    [room3d, setStage, selectHueZone],
+    [selectedId, select, setStage],
   );
   const [cameraCommand, setCameraCommand] = useState<CameraCommand | undefined>(undefined);
   const mood = useRoomMood();
@@ -262,6 +255,10 @@ export function RoomMapEditor({
   const areaZones = useMemo(
     () => (hueAreaId ? hueZones.filter((zone) => zone.entertainmentAreaId === hueAreaId) : hueZones),
     [hueZones, hueAreaId],
+  );
+  const roomZones = useMemo(
+    () => (inRoom && !preview ? zoneMarks(scopedConfig, areaZones.map((zone) => zone.id), activeHueZoneId, selectedId, showHueZones) : null),
+    [inRoom, preview, scopedConfig, areaZones, activeHueZoneId, selectedId, showHueZones],
   );
 
   const { guides: snapGuides, dragging: pieceDragging, onDragMove: snapDragMove, onDragEnd: snapDragEnd } = useSnapGuides(config);
@@ -899,6 +896,7 @@ export function RoomMapEditor({
             lampFamilies={lampFamilies}
             label={t("roomMap:face.editLabel")}
             selectedId={selectedId}
+            zones={roomZones}
             bottomInset={(preview ? ROOM_MAP_PREVIEW_INSETS : ROOM_MAP_FIT_INSETS).bottom}
             topInset={ROOM_MAP_FIT_INSETS.top}
             cameraCommand={cameraCommand}
@@ -1126,10 +1124,7 @@ export function RoomMapEditor({
             onSelectTv: handleTvSelect,
             onAddStrip: handleAddUsb,
             onAddImage: () => void handleAddImage(),
-            onAddZone: () => {
-              if (room3d) setStage(EDIT_STAGES.PLAN);
-              handleAddHueZone();
-            },
+            onAddZone: handleAddHueZone,
             drop: libraryDrop,
           }}
           hue={
@@ -1176,7 +1171,7 @@ export function RoomMapEditor({
           onReset={reset}
           templates={onApplyTemplate && dockTemplates}
           onSelect={selectFromList}
-          onSelectZone={selectZoneShowingPlan}
+          onSelectZone={selectHueZone}
           onPopSelection={popSelection}
           onFocusEditor={focusEditor}
         />

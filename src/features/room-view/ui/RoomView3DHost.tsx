@@ -1,6 +1,7 @@
 import { type CSSProperties, lazy, type MutableRefObject, Suspense, useEffect, useState } from "react";
 
 import { useWindowPresence, type WindowPresence } from "@/features/shell/windowVisibility";
+import type { ZoneMarks } from "@/features/room-map/model/zoneMarks";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 
 import type { LampFamily } from "../model/lampFamily";
@@ -45,6 +46,7 @@ export function RoomView3DHost(props: {
   lampFamilies?: ReadonlyMap<number, LampFamily>;
   label: string;
   selectedId?: string | null;
+  zones?: ZoneMarks | null;
   bottomInset?: number;
   topInset?: number;
   cameraCommand?: CameraCommand;

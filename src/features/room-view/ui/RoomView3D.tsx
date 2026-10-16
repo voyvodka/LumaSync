@@ -1,6 +1,7 @@
 // Spike: the 3D room, measured in the real app before the room view is built for real. Draws only
 // on a change, and hands back everything — context included — on unmount. The rules it follows are
 // in docs/architecture/ui-and-shell.md, "Per-window bundles".
+import type { ZoneMarks } from "@/features/room-map/model/zoneMarks";
 import { type MutableRefObject, useEffect, useRef } from "react";
 import {
   BoxGeometry,
@@ -108,6 +109,7 @@ interface RoomView extends RoomDropTarget {
   /** `morph`: the room becomes this one piece by piece, as a template does, instead of at once. */
   show(config: RoomMapConfig, lampFamilies: ReadonlyMap<number, LampFamily>, morph?: boolean): void;
   select(objectId: string | null): void;
+  zones(marks: ZoneMarks | null): void;
   /** Pixels at the foot and the head something floats over; the room is fitted between them. */
   setInsets(bottom: number, top: number): void;
   /** The camera's own controls, beside the drag and the wheel. */
@@ -194,6 +196,7 @@ function openRoomView(
   let observer: ResizeObserver | null = null;
   let controls: OrbitControls | null = null;
   let selected: string | null = null;
+  let zoneMarks: ZoneMarks | null = null;
   let pixelsPerMetre = 0;
   let bottomInset = 0;
   let topInset = 0;
@@ -797,6 +800,7 @@ function openRoomView(
       // rebuilds the scene, and taking the target back to the middle threw the view across the room.
       if (first || roomKey(config) !== shownRoom) orbit.target.copy(room.target);
       room.select(selected);
+      room.markZones(zoneMarks);
       paintMood();
       if (first) {
         const kept = sessionCamera;
@@ -1075,6 +1079,10 @@ function openRoomView(
         if (room?.select(objectId) || nudged) request();
         if (ready) focusOn(objectId, previous);
       },
+      zones(marks) {
+        zoneMarks = marks;
+        if (room?.markZones(marks)) request();
+      },
       show(config, lampFamilies, morphing) {
         try {
           show(config, lampFamilies, morphing);
@@ -1175,6 +1183,7 @@ export default function RoomView3D({
   lampFamilies = NO_FAMILIES,
   label,
   selectedId = null,
+  zones = null,
   bottomInset = 0,
   topInset = 0,
   cameraCommand,
@@ -1192,6 +1201,8 @@ export default function RoomView3D({
   label: string;
   /** The room map's selection, marked in the room. */
   selectedId?: string | null;
+  /** The Hue zones outlined while the room is edited. */
+  zones?: ZoneMarks | null;
   /** Pixels at the view's foot that something floats over; the room is fitted above them. */
   bottomInset?: number;
   /** Pixels at the view's head that something floats over (the View/Edit switch). */
@@ -1223,6 +1234,8 @@ export default function RoomView3D({
   onHoverRef.current = onHover;
   const selectedRef = useRef(selectedId);
   selectedRef.current = selectedId;
+  const zonesRef = useRef(zones);
+  zonesRef.current = zones;
   const moodRef = useRef(mood);
   moodRef.current = mood;
 
@@ -1255,6 +1268,7 @@ export default function RoomView3D({
     const { view, handlers } = kept;
     viewRef.current = view;
     view.select(selectedRef.current);
+    view.zones(zonesRef.current);
     if (moodRef.current) view.setMood(moodRef.current);
     return () => {
       viewRef.current = null;
@@ -1295,6 +1309,10 @@ export default function RoomView3D({
   useEffect(() => {
     viewRef.current?.select(selectedId);
   }, [selectedId]);
+
+  useEffect(() => {
+    viewRef.current?.zones(zones);
+  }, [zones]);
 
   return <div ref={hostRef} role="img" aria-label={label} className={`absolute inset-0 ${styles.host}`} />;
 }

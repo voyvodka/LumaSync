@@ -1,6 +1,7 @@
 // The 3D room's scene, built from the room map. Everything here runs only while the view is on
 // screen and is torn down with it (`disposeScene`). Lamp colours are placeholders until the live
 // feed reaches the view.
+import type { ZoneMarks } from "@/features/room-map/model/zoneMarks";
 import { lampColour } from "../model/lampColours";
 import {
   AdditiveBlending,
@@ -59,6 +60,7 @@ import { type Liftable, type LiftedPiece, liftPiece, spanHider, spansOf } from "
 import { beamGeometry, columnGeometry, decorLights, doorGaps, gappedWallGeometry, openingsTop, planStructures, thresholds } from "./scene/structures";
 import { buildScreen } from "./scene/screen";
 import { buildSelectionMark } from "./scene/selection";
+import { buildZoneBoxes } from "./scene/zoneBoxes";
 import { type LedTape, ledTape, TAPE_DEPTH as STRIP_DEPTH, TAPE_WIDTH as STRIP_WIDTH } from "./scene/ledTape";
 
 const STRIP_GLOW = 0xffc46b;
@@ -161,7 +163,9 @@ export interface RoomScene {
   pickables: readonly Pickable[];
   /** Marks the object with this id, or nothing; true when the mark changed. */
   select(objectId: string | null): boolean;
-  /** Turns what faces the camera (the selection's ring) to it; call before each draw. */
+  /** Outlines the Hue zones being edited, or none; true when that changed. */
+  markZones(marks: ZoneMarks | null): boolean;
+  /** Turns what faces the camera (the selection's ring, a zone's name) to it; call before each draw. */
   faceCamera(cameraQuaternion: Quaternion): void;
   /** `null` keeps each lamp's own colour; a palette gives lamp i stop i mod n. */
   setMood(lampColour: number | null, levels: MoodLevels, palette?: readonly number[]): void;
@@ -515,6 +519,8 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
 
   const mark = buildSelectionMark(pickables);
   scene.add(mark.group);
+  const zoneBoxes = buildZoneBoxes(config.zones, dims);
+  scene.add(zoneBoxes.group);
 
   // A room with no lamps keeps its evening light whatever the mode; the Ambient light moves it
   // toward night or day. A lamp-lit room's unlit end is a dusk, so the lamps going out reads.
@@ -569,7 +575,11 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     scene,
     pickables,
     select: mark.select,
-    faceCamera: mark.orient,
+    markZones: zoneBoxes.mark,
+    faceCamera(q) {
+      mark.orient(q);
+      zoneBoxes.orient(q);
+    },
     lift(objectId: string, withRiders = true) {
       const piece = liftables.get(objectId);
       if (!piece || (piece.spans.length === 0 && piece.extras.length === 0)) return null;
@@ -637,6 +647,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     },
     setPixelsPerMetre(ppm: number) {
       mark.setPixelsPerMetre(ppm);
+      zoneBoxes.setPixelsPerMetre(ppm);
       for (const tape of tapes) tape.setPixelsPerMetre(ppm);
     },
   };

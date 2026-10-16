@@ -38,6 +38,19 @@ export function hueChannelScenePoint(
   return roomToScene(hueToMetres(x, dims.widthMeters), hueToMetres(-y, dims.depthMeters), height, dims);
 }
 
+/** A zone's box in the scene: its centre and its size along x, up and z, clipped to the room. */
+export function zoneSceneBox(zone: HueZone, dims: RoomDimensions): { centre: ScenePoint; size: ScenePoint } {
+  const span = (centre: number, scale: number, sizeM: number, flip = 1) => {
+    const a = hueToMetres(flip * Math.min(Math.max(centre - Math.abs(scale), -1), 1), sizeM);
+    const b = hueToMetres(flip * Math.min(Math.max(centre + Math.abs(scale), -1), 1), sizeM);
+    return [Math.min(a, b), Math.abs(b - a)] as const;
+  };
+  const [x, w] = span(zone.centerX, zone.scaleX, dims.widthMeters);
+  const [y, d] = span(zone.centerY, zone.scaleY, dims.depthMeters, -1);
+  const [z, h] = span(zone.centerZ, zone.scaleZ, dims.heightMeters);
+  return { centre: roomToScene(x + w / 2, y + d / 2, z + h / 2, dims), size: { x: w, y: h, z: d } };
+}
+
 /** The screen's centre, from the anchor's top-left footprint corner and its mount height. */
 export function tvScreenCentre(tv: TvAnchorPlacement, dims: RoomDimensions): ScenePoint {
   return roomToScene(tv.x + tv.width / 2, tv.y + tv.height / 2, tvMountHeight(tv, dims), dims);
