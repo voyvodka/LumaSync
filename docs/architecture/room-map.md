@@ -221,7 +221,9 @@ window and every fit's zoom with it. Now the plan fills the face; the View|Edit 
 capsule (undo, redo, zoom, the keys) and the room-aware pill float over its top, and one 92 px dock
 floats over its foot (`ui/dock/`). While nothing is selected the dock's slot is one quiet row — Add,
 the templates and the Hue area's state — and Add opens the library above it: shelves of cards, each
-piece drawn as the plan draws it, at a fixed height so a change of shelf moves nothing. Two rows of
+piece drawn as the plan draws it, at a fixed height so a change of shelf moves nothing. There are
+two shelves: Furniture, led by the TV, and Light, which holds the LED strip and, with a Hue side, a
+zone — a third shelf for the screen and the strip split the lights in two. Two rows of
 tiles in the slot left no room for kinds the room gains, and the image, which traces the room
 rather than furnishing it, moved to the room's settings. With a selection the slot holds its
 two-row inspector; the rail opens the objects list and the room's settings as popovers above it.

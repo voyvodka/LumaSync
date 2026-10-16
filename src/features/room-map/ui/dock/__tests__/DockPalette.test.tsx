@@ -34,7 +34,7 @@ const openLibrary = async () => {
   fireEvent.click(tile("palette-add"));
   await screen.findByRole("dialog", { name: "roomMap:library.label" });
 };
-const shelf = async (tab: "furniture" | "light" | "screen") => {
+const shelf = async (tab: "furniture" | "light") => {
   if (tile("palette-add").getAttribute("aria-expanded") !== "true") await openLibrary();
   fireEvent.click(tile(`library-tab-${tab}`));
 };
@@ -82,26 +82,22 @@ describe("DockPalette", () => {
 
   it("takes you to the TV there is instead of adding a second", async () => {
     const props = renderPalette({ hasTv: true });
-    await shelf("screen");
+    await shelf("furniture");
     expect(tile("palette-tv")).toHaveAccessibleName("roomMap:palette.selectTv");
     fireEvent.click(tile("palette-tv"));
     expect(props.onSelectTv).toHaveBeenCalledTimes(1);
     expect(props.onAddTv).not.toHaveBeenCalled();
   });
 
-  it("adds a strip from the screen shelf", async () => {
+  it("adds an LED strip from the Light shelf, there with no Hue side too", async () => {
     const props = renderPalette();
-    await shelf("screen");
+    await shelf("light");
+    expect(screen.queryByTestId("palette-zone")).toBeNull();
     fireEvent.click(tile("palette-strip"));
     expect(props.onAddStrip).toHaveBeenCalledTimes(1);
   });
 
-  it("has a Light shelf only in a room with a Hue side", async () => {
-    renderPalette();
-    await openLibrary();
-    expect(screen.queryByTestId("library-tab-light")).toBeNull();
-
-    cleanup();
+  it("adds a Hue zone from the Light shelf in a room with a Hue side", async () => {
     const props = renderPalette({ hue: ready });
     await shelf("light");
     fireEvent.click(tile("palette-zone"));
@@ -132,11 +128,11 @@ describe("DockPalette", () => {
 
   it("opens on the shelf it was last left on", async () => {
     renderPalette();
-    await shelf("screen");
+    await shelf("light");
     cleanup();
     renderPalette();
     await openLibrary();
-    expect(tile("library-tab-screen")).toHaveAttribute("aria-checked", "true");
+    expect(tile("library-tab-light")).toHaveAttribute("aria-checked", "true");
     expect(screen.getByTestId("palette-strip")).toBeInTheDocument();
   });
 
@@ -145,17 +141,18 @@ describe("DockPalette", () => {
     await shelf("furniture");
     const cards = Array.from(tile("library-cards").querySelectorAll("button"));
     expect(cards.filter((b) => b.tabIndex === 0)).toHaveLength(1);
+    expect(cards[0]).toBe(tile("palette-tv"));
     const sofa = tile("palette-sofa");
     act(() => sofa.focus());
     fireEvent.keyDown(sofa, { key: "ArrowRight" });
-    expect(cards[1]).toHaveFocus();
-    fireEvent.keyDown(cards[1]!, { key: "ArrowDown" });
-    expect(cards[6]).toHaveFocus();
+    expect(cards[2]).toHaveFocus();
+    fireEvent.keyDown(cards[2]!, { key: "ArrowDown" });
+    expect(cards[7]).toHaveFocus();
     const last = cards[cards.length - 1]!;
-    fireEvent.keyDown(cards[6]!, { key: "End" });
+    fireEvent.keyDown(cards[7]!, { key: "End" });
     expect(last).toHaveFocus();
     fireEvent.keyDown(last, { key: "Home" });
-    expect(sofa).toHaveFocus();
+    expect(cards[0]).toHaveFocus();
     expect(props.onAddFurniture).not.toHaveBeenCalled();
   });
 
@@ -257,7 +254,7 @@ describe("DockPalette", () => {
       pointer("pointerup", 12, 11);
       fireEvent.click(tile("palette-table"));
       expect(props.onAddFurniture).toHaveBeenCalledWith("table", expect.anything());
-      await shelf("screen");
+      await shelf("furniture");
       press("palette-tv");
       pointer("pointermove", 200, 120);
       expect(drop.hover).not.toHaveBeenCalled();

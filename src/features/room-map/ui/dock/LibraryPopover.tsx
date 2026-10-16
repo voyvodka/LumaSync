@@ -19,7 +19,7 @@ import styles from "./LibraryPopover.module.css";
 
 type Press = (event: MouseEvent<HTMLButtonElement>) => void;
 
-export const LIBRARY_TABS = { FURNITURE: "furniture", LIGHT: "light", SCREEN: "screen" } as const;
+export const LIBRARY_TABS = { FURNITURE: "furniture", LIGHT: "light" } as const;
 export type LibraryTab = (typeof LIBRARY_TABS)[keyof typeof LIBRARY_TABS];
 
 const COLUMNS = 5;
@@ -59,8 +59,7 @@ export function LibraryPopover({ open, onClose, anchorRef, id, hasTv, onAddFurni
   const { t } = useTranslation();
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const noteRef = useRef<HTMLSpanElement | null>(null);
-  const [tab, setTabState] = useState<LibraryTab>(() => (lastTab === LIBRARY_TABS.LIGHT && !hue ? LIBRARY_TABS.FURNITURE : lastTab));
-  const shown = tab === LIBRARY_TABS.LIGHT && !hue ? LIBRARY_TABS.FURNITURE : tab;
+  const [shown, setTabState] = useState<LibraryTab>(lastTab);
   const setTab = (next: LibraryTab) => {
     lastTab = next;
     setTabState(next);
@@ -68,49 +67,53 @@ export function LibraryPopover({ open, onClose, anchorRef, id, hasTv, onAddFurni
   const zoneReady = hue?.state.kind === "ready";
   const drag = useCardDrag(drop, { onStart: onClose, onAbandon: () => anchorRef.current?.focus({ preventScroll: true }) });
 
+  const tv: Card = {
+    id: "tv",
+    name: t("roomMap:objectPanel.tvLabel"),
+    label: hasTv ? t("roomMap:palette.selectTv") : t("roomMap:palette.add", { name: t("roomMap:objectPanel.tvLabel") }),
+    glyph: <TvGlyph placed={hasTv} />,
+    drag: hasTv ? undefined : { kind: "tv" },
+    onClick: hasTv ? onSelectTv : onAddTv,
+  };
   const cards: Card[] =
     shown === LIBRARY_TABS.FURNITURE
-      ? FURNITURE_TILES.map((tile) => {
-          const name = t(`roomMap:furniture.type.${tile.type}`);
-          return {
-            id: tile.type,
-            name,
-            label: t("roomMap:palette.add", { name }),
-            title: t("roomMap:palette.size", { name, width: tile.piece.width.toFixed(1), depth: tile.piece.height.toFixed(1) }),
-            glyph: <FurnitureGlyph model={tile.model} colours={furnitureColours(tile.piece, tile.model)} width={tile.piece.width} depth={tile.piece.height} fit />,
-            drag: { kind: "furniture", type: tile.type },
-            onClick: (event) => onAddFurniture(tile.type, event),
-          };
-        })
-      : shown === LIBRARY_TABS.LIGHT
-        ? [
-            {
-              id: "zone",
-              name: t("roomMap:palette.zone"),
-              label: t("roomMap:palette.addZone"),
-              glyph: <ZoneGlyph />,
-              disabled: !zoneReady,
-              // With no area to put it in, the press goes to the way to get one.
-              onClick: zoneReady ? onAddZone : () => noteRef.current?.querySelector("button")?.focus(),
-            },
-          ]
-        : [
-            {
-              id: "tv",
-              name: t("roomMap:objectPanel.tvLabel"),
-              label: hasTv ? t("roomMap:palette.selectTv") : t("roomMap:palette.add", { name: t("roomMap:objectPanel.tvLabel") }),
-              glyph: <TvGlyph placed={hasTv} />,
-              drag: hasTv ? undefined : { kind: "tv" },
-              onClick: hasTv ? onSelectTv : onAddTv,
-            },
-            {
-              id: "strip",
-              name: t("roomMap:palette.strip"),
-              label: t("roomMap:palette.add", { name: t("roomMap:palette.strip") }),
-              glyph: <StripGlyph />,
-              onClick: onAddStrip,
-            },
-          ];
+      ? [
+          tv,
+          ...FURNITURE_TILES.map((tile): Card => {
+            const name = t(`roomMap:furniture.type.${tile.type}`);
+            return {
+              id: tile.type,
+              name,
+              label: t("roomMap:palette.add", { name }),
+              title: t("roomMap:palette.size", { name, width: tile.piece.width.toFixed(1), depth: tile.piece.height.toFixed(1) }),
+              glyph: <FurnitureGlyph model={tile.model} colours={furnitureColours(tile.piece, tile.model)} width={tile.piece.width} depth={tile.piece.height} fit />,
+              drag: { kind: "furniture", type: tile.type },
+              onClick: (event) => onAddFurniture(tile.type, event),
+            };
+          }),
+        ]
+      : [
+          {
+            id: "strip",
+            name: t("roomMap:palette.strip"),
+            label: t("roomMap:palette.add", { name: t("roomMap:palette.strip") }),
+            glyph: <StripGlyph />,
+            onClick: onAddStrip,
+          },
+          ...(hue
+            ? [
+                {
+                  id: "zone",
+                  name: t("roomMap:palette.zone"),
+                  label: t("roomMap:palette.addZone"),
+                  glyph: <ZoneGlyph />,
+                  disabled: !zoneReady,
+                  // With no area to put it in, the press goes to the way to get one.
+                  onClick: zoneReady ? onAddZone : () => noteRef.current?.querySelector("button")?.focus(),
+                },
+              ]
+            : []),
+        ];
   const rows = Array.from({ length: Math.ceil(cards.length / COLUMNS) }, (_, r) => cards.slice(r * COLUMNS, (r + 1) * COLUMNS).map((card) => card.id));
   const { tileProps } = usePaletteKeys(rows);
 
@@ -121,8 +124,7 @@ export function LibraryPopover({ open, onClose, anchorRef, id, hasTv, onAddFurni
 
   const tabs = [
     { value: LIBRARY_TABS.FURNITURE, label: t("roomMap:library.furniture"), testId: "library-tab-furniture" },
-    ...(hue ? [{ value: LIBRARY_TABS.LIGHT, label: t("roomMap:library.light"), testId: "library-tab-light" }] : []),
-    { value: LIBRARY_TABS.SCREEN, label: t("roomMap:library.screen"), testId: "library-tab-screen" },
+    { value: LIBRARY_TABS.LIGHT, label: t("roomMap:library.light"), testId: "library-tab-light" },
   ];
 
   return (
