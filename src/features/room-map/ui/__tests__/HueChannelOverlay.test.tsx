@@ -13,6 +13,7 @@ import { render, fireEvent, cleanup } from "@testing-library/react";
 
 import { HueChannelOverlay, pinnedZoneEdges } from "../HueChannelOverlay";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
+import type { SnapResult } from "../../model/snapGeometry";
 
 beforeEach(() => {
   cleanup();
@@ -513,5 +514,50 @@ describe("HueChannelOverlay — zone grips", () => {
     fireEvent.pointerUp(w, { pointerId: 1 });
     expect(box.style.cssText).toBe(before);
     expect(onHueZoneResize).not.toHaveBeenCalled();
+  });
+});
+
+describe("HueChannelOverlay — guides", () => {
+  function renderLight(onSnapDragMove: (id: string, x: number, y: number, w: number, h: number) => SnapResult) {
+    const onChange = vi.fn<(ch: HueChannelPlacement) => void>();
+    const onSnapDragEnd = vi.fn<() => void>();
+    const view = render(
+      <HueChannelOverlay
+        channels={[{ channelIndex: 0, x: 0, y: 0, z: 0 }]}
+        pxPerMeter={100}
+        roomWidthM={4}
+        roomDepthM={4}
+        selectedId={null}
+        onSelect={() => {}}
+        onChange={onChange}
+        onSnapDragMove={onSnapDragMove}
+        onSnapDragEnd={onSnapDragEnd}
+      />,
+    );
+    const dot = view.container.querySelector<HTMLElement>('[data-object-id="hue-0"] [role="button"]')!;
+    dot.setPointerCapture = () => {};
+    dot.releasePointerCapture = () => {};
+    return { dot, onChange, onSnapDragEnd };
+  }
+
+  it("asks where the light lands in plan metres and holds it on the guide it meets", () => {
+    const onSnapDragMove = vi.fn<(id: string, x: number, y: number, w: number, h: number) => SnapResult>(() => ({ snapX: 3, snapY: null, guides: [] }));
+    const { dot, onChange, onSnapDragEnd } = renderLight(onSnapDragMove);
+    fireEvent.pointerDown(dot, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
+    fireEvent.pointerMove(dot, { clientX: 90, clientY: 50, pointerId: 1 });
+    expect(onSnapDragMove).toHaveBeenLastCalledWith("hue-0", 2.9, 2.5, 0, 0);
+    fireEvent.pointerUp(dot, { pointerId: 1 });
+    // x held at 3 m of 4 → 0.5 in the cube; y follows the pointer, 0.5 m toward the back.
+    expect(onChange.mock.calls[0]![0].x).toBeCloseTo(0.5);
+    expect(onChange.mock.calls[0]![0].y).toBeCloseTo(-0.25);
+    expect(onSnapDragEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets ⌥ drag a light past a guide", () => {
+    const { dot, onChange } = renderLight(() => ({ snapX: 3, snapY: null, guides: [] }));
+    fireEvent.pointerDown(dot, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
+    fireEvent.pointerMove(dot, { clientX: 90, clientY: 0, altKey: true, pointerId: 1 });
+    fireEvent.pointerUp(dot, { pointerId: 1 });
+    expect(onChange.mock.calls[0]![0].x).toBeCloseTo(0.45);
   });
 });

@@ -282,7 +282,7 @@ export function RoomMapEditor({
     [inRoom, preview, scopedConfig, areaZones, activeHueZoneId, selectedId, showHueZones],
   );
 
-  const { guides: snapGuides, dragging: pieceDragging, onDragMove: snapDragMove, onDragEnd: snapDragEnd } = useSnapGuides(config);
+  const { guides: snapGuides, dragging: pieceDragging, onDragMove: snapDragMove, onDragEnd: snapDragEnd } = useSnapGuides(scopedConfig);
   const furnitureModels = useFurnitureModels(config);
   // Drawn lowest first, as seen from above: a rug stays under the sofa on it, whatever was added last.
   const furnitureByHeight = useMemo(() => {
@@ -1077,6 +1077,8 @@ export function RoomMapEditor({
                 activeHueZone={activeHueZone}
                 onHueZoneCenterChange={handleHueZoneCenterChange}
                 onHueZoneResize={handleHueZoneUpdate}
+                onSnapDragMove={snapDragMove}
+                onSnapDragEnd={snapDragEnd}
                 allHueZones={hueZones}
                 hidePassiveZoneBounds={!showHueZones}
                 facings={facings}

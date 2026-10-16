@@ -152,6 +152,12 @@ one commit re-renders none of them either. An inline closure in their props undo
 on each side, so the part a pan reveals before it commits is already there. Snap guides live in the
 editor, so `useSnapGuides` stores a new list only when it differs from the last one.
 
+**A dragged Hue light meets the same guides as a piece, and the other lights as points.** It snaps
+to the TV, the furniture's edges and centres, the room's middle and each other light's stored
+position (not where a stack fans it out to), then its zone's bounds clamp it; ⌥ drags it free. Only
+a light takes the lights as targets: a sofa caught on every bulb would never sit where it was put.
+The guides read the shown area's lights, so another area's never pull one.
+
 **Channel-to-zone assignment keeps three shapes in sync by hand.** One handler serves both ways a
 light changes zone — the zone picker in the light's inspector and the light chips in the zone's —
 because both have to write the same three fields: the channel's `zoneId` (the join key), its

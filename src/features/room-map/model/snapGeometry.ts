@@ -1,5 +1,6 @@
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
-import { furnitureObjectId, TV_ANCHOR_OBJECT_ID } from "./objectId";
+import { hueToPlanMetres, resolveHueChannelWorld } from "./hueChannelPosition";
+import { furnitureObjectId, hueChannelObjectId, parseObjectId, TV_ANCHOR_OBJECT_ID } from "./objectId";
 
 export interface ObjectRect {
   id: string;
@@ -43,6 +44,17 @@ export function getObjectRects(config: RoomMapConfig, excludeId: string): Object
     const fId = furnitureObjectId(f.id);
     if (fId === excludeId) continue;
     rects.push({ id: fId, x: f.x, y: f.y, w: f.width, h: f.height });
+  }
+
+  // Lights line up with lights; a sofa caught on every bulb would never sit where it was put.
+  if (parseObjectId(excludeId)?.kind === "hue") {
+    const { widthMeters, depthMeters } = config.dimensions;
+    for (const ch of config.hueChannels) {
+      const id = hueChannelObjectId(ch.channelIndex);
+      if (id === excludeId) continue;
+      const at = hueToPlanMetres(resolveHueChannelWorld(ch, config.zones), widthMeters, depthMeters);
+      rects.push({ id, x: at.x, y: at.y, w: 0, h: 0 });
+    }
   }
 
   // Origin (room center) as a zero-size rect so objects snap to it

@@ -4,7 +4,8 @@ import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 import { findHueChannel } from "@/shared/contracts/roomMap";
 import { clamp } from "@/shared/lib/math";
 import { hueChannelObjectId } from "../model/objectId";
-import { findBoundZone, hueToMetres, resolveHueChannelWorld } from "../model/hueChannelPosition";
+import { findBoundZone, hueToMetres, hueToPlanMetres, planMetresToHue, resolveHueChannelWorld } from "../model/hueChannelPosition";
+import type { SnapResult } from "../model/snapGeometry";
 import { hueChannelDotText, hueChannelName } from "../model/hueChannelLabel";
 import { fanOutStacked } from "../model/stackFan";
 import { markDragging, pastSlop, useEscapeCancels } from "./objects/dragIntent";
@@ -42,6 +43,9 @@ interface HueChannelOverlayProps {
   activeHueZone?: HueZone | null;
   /** Called when the user drags the zone center marker. */
   onHueZoneCenterChange?: (zoneId: string, centerX: number, centerY: number) => void;
+  /** Lines a dragged light up with the room's pieces and its other lights; ⌥ drags it free. */
+  onSnapDragMove?: (id: string, x: number, y: number, w: number, h: number) => SnapResult;
+  onSnapDragEnd?: () => void;
   /** Called once when a grip on the active zone's bounds is let go. */
   onHueZoneResize?: (zoneId: string, footprint: Pick<HueZone, "centerX" | "centerY" | "scaleX" | "scaleY">) => void;
   /**
@@ -213,6 +217,8 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
   activeHueZone = null,
   onHueZoneCenterChange,
   onHueZoneResize,
+  onSnapDragMove,
+  onSnapDragEnd,
   allHueZones,
   hidePassiveZoneBounds = false,
   facings,
@@ -236,6 +242,8 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
 
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const snapRef = useRef({ move: onSnapDragMove, end: onSnapDragEnd });
+  snapRef.current = { move: onSnapDragMove, end: onSnapDragEnd };
 
   const activeHueZoneRef = useRef(activeHueZone);
   activeHueZoneRef.current = activeHueZone;
@@ -310,6 +318,16 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
 
     let newX = clamp(dr.startX + dxHue, -1, 1);
     let newY = clamp(dr.startY + dyHue, -1, 1);
+    const snapMove = snapRef.current.move;
+    if (snapMove) {
+      const at = hueToPlanMetres({ x: newX, y: newY }, widthRef.current, depthRef.current);
+      const snap = snapMove(hueChannelObjectId(dr.channelIndex), at.x, at.y, 0, 0);
+      if (!e.altKey && (snap.snapX !== null || snap.snapY !== null)) {
+        const held = planMetresToHue(snap.snapX ?? at.x, snap.snapY ?? at.y, widthRef.current, depthRef.current);
+        newX = clamp(held.x, -1, 1);
+        newY = clamp(held.y, -1, 1);
+      }
+    }
     let relX: number | null = null;
     let relY: number | null = null;
 
@@ -352,6 +370,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
 
     e.currentTarget.releasePointerCapture(e.pointerId);
     markDragging(dr.element?.parentElement, false);
+    snapRef.current.end?.();
 
     const ch = findHueChannel(channelsRef.current, dr.channelIndex);
     if (ch && dr.moved && (dr.currentX !== dr.startX || dr.currentY !== dr.startY)) {
@@ -387,6 +406,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
     if (!dr.active) return;
     const wrapper = dr.element?.parentElement;
     markDragging(wrapper, false);
+    snapRef.current.end?.();
     if (wrapper && dr.moved) {
       wrapper.style.left = dr.homeLeft;
       wrapper.style.top = dr.homeTop;
