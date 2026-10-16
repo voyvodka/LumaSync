@@ -421,7 +421,7 @@ export default {
   carryHint: {
     turn: "rotate",
     rise: "up and down",
-    putBack: "put back",
+    letGo: "let go",
   },
   shortcuts: {
     title: "Keyboard shortcuts",

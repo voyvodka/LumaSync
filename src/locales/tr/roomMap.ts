@@ -424,7 +424,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
   carryHint: {
     turn: "döndür",
     rise: "dikey",
-    putBack: "bırak",
+    letGo: "bırak",
   },
   shortcuts: {
     title: "Klavye kısayolları",

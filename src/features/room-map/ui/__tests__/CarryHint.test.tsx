@@ -15,7 +15,7 @@ describe("CarryHint", () => {
     expect(shown()).toHaveTextContent("RroomMap:carryHint.turn");
     rerender(<CarryHint hint="rise" />);
     expect(shown()).toHaveTextContent("roomMap:carryHint.rise");
-    expect(shown()).toHaveTextContent("roomMap:carryHint.putBack");
+    expect(shown()).toHaveTextContent("roomMap:carryHint.letGo");
     rerender(<CarryHint hint={null} />);
     expect(shown()).toBeEmptyDOMElement();
   });

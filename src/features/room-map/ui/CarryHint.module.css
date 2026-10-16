@@ -13,7 +13,8 @@
     gap: 12px;
     padding: 4px 10px;
     border-radius: 999px;
-    background: rgb(12 13 16 / 72%);
+    background: var(--lm-panel);
+    box-shadow: inset 0 0 0 1px var(--lm-line-2);
     color: var(--lm-ink-dim);
     font-size: 11.5px;
     white-space: nowrap;
@@ -24,9 +25,9 @@
     gap: 5px;
   }
   .key kbd {
-    padding: 1px 5px;
+    padding: 2px 5px;
     border-radius: 4px;
-    background: rgb(255 255 255 / 8%);
+    background: rgb(255 255 255 / 6%);
     color: var(--lm-ink);
     font: 10.5px var(--lm-mono);
   }
