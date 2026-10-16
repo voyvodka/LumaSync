@@ -828,6 +828,15 @@ describe("RoomMapEditor — the 3D room as the editing stage", () => {
     expect(view.queryByTestId("zone-draw-layer")).toBeNull();
   });
 
+  it("ends a draw when a template is shown, so the drawn zone never lands on it", async () => {
+    const view = await openEdit();
+    await act(async () => stageRadio(view, "roomMap:stage.plan").click());
+    await act(async () => view.getByTestId("add-zone").click());
+    expect(view.getByTestId("zone-draw-layer")).toBeInTheDocument();
+    await act(async () => view.getByTestId("preview-template").click());
+    expect(view.queryByTestId("zone-draw-layer")).toBeNull();
+  });
+
   it("opens the plan for an image picked from the list, and closes its card going back to 3D", async () => {
     const view = await openEdit();
     await act(async () => view.getByTestId("pick-image").click());

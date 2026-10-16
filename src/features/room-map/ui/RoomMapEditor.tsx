@@ -221,7 +221,7 @@ export function RoomMapEditor({
   const [drawingZone, setDrawingZone] = useState(false);
   // Anything picked or changed meanwhile ends the draw: the layer would put a zone on top of it.
   // biome-ignore lint/correctness/useExhaustiveDependencies: each is a trigger, not a value read.
-  useEffect(() => setDrawingZone(false), [docSelectedId, activeHueZoneId, docConfig]);
+  useEffect(() => setDrawingZone(false), [docSelectedId, activeHueZoneId, docConfig, template]);
   // The other way, the card of something the room does not draw closes with the plan.
   const changeStage = useCallback(
     (next: EditStage) => {
@@ -250,6 +250,7 @@ export function RoomMapEditor({
     handleAssignChannelToZone,
     handleHueZoneCenterChange,
     handleHueZoneUpdate,
+    handleHueZoneResize,
   } = useRoomMapHueZones({
     config: docConfig,
     apply,
@@ -306,6 +307,14 @@ export function RoomMapEditor({
     [setCanvasContainer],
   );
   const hover = useHoverChip(stageRef);
+  // A piece is only named; a light the bridge lost is off whatever the room is doing.
+  const hoveredLight = useMemo(() => {
+    const ref = hover.hoveredId ? parseObjectId(hover.hoveredId) : null;
+    if (ref?.kind !== "hue") return null;
+    const ch = visibleHueChannels.find((c) => c.channelIndex === ref.channelIndex);
+    const lost = liveChannelIds != null && ch?.channelId != null && !liveChannelIds.has(ch.channelId);
+    return glow && !lost ? "lit" : "off";
+  }, [hover.hoveredId, visibleHueChannels, liveChannelIds, glow]);
   const hoveredName = useMemo(
     () => (inRoom && !preview && hover.hoveredId ? (buildObjectList(scopedConfig, t).find((row) => row.id === hover.hoveredId)?.label ?? null) : null),
     [inRoom, preview, hover.hoveredId, scopedConfig, t],
@@ -1078,7 +1087,7 @@ export function RoomMapEditor({
                 panMode={spaceHeld}
                 activeHueZone={activeHueZone}
                 onHueZoneCenterChange={handleHueZoneCenterChange}
-                onHueZoneResize={handleHueZoneUpdate}
+                onHueZoneResize={handleHueZoneResize}
                 onSnapDragMove={snapDragMove}
                 onSnapDragEnd={snapDragEnd}
                 glow={glow}
@@ -1114,8 +1123,8 @@ export function RoomMapEditor({
           <HoverChip
             chipRef={hover.chipRef}
             name={hoveredName}
-            lit={glow !== null}
-            level={hover.hoveredId && parseObjectId(hover.hoveredId)?.kind === "hue" ? (glow?.level ?? 0) : undefined}
+            lit={hoveredLight === "lit"}
+            level={hoveredLight === null ? undefined : hoveredLight === "lit" ? (glow?.level ?? 0) : 0}
           />
         )}
 

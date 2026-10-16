@@ -321,16 +321,6 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
 
     let newX = clamp(dr.startX + dxHue, -1, 1);
     let newY = clamp(dr.startY + dyHue, -1, 1);
-    const snapMove = snapRef.current.move;
-    if (snapMove) {
-      const at = hueToPlanMetres({ x: newX, y: newY }, widthRef.current, depthRef.current);
-      const snap = snapMove(hueChannelObjectId(dr.channelIndex), at.x, at.y, 0, 0);
-      if (!e.altKey && (snap.snapX !== null || snap.snapY !== null)) {
-        const held = planMetresToHue(snap.snapX ?? at.x, snap.snapY ?? at.y, widthRef.current, depthRef.current);
-        newX = clamp(held.x, -1, 1);
-        newY = clamp(held.y, -1, 1);
-      }
-    }
     let relX: number | null = null;
     let relY: number | null = null;
 
@@ -345,6 +335,25 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
       const bounded = clampWithinZone(newX, newY, boundZone);
       newX = bounded.worldX;
       newY = bounded.worldY;
+    }
+    // Snapped where the zone has put it, and kept only if the guide lies inside the zone too.
+    const snapMove = snapRef.current.move;
+    if (snapMove) {
+      const at = hueToPlanMetres({ x: newX, y: newY }, widthRef.current, depthRef.current);
+      const snap = snapMove(hueChannelObjectId(dr.channelIndex), at.x, at.y, 0, 0);
+      if (!e.altKey && (snap.snapX !== null || snap.snapY !== null)) {
+        const held = planMetresToHue(snap.snapX ?? at.x, snap.snapY ?? at.y, widthRef.current, depthRef.current);
+        const inside = boundZone ? clampWithinZone(held.x, held.y, boundZone) : null;
+        if (!inside || (Math.abs(inside.worldX - held.x) < 1e-9 && Math.abs(inside.worldY - held.y) < 1e-9)) {
+          newX = clamp(held.x, -1, 1);
+          newY = clamp(held.y, -1, 1);
+        } else {
+          snapRef.current.end?.();
+        }
+      }
+    }
+    if (boundZone) {
+      const bounded = clampWithinZone(newX, newY, boundZone);
       relX = bounded.relX;
       relY = bounded.relY;
     }

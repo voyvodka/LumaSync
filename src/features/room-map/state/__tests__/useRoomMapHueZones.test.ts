@@ -318,3 +318,29 @@ describe("useRoomMapHueZones — a refusal is a resolved promise", () => {
     expect(adopt).not.toHaveBeenCalled();
   });
 });
+
+describe("useRoomMapHueZones — drawn and resized zones", () => {
+  it("makes a drawn zone where it was drawn, spanning floor to ceiling", async () => {
+    mockCreate.mockResolvedValue(applied([]));
+    const { result, apply } = renderZones();
+
+    act(() => result.current.handleAddHueZone({ centerX: 0.4, centerY: -0.2, scaleX: 0.3, scaleY: 0.1 }));
+
+    const zone = mockCreate.mock.calls[0]![0].zone;
+    expect(zone).toMatchObject({ centerX: 0.4, centerY: -0.2, centerZ: 0, scaleX: 0.3, scaleY: 0.1, scaleZ: 1 });
+    expect(apply).toHaveBeenCalledWith({ zones: [ZONE_A, zone] });
+  });
+
+  it("writes each resize as its own undo step", async () => {
+    mockUpdate.mockResolvedValue(applied([ZONE_A]));
+    const { result } = renderZonesWithStore({ zones: [ZONE_A] });
+    await waitFor(() => expect(result.current.store.loading).toBe(false));
+
+    act(() => result.current.zones.handleHueZoneResize("zone-a", { centerX: 0.1, centerY: 0, scaleX: 0.4, scaleY: 0.3 }));
+    act(() => result.current.zones.handleHueZoneResize("zone-a", { centerX: 0.2, centerY: 0, scaleX: 0.5, scaleY: 0.3 }));
+    expect(result.current.store.config.zones[0]!.scaleX).toBe(0.5);
+
+    await act(async () => result.current.store.undo());
+    expect(result.current.store.config.zones[0]!.scaleX).toBe(0.4);
+  });
+});

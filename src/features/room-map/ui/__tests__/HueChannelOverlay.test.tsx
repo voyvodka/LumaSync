@@ -515,6 +515,31 @@ describe("HueChannelOverlay — zone grips", () => {
     expect(box.style.cssText).toBe(before);
     expect(onHueZoneResize).not.toHaveBeenCalled();
   });
+
+  it("lets go of Escape when the grips go away mid-drag", () => {
+    const view = render(
+      <HueChannelOverlay
+        channels={[CHANNEL_IN_ZONE]}
+        pxPerMeter={100}
+        roomWidthM={5}
+        roomDepthM={4}
+        selectedId={null}
+        onSelect={() => {}}
+        onChange={() => {}}
+        activeHueZone={ZONE}
+        allHueZones={[ZONE]}
+        onHueZoneResize={() => {}}
+      />,
+    );
+    const se = view.container.querySelector<HTMLElement>('[data-zone-handle="se"]')!;
+    se.setPointerCapture = () => {};
+    fireEvent.pointerDown(se, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
+    fireEvent.pointerMove(se, { clientX: 80, clientY: 0, pointerId: 1 });
+    view.unmount();
+    const esc = new KeyboardEvent("keydown", { key: "Escape", cancelable: true });
+    window.dispatchEvent(esc);
+    expect(esc.defaultPrevented).toBe(false);
+  });
 });
 
 describe("HueChannelOverlay — guides", () => {
@@ -559,6 +584,37 @@ describe("HueChannelOverlay — guides", () => {
     fireEvent.pointerMove(dot, { clientX: 90, clientY: 0, altKey: true, pointerId: 1 });
     fireEvent.pointerUp(dot, { pointerId: 1 });
     expect(onChange.mock.calls[0]![0].x).toBeCloseTo(0.45);
+  });
+
+  it("asks from the zone's edge and lets a guide beyond it go", () => {
+    const onSnapDragMove = vi.fn<(id: string, x: number, y: number, w: number, h: number) => SnapResult>(() => ({ snapX: 3, snapY: null, guides: [] }));
+    const onSnapDragEnd = vi.fn<() => void>();
+    const onChange = vi.fn<(ch: HueChannelPlacement) => void>();
+    const view = render(
+      <HueChannelOverlay
+        channels={[CHANNEL_IN_ZONE]}
+        pxPerMeter={100}
+        roomWidthM={4}
+        roomDepthM={4}
+        selectedId={null}
+        onSelect={() => {}}
+        onChange={onChange}
+        activeHueZone={ZONE}
+        allHueZones={[ZONE]}
+        onSnapDragMove={onSnapDragMove}
+        onSnapDragEnd={onSnapDragEnd}
+      />,
+    );
+    const dot = view.container.querySelector<HTMLElement>('[data-zone-channel-id="zone-1"] [role="button"]')!;
+    dot.setPointerCapture = () => {};
+    dot.releasePointerCapture = () => {};
+    fireEvent.pointerDown(dot, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
+    fireEvent.pointerMove(dot, { clientX: 400, clientY: 0, pointerId: 1 });
+    // The zone ends at 0.3 in the cube, 2.6 m of 4; the guide at 3 m lies outside it.
+    expect(onSnapDragMove.mock.lastCall![1]).toBeCloseTo(2.6);
+    expect(onSnapDragEnd).toHaveBeenCalled();
+    fireEvent.pointerUp(dot, { pointerId: 1 });
+    expect(onChange.mock.calls[0]![0].x).toBeCloseTo(0.3);
   });
 });
 

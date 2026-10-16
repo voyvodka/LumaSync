@@ -45,6 +45,8 @@ export interface UseRoomMapHueZonesReturn {
   handleAssignChannelToZone: (channelIndex: number, targetZoneId: string | null, dropped?: DroppedLight) => void;
   handleHueZoneCenterChange: (zoneId: string, centerX: number, centerY: number) => void;
   handleHueZoneUpdate: (zoneId: string, patch: Partial<HueZone>) => void;
+  /** One undo step per release: unlike a field's stream, two resizes a beat apart must not merge. */
+  handleHueZoneResize: (zoneId: string, footprint: Pick<HueZone, "centerX" | "centerY" | "scaleX" | "scaleY">) => void;
 }
 
 export interface DroppedLight {
@@ -284,6 +286,17 @@ export function useRoomMapHueZones({
     [config.zones, apply, settle],
   );
 
+  const handleHueZoneResize = useCallback(
+    (zoneId: string, footprint: Pick<HueZone, "centerX" | "centerY" | "scaleX" | "scaleY">) => {
+      const zone = config.zones.find((z) => z.id === zoneId);
+      if (!zone) return;
+      const updated = { ...zone, ...footprint };
+      apply({ zones: config.zones.map((z) => (z.id === zoneId ? updated : z)) });
+      settle("update_hue_zone (resize)", updateHueZone({ zone: updated, existingZones: config.zones }), false);
+    },
+    [config.zones, apply, settle],
+  );
+
   return {
     hueZones,
     activeHueZone,
@@ -295,5 +308,6 @@ export function useRoomMapHueZones({
     handleAssignChannelToZone,
     handleHueZoneCenterChange,
     handleHueZoneUpdate,
+    handleHueZoneResize,
   };
 }

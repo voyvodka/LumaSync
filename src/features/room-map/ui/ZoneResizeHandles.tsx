@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+
 import type { HueZone } from "@/shared/contracts/roomMap";
 
 import { rectToZone, resizeZoneRect, ZONE_HANDLES, type ZoneHandle, zoneRect } from "../model/zoneRect";
@@ -24,6 +26,10 @@ export function ZoneResizeHandles({
   panMode: boolean;
   onResize: (zoneId: string, footprint: Footprint) => void;
 }) {
+  // An undo or a refusal can take the zone away mid-drag; its window listener must not outlive it.
+  const live = useRef<(() => void) | null>(null);
+  useEffect(() => () => live.current?.(), []);
+
   const begin = (handle: ZoneHandle, e: React.PointerEvent<HTMLSpanElement>) => {
     if (panMode || e.button !== 0) return;
     e.stopPropagation();
@@ -78,6 +84,7 @@ export function ZoneResizeHandles({
       grip.removeEventListener("pointerup", up);
       grip.removeEventListener("pointercancel", cancel);
       window.removeEventListener("keydown", esc, true);
+      live.current = null;
     };
     const restore = () => {
       for (const s of saved) {
@@ -103,6 +110,7 @@ export function ZoneResizeHandles({
     grip.addEventListener("pointerup", up);
     grip.addEventListener("pointercancel", cancel);
     window.addEventListener("keydown", esc, true);
+    live.current = stop;
   };
 
   // Below three targets a side, its middle grip would cover the corners and the centre marker.
