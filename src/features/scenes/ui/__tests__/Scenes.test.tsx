@@ -23,11 +23,14 @@ const disk: {
   saveFails: boolean;
   /** The next update fails once this resolves: a write still in flight while the user moves on. */
   slowFailure: Promise<void> | null;
+  /** Saves wait for this: a write held in flight for as long as a test needs. */
+  saveGate: Promise<void> | null;
 } = {
   state: {},
   failNext: false,
   saveFails: false,
   slowFailure: null,
+  saveGate: null,
 };
 const writes: Partial<ShellState>[] = [];
 
@@ -35,14 +38,16 @@ vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: () => Promise.resolve({ ...disk.state }),
     // A save lands a moment later, as a real write does: an apply that did not wait would beat it.
-    save: (partial: Partial<ShellState>) =>
-      new Promise<void>((resolve, reject) =>
+    save: async (partial: Partial<ShellState>) => {
+      await disk.saveGate;
+      await new Promise<void>((resolve, reject) =>
         setTimeout(() => {
           if (disk.saveFails) return reject(new Error("SHELL_STATE_WRITE_FAILED"));
           disk.state = { ...disk.state, ...partial };
           resolve();
         }, 5),
-      ),
+      );
+    },
     update: (fn: (s: Partial<ShellState>) => Partial<ShellState> | null) => {
       if (disk.failNext) {
         disk.failNext = false;
@@ -102,6 +107,7 @@ beforeEach(() => {
   disk.failNext = false;
   disk.saveFails = false;
   disk.slowFailure = null;
+  disk.saveGate = null;
   writes.length = 0;
   __resetPreferencesForTests();
   __setPreferenceForTests("lightingIntensityPreset", "moderate");
@@ -319,9 +325,16 @@ describe("making and editing a scene", () => {
     };
     seed([movie]);
     const { onApply } = renderPage(RED);
+    // Held until Cancel: a 5 ms write alone outran the frame the edit waits for on a slow runner.
+    let release = () => {};
+    disk.saveGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     await editFromLibrary("m");
+    expect(onApply).not.toHaveBeenCalled();
     await act(async () => {
       fireEvent.click(screen.getByTestId("scene-edit-cancel"));
+      release();
       await new Promise((resolve) => setTimeout(resolve, 30));
     });
     expect(onApply).not.toHaveBeenCalledWith(toModeConfig(movie));
