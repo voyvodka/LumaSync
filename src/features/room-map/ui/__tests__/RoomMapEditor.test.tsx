@@ -401,6 +401,18 @@ describe("RoomMapEditor — arrow keys route to pan or nudge by selection", () =
     // replacement, so the next edit cannot reinstate a bare `none`.
     expect(root.style.outline).toBe("");
   });
+
+  // WebKit rang the whole room with :focus-visible each time an action handed focus back to it.
+  it("is ringed when Tab brings focus to it, not when an action hands focus back", async () => {
+    const { root } = renderEditor();
+    await act(async () => {});
+    act(() => root.focus());
+    expect(root).not.toHaveAttribute("data-tabbed");
+    fireEvent.keyUp(root, { key: "Tab" });
+    expect(root).toHaveAttribute("data-tabbed");
+    act(() => root.blur());
+    expect(root).not.toHaveAttribute("data-tabbed");
+  });
 });
 
 class StubResizeObserver {

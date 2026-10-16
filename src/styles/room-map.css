@@ -231,7 +231,7 @@
 .lm-room-editor:focus {
   outline: none;
 }
-.lm-room-editor:focus-visible::after {
+.lm-room-editor[data-tabbed]:focus::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -240,7 +240,7 @@
   box-shadow: var(--lm-focus-ring-inset);
 }
 @media (forced-colors: active) {
-  .lm-room-editor:focus-visible::after {
+  .lm-room-editor[data-tabbed]:focus::after {
     box-shadow: none;
     outline: 2px solid Highlight;
     outline-offset: -2px;

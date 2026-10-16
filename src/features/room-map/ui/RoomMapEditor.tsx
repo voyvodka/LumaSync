@@ -869,7 +869,21 @@ export function RoomMapEditor({
   const freeHeight = Math.max(0, canvasSize.h - ROOM_MAP_FIT_INSETS.top - ROOM_MAP_FIT_INSETS.bottom);
 
   return (
-    <div ref={rootRef} className="lm-room-editor relative h-full" onKeyDown={handleKeyDown} onContextMenu={handleContextMenu} tabIndex={0}>
+    <div
+      ref={rootRef}
+      className="lm-room-editor relative h-full"
+      onKeyDown={handleKeyDown}
+      // Ringed only when Tab brought focus here: WebKit's :focus-visible also ringed the whole room
+      // when an action handed focus back to it. Tab's keyup lands on the element it focused.
+      onKeyUp={(event) => {
+        if (event.key === "Tab" && event.target === event.currentTarget) event.currentTarget.dataset.tabbed = "";
+      }}
+      onBlur={(event) => {
+        if (event.target === event.currentTarget) delete event.currentTarget.dataset.tabbed;
+      }}
+      onContextMenu={handleContextMenu}
+      tabIndex={0}
+    >
       <div
         className={styles.stage}
         ref={setCanvasContainer}

@@ -180,7 +180,9 @@ are box-shadows, so a ring never shifts layout; the utility form is
 `focus-visible:ring-2 focus-visible:ring-amber/60`. A button or canvas that shows a ring on every mouse click is wrong — `:focus` is for
 text fields, where the browser treats click focus as visible anyway. A ring painted on an element
 that opaque children cover is invisible: the room-map editor draws its ring on a `::after` above
-them for that reason.
+them for that reason. That ring keys off a Tab landing on the editor (`data-tabbed`), not
+`:focus-visible`: WebKit counted the focus an action hands back to the editor as visible and ringed
+the whole room after a shortcut or a drop.
 
 **Text clears 4.5:1 on the page.** `--lm-ink-faint` is the quietest text colour, used for captions,
 inactive tabs and the status bar; it was `#4d5564`, 2.7:1, until an audit read it as unreadable and
