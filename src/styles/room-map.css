@@ -65,6 +65,37 @@
   text-transform: uppercase;
 }
 
+/* Grips on the active zone's bounds: screen-sized at any zoom, with a hit area wider than the mark. */
+.lm-room-zone-grip {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border: 1px solid var(--lm-ink);
+  border-radius: 2px;
+  background: var(--lm-bg);
+  pointer-events: auto;
+  touch-action: none;
+  transform: scale(var(--lm-zone-grip-scale, 1));
+}
+.lm-room-zone-grip::before {
+  position: absolute;
+  inset: -7px;
+  content: "";
+}
+.lm-room-zone-grip[data-zone-handle="nw"] { top: 0; left: 0; cursor: nwse-resize; }
+.lm-room-zone-grip[data-zone-handle="n"] { top: 0; left: 50%; cursor: ns-resize; }
+.lm-room-zone-grip[data-zone-handle="ne"] { top: 0; left: 100%; cursor: nesw-resize; }
+.lm-room-zone-grip[data-zone-handle="e"] { top: 50%; left: 100%; cursor: ew-resize; }
+.lm-room-zone-grip[data-zone-handle="se"] { top: 100%; left: 100%; cursor: nwse-resize; }
+.lm-room-zone-grip[data-zone-handle="s"] { top: 100%; left: 50%; cursor: ns-resize; }
+.lm-room-zone-grip[data-zone-handle="sw"] { top: 100%; left: 0; cursor: nesw-resize; }
+.lm-room-zone-grip[data-zone-handle="w"] { top: 50%; left: 0; cursor: ew-resize; }
+.lm-room-zone-grip:hover { background: var(--lm-ink); }
+@media (forced-colors: active) {
+  .lm-room-zone-grip { border-color: CanvasText; background: Canvas; }
+}
+
 /* Room-aware indicator — a quiet state chip, deliberately not amber-filled:
    it reports a fact, it is not a control the user is expected to act on. The
    32 px hit area is the button; the pill inside stays small. */

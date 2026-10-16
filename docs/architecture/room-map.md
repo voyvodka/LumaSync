@@ -208,20 +208,30 @@ bridge position, never re-route a light.
 
 **The one-shot fit has to read the dimensions live, not the ones present at first render.** `useRoomMapState` seeds `DEFAULT_ROOM_MAP` and swaps in the stored room a commit later, and the canvas container only mounts once loading ends — so a ref captured at first render always held the 5×4 placeholder, and *every* map was framed as if it were 5×4. A larger room then opened zoomed too far in, overflowing the canvas instead of sitting centred in it. The guard against re-fitting under a user who is editing the room size is `initialFitDone`, not a stale ref; the two were conflated, and a test had pinned the stale read as intentional with the reasoning that "a dimension change arriving before the container mounts must not become the basis of the fit" — but that change *is* the room finishing loading.
 
-**A zone is a physical square in metres, which means its two cube-space scales diverge in a
-non-square room.** The inspector edits one edge length; `scaleX` and `scaleY` are derived from it
-against the room's width and depth independently, so a 1 m square in a 5×4 m room is not a uniform
-fraction of the bridge's ±1 frame. Patches therefore pass through verbatim rather than mirroring one
-axis onto the other, and Rust validates each axis on its own against the `HUE_ZONE_SCALE_MIN` /
-`HUE_ZONE_SCALE_MAX` band and the cube-overflow invariant
+**A zone is a rectangle on the floor, its two sides set independently.** The Hue frame is unitless:
+every axis runs −1 to 1 and the room is stretched onto it per axis (width to x, depth to y, height
+to z), so a zone's `scaleX` and `scaleY` are each a fraction of their own room side, and the bridge
+never sees a zone — only the world positions resolved through it. The dock edits width and depth
+in metres; the plan draws one with a drag ("Add zone" arms the draw, a click drops half the room
+each way, Shift keeps it square) and reshapes it from eight grips on the active zone's box, which
+move the box, its centre, its name chip and every bound light in place and write the zone once on
+release (`model/zoneRect.ts`). An earlier inspector held a zone to a physical square with one
+edge field; nothing in the frame asked for that. Rust validates each axis on its own against the
+`HUE_ZONE_SCALE_MIN` / `HUE_ZONE_SCALE_MAX` band and the cube-overflow invariant
 (`src-tauri/src/commands/room_map/hue_zone.rs`). The frontend mirrors that band as a clamp; the two
 constants have to move together.
 
-`scaleZ` is the one scale Rust does not validate, because no control authors it: a zone is created
-at 0.5 and the value is only read as the height slider's reach. It cannot arrive bad by accident —
-a non-finite number serialises to `null` and fails deserialisation, loading drops non-finite zones,
-and the live path clamps. A zone-depth control has to bring the Z band and its frontend clamp with
-it, the way X and Y have them.
+**A zone spans floor to ceiling, so it never limits how high a light in it sits.** Zones were
+created at `centerZ 0, scaleZ 0.5`; since a bound light's height is `centerZ + scaleZ · relative.z`,
+that held every light in a zone to the middle half of the room's height — the height field stopped
+short of floor and ceiling and "hang from the ceiling" did nothing. A zone is now made at
+`(0, 1)`, and the `10 → 11` migration rewrites each bound light's relative z to the height it
+resolved to before opening its zone, so no light moves. `(0, 1)` is a default, not an invariant: a
+v10 build still makes `0.5` zones in a v11 file, so every reader keeps the general formula.
+`scaleZ` is still the one scale Rust does not validate, because no control authors it. It cannot
+arrive bad by accident — a non-finite number serialises to `null` and fails deserialisation,
+loading drops non-finite zones, and the live path clamps. A zone-depth control has to bring a Z
+band and its frontend clamp with it, the way X and Y have them.
 
 **A large zone's centre marker stops well short of the wall it is pinned against, so the pinned edge lights up.** `|center| + scale ≤ 1` means the centre can only reach `1 - scale`, and at that point the box edge is exactly on the wall — correct, but on a 5 m zone in a 9 m room the marker parks 2.5 m away from the edge holding it, and the drag reads as broken rather than finished. `pinnedZoneEdges` names the flush walls and the drag path writes them to `data-zone-pinned`; four CSS custom-property slots compose the inset shadow so a corner lights both its edges. The cue is a `box-shadow` rather than a `border-*` override because the bounds box sets `border` inline, and it is dropped in forced-colours mode, where a real border stands in. The comparison is tolerant rather than `===`: the drag compares against the bound `clamp` just returned so it would match exactly, but a centre round-tripped through the backend carries float noise and `-1 + 0.6` is not `-0.4`.
 

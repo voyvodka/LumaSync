@@ -1,8 +1,8 @@
 /**
- * HueZoneInspector — a zone is a physical square: one edge in metres, written as per-axis cube
- * scales (`edge / roomWidth`, `edge / roomDepth`), capped by the room's short side and by the
- * headroom Rust leaves a zone near a wall. Its colour is one of the palette's six, and its lights
- * join and leave from their chips.
+ * HueZoneInspector — a zone is a rectangle: its width and depth in metres, each written as its own
+ * cube scale (`width / roomWidth`, `depth / roomDepth`) and capped by the headroom Rust leaves a
+ * zone near a wall. Its colour is one of the palette's six, and its lights join and leave from
+ * their chips.
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,7 +28,7 @@ const BASE_ZONE: HueZone = {
   centerX: 0,
   centerY: 0,
   centerZ: 0,
-  // 0.5 × 5 m = 2.5 m on X, 0.5 × 4 m = 2.0 m on Y → physical edge 2.0 m, the smaller.
+  // 0.5 × 5 m = 2.5 m wide, 0.5 × 4 m = 2.0 m deep.
   scaleX: 0.5,
   scaleY: 0.5,
   scaleZ: 0.5,
@@ -67,7 +67,11 @@ function renderZone({
       {...handlers}
     />,
   );
-  return { ...handlers, edge: screen.getByTestId("hue-zone-size-edge-input") as HTMLInputElement };
+  return {
+    ...handlers,
+    width: screen.getByTestId("hue-zone-width-input") as HTMLInputElement,
+    depth: screen.getByTestId("hue-zone-depth-input") as HTMLInputElement,
+  };
 }
 
 function commit(input: HTMLInputElement, value: string) {
@@ -76,61 +80,56 @@ function commit(input: HTMLInputElement, value: string) {
   fireEvent.keyDown(input, { key: "Enter" });
 }
 
-describe("HueZoneInspector — a physical square", () => {
-  it("writes one edge as per-axis cube scales, so the zone paints as a true square", () => {
-    const { onUpdate, edge } = renderZone();
-    // 3 m in a 5×4 m room: scaleX = 3/5, scaleY = 3/4.
-    commit(edge, "3");
-    expect(onUpdate).toHaveBeenCalledTimes(1);
-    const patch = onUpdate.mock.calls[0]![0];
-    expect(patch.scaleX).toBeCloseTo(0.6, 5);
-    expect(patch.scaleY).toBeCloseTo(0.75, 5);
+describe("HueZoneInspector — width and depth", () => {
+  it("shows each side in metres and writes it as that axis's cube scale alone", () => {
+    const { onUpdate, width, depth } = renderZone();
+    expect(width.value).toBe("2.50");
+    expect(depth.value).toBe("2.00");
+    commit(width, "3");
+    expect(onUpdate).toHaveBeenLastCalledWith({ scaleX: expect.closeTo(0.6, 5) });
+    commit(depth, "1");
+    expect(onUpdate).toHaveBeenLastCalledWith({ scaleY: expect.closeTo(0.25, 5) });
   });
 
-  it("reaches the room's short side and goes no further", () => {
-    const { onUpdate, edge } = renderZone();
-    expect(edge).toHaveAttribute("aria-valuemax", "4");
-    commit(edge, "6");
+  it("reaches the walls and goes no further", () => {
+    const { onUpdate, width, depth } = renderZone();
+    expect(width).toHaveAttribute("aria-valuemax", "5");
+    expect(depth).toHaveAttribute("aria-valuemax", "4");
+    commit(width, "6");
     expect(onUpdate).not.toHaveBeenCalled();
-    commit(edge, "4");
-    const patch = onUpdate.mock.calls[0]![0];
-    expect(patch.scaleY).toBeCloseTo(1.0, 5);
-    expect(patch.scaleX).toBeCloseTo(0.8, 5);
+    commit(width, "5");
+    expect(onUpdate.mock.calls[0]![0].scaleX).toBeCloseTo(1, 5);
   });
 
-  it("reads a legacy asymmetric zone as its smaller physical edge", () => {
-    // 0.6 × 5 = 3.0 m against 0.4 × 4 = 1.6 m.
-    const { edge } = renderZone({ zone: { ...BASE_ZONE, scaleX: 0.6, scaleY: 0.4 } });
-    expect(edge.value).toBe("1.60");
-  });
-
-  it("holds the edge while the room's size has not loaded, rather than dividing by it", () => {
-    const { edge } = renderZone({ roomWidthM: 0, roomDepthM: 0 });
-    expect(edge).toBeDisabled();
+  it("holds both sides while the room's size has not loaded, rather than dividing by it", () => {
+    const { width, depth } = renderZone({ roomWidthM: 0, roomDepthM: 0 });
+    expect(width).toBeDisabled();
+    expect(depth).toBeDisabled();
   });
 });
 
-// Rust refuses `|center| + scale > 1` (`validate_zone_shape`). Bounding the
-// edge by the room alone let a wall-side zone grow past that, and the refusal
-// was invisible because nothing read `status.code`.
+// Rust refuses `|center| + scale > 1` (`validate_zone_shape`). Bounding a side
+// by the room alone let a wall-side zone grow past that, and the refusal was
+// invisible because nothing read `status.code`.
 describe("HueZoneInspector — headroom at the wall", () => {
   const NEAR_WALL: HueZone = { ...BASE_ZONE, centerX: 0.7, centerY: 0, scaleX: 0.2, scaleY: 0.25 };
 
-  it("caps the edge at the centre's remaining headroom, not the room's short side", () => {
-    // Room short side is 4 m, but centerX 0.7 leaves scaleX ≤ 0.3 → 1.5 m.
-    const { onUpdate, edge } = renderZone({ zone: NEAR_WALL });
-    expect(Number(edge.getAttribute("aria-valuemax"))).toBeCloseTo(1.5, 5);
-    commit(edge, "1.5");
+  it("caps a side at the centre's remaining headroom, not the room's", () => {
+    // centerX 0.7 leaves scaleX ≤ 0.3 → 1.5 m of a 5 m room.
+    const { onUpdate, width } = renderZone({ zone: NEAR_WALL });
+    expect(Number(width.getAttribute("aria-valuemax"))).toBeCloseTo(1.5, 5);
+    commit(width, "1.5");
     const patch = onUpdate.mock.calls[0]![0];
     expect(Math.abs(NEAR_WALL.centerX) + patch.scaleX!).toBeLessThanOrEqual(1 + 1e-9);
-    expect(Math.abs(NEAR_WALL.centerY) + patch.scaleY!).toBeLessThanOrEqual(1);
   });
 
   it("keeps a legacy escapee editable instead of collapsing its range", () => {
-    const { edge } = renderZone({ zone: { ...BASE_ZONE, centerX: 1, centerY: 1, scaleX: 0.9, scaleY: 0.9 } });
-    // Headroom is 0 on both axes; the floor keeps min ≤ max so the field works.
-    expect(Number(edge.getAttribute("aria-valuemax"))).toBeGreaterThanOrEqual(Number(edge.getAttribute("aria-valuemin")));
-    expect(edge).not.toBeDisabled();
+    const { width, depth } = renderZone({ zone: { ...BASE_ZONE, centerX: 1, centerY: 1, scaleX: 0.9, scaleY: 0.9 } });
+    // Headroom is 0 on both axes; the floor keeps min ≤ max so the fields work.
+    for (const field of [width, depth]) {
+      expect(Number(field.getAttribute("aria-valuemax"))).toBeGreaterThanOrEqual(Number(field.getAttribute("aria-valuemin")));
+      expect(field).not.toBeDisabled();
+    }
   });
 });
 

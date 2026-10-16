@@ -1,0 +1,35 @@
+@layer components {
+  .layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 45;
+    cursor: crosshair;
+    touch-action: none;
+  }
+  .box {
+    position: absolute;
+    border: calc(1.5px * var(--draw-scale)) dashed var(--draw-colour);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--draw-colour) 10%, transparent);
+    pointer-events: none;
+  }
+  .box[hidden] { display: none; }
+  .size {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: var(--lm-panel);
+    color: var(--lm-ink);
+    font: 11px var(--lm-mono);
+    white-space: nowrap;
+    transform: translate(-50%, -50%) scale(var(--draw-scale));
+  }
+
+  @media (forced-colors: active) {
+    .box { border-color: Highlight; background: transparent; }
+    .size { border: 1px solid CanvasText; background: Canvas; color: CanvasText; }
+  }
+}

@@ -8,6 +8,7 @@ import { findBoundZone, hueToMetres, resolveHueChannelWorld } from "../model/hue
 import { hueChannelDotText, hueChannelName } from "../model/hueChannelLabel";
 import { fanOutStacked } from "../model/stackFan";
 import { markDragging, pastSlop, useEscapeCancels } from "./objects/dragIntent";
+import { ZoneResizeHandles } from "./ZoneResizeHandles";
 import { cx } from "@/shared/lib/cx";
 
 interface HueChannelOverlayProps {
@@ -41,6 +42,8 @@ interface HueChannelOverlayProps {
   activeHueZone?: HueZone | null;
   /** Called when the user drags the zone center marker. */
   onHueZoneCenterChange?: (zoneId: string, centerX: number, centerY: number) => void;
+  /** Called once when a grip on the active zone's bounds is let go. */
+  onHueZoneResize?: (zoneId: string, footprint: Pick<HueZone, "centerX" | "centerY" | "scaleX" | "scaleY">) => void;
   /**
    * When supplied, every zone in the array renders its
    * dashed bounds box on the canvas (not just the active one). Passive
@@ -209,6 +212,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
   panMode = false,
   activeHueZone = null,
   onHueZoneCenterChange,
+  onHueZoneResize,
   allHueZones,
   hidePassiveZoneBounds = false,
   facings,
@@ -473,6 +477,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
               read the active zone name at a glance even when the dashed
               border is faint or partially off-screen. */}
           <div
+            data-zone-chip-id={activeHueZone.id}
             className="lm-room-zone-chip"
             // Screen-sized like the dots: at a high zoom the chip grew with the plan.
             style={{
@@ -500,17 +505,29 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
               top: zoneBoundsBox.topPx,
               width: zoneBoundsBox.rightPx - zoneBoundsBox.leftPx,
               height: zoneBoundsBox.bottomPx - zoneBoundsBox.topPx,
-              // Deliberately soft: the label chip carries zone identity, so the
-              // outline should read as a hint rather than a frame.
-              border: `1px dashed color-mix(in srgb, ${zoneBoundsBox.color} 60%, transparent)`,
-              background: `color-mix(in srgb, ${zoneBoundsBox.color} 2%, transparent)`,
+              // Soft: the label chip carries the zone's identity; the outline only has to hold the grips.
+              border: `1px dashed color-mix(in srgb, ${zoneBoundsBox.color} 80%, transparent)`,
+              background: `color-mix(in srgb, ${zoneBoundsBox.color} 6%, transparent)`,
               zIndex: 18,
             }}
             aria-hidden
-          />
+          >
+            {onHueZoneResize && (
+              <ZoneResizeHandles
+                zone={activeHueZone}
+                widthM={roomWidthM}
+                depthM={roomDepthM}
+                pxPerMeter={pxPerMeter}
+                zoom={zoom}
+                panMode={panMode}
+                onResize={onHueZoneResize}
+              />
+            )}
+          </div>
           <div
             role="button"
             tabIndex={0}
+            data-zone-center-id={activeHueZone.id}
             aria-label={t("roomMap:hueZones.centerMarkerAriaLabel", { name: activeHueZone.name })}
             title={t("roomMap:hueZones.centerMarkerAriaLabel", { name: activeHueZone.name })}
             className="absolute flex h-3 w-3 cursor-grab items-center justify-center rounded-full ring-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"

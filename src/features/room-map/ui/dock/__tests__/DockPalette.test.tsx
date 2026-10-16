@@ -47,7 +47,9 @@ describe("DockPalette", () => {
     expect(screen.queryByTestId("library-cards")).toBeNull();
     fireEvent.click(tile("palette-templates"));
     expect(onTemplates).toHaveBeenCalledOnce();
-    expect(screen.getByText('roomMap:hueZones.areaState.readyZones {"count":4,"zones":2}')).toBeInTheDocument();
+    expect(
+      screen.getByText('roomMap:hueZones.areaState.readyZones {"count":4,"zones":"roomMap:hueZones.areaState.zoneCount {\\"count\\":2}"}'),
+    ).toBeInTheDocument();
     cleanup();
     renderPalette();
     expect(screen.queryByTestId("palette-templates")).toBeNull();

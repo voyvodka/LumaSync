@@ -37,7 +37,8 @@ export interface UseRoomMapHueZonesReturn {
   /** Code of the last refused mutation, until dismissed. `null` while nothing is refused. */
   hueZoneRejection: HueZoneStatusCode | null;
   dismissHueZoneRejection: () => void;
-  handleAddHueZone: () => void;
+  /** Without `footprint`, half the room each way at its middle. */
+  handleAddHueZone: (footprint?: Pick<HueZone, "centerX" | "centerY" | "scaleX" | "scaleY">) => void;
   handleDeleteHueZone: (zoneId: string) => void;
   handleRenameHueZone: (zoneId: string, name: string) => void;
   /** Without `dropped`, the stored light lands at the zone's middle. */
@@ -97,7 +98,7 @@ export function useRoomMapHueZones({
     [adopt],
   );
 
-  const handleAddHueZone = useCallback(() => {
+  const handleAddHueZone = useCallback((footprint?: Pick<HueZone, "centerX" | "centerY" | "scaleX" | "scaleY">) => {
     if (!hueAreaId) return;
     const id = `hue-zone-${crypto.randomUUID()}`;
     const name = t("roomMap:hueZones.defaultName", { N: String(hueZones.length + 1) });
@@ -110,9 +111,11 @@ export function useRoomMapHueZones({
       centerZ: 0,
       scaleX: 0.5,
       scaleY: 0.5,
-      scaleZ: 0.5,
+      // Floor to ceiling: a zone is a patch of floor, and a light in it may hang or stand anywhere.
+      scaleZ: 1,
       channelIndices: [],
       borderColor: zoneToken(hueZones.length),
+      ...footprint,
     };
     apply({ zones: [...config.zones, newZone] });
     selectHueZone(id);
@@ -255,9 +258,8 @@ export function useRoomMapHueZones({
     [config.zones, apply, settle],
   );
 
-  // The patch passes through verbatim — do NOT mirror one axis onto the other.
-  // Zones are physical squares, so the two scales legitimately differ in a
-  // non-square room. See docs/architecture/room-map.md.
+  // The patch passes through verbatim — do NOT mirror one axis onto the other:
+  // each scale is a fraction of its own room side. See docs/architecture/room-map.md.
   const handleHueZoneUpdate = useCallback(
     (zoneId: string, patch: Partial<HueZone>) => {
       let updated: HueZone | undefined;

@@ -46,6 +46,8 @@ import { carryHint } from "../model/carryHint";
 import { buildObjectList } from "../model/objectList";
 import { dropZones, zoneDrop } from "../model/zoneDrop";
 import { zoneMarks } from "../model/zoneMarks";
+import { zoneToken } from "../model/zoneColor";
+import { rectToZone } from "../model/zoneRect";
 import { roomObjectAdapter } from "../model/roomObjectKinds";
 import { useFurnitureModels } from "../state/useFurnitureModels";
 import { useHoverChip } from "../state/useHoverChip";
@@ -91,6 +93,7 @@ import { OriginMarker } from "./OriginMarker";
 import { RoomMapCanvas } from "./RoomMapCanvas";
 import styles from "./RoomMapEditor.module.css";
 import { SnapGuideOverlay } from "./SnapGuideOverlay";
+import { ZoneDrawLayer } from "./ZoneDrawLayer";
 
 const NO_FAMILIES: ReadonlyMap<number, LampFamily> = new Map();
 
@@ -215,8 +218,11 @@ export function RoomMapEditor({
     [planFor, select],
   );
   // The other way, the card of something the room does not draw closes with the plan.
+  // "Add zone" on the plan arms a draw; the room view keeps placing the default box.
+  const [drawingZone, setDrawingZone] = useState(false);
   const changeStage = useCallback(
     (next: EditStage) => {
+      setDrawingZone(false);
       if (next === EDIT_STAGES.ROOM) {
         if (selectedId !== null && parseObjectId(selectedId)?.kind === "image") select(null);
       }
@@ -1067,6 +1073,7 @@ export function RoomMapEditor({
                 panMode={spaceHeld}
                 activeHueZone={activeHueZone}
                 onHueZoneCenterChange={handleHueZoneCenterChange}
+                onHueZoneResize={handleHueZoneUpdate}
                 allHueZones={hueZones}
                 hidePassiveZoneBounds={!showHueZones}
                 facings={facings}
@@ -1074,11 +1081,26 @@ export function RoomMapEditor({
               />
             )}
 
+            {drawingZone && (
+              <ZoneDrawLayer
+                widthM={widthMeters}
+                depthM={depthMeters}
+                pxPerMeter={pxPerMeter}
+                zoom={zoom}
+                colour={zoneToken(hueZones.length)}
+                onDraw={(rect) => {
+                  setDrawingZone(false);
+                  handleAddHueZone(rectToZone(rect, widthMeters, depthMeters));
+                }}
+                onCancel={() => setDrawingZone(false)}
+              />
+            )}
+
             <SnapGuideOverlay guides={snapGuides} pxPerMeter={pxPerMeter} canvasWidth={canvasSize.w} canvasHeight={canvasSize.h} />
           </RoomMapCanvas>
         )}
         {!inRoom && <PlanDropGhost ref={planGhostRef} />}
-        {inRoom && <CarryHint hint={preview ? null : carryHint(docConfig, docSelectedId, { hueAreaId })} />}
+        <CarryHint hint={inRoom ? (preview ? null : carryHint(docConfig, docSelectedId, { hueAreaId })) : drawingZone ? "draw" : null} />
         {hoveredName && <HoverChip chipRef={hover.chipRef} name={hoveredName} lit={false} />}
 
         <CornerControls
@@ -1153,7 +1175,7 @@ export function RoomMapEditor({
             onSelectTv: handleTvSelect,
             onAddStrip: handleAddUsb,
             onAddImage: () => void handleAddImage(),
-            onAddZone: handleAddHueZone,
+            onAddZone: inRoom ? () => handleAddHueZone() : () => setDrawingZone(true),
             drop: libraryDrop,
           }}
           hue={

@@ -86,7 +86,11 @@ export function HueAreaNote({ hue, noteRef }: { hue: PaletteHueArea; noteRef: Re
       }
     >
       {hue.zoneCount > 0
-        ? t("roomMap:hueZones.areaState.readyZones", { count: hue.lightCount, zones: hue.zoneCount })
+        ? t("roomMap:hueZones.areaState.readyZones", {
+            count: hue.lightCount,
+            // Its own plural: one key on the light count read "1 zones".
+            zones: t("roomMap:hueZones.areaState.zoneCount", { count: hue.zoneCount }),
+          })
         : t("roomMap:hueZones.areaState.ready", { count: hue.lightCount })}
     </Note>
   );

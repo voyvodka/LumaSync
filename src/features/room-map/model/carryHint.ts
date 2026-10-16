@@ -3,7 +3,7 @@ import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { parseObjectId } from "./objectId";
 import { ROOM_OBJECT_KINDS, type RoomObjectContext } from "./roomObjectKinds";
 
-export type CarryHint = "turn" | "rise";
+export type CarryHint = "turn" | "rise" | "draw";
 
 export function carryHint(config: RoomMapConfig, selectedId: string | null, ctx: RoomObjectContext): CarryHint | null {
   const ref = selectedId ? parseObjectId(selectedId) : null;

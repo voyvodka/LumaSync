@@ -1,6 +1,4 @@
 @layer components {
-  .edge { flex: 0 0 124px; }
-
   .caption {
     flex-shrink: 0;
     padding-left: 4px;

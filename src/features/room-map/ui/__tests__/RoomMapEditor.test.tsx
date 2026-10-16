@@ -800,6 +800,22 @@ describe("RoomMapEditor — the 3D room as the editing stage", () => {
     expect(view.getByTestId("room-view-3d")).toBeInTheDocument();
   });
 
+  it("arms a draw on the plan instead of adding a zone, and Escape or the 3D room disarms it", async () => {
+    const view = await openEdit();
+    await act(async () => stageRadio(view, "roomMap:stage.plan").click());
+    persistState.apply.mockClear();
+    await act(async () => view.getByTestId("add-zone").click());
+    expect(view.getByTestId("zone-draw-layer")).toBeInTheDocument();
+    expect(view.getByTestId("carry-hint")).toHaveAttribute("data-hint", "draw");
+    expect(persistState.apply).not.toHaveBeenCalled();
+    await act(async () => fireEvent.keyDown(window, { key: "Escape" }));
+    expect(view.queryByTestId("zone-draw-layer")).toBeNull();
+    await act(async () => view.getByTestId("add-zone").click());
+    await act(async () => stageRadio(view, "roomMap:stage.room").click());
+    await act(async () => stageRadio(view, "roomMap:stage.plan").click());
+    expect(view.queryByTestId("zone-draw-layer")).toBeNull();
+  });
+
   it("opens the plan for an image picked from the list, and closes its card going back to 3D", async () => {
     const view = await openEdit();
     await act(async () => view.getByTestId("pick-image").click());

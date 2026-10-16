@@ -446,3 +446,65 @@ describe("HueChannelOverlay — keyboard", () => {
     expect(dots[1]).toHaveAttribute("aria-disabled", "true");
   });
 });
+
+describe("HueChannelOverlay — zone grips", () => {
+  // 5×4 m at 100 px a metre: the zone is x 1.75–3.25 m, y 1.4–2.6 m.
+  function renderGrips() {
+    const onHueZoneResize = vi.fn<(zoneId: string, footprint: Pick<HueZone, "centerX" | "centerY" | "scaleX" | "scaleY">) => void>();
+    const view = render(
+      <HueChannelOverlay
+        channels={[CHANNEL_IN_ZONE]}
+        pxPerMeter={100}
+        roomWidthM={5}
+        roomDepthM={4}
+        selectedId={null}
+        onSelect={() => {}}
+        onChange={() => {}}
+        activeHueZone={ZONE}
+        allHueZones={[ZONE]}
+        onHueZoneResize={onHueZoneResize}
+      />,
+    );
+    const grip = (handle: string) => {
+      const el = view.container.querySelector<HTMLElement>(`[data-zone-handle="${handle}"]`)!;
+      el.setPointerCapture = () => {};
+      return el;
+    };
+    const box = view.container.querySelector<HTMLElement>('[data-zone-bounds-id="zone-1"]')!;
+    const light = view.container.querySelector<HTMLElement>('[data-zone-channel-id="zone-1"]')!;
+    return { onHueZoneResize, grip, box, light };
+  }
+
+  it("reshapes the box and its lights while dragged and writes the zone once on release", () => {
+    const { onHueZoneResize, grip, box, light } = renderGrips();
+    const se = grip("se");
+    const lightLeft = parseFloat(light.style.left);
+    fireEvent.pointerDown(se, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
+    fireEvent.pointerMove(se, { clientX: 150, clientY: 60, pointerId: 1 });
+    expect(parseFloat(box.style.width)).toBeCloseTo(300);
+    expect(parseFloat(box.style.height)).toBeCloseTo(180);
+    // The light keeps its place relative to the zone, which grew right from its west wall.
+    expect(parseFloat(light.style.left)).toBeCloseTo(175 + ((lightLeft - 175) / 150) * 300);
+    expect(onHueZoneResize).not.toHaveBeenCalled();
+    fireEvent.pointerUp(se, { pointerId: 1 });
+    expect(onHueZoneResize).toHaveBeenCalledTimes(1);
+    const [id, footprint] = onHueZoneResize.mock.calls[0]!;
+    expect(id).toBe("zone-1");
+    expect(footprint.scaleX).toBeCloseTo(0.6);
+    expect(footprint.scaleY).toBeCloseTo(0.45);
+    expect(footprint.centerX).toBeCloseTo(0.3);
+    expect(footprint.centerY).toBeCloseTo(-0.15);
+  });
+
+  it("puts everything back on Escape and writes nothing", () => {
+    const { onHueZoneResize, grip, box } = renderGrips();
+    const w = grip("w");
+    const before = box.style.cssText;
+    fireEvent.pointerDown(w, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
+    fireEvent.pointerMove(w, { clientX: -80, clientY: 0, pointerId: 1 });
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.pointerUp(w, { pointerId: 1 });
+    expect(box.style.cssText).toBe(before);
+    expect(onHueZoneResize).not.toHaveBeenCalled();
+  });
+});
