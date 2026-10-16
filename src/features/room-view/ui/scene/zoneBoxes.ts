@@ -28,8 +28,7 @@ import { floorBand } from "./selection";
 const LABEL_PX = 22;
 const LABEL_LIFT_PX = 12;
 const FLOOR_LIFT = 0.006;
-// A zone spans the room's height, and a box drawn to the ceiling read as a cage over the furniture:
-// a low wall fading upward marks the area the way the cut walls mark the room.
+// A box to the ceiling, the zone's real height, read as a cage over the furniture.
 const WALL_M = 0.45;
 /** Clear of the top bar and the carry hint under it. */
 const TOP_NDC = 0.72;
@@ -100,8 +99,7 @@ const SIDES = [
   [-1, -1],
 ] as const;
 
-/** The four sides of a `w` × `d` footprint raised `h`, opaque at the floor and clear at the top.
- *  Wound outward and drawn from the back, so only the far sides show and nothing covers the room. */
+/** Wound outward and drawn from the back, so only the far sides show and nothing covers the room. */
 function fadingWall(w: number, d: number, h: number): BufferGeometry {
   const position: number[] = [];
   const colour: number[] = [];

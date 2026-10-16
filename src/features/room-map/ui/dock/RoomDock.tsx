@@ -37,7 +37,7 @@ export interface DockAdd {
   onSelectTv: () => void;
   onAddStrip: () => void;
   onAddImage: () => void;
-  /** `keyboard`: pressed with a key, so a draw the pointer would make cannot be asked of it. */
+  /** `keyboard`: a draw needs a pointer, so a key press places the default zone. */
   onAddZone: (keyboard: boolean) => void;
   drop?: LibraryDrop;
 }
