@@ -165,8 +165,11 @@ export interface RoomScene {
   faceCamera(cameraQuaternion: Quaternion): void;
   /** `null` keeps each lamp's own colour; a palette gives lamp i stop i mod n. */
   setMood(lampColour: number | null, levels: MoodLevels, palette?: readonly number[]): void;
-  /** Null for a lamp: its light and glow are built into the scene. */
-  lift(objectId: string): LiftedPiece | null;
+  /** Null for a lamp: its light and glow are built into the scene. Without riders a desk leaves its
+   *  monitor, as an inspector edit does. */
+  lift(objectId: string, withRiders?: boolean): LiftedPiece | null;
+  /** Shifts the selection's mark by this much in the scene, as a piece slid in place moves. */
+  shiftMark(dx: number, dz: number): void;
   /** Where to aim and how far the room reaches from it. */
   target: Vector3;
   radius: number;
@@ -566,13 +569,16 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     pickables,
     select: mark.select,
     faceCamera: mark.orient,
-    lift(objectId: string) {
+    lift(objectId: string, withRiders = true) {
       const piece = liftables.get(objectId);
       if (!piece || (piece.spans.length === 0 && piece.extras.length === 0)) return null;
       const tv = liftables.get(TV_ANCHOR_OBJECT_ID);
       const riders = new Map<string, Liftable>();
-      if (tv && screen?.deskId != null && furnitureObjectId(screen.deskId) === objectId) riders.set(TV_ANCHOR_OBJECT_ID, tv);
+      if (withRiders && tv && screen?.deskId != null && furnitureObjectId(screen.deskId) === objectId) riders.set(TV_ANCHOR_OBJECT_ID, tv);
       return liftPiece(scene, piece, riders);
+    },
+    shiftMark(dx, dz) {
+      mark.group.position.set(dx, 0, dz);
     },
     setMood,
     target: new Vector3(0, H * 0.3, 0),

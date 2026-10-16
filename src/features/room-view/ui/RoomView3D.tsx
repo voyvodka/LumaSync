@@ -27,6 +27,7 @@ import type { LampFamily } from "../model/lampFamily";
 import { DUSK_AT, MOOD_LEVELS as LEVELS, type RoomMood } from "../model/roomMood";
 import { pressStartsCarry } from "../model/carryIntent";
 import { lightPickHalf, pickObject } from "../model/picking";
+import { pieceNudge } from "../model/pieceNudge";
 import { isWindowVisible } from "@/features/shell/windowVisibility";
 import { prefersReducedMotion } from "@/shared/lib/motion";
 
@@ -46,6 +47,12 @@ interface SpikeOptions extends Partial<RoomSceneOptions> {
   shrinkOnClose?: boolean;
   bloom?: boolean;
 }
+
+/** A run of edits builds the room once it rests this long: a build is ~90 ms in a furnished room,
+ *  and the inspector's X dragged stepped it a few times a frame. */
+const SETTLE_MS = 250;
+/** A build this soon after the last waits for the run to rest instead. */
+const REBUILD_GAP_MS = 200;
 
 interface Timings {
   options: SpikeOptions;
@@ -146,10 +153,12 @@ function openRoomView(
   let bottomInset = 0;
   let topInset = 0;
   const listening = new AbortController();
+  const closeHooks: (() => void)[] = [];
 
   const close = () => {
     if (closed) return;
     closed = true;
+    closeHooks.forEach((hook) => hook());
     listening.abort();
     delete window.__roomViewSpikeBench;
     observer?.disconnect();
@@ -397,6 +406,8 @@ function openRoomView(
         press = event.button === 0 ? { x: event.clientX, y: event.clientY, id: event.pointerId } : null;
         onHover(null, 0, 0);
         if (!press || !room || !onMovePiece) return;
+        settleNow();
+        if (!room) return;
         const ray = rayAt(event.clientX, event.clientY);
         // The selected one is carried when the press lands on it, even behind something nearer:
         // the TV's backlight strip covers the TV and took every press on it.
@@ -488,6 +499,8 @@ function openRoomView(
       // Landed, it stays where it was let go until the scene is rebuilt from the landed room; a
       // landing refused, or Esc, puts it back.
       const landed = commit && c.moved && onMovePiece?.(c.id, c.ghost.position.x, c.ghost.position.z, c.turn, c.lifted?.riders ?? []) === true;
+      // Still lifted where it was let go: the landed room must be built, not read as a slide of it.
+      if (landed && c.lifted) builtConfig = null;
       if (c.lifted && !landed) {
         c.lifted.restore();
         room?.select(selected);
@@ -568,12 +581,67 @@ function openRoomView(
 
     let shownConfig: RoomMapConfig | null = null;
     let shownFamilies: ReadonlyMap<number, LampFamily> | null = null;
+    let builtConfig: RoomMapConfig | null = null;
+    let builtAt = 0;
+    // A piece slid in place while the room it was built in waits to be built again.
+    let nudged: { id: string; lifted: LiftedPiece; dx: number; dz: number } | null = null;
+    let settle: ReturnType<typeof setTimeout> | null = null;
+    const settleLater = () => {
+      if (settle !== null) clearTimeout(settle);
+      settle = setTimeout(() => {
+        settle = null;
+        buildShown();
+      }, SETTLE_MS);
+    };
+    closeHooks.push(() => {
+      if (settle !== null) clearTimeout(settle);
+    });
+    // Before a carry lifts from the scene: lifting a slid piece again would copy its emptied spans.
+    const settleNow = () => {
+      if (settle === null) return;
+      clearTimeout(settle);
+      settle = null;
+      buildShown();
+    };
+    // Off `show`'s own guard, so a failed deferred build is reported as an immediate one is.
+    const buildShown = () => {
+      try {
+        if (shownConfig && shownFamilies) build(shownConfig, shownFamilies);
+      } catch (error) {
+        onFail(error);
+      }
+    };
     const show = (config: RoomMapConfig, lampFamilies: ReadonlyMap<number, LampFamily>) => {
       if (closed) return;
       // A view adopted across a face switch is handed the room it already shows.
       if (config === shownConfig && lampFamilies === shownFamilies) return;
+      const sameFamilies = lampFamilies === shownFamilies;
       shownConfig = config;
       shownFamilies = lampFamilies;
+      if (room && builtConfig && sameFamilies && !carry) {
+        const nudge = pieceNudge(builtConfig, config);
+        const lifted = nudge ? (nudged?.id === nudge.objectId ? nudged.lifted : room.lift(nudge.objectId, false)) : null;
+        if (nudge && lifted) {
+          nudged = { id: nudge.objectId, lifted, dx: nudge.dx, dz: nudge.dy };
+          lifted.moveTo(lifted.pivot.x + nudge.dx, lifted.pivot.z + nudge.dy);
+          if (selected === nudge.objectId) room.shiftMark(nudge.dx, nudge.dy);
+          renderer.shadowMap.needsUpdate = shadows;
+          request();
+          settleLater();
+          return;
+        }
+        if (performance.now() - builtAt < REBUILD_GAP_MS) {
+          settleLater();
+          return;
+        }
+      }
+      build(config, lampFamilies);
+    };
+    const build = (config: RoomMapConfig, lampFamilies: ReadonlyMap<number, LampFamily>) => {
+      if (settle !== null) clearTimeout(settle);
+      settle = null;
+      nudged = null;
+      builtConfig = config;
       // Rebuilt by another writer mid-carry: put the piece down first, while its buffers still exist.
       if (carry) {
         press = null;
@@ -605,6 +673,7 @@ function openRoomView(
       // A new scene's walls stand where the camera already cuts them, rather than easing down on its first frame.
       cut(room);
       renderer.shadowMap.needsUpdate = shadows;
+      builtAt = performance.now();
       if (!first) {
         fit();
         return;
@@ -717,7 +786,9 @@ function openRoomView(
       select(objectId) {
         const previous = selected;
         selected = objectId;
-        if (room?.select(objectId)) request();
+        const mine = nudged && nudged.id === objectId ? nudged : null;
+        room?.shiftMark(mine?.dx ?? 0, mine?.dz ?? 0);
+        if (room?.select(objectId) || nudged) request();
         if (ready) focusOn(objectId, previous);
       },
       show(config, lampFamilies) {

@@ -58,6 +58,23 @@ vi.mock("three/addons/controls/OrbitControls.js", async () => {
   };
 });
 
+const builds = vi.hoisted(() => ({ count: 0, last: null as unknown, throwNext: false }));
+vi.mock("../roomScene", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../roomScene")>();
+  return {
+    ...actual,
+    buildRoomScene: (...args: Parameters<typeof actual.buildRoomScene>) => {
+      builds.count++;
+      builds.last = args[0];
+      if (builds.throwNext) {
+        builds.throwNext = false;
+        throw new Error("build failed");
+      }
+      return actual.buildRoomScene(...args);
+    },
+  };
+});
+
 // The glow pass needs a real context; the fake renderer draws the room straight.
 vi.mock("../scene/bloom", () => ({
   BLOOM_LAYER: 1,
@@ -157,6 +174,81 @@ describe("RoomView3D", () => {
     rerender(<RoomView3D config={{ ...DEFAULT_ROOM_MAP, furniture: [] }} label="Room" onFail={onFail} />);
     expect([orbit.target.x, orbit.target.y, orbit.target.z]).toEqual([1.5, 0.2, -0.8]);
     unmount();
+  });
+
+  describe("an inspector edit", () => {
+    const sofa = { id: "sofa", type: "sofa" as const, x: 1, y: 2, width: 2, height: 0.9 };
+    const room = (x: number, width = 2) => ({ ...DEFAULT_ROOM_MAP, furniture: [{ ...sofa, x, width }] });
+    const families = new Map();
+    const rest = () =>
+      act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+    const open = async (props: Partial<Parameters<typeof RoomView3D>[0]> = {}) => {
+      const view = (config: ReturnType<typeof room>, more: Partial<Parameters<typeof RoomView3D>[0]> = {}) => (
+        <RoomView3D config={config} lampFamilies={families} label="Room" onFail={() => {}} {...props} {...more} />
+      );
+      const rendered = render(view(room(1)));
+      await rest();
+      builds.count = 0;
+      return { ...rendered, view };
+    };
+
+    // Every step of the inspector's X built the whole room again: ~90 ms a step in a furnished one.
+    it("slides a piece in place and builds the latest room once the steps rest", async () => {
+      const { rerender, unmount, view } = await open();
+      for (let i = 1; i <= 8; i++) rerender(view(room(1 + i * 0.05)));
+      expect(builds.count).toBe(0);
+      await rest();
+      expect(builds.count).toBe(1);
+      expect((builds.last as ReturnType<typeof room>).furniture[0]!.x).toBeCloseTo(1.4);
+      await rest();
+      rerender(view(room(1.4, 2.4)));
+      expect(builds.count).toBe(2);
+      unmount();
+    });
+
+    it("waits for the rest with any edit under 200 ms after a build, and builds new fixtures at once", async () => {
+      const { rerender, unmount, view } = await open();
+      rerender(view(room(1, 2.2)));
+      expect(builds.count).toBe(1);
+      rerender(view(room(1, 2.4)));
+      expect(builds.count).toBe(1);
+      await rest();
+      expect(builds.count).toBe(2);
+      rerender(view(room(1.2, 2.4)));
+      rerender(view(room(1.2, 2.4), { lampFamilies: new Map([[0, "bulb" as const]]) }));
+      expect(builds.count).toBe(3);
+      unmount();
+    });
+
+    it("builds a waiting room at once when the room is pressed, so a carry lifts from it", async () => {
+      const { container, rerender, unmount, view } = await open({ onMovePiece: () => true });
+      rerender(view(room(1.3)));
+      expect(builds.count).toBe(0);
+      container.querySelector("canvas")!.dispatchEvent(new PointerEvent("pointerdown", { button: 0, clientX: 5, clientY: 5, bubbles: true }));
+      expect(builds.count).toBe(1);
+      unmount();
+    });
+
+    it("reports a waiting build that fails, as an immediate one is", async () => {
+      const onFail = vi.fn<(error: unknown) => void>();
+      const { rerender, unmount, view } = await open({ onFail });
+      rerender(view(room(1.3)));
+      builds.throwNext = true;
+      await rest();
+      expect(onFail).toHaveBeenCalledWith(expect.objectContaining({ message: "build failed" }));
+      unmount();
+    });
+
+    it("builds nothing once closed with a build waiting", async () => {
+      const { rerender, unmount, view } = await open();
+      rerender(view(room(1.3)));
+      unmount();
+      __closeParkedRoomViewForTests();
+      await rest();
+      expect(builds.count).toBe(0);
+    });
   });
 
   it("draws again when a lost context comes back, and stops listening once closed", async () => {

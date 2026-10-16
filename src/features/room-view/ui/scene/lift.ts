@@ -15,6 +15,8 @@ export interface Liftable {
 export interface LiftedPiece {
   /** What rides on the piece and moves with it, turning with nothing: a desk's monitor. */
   riders: readonly string[];
+  /** Where it was built, in the scene. */
+  pivot: { readonly x: number; readonly z: number };
   moveTo(x: number, z: number): void;
   /** On top of the turn it was built with. */
   turnTo(radians: number): void;
@@ -102,6 +104,7 @@ export function liftPiece(scene: Scene, piece: Liftable, riders: ReadonlyMap<str
   scene.add(pivot);
   return {
     riders: carried.map(({ id }) => id),
+    pivot: { x: piece.pivot.x, z: piece.pivot.z },
     moveTo(x, z) {
       pivot.position.x = x;
       pivot.position.z = z;

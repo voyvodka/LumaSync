@@ -491,6 +491,11 @@ describe("buildRoomScene — lifting a carried piece", () => {
     const sofa = room.lift(furnitureObjectId("sofa"));
     expect(sofa?.riders).toEqual([]);
     sofa!.restore();
+    // The inspector slides the desk alone: its monitor stays in the config where it was.
+    const alone = room.lift(furnitureObjectId("desk"), false);
+    expect(alone?.riders).toEqual([]);
+    expect(alone?.pivot).toEqual({ x: expect.any(Number), z: expect.any(Number) });
+    alone!.restore();
     disposeScene(room.scene);
   });
 

@@ -319,6 +319,16 @@ the desk did (`landCarriedWith`), in one undo step. Left behind, the screen hung
 stood on nothing. A lamp on a piece does not ride. A Hue lamp is not lifted at all, because its
 light and glow are built into the scene, so it moves as the amber frame alone.
 
+The inspector's X and Y take the same path. Stepped or dragged, each step rebuilt the room —
+about 90 ms a step in the furnished Showroom, so dragging the field stuttered. A config that differs
+from the one the scene was built from only by one piece, the TV or a strip slid across the floor
+(`pieceNudge`) lifts that piece without its riders, which the inspector does not move, and slides it
+and the selection's mark; the room is built once the edits rest for 250 ms (`SETTLE_MS`). Any other
+edit within 200 ms of a build waits for that rest too, rather than building on every step. A press
+in the room builds a waiting one first, and a landed carry builds at once, so a carry never lifts a
+piece already lifted. A Hue light, or a strip behind the TV, has nothing to lift and builds as any
+other edit does: at once, or at the rest when a build was under 200 ms ago.
+
 ## Gotchas
 
 - **Several writers store `roomMap`, and every one of them goes through `shellStore.update`.** The editor, the USB roster (a strip on a connect), LED Setup's count sync and the Devices channel map all write it. The editor used to save the whole config from its reducer — loaded once, saved again on unmount, never listening — so a strip the roster added or a count LED Setup synced while it was open was taken away by its next save; only `SettingsLayout` mounting one section at a time kept that from happening. Now the editor keeps a baseline (the map as it last loaded or saved it) and writes only what changed since, through `mergeEditorSave` (`model/roomMapMerge.ts`): top-level fields by reference, and `usbStrips` and `hueChannels` record by record — keyed by `stripId` and by area plus `channelIndex` — because the other writers write those two. What the editor added or changed wins, what it deleted goes, everything else stays as stored. A record the editor changed takes only the fields it changed, so a `portName` the roster stamped or an `ledCount` LED Setup synced on the same strip stays. The first baseline is the stored map before the legacy-background conversion, so that conversion reaches the file. Saves run one after another, the first at once so the unmount flush is under way before the editor goes, and each reads the baseline when it runs rather than when it was asked for: a save queued behind one that failed then writes the whole map, where it once wrote only its own change and lost the failed one's. Two writers changing the same field of the same record is still last-writer-wins. `verify:shell-contracts` fails on a `shellStore.save` or `saveShellState` that names `roomMap` or `hueBridgeSyncedPositions`. `roomMapVersion` was retired at schema 10 — everyone bumped it, nobody read it.
