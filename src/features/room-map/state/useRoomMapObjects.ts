@@ -8,6 +8,7 @@ import type {
 } from "@/shared/contracts/roomMap";
 import { resolveFurnitureType, resolveRoomFootprint } from "@/shared/contracts/roomMap";
 import { FURNITURE_DEFAULT_SIZE } from "../model/furnitureKinds";
+import { TV_DEFAULT_FOOTPRINT } from "../model/libraryDrop";
 import { freeSpotFor } from "../model/pieceGeometry";
 import { outsideOutline } from "../model/roomFootprint";
 import { furnitureObjectId, parseObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "../model/objectId";
@@ -32,8 +33,9 @@ export interface UseRoomMapObjectsArgs {
 }
 
 export interface UseRoomMapObjectsReturn {
-  handleAddTv: () => void;
-  handleAddFurniture: (type: FurniturePlacement["type"]) => void;
+  /** `at` is the top-left a drop names; absent, the default place. */
+  handleAddTv: (at?: { x: number; y: number }) => void;
+  handleAddFurniture: (type: FurniturePlacement["type"], at?: { x: number; y: number }) => void;
   handleAddUsb: () => void;
   isLocked: (id: string) => boolean;
   deleteById: (id: string) => void;
@@ -57,19 +59,22 @@ export function useRoomMapObjects({
   const { t } = useTranslation();
   const { widthMeters, depthMeters } = config.dimensions;
 
-  const handleAddTv = useCallback(() => {
-    const newTv: TvAnchorPlacement = {
-      x: widthMeters / 2 - 0.5,
-      y: 0.3,
-      width: 1.0,
-      height: 0.1,
-    };
-    apply({ tvAnchor: newTv });
-    select(TV_ANCHOR_OBJECT_ID);
-  }, [widthMeters, apply, select]);
+  const handleAddTv = useCallback(
+    (at?: { x: number; y: number }) => {
+      const newTv: TvAnchorPlacement = {
+        x: at?.x ?? widthMeters / 2 - TV_DEFAULT_FOOTPRINT.width / 2,
+        y: at?.y ?? 0.3,
+        width: TV_DEFAULT_FOOTPRINT.width,
+        height: TV_DEFAULT_FOOTPRINT.depth,
+      };
+      apply({ tvAnchor: newTv });
+      select(TV_ANCHOR_OBJECT_ID);
+    },
+    [widthMeters, apply, select],
+  );
 
   const handleAddFurniture = useCallback(
-    (type: FurniturePlacement["type"]) => {
+    (type: FurniturePlacement["type"], at?: { x: number; y: number }) => {
       const id = `furniture-${crypto.randomUUID()}`;
       const size = FURNITURE_DEFAULT_SIZE[type];
       // The free place nearest the room's middle: a rug may go under furniture, so it keeps clear of
@@ -80,7 +85,8 @@ export function useRoomMapObjects({
         ...(config.tvAnchor && !rug ? [config.tvAnchor] : []),
       ];
       const outline = resolveRoomFootprint(config);
-      const spot = freeSpotFor(size.width, size.depth, { width: widthMeters, depth: depthMeters }, around, (px, py) => !outsideOutline(px, py, outline));
+      // A drop names its own place; overlap is the user's to judge, as a carry's is.
+      const spot = at ?? freeSpotFor(size.width, size.depth, { width: widthMeters, depth: depthMeters }, around, (px, py) => !outsideOutline(px, py, outline));
       let x = spot?.x ?? widthMeters / 2 - size.width / 2;
       let y = spot?.y ?? depthMeters / 2 - size.depth / 2;
       // A full room: the middle, stepped 30 cm down-right past every piece already sitting there, so

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { hueChannelObjectId } from "@/features/room-map/model/objectId";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 
-import RoomView3D, { __closeParkedRoomViewForTests } from "../RoomView3D";
+import RoomView3D, { __closeParkedRoomViewForTests, type RoomDropTarget } from "../RoomView3D";
 
 const gl = vi.hoisted(() => ({
   throwOnCreate: false,
@@ -58,7 +58,7 @@ vi.mock("three/addons/controls/OrbitControls.js", async () => {
   };
 });
 
-const builds = vi.hoisted(() => ({ count: 0, last: null as unknown, throwNext: false }));
+const builds = vi.hoisted(() => ({ count: 0, last: null as unknown, scene: null as { children: unknown[] } | null, throwNext: false }));
 vi.mock("../roomScene", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../roomScene")>();
   return {
@@ -70,7 +70,9 @@ vi.mock("../roomScene", async (importOriginal) => {
         builds.throwNext = false;
         throw new Error("build failed");
       }
-      return actual.buildRoomScene(...args);
+      const built = actual.buildRoomScene(...args);
+      builds.scene = built.scene;
+      return built;
     },
   };
 });
@@ -221,6 +223,23 @@ describe("RoomView3D", () => {
       expect(builds.count).toBe(1);
       expect((builds.last as ReturnType<typeof tv>).tvAnchor.width).toBeCloseTo(1.32);
       unmount();
+    });
+
+    it("floats a held library card in the room without building it, and takes it away", async () => {
+      const dropRef: { current: RoomDropTarget | null } = { current: null };
+      const { unmount } = await open({ dropRef });
+      const scene = builds.scene!;
+      const before = scene.children.length;
+      const piece = { id: "library-drop", type: "chair" as const, x: 1, y: 1, width: 0.5, height: 0.5 };
+      for (const x of [1, 1.2, 1.4]) dropRef.current!.preview({ piece: { ...piece, x }, model: { kind: "box" }, valid: x < 1.4 });
+      expect(scene.children).toHaveLength(before + 1);
+      dropRef.current!.preview({ piece, model: null, valid: true });
+      expect(scene.children).toHaveLength(before + 1);
+      dropRef.current!.preview(null);
+      expect(scene.children).toHaveLength(before);
+      expect(builds.count).toBe(0);
+      unmount();
+      expect(dropRef.current).toBeNull();
     });
 
     it("waits for the rest with any edit under 200 ms after a build, and builds new fixtures at once", async () => {

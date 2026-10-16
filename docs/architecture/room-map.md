@@ -214,6 +214,18 @@ selection — an object, then the zone it was picked over, then the palette — 
 ground lets go of both (`clearSelection`), since `select(null)` alone left a zone selected under the
 palette.
 
+**A furniture or TV card dragged out of the library is the piece itself until it is let go.** Past
+the click slop the drawer closes and the card's real model floats on the 3D floor under the pointer
+(the plan draws its glyph instead), outlined amber, red where its middle falls outside the room.
+Letting go adds it there in one history step and selects it; Escape, or letting go over the dock or
+off the room, adds nothing. Nothing reaches the map, the history or the selection while it is held,
+and the view only moves a ghost (`RoomDropTarget.preview`): a build per pointer move is what the
+carry's lift was made to avoid. The drag listens on the window, since the card goes with the drawer;
+it eats the one click the drag ends with, which on the plan's floor would deselect what just landed,
+and takes Escape in the capture phase, ahead of the editor's own. Strips and zones stay click-only:
+both are placed against a wall or a light, not on the floor. The drawer is its own chunk, fetched when
+Add is reached, to keep the room map's chunk under its budget.
+
 **The View face selects lights, not furniture, and shares the selection with the plan.** The 3D
 room is drawn as a few merged meshes, so a raycast against them cannot say which piece it hit; the
 scene hands back one oriented box per light, piece and screen (`room-view/model/picking.ts`) and a

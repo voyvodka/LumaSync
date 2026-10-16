@@ -1,10 +1,11 @@
 // Spike: the 3D room, measured in the real app before the room view is built for real. Draws only
 // on a change, and hands back everything — context included — on unmount. The rules it follows are
 // in docs/architecture/ui-and-shell.md, "Per-window bundles".
-import { useEffect, useRef } from "react";
+import { type MutableRefObject, useEffect, useRef } from "react";
 import {
   BoxGeometry,
   Color,
+  Group,
   EdgesGeometry,
   LineBasicMaterial,
   LineSegments,
@@ -20,20 +21,26 @@ import {
 } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-import type { RoomMapConfig } from "@/shared/contracts/roomMap";
+import type { FurniturePlacement, RoomMapConfig } from "@/shared/contracts/roomMap";
 
 import { LAMP_COLOURS } from "../model/lampColours";
 import type { LampFamily } from "../model/lampFamily";
 import { DUSK_AT, MOOD_LEVELS as LEVELS, type RoomMood } from "../model/roomMood";
 import { pressStartsCarry } from "../model/carryIntent";
 import { lightPickHalf, pickObject } from "../model/picking";
+import type { FurnitureModel } from "../model/furnitureModel";
 import { pieceNudge } from "../model/pieceNudge";
+import { roomToScene } from "../model/roomSpace";
 import { isWindowVisible } from "@/features/shell/windowVisibility";
 import { prefersReducedMotion } from "@/shared/lib/motion";
 
 import { buildRoomScene, disposeScene, type RoomScene, type RoomSceneOptions } from "./roomScene";
 import { type Bloom, createBloom } from "./scene/bloom";
+import { finishMaterial } from "./scene/finishes";
+import { furnitureParts } from "./scene/furniture";
 import type { LiftedPiece } from "./scene/lift";
+import { PALETTE } from "./scene/palette";
+import { block, mergeParts } from "./scene/parts";
 import { type Plumb, PLUMB_FROM, plumbGuide } from "./scene/plumb";
 import styles from "./RoomView3D.module.css";
 
@@ -72,7 +79,21 @@ declare global {
   }
 }
 
-interface RoomView {
+/** A library card held over the room: its piece where it would land, `model` null for a screen. */
+export interface DropGhost {
+  piece: FurniturePlacement;
+  model: FurnitureModel | null;
+  valid: boolean;
+}
+
+/** What a drag from outside the view asks of it. */
+export interface RoomDropTarget {
+  /** The floor under a client point, in the scene frame. */
+  floorAt(clientX: number, clientY: number): { x: number; z: number } | null;
+  preview(ghost: DropGhost | null): void;
+}
+
+interface RoomView extends RoomDropTarget {
   show(config: RoomMapConfig, lampFamilies: ReadonlyMap<number, LampFamily>): void;
   select(objectId: string | null): void;
   /** Pixels at the foot and the head something floats over; the room is fitted between them. */
@@ -103,6 +124,9 @@ let sessionCamera: { position: Vector3; target: Vector3; zoom: number; room: str
 const roomKey = (config: RoomMapConfig) => `${config.dimensions.widthMeters}x${config.dimensions.depthMeters}`;
 /** The frame of a piece being carried: the app's amber. */
 const CARRY_COLOUR = 0xffb020;
+const REFUSED_COLOUR = 0xff5a4f;
+// A held card floats this far off the floor, so it reads as not yet put down.
+const DROP_FLOAT_M = 0.05;
 /** A camera move from the corner buttons or a double-click: short and settling, as the app's
  *  motion is (`--lm-dur-slow`, an ease-out); a jump read as the view breaking. */
 const CAMERA_MOVE_MS = 320;
@@ -717,7 +741,71 @@ function openRoomView(
       return { perDrawMs, perDrawFinishedMs };
     };
 
+    // A held library card: built once per card, then only moved.
+    let dropGhost: { key: string; group: Group; outline: LineSegments } | null = null;
+    const dropMaterial = finishMaterial("matte", { lambert: options.lambert ?? false });
+    const dropFloor = new Plane(new Vector3(0, 1, 0), 0);
+    const clearDrop = () => {
+      if (!dropGhost) return;
+      dropGhost.group.removeFromParent();
+      dropGhost.group.traverse((node) => {
+        if ("geometry" in node) (node as LineSegments).geometry.dispose();
+      });
+      (dropGhost.outline.material as LineBasicMaterial).dispose();
+      dropGhost = null;
+    };
+    closeHooks.push(() => {
+      clearDrop();
+      dropMaterial.dispose();
+    });
+    const previewDrop = (ghost: DropGhost | null) => {
+      if (!room || !shownConfig || !ghost) {
+        if (dropGhost) {
+          clearDrop();
+          renderer.shadowMap.needsUpdate = shadows;
+          request();
+        }
+        return;
+      }
+      const { piece, model } = ghost;
+      const dims = shownConfig.dimensions;
+      const key = `${model ? piece.type : "screen"}:${piece.width}:${piece.height}`;
+      if (dropGhost?.key !== key || dropGhost.group.parent !== room.scene) {
+        clearDrop();
+        const tall = piece.width * 0.5625;
+        const parts = model
+          ? furnitureParts({ ...piece, x: 0, y: 0 }, model)
+          : [block(piece.width, tall, 0.04, 0, dims.heightMeters * 0.4 - tall / 2, 0, PALETTE.bezel, 0.005)];
+        const group = new Group();
+        const mesh = mergeParts(parts, dropMaterial, false);
+        if (mesh) {
+          mesh.castShadow = true;
+          mesh.position.y = DROP_FLOAT_M;
+          group.add(mesh);
+        }
+        const outline = new LineSegments(
+          new EdgesGeometry(new BoxGeometry(piece.width, 0.01, piece.height)),
+          new LineBasicMaterial({ color: CARRY_COLOUR }),
+        );
+        outline.position.y = 0.006;
+        group.add(outline);
+        room.scene.add(group);
+        dropGhost = { key, group, outline };
+      }
+      const centre = roomToScene(piece.x + piece.width / 2, piece.y + piece.height / 2, 0, dims);
+      dropGhost.group.position.set(centre.x, 0, centre.z);
+      (dropGhost.outline.material as LineBasicMaterial).color.setHex(ghost.valid ? CARRY_COLOUR : REFUSED_COLOUR);
+      renderer.shadowMap.needsUpdate = shadows;
+      request();
+    };
+
     return {
+      floorAt(clientX, clientY) {
+        if (!room) return null;
+        const hit = rayAt(clientX, clientY).intersectPlane(dropFloor, new Vector3());
+        return hit ? { x: hit.x, z: hit.z } : null;
+      },
+      preview: previewDrop,
       setMood(mood) {
         const same = (m: RoomMood | null) =>
           m !== null &&
@@ -891,6 +979,7 @@ export default function RoomView3D({
   onHover,
   onMovePiece,
   onFail,
+  dropRef,
 }: {
   config: RoomMapConfig;
   /** Each Hue channel's fixture, by channel index; absent ones draw as bulbs. */
@@ -911,6 +1000,8 @@ export default function RoomView3D({
   onHover?: (objectId: string | null, clientX: number, clientY: number) => void;
   /** No view could be drawn — no WebGL context, or the scene failed to build. */
   onFail: (error: unknown) => void;
+  /** Filled while the view is open, for a library card dragged in from the dock. */
+  dropRef?: MutableRefObject<RoomDropTarget | null>;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<RoomView | null>(null);
@@ -959,9 +1050,20 @@ export default function RoomView3D({
     if (moodRef.current) view.setMood(moodRef.current);
     return () => {
       viewRef.current = null;
+      view.preview(null);
       park(view, handlers);
     };
   }, []);
+
+  // After the opening effect, so the view it hands out is the one just opened.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!dropRef || !view) return;
+    dropRef.current = view;
+    return () => {
+      if (dropRef.current === view) dropRef.current = null;
+    };
+  }, [dropRef]);
 
   useEffect(() => {
     viewRef.current?.show(config, lampFamilies);

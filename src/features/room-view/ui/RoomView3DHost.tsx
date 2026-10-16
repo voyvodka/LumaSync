@@ -1,11 +1,11 @@
-import { type CSSProperties, lazy, Suspense, useEffect, useState } from "react";
+import { type CSSProperties, lazy, type MutableRefObject, Suspense, useEffect, useState } from "react";
 
 import { useWindowPresence, type WindowPresence } from "@/features/shell/windowVisibility";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 
 import type { LampFamily } from "../model/lampFamily";
 import { hexCss, type RoomMood, roomMood } from "../model/roomMood";
-import type { CameraCommand } from "./RoomView3D";
+import type { CameraCommand, RoomDropTarget } from "./RoomView3D";
 import styles from "./RoomView3DHost.module.css";
 
 // Spike: built into dev builds and into a measuring build with VITE_ROOM_VIEW_SPIKE=1. A release
@@ -53,6 +53,7 @@ export function RoomView3DHost(props: {
   onHover?: (objectId: string | null, clientX: number, clientY: number) => void;
   onMovePiece?: (objectId: string, sceneX: number, sceneZ: number, turnDeg: number, riders: readonly string[]) => boolean;
   onFail: (error: unknown) => void;
+  dropRef?: MutableRefObject<RoomDropTarget | null>;
 }) {
   const kept = useKeptOnScreen(useWindowPresence());
   if (!RoomView3D || !kept) return null;

@@ -67,6 +67,16 @@
     outline: 2px solid transparent;
     box-shadow: var(--lm-focus-ring-inset);
   }
+  .draggable {
+    cursor: grab;
+    touch-action: none;
+  }
+  /* Held over the room, every surface shows the hold — the 3D canvas sets its cursor inline. */
+  :global(:root[data-library-drag]),
+  :global(:root[data-library-drag] *) {
+    cursor: grabbing !important;
+    user-select: none;
+  }
   .unavailable {
     color: var(--lm-ink-faint);
     cursor: not-allowed;

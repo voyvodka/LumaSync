@@ -10,6 +10,7 @@ import { ConfirmPopover } from "@/shared/ui/ConfirmPopover/ConfirmPopover";
 import { IconButton } from "@/shared/ui/IconButton/IconButton";
 
 import { hueChannelName } from "../../model/hueChannelLabel";
+import type { LibraryDrop } from "../../model/libraryDrop";
 import { type InspectorTarget, resolveInspectorTarget } from "../../model/resolveInspectorTarget";
 import type { UsbStripConnectionStatus } from "../objects/UsbStripInspector";
 import { DockInspector, type InspectorActions, inspectorKey } from "./DockInspector";
@@ -29,6 +30,8 @@ export interface DockAdd {
   onAddStrip: () => void;
   onAddImage: () => void;
   onAddZone: () => void;
+  /** Where a card dragged out of the library lands. */
+  drop?: LibraryDrop;
 }
 
 export interface RoomDockProps {
@@ -303,6 +306,7 @@ export function RoomDock(props: RoomDockProps) {
           onAddZone={(event) => fromDock(event, add.onAddZone)}
           onTemplates={props.onTemplates}
           hue={props.hue}
+          drop={add.drop}
         />
       ) : (
         <DockInspector

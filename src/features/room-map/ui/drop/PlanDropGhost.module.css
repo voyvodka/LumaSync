@@ -1,0 +1,26 @@
+@layer components {
+  .ghost {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 30;
+    display: grid;
+    place-items: stretch;
+    border-radius: 3px;
+    outline: 1.5px solid var(--lm-amber);
+    outline-offset: 2px;
+    opacity: 0.85;
+    pointer-events: none;
+  }
+  .ghost svg {
+    width: 100%;
+    height: 100%;
+  }
+  .ghost[data-refused] { outline-color: var(--lm-red); }
+  .screen { border-radius: 2px; }
+
+  @media (forced-colors: active) {
+    .ghost { outline-color: Highlight; }
+    .ghost[data-refused] { outline-color: Mark; }
+  }
+}

@@ -9,7 +9,7 @@ import { hueOverhead } from "../model/hueHang";
 import { moveStructures } from "../model/roomStructures";
 import { seatMovedLight } from "../model/lightSeat";
 import { ROOM_VIEW_3D_AVAILABLE, RoomView3DHost } from "@/features/room-view/ui/RoomView3DHost";
-import type { CameraCommand } from "@/features/room-view/ui/RoomView3D";
+import type { CameraCommand, RoomDropTarget } from "@/features/room-view/ui/RoomView3D";
 import type {
   FurniturePlacement,
   HueChannelPlacement,
@@ -43,9 +43,11 @@ import type { RoomAwareStatus } from "../model/roomAware";
 import { roomObjectAdapter } from "../model/roomObjectKinds";
 import { useFurnitureModels } from "../state/useFurnitureModels";
 import { useLandCarried } from "../state/useLandCarried";
+import { useLibraryDrop } from "../state/useLibraryDrop";
 import type { RoomMapDocument } from "../state/useRoomMapDocument";
 import { useRoomMapGridSettings } from "../state/useRoomMapGridSettings";
 import { useRoomMood } from "../state/useRoomMood";
+import { PlanDropGhost, type PlanDropGhostHandle } from "./drop/PlanDropGhost";
 import { StructurePlan } from "./objects/StructurePlan";
 import { useUsbStripStatus } from "../state/useUsbStripStatus";
 import { FootprintWalls } from "./objects/FootprintWalls";
@@ -660,6 +662,22 @@ export function RoomMapEditor({
     () => resolveRoomFootprint({ dimensions: config.dimensions, footprint: config.footprint }),
     [config.dimensions, config.footprint],
   );
+  const roomDropRef = useRef<RoomDropTarget | null>(null);
+  const planGhostRef = useRef<PlanDropGhostHandle | null>(null);
+  const libraryDrop = useLibraryDrop({
+    rootRef,
+    inRoom,
+    config,
+    outline,
+    pxPerMeter,
+    zoom,
+    panOffset,
+    roomDropRef,
+    ghostRef: planGhostRef,
+    onAddFurniture: handleAddFurniture,
+    onAddTv: handleAddTv,
+    onLanded: focusEditor,
+  });
   const roomShape = useMemo(() => describeFootprint(config.footprint, config.dimensions), [config.footprint, config.dimensions]);
   const minimumSize = useMemo(() => footprintMinimumSize(config.footprint, config.dimensions), [config.footprint, config.dimensions]);
   const handleShapeChange = useCallback(
@@ -812,6 +830,7 @@ export function RoomMapEditor({
             onPick={handleRoomPick}
             onMovePiece={landCarriedPiece}
             onFail={(failure) => onRoomFail?.(failure)}
+            dropRef={roomDropRef}
           />
         ) : (
           <RoomMapCanvas
@@ -955,6 +974,7 @@ export function RoomMapEditor({
             <SnapGuideOverlay guides={snapGuides} pxPerMeter={pxPerMeter} canvasWidth={canvasSize.w} canvasHeight={canvasSize.h} />
           </RoomMapCanvas>
         )}
+        {!inRoom && <PlanDropGhost ref={planGhostRef} />}
 
         <CornerControls
           roomAware={roomAware}
@@ -1032,6 +1052,7 @@ export function RoomMapEditor({
               if (room3d) setStage(EDIT_STAGES.PLAN);
               handleAddHueZone();
             },
+            drop: libraryDrop,
           }}
           hue={
             hasHue

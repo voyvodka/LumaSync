@@ -1,17 +1,21 @@
-import { type MouseEvent, useId, useRef, useState } from "react";
+import { lazy, type MouseEvent, Suspense, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { FurnitureType } from "@/shared/contracts/roomMap";
 import { cx } from "@/shared/lib/cx";
 import { IconPlus } from "@/shared/ui/icons";
 
+import type { LibraryDrop } from "../../model/libraryDrop";
 import { usePaletteKeys } from "../../state/usePaletteKeys";
 import { IconTemplates } from "./dockIcons";
 import styles from "./DockPalette.module.css";
 import { HueAreaNote, type PaletteHueArea } from "./HueAreaNote";
-import { LibraryPopover } from "./LibraryPopover";
 
 type Press = (event: MouseEvent<HTMLButtonElement>) => void;
+
+// Its own chunk, fetched when Add is reached: the room map's chunk has no room for the drawer and its drag.
+const loadLibrary = () => import("./LibraryPopover");
+const LibraryPopover = lazy(() => loadLibrary().then((m) => ({ default: m.LibraryPopover })));
 
 export interface DockPaletteProps {
   hasTv: boolean;
@@ -24,14 +28,16 @@ export interface DockPaletteProps {
   /** Opens the room templates, where the editor offers them. */
   onTemplates?: Press;
   hue: PaletteHueArea | null;
+  drop?: LibraryDrop;
 }
 
-export function DockPalette({ hasTv, onAddFurniture, onAddTv, onSelectTv, onAddStrip, onAddZone, onTemplates, hue }: DockPaletteProps) {
+export function DockPalette({ hasTv, onAddFurniture, onAddTv, onSelectTv, onAddStrip, onAddZone, onTemplates, hue, drop }: DockPaletteProps) {
   const { t } = useTranslation();
   const addRef = useRef<HTMLButtonElement | null>(null);
   const noteRef = useRef<HTMLSpanElement | null>(null);
   const libraryId = useId();
   const [open, setOpen] = useState(false);
+  const [wanted, setWanted] = useState(false);
   const { tileProps } = usePaletteKeys([["add", ...(onTemplates ? ["templates"] : [])]]);
   const closing =
     <A extends unknown[]>(run: (...args: A) => void) =>
@@ -56,7 +62,11 @@ export function DockPalette({ hasTv, onAddFurniture, onAddTv, onSelectTv, onAddS
         aria-haspopup="dialog"
         aria-controls={open ? libraryId : undefined}
         data-testid="palette-add"
-        onClick={() => setOpen((was) => !was)}
+        onPointerEnter={() => void loadLibrary()}
+        onClick={() => {
+          setWanted(true);
+          setOpen((was) => !was);
+        }}
       >
         <span className={styles.glyph} aria-hidden="true">
           <IconPlus />
@@ -83,19 +93,24 @@ export function DockPalette({ hasTv, onAddFurniture, onAddTv, onSelectTv, onAddS
           <HueAreaNote hue={hue} noteRef={noteRef} />
         </span>
       )}
-      <LibraryPopover
-        open={open}
-        onClose={() => setOpen(false)}
-        anchorRef={addRef}
-        id={libraryId}
-        hasTv={hasTv}
-        hue={hue}
-        onAddFurniture={closing(onAddFurniture)}
-        onAddTv={closing(onAddTv)}
-        onSelectTv={closing(onSelectTv)}
-        onAddStrip={closing(onAddStrip)}
-        onAddZone={closing(onAddZone)}
-      />
+      {wanted && (
+        <Suspense fallback={null}>
+          <LibraryPopover
+            open={open}
+            onClose={() => setOpen(false)}
+            anchorRef={addRef}
+            id={libraryId}
+            hasTv={hasTv}
+            hue={hue}
+            drop={drop}
+            onAddFurniture={closing(onAddFurniture)}
+            onAddTv={closing(onAddTv)}
+            onSelectTv={closing(onSelectTv)}
+            onAddStrip={closing(onAddStrip)}
+            onAddZone={closing(onAddZone)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

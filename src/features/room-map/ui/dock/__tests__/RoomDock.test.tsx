@@ -154,10 +154,10 @@ describe("RoomDock", () => {
     expect(spies.onFocusEditor).not.toHaveBeenCalled();
   });
 
-  it("lands a keyboard pick from the dock on the inspector's first field, without announcing it", () => {
+  it("lands a keyboard pick from the dock on the inspector's first field, without announcing it", async () => {
     render(<Harness />);
     fireEvent.click(screen.getByTestId("palette-add"));
-    fireEvent.click(screen.getByTestId("library-tab-furniture"));
+    fireEvent.click(await screen.findByTestId("library-tab-furniture"));
     // A click with no pointer behind it is Enter or Space on the card.
     fireEvent.click(screen.getByTestId("palette-sofa"), { detail: 0 });
     expect(spies.onAddFurniture).toHaveBeenCalledWith("sofa");
@@ -165,10 +165,10 @@ describe("RoomDock", () => {
     expect(screen.getByRole("status")).toHaveTextContent("");
   });
 
-  it("hands the keys back to the editor after a pointer pick", () => {
+  it("hands the keys back to the editor after a pointer pick", async () => {
     render(<Harness />);
     fireEvent.click(screen.getByTestId("palette-add"));
-    fireEvent.click(screen.getByTestId("library-tab-furniture"));
+    fireEvent.click(await screen.findByTestId("library-tab-furniture"));
     fireEvent.click(screen.getByTestId("palette-sofa"), { detail: 1 });
     expect(spies.onFocusEditor).toHaveBeenCalledTimes(1);
   });

@@ -8,8 +8,10 @@ import { IconCheck } from "@/shared/ui/icons";
 import { Popover } from "@/shared/ui/Popover/Popover";
 import { Segmented } from "@/shared/ui/Segmented/Segmented";
 
+import type { LibraryCard, LibraryDrop } from "../../model/libraryDrop";
 import { FURNITURE_TILES } from "../../model/paletteTiles";
 import { TYPE_DOT_COLOR } from "../../model/zoneColor";
+import { useCardDrag } from "../../state/useCardDrag";
 import { usePaletteKeys } from "../../state/usePaletteKeys";
 import { FurnitureGlyph } from "../objects/FurnitureGlyph";
 import { HueAreaNote, type PaletteHueArea } from "./HueAreaNote";
@@ -37,6 +39,8 @@ export interface LibraryPopoverProps {
   onAddStrip: Press;
   onAddZone: Press;
   hue: PaletteHueArea | null;
+  /** Where a card dragged out of the drawer lands; without it the cards only click. */
+  drop?: LibraryDrop;
 }
 
 interface Card {
@@ -46,10 +50,12 @@ interface Card {
   title?: string;
   glyph: ReactNode;
   disabled?: boolean;
+  /** What a drag of this card carries, for the cards that can be placed by hand. */
+  drag?: LibraryCard;
   onClick: Press;
 }
 
-export function LibraryPopover({ open, onClose, anchorRef, id, hasTv, onAddFurniture, onAddTv, onSelectTv, onAddStrip, onAddZone, hue }: LibraryPopoverProps) {
+export function LibraryPopover({ open, onClose, anchorRef, id, hasTv, onAddFurniture, onAddTv, onSelectTv, onAddStrip, onAddZone, hue, drop }: LibraryPopoverProps) {
   const { t } = useTranslation();
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const noteRef = useRef<HTMLSpanElement | null>(null);
@@ -60,6 +66,7 @@ export function LibraryPopover({ open, onClose, anchorRef, id, hasTv, onAddFurni
     setTabState(next);
   };
   const zoneReady = hue?.state.kind === "ready";
+  const drag = useCardDrag(drop, { onStart: onClose, onAbandon: () => anchorRef.current?.focus({ preventScroll: true }) });
 
   const cards: Card[] =
     shown === LIBRARY_TABS.FURNITURE
@@ -71,6 +78,7 @@ export function LibraryPopover({ open, onClose, anchorRef, id, hasTv, onAddFurni
             label: t("roomMap:palette.add", { name }),
             title: t("roomMap:palette.size", { name, width: tile.piece.width.toFixed(1), depth: tile.piece.height.toFixed(1) }),
             glyph: <FurnitureGlyph model={tile.model} colours={furnitureColours(tile.piece, tile.model)} width={tile.piece.width} depth={tile.piece.height} fit />,
+            drag: { kind: "furniture", type: tile.type },
             onClick: (event) => onAddFurniture(tile.type, event),
           };
         })
@@ -92,6 +100,7 @@ export function LibraryPopover({ open, onClose, anchorRef, id, hasTv, onAddFurni
               name: t("roomMap:objectPanel.tvLabel"),
               label: hasTv ? t("roomMap:palette.selectTv") : t("roomMap:palette.add", { name: t("roomMap:objectPanel.tvLabel") }),
               glyph: <TvGlyph placed={hasTv} />,
+              drag: hasTv ? undefined : { kind: "tv" },
               onClick: hasTv ? onSelectTv : onAddTv,
             },
             {
@@ -136,11 +145,12 @@ export function LibraryPopover({ open, onClose, anchorRef, id, hasTv, onAddFurni
               key={card.id}
               type="button"
               {...tileProps(card.id)}
-              className={cx(styles.card, card.disabled && styles.unavailable)}
+              className={cx(styles.card, card.disabled && styles.unavailable, drop && card.drag && styles.draggable)}
               aria-label={card.label}
               aria-disabled={card.disabled || undefined}
               title={card.title ?? card.label}
               data-testid={`palette-${card.id}`}
+              onPointerDown={card.drag && drag.onPointerDown(card.drag)}
               onClick={card.onClick}
             >
               <span className={styles.glyph} aria-hidden="true">
