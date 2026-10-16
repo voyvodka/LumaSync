@@ -96,7 +96,6 @@ const WALL_CUT_HEIGHT = 0.2;
 /** At full height the walls hid the far half of the floor from a raised view. */
 const WALL_STANDING_SHARE = 0.7;
 const WALL_OPENINGS_SHARE = 0.85;
-/** A column is cut only this near the line from the room's middle to the camera, past its own half-width. */
 const COLUMN_SIGHT = 0.3;
 /** A beam's end within this of a wall rests on it. */
 const BEAM_REST = 0.3;
@@ -429,8 +428,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     const items = liftables.get(wallItemsId(i));
     return { mesh, outward: new Vector3(e.outwardX, 0, e.outwardZ), items: items ? spanHider(items.spans) : null };
   });
-  // A column is cut only where it stands in the camera's line to the room: cut for being on the near
-  // side, it read as a stool. A beam rests on the walls' tops and goes once every wall under it is cut.
+  // A column is cut only in the camera's line to the room: cut for merely being near, it read as a stool.
   const columns = build.columns.map((column) => {
     const mesh = new Mesh(columnGeometry(column, finish.walls), wallMaterial);
     const at = roomToScene(column.x, column.y, 0, dims);

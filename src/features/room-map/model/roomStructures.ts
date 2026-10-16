@@ -71,8 +71,7 @@ const WALL_KINDS: ReadonlySet<unknown> = new Set([STRUCTURE_KINDS.WINDOW, STRUCT
 
 type Outline = Pick<RoomMapConfig, "footprint" | "dimensions">;
 
-/** Shifts every stored entry, unknown kinds included; a wall item is put back on its own wall, which
- *  a moved wall would otherwise leave behind for a nearer one. */
+/** A wall item goes back on its own wall: shifted alone, a moved wall left it nearer another. */
 export function moveStructures(stored: unknown, shift: { x: number; y: number }, from: Outline, to: Outline): unknown[] | undefined {
   if (!Array.isArray(stored)) return undefined;
   const before = resolveRoomFootprint(from);

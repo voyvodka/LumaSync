@@ -101,8 +101,7 @@ function windowParts(p: Placed, item: WindowStructure, top: number): Part[] {
   ];
 }
 
-// A wall is 10 cm and a niche deeper, so no real hollow fits: its depth is told by a back a shade
-// darker, a shadow under its head and a ledge standing out — lips round it read as a picture frame.
+// No real hollow fits a 10 cm wall, and lips round the niche read as a picture frame.
 function nicheParts(p: Placed, item: NicheStructure, top: number, paint: WallColor): Part[] {
   const look = WALL_PALETTE[paint] ?? WALL_PALETTE.warmWhite;
   const tone = (k: number) => new Color(look.wall).multiplyScalar(k).getHex();
@@ -120,8 +119,6 @@ function nicheParts(p: Placed, item: NicheStructure, top: number, paint: WallCol
   ];
 }
 
-/** The leaf turned open about its hinge, into the room or out of it, under a lintel to the wall's
- *  top and inside a casing on the room's face. */
 function doorParts(p: Placed, item: DoorStructure, standing: number, paint: WallColor): Part[] {
   const height = Math.min(item.heightMeters, standing - 0.05);
   if (height < 0.3) return [];
@@ -171,7 +168,6 @@ export function openingsTop(config: RoomMapConfig): number {
   return top;
 }
 
-/** Each door's gap in its wall, by edge index: what the walls, skirting and foot shade leave open. */
 export function doorGaps(config: RoomMapConfig, edges: readonly OutlineEdge[]): Map<number, WallGap[]> {
   const gaps = new Map<number, WallGap[]>();
   for (const s of resolveRoomStructures(config)) {
@@ -183,7 +179,7 @@ export function doorGaps(config: RoomMapConfig, edges: readonly OutlineEdge[]): 
   return gaps;
 }
 
-/** A low sill across each door's gap, the wall's thickness deep: it stays when the wall is cut. */
+/** Built into the floor, so it stays when the wall is cut. */
 export function thresholds(gaps: ReadonlyMap<number, readonly WallGap[]>, edges: readonly OutlineEdge[]): Part[] {
   const parts: Part[] = [];
   for (const [i, list] of gaps) {

@@ -122,7 +122,6 @@ export interface WallGap {
   to: number;
 }
 
-/** The runs of `lo`…`hi` that no gap covers, shorter than a centimetre dropped. */
 export function openRuns(lo: number, hi: number, gaps: readonly WallGap[] = []): Array<[number, number]> {
   const runs: Array<[number, number]> = [];
   let at = lo;
@@ -135,7 +134,6 @@ export function openRuns(lo: number, hi: number, gaps: readonly WallGap[] = []):
   return runs;
 }
 
-/** Skirting along the inside of every wall, broken at its doors. */
 function skirting(parts: Part[], edges: readonly OutlineEdge[], gaps: ReadonlyMap<number, readonly WallGap[]>): void {
   edges.forEach((e, i) => {
     const alongX = e.outwardZ !== 0;
