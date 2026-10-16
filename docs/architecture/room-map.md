@@ -38,7 +38,10 @@ room. The room's WebGL view is not closed with it but parked for 20 s (`park` / 
 the other face, or Edit's 3D stage after the plan — adopts it with its scene and camera. A new
 context, its shaders and the scene took about half a second plus the fade on every switch, a pause
 the maintainer saw each time. The park ends early when the window is hidden or the view never
-finished compiling. So the room holds still across View | Edit, and only the chrome arrives: the
+finished compiling. Hidden means put away — to the tray, or minimised — and the view goes at once.
+Covered by another window or another Space, the window's document reads hidden too, but the view
+stays mounted for 30 s (`COVERED_KEEP_MS` in `RoomView3DHost.tsx`, read from `useWindowPresence`):
+flicking between windows rebuilt the room on every return. So the room holds still across View | Edit, and only the chrome arrives: the
 dock's box stays where it was while its content rises 4 px into it, and the corner drops 4 px into
 place. A stage switch fades the new surface, and the corner slot's zoom or camera, under a dock, a
 corner and any alert that stay. A return from the templates fades the whole face in, since a pick

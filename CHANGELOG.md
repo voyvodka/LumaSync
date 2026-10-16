@@ -600,6 +600,9 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- The 3D room stays put while another window or Space covers the app and comes back as it was,
+  instead of being built again on every return when flicking between windows; it is let go after
+  30 seconds covered, and at once when the window is closed to the tray or minimised.
 - An icon-only button draws its icon in the middle of its hover plate: the 3D view's light card
   (Back to the lights, Blink) and Lights' Add output drew it against the left edge.
 - In the 3D room a monitor stands on its desk at the desk's real height, on its stand near the back,

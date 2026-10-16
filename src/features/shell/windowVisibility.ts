@@ -36,13 +36,29 @@ export function isWindowVisible(): boolean {
   return documentVisible() && nativeVisible;
 }
 
+/** "covered": the window is still shown but its document is hidden — another window over it, or
+ *  another Space. "hidden": put away to the tray or minimised. */
+export type WindowPresence = "visible" | "covered" | "hidden";
+
+export function windowPresence(): WindowPresence {
+  if (!nativeVisible) return "hidden";
+  return documentVisible() ? "visible" : "covered";
+}
+
 const listeners = new Set<(visible: boolean) => void>();
+const presenceListeners = new Set<() => void>();
 let lastPublished = isWindowVisible();
+let lastPresence = windowPresence();
 
 /** `force` re-announces an unchanged answer. The document is read live, so a
  * consumer may have paused on a hidden document this store never saw change;
  * a `visibilitychange` back to visible must still reach it. */
 function recompute(force = false): void {
+  const presence = windowPresence();
+  if (presence !== lastPresence) {
+    lastPresence = presence;
+    for (const listener of [...presenceListeners]) listener();
+  }
   const visible = isWindowVisible();
   if (!force && visible === lastPublished) return;
   lastPublished = visible;
@@ -126,6 +142,11 @@ function stop(): void {
   unloading = false;
   nativeVisible = true;
   lastPublished = isWindowVisible();
+  lastPresence = windowPresence();
+}
+
+function subscriberCount(): number {
+  return listeners.size + presenceListeners.size;
 }
 
 /**
@@ -136,10 +157,20 @@ export function subscribeWindowVisible(listener: (visible: boolean) => void): ()
   // Its own entry, so one function subscribed twice is released twice.
   const entry = (visible: boolean) => listener(visible);
   listeners.add(entry);
-  if (listeners.size === 1) start();
+  if (subscriberCount() === 1) start();
   return () => {
     if (!listeners.delete(entry)) return;
-    if (listeners.size === 0) stop();
+    if (subscriberCount() === 0) stop();
+  };
+}
+
+function subscribeWindowPresence(onChange: () => void): () => void {
+  const entry = () => onChange();
+  presenceListeners.add(entry);
+  if (subscriberCount() === 1) start();
+  return () => {
+    if (!presenceListeners.delete(entry)) return;
+    if (subscriberCount() === 0) stop();
   };
 }
 
@@ -152,9 +183,15 @@ export function useWindowVisible(): boolean {
   return useSyncExternalStore(subscribeForReact, isWindowVisible, isWindowVisible);
 }
 
+/** Whether the main window is on screen, covered, or put away, re-rendering when that changes. */
+export function useWindowPresence(): WindowPresence {
+  return useSyncExternalStore(subscribeWindowPresence, windowPresence, windowPresence);
+}
+
 /** Test-only: drop every subscriber and forget what Rust said. */
 export function __resetWindowVisibilityForTests(): void {
   listeners.clear();
+  presenceListeners.clear();
   pushes = 0;
   stop();
 }

@@ -1,6 +1,6 @@
-import { type CSSProperties, lazy, Suspense } from "react";
+import { type CSSProperties, lazy, Suspense, useEffect, useState } from "react";
 
-import { useWindowVisible } from "@/features/shell/windowVisibility";
+import { useWindowPresence, type WindowPresence } from "@/features/shell/windowVisibility";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 
 import type { LampFamily } from "../model/lampFamily";
@@ -17,12 +17,26 @@ const RoomView3D =
 
 export const ROOM_VIEW_3D_AVAILABLE = RoomView3D !== null;
 
+/** Flicking between this window and another, or across Spaces, rebuilt the room on every return. */
+export const COVERED_KEEP_MS = 30_000;
+
+function useKeptOnScreen(presence: WindowPresence): boolean {
+  const [expired, setExpired] = useState(false);
+  useEffect(() => {
+    setExpired(false);
+    if (presence !== "covered") return;
+    const timer = setTimeout(() => setExpired(true), COVERED_KEEP_MS);
+    return () => clearTimeout(timer);
+  }, [presence]);
+  return presence === "visible" || (presence === "covered" && !expired);
+}
+
 function skyStyle(mood: RoomMood): CSSProperties {
   return { "--lm-room-sky-top": hexCss(mood.sky.top), "--lm-room-sky-mid": hexCss(mood.sky.mid) } as CSSProperties;
 }
 
 /** The 3D room, filling its slot. It holds a WebGL context only while the window is on screen:
- *  hidden, it unmounts and hands everything back. */
+ *  put away, it unmounts and hands everything back at once; covered, after `COVERED_KEEP_MS`. */
 export function RoomView3DHost(props: {
   config: RoomMapConfig;
   lampFamilies?: ReadonlyMap<number, LampFamily>;
@@ -37,8 +51,8 @@ export function RoomView3DHost(props: {
   onMovePiece?: (objectId: string, sceneX: number, sceneZ: number, turnDeg: number, riders: readonly string[]) => boolean;
   onFail: (error: unknown) => void;
 }) {
-  const visible = useWindowVisible();
-  if (!RoomView3D || !visible) return null;
+  const kept = useKeptOnScreen(useWindowPresence());
+  if (!RoomView3D || !kept) return null;
   return (
     <div className={styles.stage} data-testid="room-view-3d" style={skyStyle(props.mood ?? roomMood(null))}>
       <Suspense fallback={null}>
