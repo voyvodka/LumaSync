@@ -53,3 +53,41 @@
     forced-color-adjust: none;
   }
 }
+
+/* A light's name under its dot, for the selected one and the one under the pointer or the keys.
+   Scaled against the plan's zoom so it reads at one size; the dot's `title` it replaces waited a
+   second and covered the dot. */
+.lm-room-hue-name {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgb(14 14 20 / 86%);
+  box-shadow: inset 0 0 0 1px var(--lm-line-2);
+  color: var(--lm-ink);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 4px) scale(var(--lm-hue-name-scale, 1));
+  transform-origin: 50% 0;
+  transition: opacity var(--lm-dur-quick) var(--lm-ease-out);
+}
+[data-object-id]:hover > .lm-room-hue-name,
+[data-object-id]:focus-within > .lm-room-hue-name,
+.lm-room-hue-name[data-shown] {
+  opacity: 1;
+}
+:root[data-reduced-motion] .lm-room-hue-name {
+  transition: none;
+}
+@media (forced-colors: active) {
+  .lm-room-hue-name {
+    background: Canvas;
+    color: CanvasText;
+    box-shadow: inset 0 0 0 1px CanvasText;
+  }
+}

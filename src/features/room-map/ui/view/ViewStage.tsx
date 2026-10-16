@@ -10,6 +10,7 @@ import { deriveHueAreaState } from "../../model/hueAreaState";
 import { parseObjectId } from "../../model/objectId";
 import type { RoomAwareStatus } from "../../model/roomAware";
 import { buildViewLights, resolveViewSelection } from "../../model/viewLights";
+import { useHoverChip } from "../../state/useHoverChip";
 import { useHueIdentify } from "../../state/useHueIdentify";
 import { useRoomMood } from "../../state/useRoomMood";
 import { useStripBlink } from "../../state/useStripBlink";
@@ -78,25 +79,7 @@ export function ViewStage({
 
   const focusStage = useCallback(() => rootRef.current?.focus({ preventScroll: true }), []);
 
-  // Position by ref, not state: only a new object under the pointer re-renders.
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const chipRef = useRef<HTMLDivElement | null>(null);
-  const pointerRef = useRef({ x: 0, y: 0 });
-  const placeChip = useCallback(() => {
-    const root = rootRef.current;
-    const chip = chipRef.current;
-    if (!root || !chip) return;
-    const box = root.getBoundingClientRect();
-    chip.style.transform = `translate(${pointerRef.current.x - box.left + 14}px, ${pointerRef.current.y - box.top - 30}px)`;
-  }, []);
-  const handleHover = useCallback(
-    (objectId: string | null, x: number, y: number) => {
-      pointerRef.current = { x, y };
-      setHoveredId(objectId);
-      placeChip();
-    },
-    [placeChip],
-  );
+  const { hoveredId, onHover: handleHover, chipRef } = useHoverChip(rootRef);
   const hovered = hoveredId ? lights.find((light) => light.id === hoveredId) ?? null : null;
   // A light is picked over no zone: one left active from Edit would dim every light outside it there.
   const selectLight = useCallback(
@@ -142,10 +125,7 @@ export function ViewStage({
       />
       {hovered && (
         <HoverChip
-          chipRef={(node) => {
-            chipRef.current = node;
-            placeChip();
-          }}
+          chipRef={chipRef}
           name={hovered.name}
           lit={mood.level > 0}
           level={mood.brightness}

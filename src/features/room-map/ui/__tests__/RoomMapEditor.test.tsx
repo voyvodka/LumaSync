@@ -246,6 +246,7 @@ const room3d = vi.hoisted(() => ({
   camera: undefined as { kind: string } | undefined,
   config: null as Record<string, unknown> | null,
   zones: null as { active: string | null; others: readonly string[] } | null | undefined,
+  hover: null as ((objectId: string | null, x: number, y: number) => void) | null,
 }));
 
 vi.mock("@/features/room-view/ui/RoomView3DHost", () => ({
@@ -258,7 +259,9 @@ vi.mock("@/features/room-view/ui/RoomView3DHost", () => ({
     onFail,
     cameraCommand,
     zones,
+    onHover,
   }: {
+    onHover?: (objectId: string | null, x: number, y: number) => void;
     zones?: { active: string | null; others: readonly string[] } | null;
     config: Record<string, unknown>;
     onPick?: (objectId: string | null) => void;
@@ -270,6 +273,7 @@ vi.mock("@/features/room-view/ui/RoomView3DHost", () => ({
     room3d.camera = cameraCommand;
     room3d.fail = onFail;
     room3d.zones = zones;
+    room3d.hover = onHover ?? null;
     return <div data-testid="room-view-3d" />;
   },
 }));
@@ -780,6 +784,14 @@ describe("RoomMapEditor — the 3D room as the editing stage", () => {
     await act(async () => stageRadio(view, "roomMap:stage.plan").click());
     await act(async () => stageRadio(view, "roomMap:stage.room").click());
     expect(view.getByTestId("room-dock")).toHaveAttribute("data-zone", "zone-1");
+  });
+
+  it("names what is under the pointer in the 3D room, and lets go off it", async () => {
+    const view = await openEdit();
+    act(() => room3d.hover?.("tv", 200, 200));
+    expect(view.getByText("roomMap:objectPanel.tvLabel")).toBeInTheDocument();
+    act(() => room3d.hover?.(null, 0, 0));
+    expect(view.queryByText("roomMap:objectPanel.tvLabel")).toBeNull();
   });
 
   it("adds a zone in the 3D room, where it is drawn now", async () => {

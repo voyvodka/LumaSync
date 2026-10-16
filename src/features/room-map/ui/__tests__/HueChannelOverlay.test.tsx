@@ -71,6 +71,31 @@ describe("HueChannelOverlay — overhead lights", () => {
   });
 });
 
+describe("HueChannelOverlay — names", () => {
+  it("shows the selected light's name at the plan's zoom, the others' only on hover or focus", () => {
+    const { container } = render(
+      <HueChannelOverlay
+        channels={[
+          { channelIndex: 0, x: 0, y: 0, z: 0 },
+          { channelIndex: 1, x: 0.5, y: 0.5, z: 0 },
+        ]}
+        pxPerMeter={80}
+        roomWidthM={5}
+        roomDepthM={4}
+        zoom={2}
+        selectedId="hue-0"
+        onSelect={() => {}}
+        onChange={() => {}}
+      />,
+    );
+    const [picked, other] = Array.from(container.querySelectorAll<HTMLElement>('[data-testid="hue-name"]'));
+    expect(picked).toHaveAttribute("data-shown");
+    expect(other).not.toHaveAttribute("data-shown");
+    expect(picked!.style.getPropertyValue("--lm-hue-name-scale")).toBe("0.5");
+    expect(container.querySelector('[role="button"]')).not.toHaveAttribute("title");
+  });
+});
+
 describe("HueChannelOverlay — bug #52(a) drag-time zone clamp", () => {
   it("never lets a zone-bound channel drag past the zone bounds", () => {
     const onChange = vi.fn();

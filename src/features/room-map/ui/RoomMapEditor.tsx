@@ -43,9 +43,11 @@ import {
 import type { RoomAwareStatus } from "../model/roomAware";
 import { applyRoomTemplate } from "../model/roomTemplate";
 import { carryHint } from "../model/carryHint";
+import { buildObjectList } from "../model/objectList";
 import { zoneMarks } from "../model/zoneMarks";
 import { roomObjectAdapter } from "../model/roomObjectKinds";
 import { useFurnitureModels } from "../state/useFurnitureModels";
+import { useHoverChip } from "../state/useHoverChip";
 import { useLandCarried } from "../state/useLandCarried";
 import { useLibraryDrop } from "../state/useLibraryDrop";
 import type { RoomMapDocument } from "../state/useRoomMapDocument";
@@ -73,6 +75,7 @@ import { imageLayerGestureKey, useRoomMapImageLayers } from "../state/useRoomMap
 import { useRoomMapObjects } from "../state/useRoomMapObjects";
 import { ROOM_MAP_PX_PER_METER, ROOM_MAP_VIEWPORT_ATTR, useRoomMapViewport } from "../state/useRoomMapViewport";
 import { useSnapGuides } from "../state/useSnapGuides";
+import { HoverChip } from "./view/HoverChip";
 import { CarryHint } from "./CarryHint";
 import { ContextMenu, type ContextMenuAction } from "./ContextMenu";
 import { CornerControls, EDIT_STAGES, type EditStage } from "./CornerControls";
@@ -274,6 +277,19 @@ export function RoomMapEditor({
 
   const { setCanvasContainer, canvasSize, zoom, setZoom, panOffset, setPanOffset, spaceHeld, fitToView, handleArrowPan } =
     useRoomMapViewport(config.dimensions, preview ? ROOM_MAP_PREVIEW_INSETS : ROOM_MAP_FIT_INSETS);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const stageNode = useCallback(
+    (node: HTMLDivElement | null) => {
+      stageRef.current = node;
+      setCanvasContainer(node);
+    },
+    [setCanvasContainer],
+  );
+  const hover = useHoverChip(stageRef);
+  const hoveredName = useMemo(
+    () => (inRoom && !preview && hover.hoveredId ? (buildObjectList(scopedConfig, t).find((row) => row.id === hover.hoveredId)?.label ?? null) : null),
+    [inRoom, preview, hover.hoveredId, scopedConfig, t],
+  );
 
   // The plan fits a previewed template, goes back to where it was left, and fits an applied one.
   const planView = useRef<{ zoom: number; pan: { x: number; y: number } } | null>(null);
@@ -884,7 +900,7 @@ export function RoomMapEditor({
     >
       <div
         className={styles.stage}
-        ref={setCanvasContainer}
+        ref={stageNode}
         data-testid="room-map-stage"
         data-stage={inRoom ? EDIT_STAGES.ROOM : EDIT_STAGES.PLAN}
         data-switched={stageSwitched || undefined}
@@ -902,6 +918,7 @@ export function RoomMapEditor({
             cameraCommand={cameraCommand}
             mood={mood}
             onPick={handleRoomPick}
+            onHover={hover.onHover}
             onMovePiece={landCarriedPiece}
             onFail={(failure) => onRoomFail?.(failure)}
             dropRef={roomDropRef}
@@ -1051,6 +1068,7 @@ export function RoomMapEditor({
         )}
         {!inRoom && <PlanDropGhost ref={planGhostRef} />}
         {inRoom && <CarryHint hint={preview ? null : carryHint(docConfig, docSelectedId, { hueAreaId })} />}
+        {hoveredName && <HoverChip chipRef={hover.chipRef} name={hoveredName} lit={false} />}
 
         <CornerControls
           roomAware={roomAware}

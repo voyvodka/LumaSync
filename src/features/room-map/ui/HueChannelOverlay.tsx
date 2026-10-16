@@ -762,7 +762,6 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
               aria-disabled={dimmedByHueZone || undefined}
               aria-pressed={isSelected}
               aria-label={dotLabel}
-              title={dotLabel}
               className={cx(
                 // The disc is 12 px; the ring around it makes a 28 px target.
                 "relative flex items-center justify-center rounded-full border-2 text-[8px] font-bold select-none before:absolute before:-inset-2 before:rounded-full before:content-['']",
@@ -799,6 +798,15 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
             >
               {hueChannelDotText(ch.channelId)}
             </div>
+            <span
+              aria-hidden="true"
+              data-testid="hue-name"
+              data-shown={isSelected || undefined}
+              className="lm-room-hue-name"
+              style={{ "--lm-hue-name-scale": 1 / zoom } as React.CSSProperties}
+            >
+              {baseLabel}
+            </span>
           </div>
         );
       })}
