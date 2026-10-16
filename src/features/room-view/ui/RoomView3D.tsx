@@ -320,6 +320,7 @@ function openRoomView(
     // One move at a time, from wherever the camera is now: a second press during a move carries on
     // from there instead of jumping to the end of the first.
     let move = 0;
+    let steering = false;
     const moveCamera = (to: { zoom: number; target?: Vector3; position?: Vector3 }, ms = CAMERA_MOVE_MS, ease = easeOut) => {
       if (move !== 0) cancelAnimationFrame(move);
       const zoom0 = camera.zoom;
@@ -330,7 +331,9 @@ function openRoomView(
         if (to.target) orbit.target.lerpVectors(target0, to.target, k);
         if (to.position) camera.position.lerpVectors(position0, to.position, k);
         camera.updateProjectionMatrix();
+        steering = true;
         orbit.update();
+        steering = false;
         request();
       };
       if (prefersReducedMotion()) {
@@ -347,9 +350,18 @@ function openRoomView(
     };
 
     // Turning or zooming by hand while a light is picked forgets the way back: the user's view wins.
+    // Only a real move does: `start` comes with every press, and a click on the next light forgot
+    // the way back, each focus then closing in from the last one.
     let home: { zoom: number; target: Vector3; position: Vector3 } | null = null;
+    let handling = false;
     orbit.addEventListener("start", () => {
-      home = null;
+      handling = true;
+    });
+    orbit.addEventListener("change", () => {
+      if (handling && !steering) home = null;
+    });
+    orbit.addEventListener("end", () => {
+      handling = false;
     });
     const focusOn = (objectId: string | null, previous: string | null) => {
       if (!room || objectId === previous) return;

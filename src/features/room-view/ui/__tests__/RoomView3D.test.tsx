@@ -451,6 +451,51 @@ describe("RoomView3D", () => {
     unmount();
   });
 
+  // `start` comes with every press: a click on the next light forgot the way back, and each focus
+  // closed in from the last one.
+  it("frames the next light from the room's view after a click, and forgets it only when the room is turned", async () => {
+    const config = {
+      ...DEFAULT_ROOM_MAP,
+      hueChannels: [
+        { channelIndex: 0, x: 0.8, y: 0.8, z: 0, zOrigin: "bridge" as const },
+        { channelIndex: 1, x: -0.8, y: 0.8, z: 0, zOrigin: "bridge" as const },
+      ],
+    };
+    const onFail = vi.fn<(error: unknown) => void>();
+    const view = (selectedId: string | null) => <RoomView3D config={config} label="Room" selectedId={selectedId} onFail={onFail} />;
+    const settle = () =>
+      act(async () => {
+        await vi.advanceTimersByTimeAsync(1500);
+      });
+    const { rerender, unmount } = render(view(null));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    const orbit = gl.orbits[0]! as unknown as { object: { zoom: number }; addEventListener: { mock: { calls: unknown[][] } } };
+    const fire = (type: string) => {
+      for (const [name, handler] of orbit.addEventListener.mock.calls) if (name === type) (handler as () => void)();
+    };
+    const room = orbit.object.zoom;
+    rerender(view(hueChannelObjectId(0)));
+    await settle();
+    const framed = orbit.object.zoom;
+    expect(framed).toBeGreaterThan(room);
+
+    fire("start");
+    fire("end");
+    rerender(view(hueChannelObjectId(1)));
+    await settle();
+    expect(orbit.object.zoom).toBeCloseTo(framed);
+
+    fire("start");
+    fire("change");
+    fire("end");
+    rerender(view(null));
+    await settle();
+    expect(orbit.object.zoom).toBeCloseTo(framed);
+    unmount();
+  });
+
   // A template looked at while a light was picked: dropping the pick took the camera back to the old room's view.
   it("keeps a template's camera when its preview drops the pick, and frames the light once on the way back", async () => {
     const config = { ...DEFAULT_ROOM_MAP, hueChannels: [{ channelIndex: 0, x: 0.8, y: 0.8, z: 0, zOrigin: "bridge" as const }] };
