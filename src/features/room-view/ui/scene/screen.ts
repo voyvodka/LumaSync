@@ -13,6 +13,7 @@ import {
 
 import { DESK_TOP, type FurnitureModel } from "../../model/furnitureModel";
 import { roomToScene, type ScenePoint, tvMountHeight } from "../../model/roomSpace";
+import { paletteColour } from "../../model/roomMood";
 import { PALETTE } from "./palette";
 import { block, type Part } from "./parts";
 
@@ -25,6 +26,8 @@ const TV_UNIT_DEPTH = 0.42;
 /** A monitor's stand: the panel's foot this far over the desk, the panel this far in from its back. */
 const MONITOR_STAND = 0.1;
 const MONITOR_SETBACK = 0.14;
+/** How far a running mode's picture shows over the dark glass: a full one outshone the room's lights. */
+const SCREEN_PICTURE = 0.8;
 
 export interface ScreenLayout {
   centre: ScenePoint;
@@ -39,6 +42,8 @@ export interface ScreenBuild {
   parts: Part[];
   /** The panel's face, drawn unlit so it reads as a screen, not a slab. */
   panel: PlaneGeometry;
+  /** Shows a picture in the lamps' colours while they run, the dark glass while they do not. */
+  paint(lampColour: number | null, level: number, palette?: readonly number[]): void;
   /** Footprints (centre and half sizes in the scene) that shade the floor. */
   footprints: Array<{ x: number; z: number; hw: number; hd: number; shade: number }>;
   /** The desk a monitor stands on, which carries it when it is carried. */
@@ -76,9 +81,15 @@ export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, F
   const bottom = mount - height / 2;
   const wallZ = -dims.depthMeters / 2;
   const onWall = centre.z - wallZ <= WALL_REACH;
-  const depth = monitor ? 0.022 : 0.035;
-
-  const parts: Part[] = [block(width, height, depth, centre.x, bottom, centre.z, PALETTE.bezel, monitor ? 0.006 : 0.01)];
+  // A thin panel with a smaller housing behind it, as a flat screen is built; one slab read as a box.
+  const depth = 0.014;
+  const housing = { w: width * (monitor ? 0.5 : 0.62), h: height * (monitor ? 0.5 : 0.52), d: monitor ? 0.03 : 0.04 };
+  const parts: Part[] = [
+    block(width, height, depth, centre.x, bottom, centre.z, PALETTE.bezel, 0.005),
+    block(housing.w, housing.h, housing.d, centre.x, mount - housing.h * 0.6, centre.z - depth / 2 - housing.d / 2 + 0.002, PALETTE.bezel, 0.012),
+    // The standby light under the glass: red on a TV, white on a monitor.
+    block(0.008, 0.004, 0.004, centre.x, bottom + 0.002, centre.z + depth / 2, monitor ? 0xd8dde6 : 0xb3362c, 0),
+  ];
   const footprints: ScreenBuild["footprints"] = [];
 
   const onDesk = monitor && deskUnder;
@@ -90,8 +101,11 @@ export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, F
 
   if (onDesk) {
     const neck = Math.max(bottom - deskTop, 0) + 0.08;
-    parts.push(block(Math.min(0.26, width * 0.4), 0.012, 0.18, centre.x, deskTop, centre.z - 0.02, PALETTE.metal, 0.006));
-    parts.push(block(0.05, neck, 0.03, centre.x, deskTop, centre.z - depth / 2 - 0.015, PALETTE.metal, 0.008));
+    const back = centre.z - depth / 2 - housing.d;
+    parts.push(block(Math.min(0.26, width * 0.4), 0.012, 0.18, centre.x, deskTop, back + 0.02, PALETTE.metal, 0.006));
+    parts.push(block(0.05, neck, 0.03, centre.x, deskTop, back - 0.012, PALETTE.metal, 0.008));
+    // Where the neck meets the housing: the joint a monitor turns on.
+    parts.push(block(0.08, 0.08, 0.02, centre.x, mount - 0.07, back - 0.004, PALETTE.metalSoft, 0.008));
   } else if (!monitor && bottom >= TV_UNIT_HEIGHT + 0.04 && !covered) {
     const unitW = Math.min(Math.max(width * 1.15, 0.9), dims.widthMeters - 0.1);
     const unitZ = onWall ? wallZ + TV_UNIT_DEPTH / 2 + 0.02 : centre.z + TV_UNIT_DEPTH / 2 - 0.1;
@@ -106,7 +120,15 @@ export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, F
     for (const sx of [-1, 1]) {
       parts.push(block(0.03, legH, 0.03, centre.x + sx * (unitW / 2 - 0.06), 0, unitZ, PALETTE.metal, 0.006));
     }
-    parts.push(block(Math.min(width * 0.7, 1.1), 0.065, 0.09, centre.x, TV_UNIT_HEIGHT, unitZ + TV_UNIT_DEPTH / 2 - 0.08, PALETTE.metal, 0.02));
+    const bar = { w: Math.min(width * 0.7, 1.1), z: unitZ + TV_UNIT_DEPTH / 2 - 0.08 };
+    parts.push(block(bar.w, 0.065, 0.09, centre.x, TV_UNIT_HEIGHT, bar.z, PALETTE.metal, 0.02));
+    parts.push(block(bar.w - 0.04, 0.045, 0.004, centre.x, TV_UNIT_HEIGHT + 0.01, bar.z + 0.045, PALETTE.keyboard, 0));
+    if (!onWall && bottom - TV_UNIT_HEIGHT < 0.45) {
+      // Out in the room the TV stands on the unit on a pedestal, behind the soundbar.
+      const z = centre.z - depth / 2 - housing.d / 2;
+      parts.push(block(Math.min(0.5, width * 0.35), 0.012, 0.22, centre.x, TV_UNIT_HEIGHT, z, PALETTE.metal, 0.006));
+      parts.push(block(0.07, bottom - TV_UNIT_HEIGHT + 0.06, 0.025, centre.x, TV_UNIT_HEIGHT, z, PALETTE.metal, 0.008));
+    }
     footprints.push({ x: centre.x, z: unitZ, hw: unitW / 2, hd: TV_UNIT_DEPTH / 2, shade: 0.4 });
   } else if (!monitor && bottom < TV_UNIT_HEIGHT + 0.04 && !covered) {
     // A screen too low for a unit stands on its own feet; one over a piece of furniture stands on it.
@@ -116,14 +138,14 @@ export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, F
     }
   }
 
-  const panel = new PlaneGeometry(Math.max(width - 0.02, 0.01), Math.max(height - 0.02, 0.01), 12, 6);
+  const panel = new PlaneGeometry(Math.max(width - 0.016, 0.01), Math.max(height - 0.016, 0.01), 12, 6);
   // A faint top-to-bottom fall-off, the way a dark screen catches the room's light, and one soft
   // diagonal sheen across the glass, so it reads as a screen rather than a painted board.
   const top = new Color(0x26324d);
   const low = new Color(PALETTE.panel);
   const sheen = new Color(0x3a4866);
   const uv = panel.getAttribute("uv");
-  const colours = new Float32Array(uv.count * 3);
+  const glass = new Float32Array(uv.count * 3);
   const c = new Color();
   for (let i = 0; i < uv.count; i++) {
     const u = uv.getX(i);
@@ -131,11 +153,44 @@ export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, F
     c.copy(low).lerp(top, v);
     const band = Math.exp(-(((u * 0.8 + v * 0.6 - 0.62) / 0.11) ** 2));
     c.lerp(sheen, band * 0.55);
-    colours.set([c.r, c.g, c.b], i * 3);
+    glass.set([c.r, c.g, c.b], i * 3);
   }
-  panel.setAttribute("color", new BufferAttribute(colours, 3));
+  const colours = new BufferAttribute(glass.slice(), 3);
+  panel.setAttribute("color", colours);
   // Clear of the bezel's face: a millimetre z-fought across the subdivided glass as speckle.
   panel.translate(centre.x, mount, centre.z + depth / 2 + 0.004);
+
+  const left = new Color();
+  const right = new Color();
+  const picture = new Color();
+  const white = new Color(0xfff4e6);
+  const paint = (lampColour: number | null, level: number, palette?: readonly number[]) => {
+    const on = lampColour === null ? 0 : Math.min(Math.max(level, 0), 1) * SCREEN_PICTURE;
+    const array = colours.array as Float32Array;
+    if (on === 0) {
+      array.set(glass);
+      colours.needsUpdate = true;
+      return;
+    }
+    // The picture the lights are taken from: the palette's first stops across it, else the lamps' colour.
+    left.set(paletteColour(palette, 0) ?? lampColour ?? 0);
+    right.set(paletteColour(palette, 1) ?? lampColour ?? 0);
+    for (let i = 0; i < uv.count; i++) {
+      const u = uv.getX(i);
+      const v = uv.getY(i);
+      // A frame of film rather than a tint: a lit sky over a darker ground, a soft bright spot and a
+      // vignette — a flat wash read as the glass glowing, not as a picture.
+      const sky = 1 / (1 + Math.exp(-(v - 0.4) * 18));
+      const spot = Math.exp(-(((u - 0.64) / 0.16) ** 2 + ((v - 0.62) / 0.2) ** 2));
+      const shade = (0.3 + 0.62 * sky) * (1 - 0.4 * ((u - 0.5) * 2) ** 2);
+      picture.copy(left).lerp(right, u).multiplyScalar(shade).lerp(white, spot * 0.45);
+      c.setRGB(glass[i * 3]!, glass[i * 3 + 1]!, glass[i * 3 + 2]!).lerp(picture, on);
+      array[i * 3] = c.r;
+      array[i * 3 + 1] = c.g;
+      array[i * 3 + 2] = c.b;
+    }
+    colours.needsUpdate = true;
+  };
 
   const sx = tv.x + tv.width / 2;
   const sy = tv.y + tv.height / 2;
@@ -157,5 +212,5 @@ export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, F
       }
     : null;
 
-  return { layout: { centre, width, height, backlight }, parts, panel, footprints, deskId: onDesk && desk ? desk.id : null };
+  return { layout: { centre, width, height, backlight }, parts, panel, paint, footprints, deskId: onDesk && desk ? desk.id : null };
 }

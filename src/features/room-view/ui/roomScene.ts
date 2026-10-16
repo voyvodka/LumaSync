@@ -531,6 +531,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     lights.fill.intensity = unlit.fill;
     real?.paint(lampColour, level, palette);
     glow?.paint(lampColour, level, palette);
+    screen?.paint(lampColour, level, palette);
     spill?.color.set(lampColour ?? STRIP_GLOW).multiplyScalar(strip * BACKLIGHT_GAIN);
     stripMaterials.forEach((material, i) =>
       material.color.set(paletteColour(palette, i + 1) ?? lampColour ?? STRIP_GLOW).lerp(UNLIT_STRIP, 1 - strip),

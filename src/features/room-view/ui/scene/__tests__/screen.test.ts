@@ -42,3 +42,36 @@ describe("buildScreen — a monitor on a desk", () => {
     expect(centre.y).toBeCloseTo(dims.heightMeters * 0.4);
   });
 });
+
+describe("buildScreen — the picture", () => {
+  const build = () => {
+    const config: RoomMapConfig = { ...DEFAULT_ROOM_MAP, dimensions: dims, tvAnchor: { x: 1, y: 0.05, width: 1.4, height: 0.05 }, furniture: [] };
+    return buildScreen(config, classifyFurniture(config))!;
+  };
+  const colours = (built: ReturnType<typeof build>) => Array.from(built.panel.getAttribute("color").array as Float32Array);
+
+  it("shows the lamps' colours while a mode runs and the dark glass again once it stops", () => {
+    const built = build();
+    const glass = colours(built);
+    built.paint(0xff2000, 1);
+    const lit = colours(built);
+    const red = (a: number[]) => a.filter((_, i) => i % 3 === 0).reduce((n, v) => n + v, 0);
+    const blue = (a: number[]) => a.filter((_, i) => i % 3 === 2).reduce((n, v) => n + v, 0);
+    expect(red(lit)).toBeGreaterThan(red(glass) * 3);
+    expect(blue(lit)).toBeLessThan(blue(glass));
+    built.paint(null, 1);
+    expect(colours(built)).toEqual(glass);
+  });
+
+  it("runs a palette across the picture and dims it with the mode's level", () => {
+    const built = build();
+    built.paint(0x00ff00, 1, [0xff0000, 0x0000ff]);
+    const full = colours(built);
+    const uv = built.panel.getAttribute("uv");
+    const at = (u: number) => [...Array(uv.count).keys()].find((i) => Math.abs(uv.getX(i) - u) < 1e-6 && Math.abs(uv.getY(i) - 0.5) < 0.1)!;
+    expect(full[at(0) * 3]!).toBeGreaterThan(full[at(0) * 3 + 2]!);
+    expect(full[at(1) * 3 + 2]!).toBeGreaterThan(full[at(1) * 3]!);
+    built.paint(0x00ff00, 0.3, [0xff0000, 0x0000ff]);
+    expect(colours(built)[at(0) * 3]!).toBeLessThan(full[at(0) * 3]!);
+  });
+});
