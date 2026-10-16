@@ -49,7 +49,6 @@ describe("windowVisibility", () => {
     expect(seen).toHaveBeenLastCalledWith(false);
   });
 
-  // The 3D room keeps its view while covered and lets it go at once when put away.
   it("tells covered by another window or Space from put away", async () => {
     const { result, unmount } = renderHook(() => useWindowPresence());
     await act(flush);

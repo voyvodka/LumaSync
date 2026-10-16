@@ -47,7 +47,6 @@ export interface CornerViewControls {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onReset: () => void;
-  /** Edit's 3D stage, where the selected object can be carried; its hint names that. */
   carries?: boolean;
 }
 

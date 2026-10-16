@@ -36,8 +36,7 @@ export function isWindowVisible(): boolean {
   return documentVisible() && nativeVisible;
 }
 
-/** "covered": the window is still shown but its document is hidden — another window over it, or
- *  another Space. "hidden": put away to the tray or minimised. */
+/** "covered": shown, but the document is hidden by another window or Space; "hidden": tray or minimised. */
 export type WindowPresence = "visible" | "covered" | "hidden";
 
 export function windowPresence(): WindowPresence {
@@ -183,7 +182,6 @@ export function useWindowVisible(): boolean {
   return useSyncExternalStore(subscribeForReact, isWindowVisible, isWindowVisible);
 }
 
-/** Whether the main window is on screen, covered, or put away, re-rendering when that changes. */
 export function useWindowPresence(): WindowPresence {
   return useSyncExternalStore(subscribeWindowPresence, windowPresence, windowPresence);
 }
