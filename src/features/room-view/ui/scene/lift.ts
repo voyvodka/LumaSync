@@ -23,6 +23,10 @@ export interface LiftedPiece {
   /** Scaled across and up about the height `aboutY`, then raised: a screen resized in place. */
   reshape(scaleX: number, scaleY: number, aboutY: number, raise: number): void;
   restore(): void;
+  /** Into another scene, for a piece that outlives the room it was lifted from. */
+  rehome(scene: Scene): void;
+  /** Gone for good, nothing written back: the room it came from is gone too. */
+  discard(): void;
 }
 
 export function spansOf(mesh: Mesh, counts: readonly number[], owners: readonly (string | null)[], into: (owner: string) => Liftable | undefined) {
@@ -80,7 +84,8 @@ function copySpan({ mesh, start, count }: Span): BufferGeometry {
 }
 
 /** Copied out and collapsed onto the origin, a zero-area point, so nothing is rebuilt while carried. */
-export function liftPiece(scene: Scene, piece: Liftable, riders: ReadonlyMap<string, Liftable> = new Map()): LiftedPiece {
+export function liftPiece(home: Scene, piece: Liftable, riders: ReadonlyMap<string, Liftable> = new Map()): LiftedPiece {
+  let scene = home;
   const carried = [...riders].map(([id, rider]) => ({ id, rider, lifted: liftPiece(scene, rider) }));
   const pivot = new Group();
   pivot.position.set(piece.pivot.x, 0, piece.pivot.z);
@@ -121,6 +126,18 @@ export function liftPiece(scene: Scene, piece: Liftable, riders: ReadonlyMap<str
       stretch.scale.set(scaleX, scaleY, 1);
       stretch.position.y = aboutY + raise;
       inner.position.y = -aboutY;
+    },
+    rehome(next) {
+      for (const { lifted } of carried) lifted.rehome(next);
+      scene = next;
+      next.add(pivot);
+    },
+    discard() {
+      for (const { lifted } of carried) lifted.discard();
+      pivot.removeFromParent();
+      pivot.traverse((node) => {
+        if (node instanceof Mesh) node.geometry.dispose();
+      });
     },
     restore() {
       for (const { lifted } of carried) lifted.restore();

@@ -65,6 +65,16 @@ plan fits each previewed size and goes back to the zoom it was left at; the 3D v
 camera it had for each room size, so leaving a preview finds the room as it was being seen. The
 full-page picker is only the first run's.
 
+In 3D each change to or from a template plays out piece by piece (`planMorph`, `scene/morph.ts`):
+the new room is built at once, then pieces of a kind are paired nearest first, both rooms measured
+from their middles since the ids never match, and each pair slides, turns and stretches from where
+it stood; a piece the new room has no place for is pressed down into the floor, and one it adds
+grows up out of it, nearest the middle first. Every moving piece is a lifted copy for the ~0.6 s,
+the ones going rehomed out of the old scene before it is disposed; a press, a carry or another
+change ends it at once, and reduced motion skips it. The walls and the room's size change at once:
+a wall is not a piece that lifts. The editor marks such a change with `morphKey`, so an ordinary
+edit never morphs.
+
 **View changes every light at once, never one.** The corner's lights button (`view/RoomLights.tsx`)
 opens `QuickLights` — the column the tray window draws — in a popover: mode, brightness, Solid's
 colour and white, the effect. It writes through the same lighting control as Lights, so the room's

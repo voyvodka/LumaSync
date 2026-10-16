@@ -54,6 +54,7 @@ export function RoomView3DHost(props: {
   onMovePiece?: (objectId: string, sceneX: number, sceneZ: number, turnDeg: number, riders: readonly string[]) => boolean;
   onFail: (error: unknown) => void;
   dropRef?: MutableRefObject<RoomDropTarget | null>;
+  morphKey?: number;
 }) {
   const kept = useKeptOnScreen(useWindowPresence());
   if (!RoomView3D || !kept) return null;

@@ -171,6 +171,8 @@ export function RoomMapEditor({
   } = doc;
   // A template the drawer rests on is shown in place of the room; nothing of it is saved until applied.
   const [template, setTemplate] = useState<RoomMapConfig | null>(null);
+  // Each change to or from a template is one the 3D room plays out piece by piece.
+  const [morphKey, setMorphKey] = useState(0);
   const preview = useMemo(() => template && applyRoomTemplate(docConfig, template), [template, docConfig]);
   const config = preview ?? docConfig;
   const scopedConfig = useMemo(
@@ -284,11 +286,13 @@ export function RoomMapEditor({
         if (next && !planView.current) planView.current = { zoom, pan: panOffset };
         followTemplate.current = true;
         setTemplate(next);
+        setMorphKey((key) => key + 1);
       },
       onApply: (next: RoomMapConfig) => {
         planView.current = null;
         followTemplate.current = true;
         setTemplate(null);
+        setMorphKey((key) => key + 1);
         onApplyTemplate?.(next);
       },
     }),
@@ -878,6 +882,7 @@ export function RoomMapEditor({
             onMovePiece={landCarriedPiece}
             onFail={(failure) => onRoomFail?.(failure)}
             dropRef={roomDropRef}
+            morphKey={morphKey}
           />
         ) : (
           <RoomMapCanvas

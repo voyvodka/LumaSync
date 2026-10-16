@@ -19,6 +19,7 @@ import {
   Plane,
   PlaneGeometry,
   Raycaster,
+  Scene,
   SRGBColorSpace,
   Vector2,
   Vector3,
@@ -36,6 +37,7 @@ import { lightPickHalf, pickObject } from "../model/picking";
 import type { FurnitureModel } from "../model/furnitureModel";
 import { pieceNudge } from "../model/pieceNudge";
 import { roomToScene } from "../model/roomSpace";
+import { planMorph } from "../model/templateMorph";
 import { isWindowVisible } from "@/features/shell/windowVisibility";
 import { prefersReducedMotion } from "@/shared/lib/motion";
 
@@ -46,6 +48,7 @@ import { furnitureParts } from "./scene/furniture";
 import type { LiftedPiece } from "./scene/lift";
 import { PALETTE } from "./scene/palette";
 import { block, mergeParts } from "./scene/parts";
+import { type Morph, startMorph } from "./scene/morph";
 import { type Plumb, PLUMB_FROM, plumbGuide } from "./scene/plumb";
 import { floorBand } from "./scene/selection";
 import styles from "./RoomView3D.module.css";
@@ -101,7 +104,8 @@ export interface RoomDropTarget {
 }
 
 interface RoomView extends RoomDropTarget {
-  show(config: RoomMapConfig, lampFamilies: ReadonlyMap<number, LampFamily>): void;
+  /** `morph`: the room becomes this one piece by piece, as a template does, instead of at once. */
+  show(config: RoomMapConfig, lampFamilies: ReadonlyMap<number, LampFamily>, morph?: boolean): void;
   select(objectId: string | null): void;
   /** Pixels at the foot and the head something floats over; the room is fitted between them. */
   setInsets(bottom: number, top: number): void;
@@ -443,6 +447,7 @@ function openRoomView(
         press = event.button === 0 ? { x: event.clientX, y: event.clientY, id: event.pointerId } : null;
         onHover(null, 0, 0);
         if (!press || !room || !onMovePiece) return;
+        endMorph();
         settleNow();
         if (!room) return;
         const ray = rayAt(event.clientX, event.clientY);
@@ -623,6 +628,17 @@ function openRoomView(
     // A piece slid in place while the room it was built in waits to be built again.
     let nudged: { id: string; lifted: LiftedPiece; dx: number; dz: number } | null = null;
     let settle: ReturnType<typeof setTimeout> | null = null;
+    let morphNext = false;
+    const holding = new Scene();
+    let morph: Morph | null = null;
+    let morphFrame = 0;
+    const endMorph = () => {
+      cancelAnimationFrame(morphFrame);
+      morphFrame = 0;
+      morph?.finish();
+      morph = null;
+    };
+    closeHooks.push(endMorph);
     // Out of the scene before it is disposed: a held card's buffers outlive the room it floats in.
     let detachDrop = () => {};
     const settleLater = () => {
@@ -650,14 +666,15 @@ function openRoomView(
         onFail(error);
       }
     };
-    const show = (config: RoomMapConfig, lampFamilies: ReadonlyMap<number, LampFamily>) => {
+    const show = (config: RoomMapConfig, lampFamilies: ReadonlyMap<number, LampFamily>, morphing = false) => {
       if (closed) return;
       // A view adopted across a face switch is handed the room it already shows.
       if (config === shownConfig && lampFamilies === shownFamilies) return;
       const sameFamilies = lampFamilies === shownFamilies;
       shownConfig = config;
       shownFamilies = lampFamilies;
-      if (room && builtConfig && sameFamilies && !carry) {
+      if (morphing) morphNext = true;
+      if (room && builtConfig && sameFamilies && !carry && !morphNext) {
         const nudge = pieceNudge(builtConfig, config);
         const lifted = nudge ? (nudged?.id === nudge.objectId ? nudged.lifted : room.lift(nudge.objectId, false)) : null;
         if (nudge && lifted) {
@@ -682,6 +699,10 @@ function openRoomView(
       if (settle !== null) clearTimeout(settle);
       settle = null;
       nudged = null;
+      endMorph();
+      const was = builtConfig;
+      const plan = morphNext && room && was && !prefersReducedMotion() ? planMorph(was, config) : null;
+      morphNext = false;
       builtConfig = config;
       // Rebuilt by another writer mid-carry: put the piece down first, while its buffers still exist.
       if (carry) {
@@ -689,8 +710,18 @@ function openRoomView(
         drop(false);
       }
       const first = room === null;
+      const leaving: LiftedPiece[] = [];
       if (room) {
         detachDrop();
+        if (plan) {
+          for (const piece of plan.leaving) {
+            const lifted = room.lift(piece.objectId, false);
+            if (!lifted) continue;
+            // Lifted copies are the old scene's children; disposing it would empty them.
+            lifted.rehome(holding);
+            leaving.push(lifted);
+          }
+        }
         disposeScene(room.scene);
       }
       room = buildRoomScene(config, { shadows, lambert: options.lambert ?? false, coldKey: options.coldKey, lampFamilies });
@@ -726,6 +757,20 @@ function openRoomView(
       }
       // A new scene's walls stand where the camera already cuts them, rather than easing down on its first frame.
       cut(room);
+      if (plan) {
+        const current = room;
+        for (const lifted of leaving) lifted.rehome(current.scene);
+        morph = startMorph(plan, (objectId) => current.lift(objectId, false), leaving, performance.now());
+        const step = () => {
+          if (!morph || closed) return;
+          const running = morph.step(performance.now());
+          renderer.shadowMap.needsUpdate = shadows;
+          request();
+          morphFrame = running ? requestAnimationFrame(step) : 0;
+          if (!running) morph = null;
+        };
+        morphFrame = requestAnimationFrame(step);
+      }
       renderer.shadowMap.needsUpdate = shadows;
       builtAt = performance.now();
       if (!first) {
@@ -960,9 +1005,9 @@ function openRoomView(
         if (room?.select(objectId) || nudged) request();
         if (ready) focusOn(objectId, previous);
       },
-      show(config, lampFamilies) {
+      show(config, lampFamilies, morphing) {
         try {
-          show(config, lampFamilies);
+          show(config, lampFamilies, morphing);
         } catch (error) {
           onFail(error);
         }
@@ -1059,6 +1104,7 @@ export default function RoomView3D({
   onMovePiece,
   onFail,
   dropRef,
+  morphKey,
 }: {
   config: RoomMapConfig;
   /** Each Hue channel's fixture, by channel index; absent ones draw as bulbs. */
@@ -1081,7 +1127,10 @@ export default function RoomView3D({
   onFail: (error: unknown) => void;
   /** Filled while the view is open, for a library card dragged in from the dock. */
   dropRef?: MutableRefObject<RoomDropTarget | null>;
+  /** Changed with a room it should become piece by piece, as a template does. */
+  morphKey?: number;
 }) {
+  const shownMorph = useRef(morphKey);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<RoomView | null>(null);
   const onFailRef = useRef(onFail);
@@ -1145,8 +1194,10 @@ export default function RoomView3D({
   }, [dropRef]);
 
   useEffect(() => {
-    viewRef.current?.show(config, lampFamilies);
-  }, [config, lampFamilies]);
+    const morphing = morphKey !== shownMorph.current;
+    shownMorph.current = morphKey;
+    viewRef.current?.show(config, lampFamilies, morphing);
+  }, [config, lampFamilies, morphKey]);
 
   useEffect(() => {
     viewRef.current?.setInsets(bottomInset, topInset);

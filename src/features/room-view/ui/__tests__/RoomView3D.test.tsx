@@ -2,7 +2,7 @@ import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { hueChannelObjectId } from "@/features/room-map/model/objectId";
-import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
+import { DEFAULT_ROOM_MAP, type RoomMapConfig } from "@/shared/contracts/roomMap";
 
 import RoomView3D, { __closeParkedRoomViewForTests, type RoomDropTarget } from "../RoomView3D";
 
@@ -180,7 +180,7 @@ describe("RoomView3D", () => {
 
   describe("an inspector edit", () => {
     const sofa = { id: "sofa", type: "sofa" as const, x: 1, y: 2, width: 2, height: 0.9 };
-    const room = (x: number, width = 2) => ({ ...DEFAULT_ROOM_MAP, furniture: [{ ...sofa, x, width }] });
+    const room = (x: number, width = 2): RoomMapConfig => ({ ...DEFAULT_ROOM_MAP, furniture: [{ ...sofa, x, width }] });
     const families = new Map();
     const rest = () =>
       act(async () => {
@@ -247,6 +247,32 @@ describe("RoomView3D", () => {
       expect(scene.children).toHaveLength(before);
       unmount();
       expect(dropRef.current).toBeNull();
+    });
+
+    it("plays a template out piece by piece in the room it builds at once, and settles into it", async () => {
+      const bed = { id: "bed", type: "bed" as const, x: 2, y: 1, width: 1.6, height: 2 };
+      const chair = { id: "chair", type: "chair" as const, x: 0.2, y: 0.2, width: 0.5, height: 0.5 };
+      const before = { ...room(1), furniture: [{ ...sofa, x: 1 }, bed] };
+      const after = { ...room(1), furniture: [{ ...sofa, id: "t-sofa", x: 2.5 }, chair] };
+      const { rerender, unmount, view } = await open();
+      rerender(view(before));
+      await rest();
+      builds.count = 0;
+      rerender(view(after, { morphKey: 1 }));
+      expect(builds.count).toBe(1);
+      const scene = builds.scene!;
+      // The sofa sliding, the chair rising and the bed going down, each a piece of its own for now.
+      const during = scene.children.length;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1500);
+      });
+      expect(scene.children).toHaveLength(during - 3);
+      expect(builds.count).toBe(1);
+
+      // An edit after it is an edit again: the one piece slid in place, as an inspector step does.
+      rerender(view({ ...after, furniture: [{ ...sofa, id: "t-sofa", x: 2.6 }, chair] }, { morphKey: 1 }));
+      expect(scene.children).toHaveLength(during - 2);
+      unmount();
     });
 
     it("waits for the rest with any edit under 200 ms after a build, and builds new fixtures at once", async () => {
