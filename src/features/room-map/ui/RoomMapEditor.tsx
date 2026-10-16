@@ -3,6 +3,7 @@ import type React from "react";
 import { useTranslation } from "react-i18next";
 
 import { type FurnitureModel, modelTop } from "@/features/room-view/model/furnitureModel";
+import { hexCss } from "@/features/room-view/model/roomMood";
 import type { LampFamily } from "@/features/room-view/model/lampFamily";
 import { hueFacings } from "../model/hueFacing";
 import { hueOverhead } from "../model/hueHang";
@@ -234,6 +235,7 @@ export function RoomMapEditor({
   );
   const [cameraCommand, setCameraCommand] = useState<CameraCommand | undefined>(undefined);
   const mood = useRoomMood();
+  const glow = useMemo(() => (mood.level > 0 ? { colour: hexCss(mood.lamp), level: mood.brightness } : null), [mood]);
 
   const { showGrid, setShowGrid, gridStrokeWidth, setGridStrokeWidth, showHueZones, setShowHueZones } = useRoomMapGridSettings();
 
@@ -1079,6 +1081,7 @@ export function RoomMapEditor({
                 onHueZoneResize={handleHueZoneUpdate}
                 onSnapDragMove={snapDragMove}
                 onSnapDragEnd={snapDragEnd}
+                glow={glow}
                 allHueZones={hueZones}
                 hidePassiveZoneBounds={!showHueZones}
                 facings={facings}
@@ -1107,7 +1110,15 @@ export function RoomMapEditor({
         )}
         {!inRoom && <PlanDropGhost ref={planGhostRef} />}
         <CarryHint hint={inRoom ? (preview ? null : carryHint(docConfig, docSelectedId, { hueAreaId })) : drawingZone ? "draw" : null} />
-        {hoveredName && <HoverChip chipRef={hover.chipRef} name={hoveredName} lit={false} />}
+        {hoveredName && (
+          <HoverChip
+            chipRef={hover.chipRef}
+            name={hoveredName}
+            lit={glow !== null}
+            // A light says whether it is on, as in the view; a piece is only named.
+            level={hover.hoveredId && parseObjectId(hover.hoveredId)?.kind === "hue" ? (glow?.level ?? 0) : undefined}
+          />
+        )}
 
         <CornerControls
           roomAware={roomAware}

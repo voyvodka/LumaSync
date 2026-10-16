@@ -561,3 +561,44 @@ describe("HueChannelOverlay — guides", () => {
     expect(onChange.mock.calls[0]![0].x).toBeCloseTo(0.45);
   });
 });
+
+describe("HueChannelOverlay — lit lights", () => {
+  it("haloes each light in the lights' colour while they are on, and not one the bridge lost", () => {
+    const { container } = render(
+      <HueChannelOverlay
+        channels={[
+          { channelIndex: 0, channelId: 0, x: 0, y: 0, z: 0 },
+          { channelIndex: 1, channelId: 9, x: 0.5, y: 0.5, z: 0 },
+        ]}
+        liveChannelIds={new Set([0])}
+        pxPerMeter={80}
+        roomWidthM={5}
+        roomDepthM={4}
+        selectedId={null}
+        onSelect={() => {}}
+        onChange={() => {}}
+        glow={{ colour: "#ff8800", level: 1 }}
+      />,
+    );
+    const lit = container.querySelector<HTMLElement>('[data-object-id="hue-0"]')!;
+    const lost = container.querySelector<HTMLElement>('[data-object-id="hue-1"]')!;
+    expect(lit).toHaveAttribute("data-lit");
+    expect(lit.querySelector<HTMLElement>('[role="button"]')!.style.boxShadow).toContain("#ff8800");
+    expect(lost).not.toHaveAttribute("data-lit");
+  });
+
+  it("draws no halo while the lights are off", () => {
+    const { container } = render(
+      <HueChannelOverlay
+        channels={[{ channelIndex: 0, x: 0, y: 0, z: 0 }]}
+        pxPerMeter={80}
+        roomWidthM={5}
+        roomDepthM={4}
+        selectedId={null}
+        onSelect={() => {}}
+        onChange={() => {}}
+      />,
+    );
+    expect(container.querySelector('[data-object-id="hue-0"]')).not.toHaveAttribute("data-lit");
+  });
+});

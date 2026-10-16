@@ -43,6 +43,8 @@ interface HueChannelOverlayProps {
   activeHueZone?: HueZone | null;
   /** Called when the user drags the zone center marker. */
   onHueZoneCenterChange?: (zoneId: string, centerX: number, centerY: number) => void;
+  /** The lights' colour and level while they are on, as the room view draws them; absent while off. */
+  glow?: { colour: string; level: number } | null;
   /** Lines a dragged light up with the room's pieces and its other lights; ⌥ drags it free. */
   onSnapDragMove?: (id: string, x: number, y: number, w: number, h: number) => SnapResult;
   onSnapDragEnd?: () => void;
@@ -219,6 +221,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
   onHueZoneResize,
   onSnapDragMove,
   onSnapDragEnd,
+  glow = null,
   allHueZones,
   hidePassiveZoneBounds = false,
   facings,
@@ -725,13 +728,13 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
         const isInActiveHueZone = activeHueZone !== null && ch.zoneId === activeHueZone.id;
         const dimmedByHueZone = activeHueZone !== null && !isInActiveHueZone;
 
-        const ringStyle: React.CSSProperties =
-          isInActiveHueZone && activeHueZone?.borderColor
-            ? { boxShadow: `0 0 0 2px ${activeHueZone.borderColor}` }
-            : {};
+        const ring = isInActiveHueZone && activeHueZone?.borderColor ? `0 0 0 2px ${activeHueZone.borderColor}` : null;
 
         const isGhost =
           liveChannelIds != null && ch.channelId != null && !liveChannelIds.has(ch.channelId);
+        // A light the bridge no longer has, or one outside the zone being edited, is not lit for this room.
+        const halo = glow && !isGhost && !dimmedByHueZone ? `0 0 ${4 + 10 * glow.level}px ${1 + 3 * glow.level}px ${glow.colour}` : null;
+        const ringStyle: React.CSSProperties = ring || halo ? { boxShadow: [ring, halo].filter(Boolean).join(", ") } : {};
         const baseLabel = hueChannelName(ch, t);
         const facing = facings?.get(ch.channelIndex);
         const isOverhead = overhead?.has(ch.channelIndex) ?? false;
@@ -749,6 +752,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
             // as the dashed bounds box.
             data-zone-channel-id={isInActiveHueZone ? activeHueZone?.id : undefined}
             data-object-id={hueChannelObjectId(ch.channelIndex)}
+            data-lit={halo ? "" : undefined}
             className="absolute"
             style={{
               left: leftPx + (fan?.dx ?? 0),
