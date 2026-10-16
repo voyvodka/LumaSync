@@ -103,7 +103,6 @@ function Harness({
   );
 }
 
-// The dock's own announcement, not the card's state word.
 const announced = () => screen.getAllByRole("status").find((element) => element.classList.contains("sr-only"))?.textContent;
 const chip = (id: string) => screen.getByTestId(`view-light-${id}`);
 const liveButton = (testId: string) =>

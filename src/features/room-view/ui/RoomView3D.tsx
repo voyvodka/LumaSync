@@ -349,9 +349,7 @@ function openRoomView(
       move = requestAnimationFrame(step);
     };
 
-    // Turning or zooming by hand while a light is picked forgets the way back: the user's view wins.
-    // Only a real move does: `start` comes with every press, and a click on the next light forgot
-    // the way back, each focus then closing in from the last one.
+    // Only a real turn or zoom forgets the way back: `start` also comes with a plain click.
     let home: { zoom: number; target: Vector3; position: Vector3 } | null = null;
     let handling = false;
     orbit.addEventListener("start", () => {
@@ -410,7 +408,6 @@ function openRoomView(
       moved: boolean;
       turn: number;
       angle: number;
-      /** The TV and a Hue light go up and down while ⇧ is held; the rest stands where it was built. */
       rises: boolean;
       fromY: number;
       halfY: number;
@@ -549,7 +546,6 @@ function openRoomView(
         } else {
           if (!ray.intersectPlane(floor, onFloor)) return;
           if (carry.grip !== null) {
-            // Back to sliding at the new height, the pointer keeping its hold on the piece.
             carry.grip = null;
             carry.dx = carry.ghost.position.x - onFloor.x;
             carry.dz = carry.ghost.position.z - onFloor.z;
@@ -1117,8 +1113,7 @@ function openRoomView(
 
 const NO_FAMILIES: ReadonlyMap<number, LampFamily> = new Map();
 
-/** A piece let go at its centre in the scene; `raised` when ⇧ took it up or down by `rise` metres,
- *  its centre then `centreY` high. */
+/** `raised`: ⇧ took the piece up or down by `rise` metres, its centre then `centreY` high. */
 export type MovePiece = (
   objectId: string,
   sceneX: number,

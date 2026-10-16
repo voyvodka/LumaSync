@@ -18,7 +18,6 @@ export interface ViewLightCardProps {
   light: ViewLight;
   /** How it reads now: the bridge for a Hue light, the strip for a strip or a screen's backlight. */
   connection?: UsbStripConnectionStatus;
-  /** USB only: the strip's port. */
   port?: string | null;
   /** How bright the room's lights are, 0–1; null while they are off. */
   level: number | null;

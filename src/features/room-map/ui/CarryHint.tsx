@@ -5,7 +5,6 @@ import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
 import type { CarryHint as Hint } from "../model/carryHint";
 import styles from "./CarryHint.module.css";
 
-/** The keys a carry in the 3D room answers to, under the top bar while a piece that has them is selected. */
 export function CarryHint({ hint }: { hint: Hint | null }) {
   const { t } = useTranslation();
   const key = (cap: string, label: string) => (
@@ -16,7 +15,7 @@ export function CarryHint({ hint }: { hint: Hint | null }) {
   );
   const letGo = key(t("roomMap:shortcuts.keys.escape"), t("roomMap:carryHint.letGo"));
   return (
-    // The same keys are in the shortcuts list; read out on every selection, they would only repeat it.
+    // aria-hidden: the shortcuts list names the same keys.
     <div className={styles.slot} data-testid="carry-hint" data-hint={hint ?? undefined} aria-hidden="true">
       <StateSwap
         fit

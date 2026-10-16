@@ -63,9 +63,7 @@ export interface WallPlane {
 const WASH_REACH = 1.6;
 const WASH_SIZE = 2.4;
 
-/** White texels with the alpha `alphaAt` gives each texel's centre, in [0, 1] across the texture.
- *  Written as data, never drawn: WebKit dithers a canvas gradient in premultiplied space, and three's
- *  straight-alpha upload then wraps a channel past 255 to near 0, freckling pools with primaries. */
+/** Data, never a drawn gradient: WebKit's straight-alpha upload wrapped dithered channels to ~0. */
 function alphaTexture(size: number, alphaAt: (u: number, v: number) => number): CanvasTexture {
   const canvas = document.createElement("canvas");
   canvas.width = size;

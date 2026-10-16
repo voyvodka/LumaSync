@@ -451,8 +451,6 @@ describe("RoomView3D", () => {
     unmount();
   });
 
-  // `start` comes with every press: a click on the next light forgot the way back, and each focus
-  // closed in from the last one.
   it("frames the next light from the room's view after a click, and forgets it only when the room is turned", async () => {
     const config = {
       ...DEFAULT_ROOM_MAP,

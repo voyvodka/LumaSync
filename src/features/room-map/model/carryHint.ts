@@ -3,8 +3,6 @@ import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { parseObjectId } from "./objectId";
 import { ROOM_OBJECT_KINDS, type RoomObjectContext } from "./roomObjectKinds";
 
-/** What the 3D room does with the selected piece beyond sliding it: furniture turns with R, the TV
- *  and a Hue light go up and down with ⇧. */
 export type CarryHint = "turn" | "rise";
 
 export function carryHint(config: RoomMapConfig, selectedId: string | null, ctx: RoomObjectContext): CarryHint | null {

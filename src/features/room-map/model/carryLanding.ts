@@ -13,8 +13,7 @@ import { ROOM_OBJECT_KINDS, type RoomObjectContext } from "./roomObjectKinds";
  * plan, in metres. Furniture also takes the turn it was given while carried; the TV, a strip and a
  * Hue light keep their own axes. Each kind lands through the same adapter typed positions use, so it
  * stops at the walls and a zone-bound light stays in its zone. Null for what cannot move or is locked.
- * `raised` takes the TV or a Hue light up or down as well: the TV's centre to `centreY`, a light by
- * `rise` metres from the height it was drawn at.
+ * `raised` sets the TV's centre to `centreY`, or lifts a light by `rise` from where it was drawn.
  */
 export function landCarried(
   config: RoomMapConfig,

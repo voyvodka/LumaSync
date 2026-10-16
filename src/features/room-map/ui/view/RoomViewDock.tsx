@@ -24,14 +24,12 @@ export interface RoomViewDockProps {
   /** The light shown as selected, or null for the row. */
   selected: ViewLight | null;
   strips: readonly UsbStripPlacement[];
-  /** The screen, whose backlight strip is how it blinks and reads. */
   tv: TvAnchorPlacement | null;
   stripStatus: UsbStripStatus["stripStatus"];
   hueBridgeStatus: UsbStripConnectionStatus;
   identify: HueIdentify;
   blink: StripBlink;
   canIdentify: boolean;
-  /** How bright the room's lights are, 0–1; null while they are off. */
   level: number | null;
   /** Hue is streaming: the bridge will not blink a light, so the card says so before the press. */
   hueStreaming?: boolean;

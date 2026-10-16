@@ -119,8 +119,7 @@ describe("buildGlow — lit shapes", () => {
 describe("poolTexture", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  // WebKit dithered a drawn gradient in premultiplied space, and the straight-alpha upload wrapped
-  // a channel past 255 to near 0: the pools came out freckled with primaries.
+  // A drawn gradient freckled WebKit's pools with primaries.
   it("is written as white texels with a falling alpha, never drawn as a gradient", () => {
     let written: Uint8ClampedArray | null = null;
     const ctx = {
