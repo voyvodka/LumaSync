@@ -22,8 +22,7 @@ const STRIP_MARGIN = 0.025;
 const STRIP_LINE = 0.012;
 const CORNER_STEPS = 6;
 
-/** A rounded-rectangle band `line` wide around a `w` × `d` rectangle, in the xy plane. Stitched
- *  from two matching outlines by hand: `ShapeGeometry` brought three's whole curve family along. */
+/** Stitched by hand: `ShapeGeometry` pulled three's whole curve family into the chunk. */
 export function floorBand(w: number, d: number, margin = MARGIN, line = LINE): BufferGeometry {
   const hw = w / 2 + margin;
   const hd = d / 2 + margin;
@@ -31,7 +30,6 @@ export function floorBand(w: number, d: number, margin = MARGIN, line = LINE): B
   const outline = (hw: number, hd: number, r: number) =>
     [1, 1, -1, -1].flatMap((sx, i) => {
       const sy = i === 0 || i === 3 ? -1 : 1;
-      // Into the corner along one side and out along the next, turning anticlockwise.
       const [ax, ay, bx, by] = i % 2 ? [sx * hw, sy * (hd - r), sx * (hw - r), sy * hd] : [sx * (hw - r), sy * hd, sx * hw, sy * (hd - r)];
       return Array.from({ length: CORNER_STEPS + 1 }, (_, k) => {
         const t = k / CORNER_STEPS;

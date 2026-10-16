@@ -32,8 +32,7 @@ export const TYPE_DOT_COLOR: Record<RoomObjectKind, string> = {
   image: "var(--lm-ink-faint)",
 };
 
-/** A zone's colour as hex, for what cannot read a CSS variable: a palette token, a stored hex, or
- *  the `index`th swatch for anything else. */
+/** Hex for what cannot read a CSS variable; anything unrecognised is the `index`th swatch. */
 export function zoneHex(colour: string | null | undefined, index: number): string {
   const swatch = zoneSwatchIndex(colour);
   if (swatch >= 0) return ZONE_TOKEN_HEX[swatch]!;

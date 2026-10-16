@@ -40,8 +40,7 @@ export interface UseRoomMapHueZonesReturn {
   handleAddHueZone: () => void;
   handleDeleteHueZone: (zoneId: string) => void;
   handleRenameHueZone: (zoneId: string, name: string) => void;
-  /** `dropped`: the light as it was put down, and where in the zone that is; without it, the stored
-   *  light at the zone's middle. */
+  /** Without `dropped`, the stored light lands at the zone's middle. */
   handleAssignChannelToZone: (channelIndex: number, targetZoneId: string | null, dropped?: DroppedLight) => void;
   handleHueZoneCenterChange: (zoneId: string, centerX: number, centerY: number) => void;
   handleHueZoneUpdate: (zoneId: string, patch: Partial<HueZone>) => void;
@@ -190,8 +189,6 @@ export function useRoomMapHueZones({
       const entertainmentAreaId =
         targetZone?.entertainmentAreaId ?? hueAreaId ?? "";
 
-      // From the menu it lands on the zone's middle, inside the dashed bounds; dropped into the zone,
-      // where it was put down.
       const nextChannels = replaceHueChannel(
         config.hueChannels,
         targetZoneId

@@ -20,8 +20,7 @@ import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 
 export const BLOOM_LAYER = 1;
-/** A `userData` flag: an editing aid hidden from the glow pass, whose black stand-in would write
- *  depth over the bulbs it is drawn around. */
+/** `userData` flag: hidden from the glow pass, whose black stand-in writes depth over the bulbs. */
 export const OVERLAY = "overlay";
 
 const STRENGTH = 1.4;

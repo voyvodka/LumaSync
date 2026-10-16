@@ -1201,7 +1201,6 @@ export default function RoomView3D({
   label: string;
   /** The room map's selection, marked in the room. */
   selectedId?: string | null;
-  /** The Hue zones outlined while the room is edited. */
   zones?: ZoneMarks | null;
   /** Pixels at the view's foot that something floats over; the room is fitted above them. */
   bottomInset?: number;

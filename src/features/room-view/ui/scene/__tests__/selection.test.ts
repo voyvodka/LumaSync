@@ -86,7 +86,6 @@ describe("floorBand", () => {
       expect(twice).toBeGreaterThan(0);
       area += twice / 2;
     }
-    // About the outline's length times the line, the rounded corners taking a little off.
     expect(area).toBeGreaterThan(2 * (2.2 + 1.2) * 0.03 * 0.9);
     expect(area).toBeLessThan(2 * (2.2 + 1.2) * 0.03);
   });

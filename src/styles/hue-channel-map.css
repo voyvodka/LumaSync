@@ -54,9 +54,7 @@
   }
 }
 
-/* A light's name under its dot, for the selected one and the one under the pointer or the keys.
-   Scaled against the plan's zoom so it reads at one size; the dot's `title` it replaces waited a
-   second and covered the dot. */
+/* Replaces the dot's `title`, which waited a second and covered the dot. */
 .lm-room-hue-name {
   position: absolute;
   top: 100%;

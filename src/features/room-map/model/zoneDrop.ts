@@ -1,9 +1,7 @@
 import type { HueChannelPlacement, HueZone, ZoneRelativePosition } from "@/shared/contracts/roomMap";
 import { clamp } from "@/shared/lib/math";
 
-/** The zone a loose light was put down inside, and where in it, so it joins the zone at the spot
- *  it was dropped on rather than at the zone's middle. The smallest zone wins where they overlap;
- *  a light of another area never joins. Null for a light already in a zone. */
+/** Where it lands in the zone, so it joins at the spot it was dropped on; the smallest zone wins. */
 export function zoneDrop(channel: HueChannelPlacement, zones: readonly HueZone[]): { zoneId: string; at: ZoneRelativePosition } | null {
   if (channel.zoneId) return null;
   const area = channel.entertainmentAreaId;
@@ -21,8 +19,7 @@ export function zoneDrop(channel: HueChannelPlacement, zones: readonly HueZone[]
   };
 }
 
-/** The zones a light can be dropped into: the ones drawn. With the zones toggle off only the zone
- *  being edited is, and a hidden one took the light unseen. */
+/** Only drawn zones take a light: a hidden one took it unseen. */
 export function dropZones(zones: readonly HueZone[], activeZoneId: string | null, showAll: boolean): readonly HueZone[] {
   return showAll ? zones : zones.filter((zone) => zone.id === activeZoneId);
 }

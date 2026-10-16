@@ -10,8 +10,7 @@ import type { RoomMapDocument } from "./useRoomMapDocument";
 /**
  * Where a piece carried across the 3D room is put down on the plan, inside the walls: the scene's
  * origin is the room's middle, the plan's its top-left corner. False when it is not put down, so
- * the view puts it back. `dropInto` is offered a Hue light as it lands and takes it over by
- * returning true, as a zone it was dropped inside does.
+ * the view puts it back. `dropInto` takes over a landing Hue light by returning true.
  */
 export function useLandCarried(
   doc: Pick<RoomMapDocument, "apply" | "config" | "hueAreaId" | "scopedConfig">,

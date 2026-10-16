@@ -9,8 +9,7 @@ export interface ZoneMarks {
   others: readonly string[];
 }
 
-/** The zone being edited, or else the one the selected light is bound to; the area's other zones
- *  with the plan's zones toggle, as the plan draws them. */
+/** The edited zone, else the selected light's; the area's others with the zones toggle. */
 export function zoneMarks(
   config: RoomMapConfig,
   areaZoneIds: readonly string[],

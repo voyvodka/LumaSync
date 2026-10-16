@@ -1,6 +1,4 @@
-// The Hue zones while the room is edited: each one's box, drawn in its colour, the one being worked
-// on brighter and named. Built with the scene and only shown or hidden after, so picking a zone
-// costs no build.
+// Built with the scene and only shown or hidden after, so picking a zone builds nothing.
 import {
   BackSide,
   BoxGeometry,
@@ -28,9 +26,7 @@ import { zoneSceneBox } from "../../model/roomSpace";
 import { OVERLAY } from "./bloom";
 import { floorBand } from "./selection";
 
-/** The name's height on screen, whatever the zoom. */
 const LABEL_PX = 22;
-/** How far over the box's highest corner on screen the name floats. */
 const LABEL_LIFT_PX = 12;
 const DASH_PX = 8;
 const GAP_PX = 6;
@@ -53,7 +49,6 @@ export interface ZoneBoxes {
   /** True when what is shown changed. */
   mark(marks: ZoneMarks | null): boolean;
   setPixelsPerMetre(ppm: number): void;
-  /** With `camera`, the name keeps clear of the view's top edge. */
   orient(cameraQuaternion: Quaternion, camera?: Camera): void;
 }
 
@@ -117,7 +112,6 @@ export function buildZoneBoxes(zones: readonly HueZone[], dims: RoomDimensions):
       new LineDashedMaterial({ color: new Color(colour).lerp(new Color(0xffffff), 0.3), transparent: true, depthWrite: false, toneMapped: false }),
     );
     edges.computeLineDistances();
-    // Where the zone meets the floor, drawn as the selection's outline is.
     const foot = new Mesh(
       floorBand(w, d, 0, 0.025),
       new MeshBasicMaterial({ color: colour, transparent: true, depthWrite: false, side: DoubleSide, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -4 }),
@@ -172,8 +166,7 @@ export function buildZoneBoxes(zones: readonly HueZone[], dims: RoomDimensions):
         label.scale.setScalar(LABEL_PX / ppm);
       }
     },
-    // Over the top corner highest on screen, as long as the name stays in view: over the top face's
-    // middle it sat on the lamp inside, and over a corner past the top edge it was cut off.
+    // The highest top corner still in view: over the top's middle the name sat on the lamp inside.
     orient(q, camera) {
       up.set(0, 1, 0).applyQuaternion(q);
       camera?.updateMatrixWorld();

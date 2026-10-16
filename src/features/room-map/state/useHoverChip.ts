@@ -1,7 +1,6 @@
 import { type RefObject, useCallback, useRef, useState } from "react";
 
-/** What the 3D room has under the pointer, and a chip following it. Placed by ref, not state:
- *  only a new object under the pointer re-renders. */
+/** Placed by ref, not state: only a new object under the pointer re-renders. */
 export function useHoverChip(rootRef: RefObject<HTMLElement | null>) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const chip = useRef<HTMLDivElement | null>(null);
