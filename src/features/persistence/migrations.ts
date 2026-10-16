@@ -187,7 +187,7 @@ function migrateV10ToV11(state: ShellState): ShellState {
   const hueChannels = (room.hueChannels ?? []).map((ch) => {
     const zone = ch.zoneId ? room.zones.find((z) => z.id === ch.zoneId) : undefined;
     const rel = ch.zoneRelativePosition;
-    if (!zone || !rel || !finite(zone) || (zone.centerZ === 0 && zone.scaleZ === 1)) return ch;
+    if (!zone || !rel || !Number.isFinite(rel.z) || !finite(zone) || (zone.centerZ === 0 && zone.scaleZ === 1)) return ch;
     return { ...ch, zoneRelativePosition: { ...rel, z: unit(zone.centerZ + zone.scaleZ * rel.z) } };
   });
   const zones = room.zones.map((z) => (finite(z) ? { ...z, centerZ: 0, scaleZ: 1 } : z));

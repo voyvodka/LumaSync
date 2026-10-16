@@ -71,6 +71,12 @@ describe("migrateV10ToV11 — zones span floor to ceiling", () => {
     expect(out.roomMap!.hueChannels[0]!.zoneRelativePosition!.z).toBe(1);
   });
 
+  it("leaves a light with no relative height as it is rather than writing NaN", () => {
+    const broken = { ...light(0, "a", 0), zoneRelativePosition: { x: 0, y: 0 } as HueChannelPlacement["zoneRelativePosition"] };
+    const out = migrateShellState(v10([zone("a", 0, 0.5)], [broken]));
+    expect(out.roomMap!.hueChannels[0]).toBe(broken);
+  });
+
   it("is a no-op the second time and on a state with no room map", () => {
     const once = migrateShellState(v10([zone("a", 0, 0.5)], [light(0, "a", 1)]));
     expect(migrateShellState(once)).toBe(once);
