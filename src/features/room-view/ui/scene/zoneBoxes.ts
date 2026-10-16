@@ -1,14 +1,13 @@
 // Built with the scene and only shown or hidden after, so picking a zone builds nothing.
 import {
   BackSide,
-  BoxGeometry,
+  BufferGeometry,
   type Camera,
   CanvasTexture,
-  Color,
   DoubleSide,
-  EdgesGeometry,
+  Float32BufferAttribute,
   Group,
-  LineDashedMaterial,
+  LineBasicMaterial,
   LineSegments,
   Mesh,
   MeshBasicMaterial,
@@ -28,9 +27,10 @@ import { floorBand } from "./selection";
 
 const LABEL_PX = 22;
 const LABEL_LIFT_PX = 12;
-const DASH_PX = 8;
-const GAP_PX = 6;
 const FLOOR_LIFT = 0.006;
+// A zone spans the room's height, and a box drawn to the ceiling read as a cage over the furniture:
+// a low wall fading upward marks the area the way the cut walls mark the room.
+const WALL_M = 0.45;
 /** Clear of the top bar and the carry hint under it. */
 const TOP_NDC = 0.72;
 const TOP_CORNERS = [
@@ -39,10 +39,9 @@ const TOP_CORNERS = [
   [1, -1],
   [1, 1],
 ] as const;
-// One side only: both faces of a box stacked every pixel twice and read at double the opacity.
-const FILL = { active: 0.06, other: 0.02 };
-const EDGE = { active: 0.5, other: 0.3 };
-const FOOT = { active: 0.9, other: 0.3 };
+const WALL_OPACITY = 0.16;
+const POST_OPACITY = 0.6;
+const FOOT = { active: 0.9, other: 0.35 };
 
 export interface ZoneBoxes {
   group: Group;
@@ -94,6 +93,54 @@ function nameTexture(name: string, colour: string): { texture: CanvasTexture; as
   return { texture, aspect: canvas.width / height };
 }
 
+const SIDES = [
+  [-1, 1],
+  [1, 1],
+  [1, -1],
+  [-1, -1],
+] as const;
+
+/** The four sides of a `w` × `d` footprint raised `h`, opaque at the floor and clear at the top.
+ *  Wound outward and drawn from the back, so only the far sides show and nothing covers the room. */
+function fadingWall(w: number, d: number, h: number): BufferGeometry {
+  const position: number[] = [];
+  const colour: number[] = [];
+  for (let i = 0; i < 4; i++) {
+    const [px, pz] = SIDES[i]!;
+    const [qx, qz] = SIDES[(i + 1) % 4]!;
+    const p = [(px * w) / 2, (pz * d) / 2];
+    const q = [(qx * w) / 2, (qz * d) / 2];
+    for (const [x, y, z] of [
+      [p[0], 0, p[1]],
+      [q[0], 0, q[1]],
+      [q[0], h, q[1]],
+      [p[0], 0, p[1]],
+      [q[0], h, q[1]],
+      [p[0], h, p[1]],
+    ] as const) {
+      position.push(x!, y, z!);
+      colour.push(1, 1, 1, y === 0 ? 1 : 0);
+    }
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(position, 3));
+  geometry.setAttribute("color", new Float32BufferAttribute(colour, 4));
+  return geometry;
+}
+
+function cornerPosts(w: number, d: number, h: number): BufferGeometry {
+  const position: number[] = [];
+  const colour: number[] = [];
+  for (const [sx, sz] of SIDES) {
+    position.push((sx * w) / 2, 0, (sz * d) / 2, (sx * w) / 2, h, (sz * d) / 2);
+    colour.push(1, 1, 1, 1, 1, 1, 1, 0);
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(position, 3));
+  geometry.setAttribute("color", new Float32BufferAttribute(colour, 4));
+  return geometry;
+}
+
 export function buildZoneBoxes(zones: readonly HueZone[], dims: RoomDimensions): ZoneBoxes {
   const group = new Group();
   group.visible = false;
@@ -104,20 +151,16 @@ export function buildZoneBoxes(zones: readonly HueZone[], dims: RoomDimensions):
     const w = Math.max(size.x, 0.01);
     const h = Math.max(size.y, 0.01);
     const d = Math.max(size.z, 0.01);
-    const box = new BoxGeometry(w, h, d);
-    const fill = new Mesh(box, new MeshBasicMaterial({ color: colour, transparent: true, depthWrite: false, side: BackSide, toneMapped: false }));
-    // Lightened so the dashes hold against a lit floor.
-    const edges = new LineSegments(
-      new EdgesGeometry(box),
-      new LineDashedMaterial({ color: new Color(colour).lerp(new Color(0xffffff), 0.3), transparent: true, depthWrite: false, toneMapped: false }),
-    );
-    edges.computeLineDistances();
+    const wallH = Math.min(h, WALL_M);
+    const tint = { color: colour, transparent: true, depthWrite: false, toneMapped: false, vertexColors: true };
+    const wall = new Mesh(fadingWall(w, d, wallH), new MeshBasicMaterial({ ...tint, side: BackSide, opacity: WALL_OPACITY }));
+    const posts = new LineSegments(cornerPosts(w, d, wallH), new LineBasicMaterial({ ...tint, opacity: POST_OPACITY }));
     const foot = new Mesh(
       floorBand(w, d, 0, 0.025),
       new MeshBasicMaterial({ color: colour, transparent: true, depthWrite: false, side: DoubleSide, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -4 }),
     );
     foot.rotation.x = -Math.PI / 2;
-    foot.position.y = FLOOR_LIFT - centre.y;
+    foot.position.y = FLOOR_LIFT;
     const { texture, aspect } = nameTexture(zone.name, colour);
     // Over everything, so a zone behind a wall or the sofa is still named.
     const label = new Mesh(
@@ -126,11 +169,12 @@ export function buildZoneBoxes(zones: readonly HueZone[], dims: RoomDimensions):
     );
     label.renderOrder = 11;
     const one = new Group();
-    one.position.set(centre.x, centre.y, centre.z);
-    one.add(fill, edges, foot, label);
+    // On the floor, whatever height the zone spans: it marks a patch of floor.
+    one.position.set(centre.x, 0, centre.z);
+    one.add(wall, posts, foot, label);
     one.visible = false;
     group.add(one);
-    return { id: zone.id, one, fill, edges, foot, label, half: new Vector3(w / 2, h / 2, d / 2) };
+    return { id: zone.id, one, wall, posts, foot, label, half: new Vector3(w / 2, wallH, d / 2) };
   });
 
   let shown = "";
@@ -145,12 +189,13 @@ export function buildZoneBoxes(zones: readonly HueZone[], dims: RoomDimensions):
       if (key === shown) return false;
       shown = key;
       let any = false;
-      for (const { id, one, fill, edges, foot, label } of built) {
+      for (const { id, one, wall, posts, foot, label } of built) {
         const active = marks?.active === id;
         one.visible = active || Boolean(marks?.others.includes(id));
         any ||= one.visible;
-        fill.material.opacity = active ? FILL.active : FILL.other;
-        edges.material.opacity = active ? EDGE.active : EDGE.other;
+        // The others are their footprint alone, so several zones leave the floor readable.
+        wall.visible = active;
+        posts.visible = active;
         foot.material.opacity = active ? FOOT.active : FOOT.other;
         label.visible = active;
       }
@@ -160,11 +205,7 @@ export function buildZoneBoxes(zones: readonly HueZone[], dims: RoomDimensions):
     setPixelsPerMetre(next) {
       if (next === ppm || next <= 0) return;
       ppm = next;
-      for (const { edges, label } of built) {
-        edges.material.dashSize = DASH_PX / ppm;
-        edges.material.gapSize = GAP_PX / ppm;
-        label.scale.setScalar(LABEL_PX / ppm);
-      }
+      for (const { label } of built) label.scale.setScalar(LABEL_PX / ppm);
     },
     // The highest top corner still in view: over the top's middle the name sat on the lamp inside.
     orient(q, camera) {
