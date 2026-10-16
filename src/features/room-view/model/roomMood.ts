@@ -1,5 +1,6 @@
 // Ambilight and an effect's motion are placeholders here until the live colours reach the view.
 import { DEFAULT_EFFECT, type LightingModeConfig, LIGHTING_MODE_KIND } from "@/shared/contracts/mode";
+import { ROOM_AMBIENT_DEFAULT } from "@/shared/contracts/shell";
 import { kelvinToRgb } from "@/shared/lib/color";
 import { paletteOf, paletteStops } from "@/features/mode/model/effectSwatch";
 
@@ -12,9 +13,11 @@ export interface MoodLevels {
   ambient: number;
   /** The LED strips and the screen's backlight: under Ambilight they carry the picture at full. */
   strip: number;
+  /** The room with no lamp on, 0 night to 1 day: the Room settings "Ambient light". */
+  daylight: number;
 }
 
-export const MOOD_LEVELS = ["level", "ambient", "strip"] as const satisfies ReadonlyArray<keyof MoodLevels>;
+export const MOOD_LEVELS = ["level", "ambient", "strip", "daylight"] as const satisfies ReadonlyArray<keyof MoodLevels>;
 
 export interface RoomMood extends MoodLevels {
   /** As the user set it; `level` is what is drawn. */
@@ -33,6 +36,10 @@ const CINEMA_SHARE = 0.2;
 const CINEMA_AMBIENT = 0.25;
 const EFFECT_AMBIENT = 0.55;
 const SKY_NIGHT = { top: 0x121d3d, mid: 0x0a1024 };
+const SKY_DUSK = { top: 0x3a3550, mid: 0x171525 };
+const SKY_DAY = { top: 0x8fa3c4, mid: 0x3a4658 };
+/** The stored default lands on dusk; the scene's light rig bends at the same point. */
+export const DUSK_AT = ROOM_AMBIENT_DEFAULT / 100;
 /** At 1% a Hue light still glows: the room must not read as off. */
 const LEVEL_FLOOR = 0.12;
 
@@ -62,16 +69,32 @@ function skyOf(colour: number): RoomMood["sky"] {
   return { top: mix(colour, 0x0b0b12, 0.8), mid: mix(colour, 0x07070c, 0.93) };
 }
 
+function mixSky(a: RoomMood["sky"], b: RoomMood["sky"], t: number): RoomMood["sky"] {
+  return { top: mix(a.top, b.top, t), mid: mix(a.mid, b.mid, t) };
+}
+
+/** How far past dusk toward day, 0 at or below the default. */
+export function pastDusk(daylight: number): number {
+  return Math.max(0, (daylight - DUSK_AT) / (1 - DUSK_AT));
+}
+
+function unlitSky(daylight: number): RoomMood["sky"] {
+  return daylight <= DUSK_AT ? mixSky(SKY_NIGHT, SKY_DUSK, daylight / DUSK_AT) : mixSky(SKY_DUSK, SKY_DAY, pastDusk(daylight));
+}
+
 const level = (brightness: number | undefined) => LEVEL_FLOOR + (1 - LEVEL_FLOOR) * Math.min(Math.max(brightness ?? 1, 0), 1);
 
-export function roomMood(mode: LightingModeConfig | null): RoomMood {
+export function roomMood(mode: LightingModeConfig | null, daylight = DUSK_AT): RoomMood {
   // The control state keeps every mode's last payload through a switch: read the running kind's.
   const payload =
     mode?.kind === LIGHTING_MODE_KIND.SOLID ? mode.solid : mode?.kind === LIGHTING_MODE_KIND.EFFECT ? mode.effect : mode?.ambilight;
-  return { ...moodOf(mode), brightness: mode?.kind === LIGHTING_MODE_KIND.OFF ? 0 : (payload?.brightness ?? 1) };
+  const mood = moodOf(mode);
+  const sky =
+    mode?.kind === LIGHTING_MODE_KIND.OFF ? unlitSky(daylight) : mixSky(mood.sky, SKY_DAY, pastDusk(daylight) * (1 - mood.ambient));
+  return { ...mood, sky, daylight, brightness: mode?.kind === LIGHTING_MODE_KIND.OFF ? 0 : (payload?.brightness ?? 1) };
 }
 
-function moodOf(mode: LightingModeConfig | null): Omit<RoomMood, "brightness"> {
+function moodOf(mode: LightingModeConfig | null): Omit<RoomMood, "brightness" | "daylight"> {
   if (!mode) return { level: 1, ambient: 1, strip: 1, lamp: WARM, sky: SKY_WARM };
   switch (mode.kind) {
     case LIGHTING_MODE_KIND.OFF:

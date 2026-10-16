@@ -41,6 +41,7 @@ const store = vi.hoisted(() => ({
 
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
+    onSaved: () => () => {},
     load: () => Promise.resolve(store.state),
     save: (partial: Record<string, unknown>) => store.save(partial),
     update: async (fn: (current: Record<string, unknown>) => Record<string, unknown> | null) => {

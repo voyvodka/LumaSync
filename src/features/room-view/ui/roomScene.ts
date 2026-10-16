@@ -47,7 +47,7 @@ import { hueChannelScenePoint, roomToScene, tvMountHeight } from "../model/roomS
 import { contactShadow, floorParts, roomLights, WALL_THICKNESS, wallFootShade, wallGeometry } from "./scene/environment";
 import { classifyFurniture, contactShade, modelTop, surfaceTop } from "../model/furnitureModel";
 import { type LampFamily, ONE_SIDED } from "../model/lampFamily";
-import { type MoodLevels, paletteColour } from "../model/roomMood";
+import { DUSK_AT, type MoodLevels, paletteColour, pastDusk } from "../model/roomMood";
 import { furnitureParts } from "./scene/furniture";
 import { buildGlow, type Lamp, poolTexture, rimTexture, type WallPlane } from "./scene/glow";
 import { PALETTE } from "./scene/palette";
@@ -64,6 +64,31 @@ const STRIP_GLOW = 0xffc46b;
 const BACKLIGHT_GAIN = 1.6;
 const LAMP_BOUNCE = 0.35;
 const PALETTE_BOUNCE_SATURATION = 0.5;
+/** Full day still leaves lit lamps half their say in the room's light. */
+const DAY_OVER_LAMPS = 0.5;
+
+interface Rig {
+  sky: Color;
+  ground: Color;
+  hemi: number;
+  key: number;
+  keyColour: Color;
+  fill: number;
+}
+
+function scratchRig(): Rig {
+  return { sky: new Color(), ground: new Color(), hemi: 0, key: 0, keyColour: new Color(), fill: 0 };
+}
+
+/** `out` may be `a`: setMood runs every frame of an ease, so nothing is allocated here. */
+function lerpRig(out: Rig, a: Rig, b: Rig, t: number): void {
+  out.sky.lerpColors(a.sky, b.sky, t);
+  out.ground.lerpColors(a.ground, b.ground, t);
+  out.keyColour.lerpColors(a.keyColour, b.keyColour, t);
+  out.hemi = a.hemi + (b.hemi - a.hemi) * t;
+  out.key = a.key + (b.key - a.key) * t;
+  out.fill = a.fill + (b.fill - a.fill) * t;
+}
 const UNLIT_STRIP = new Color(0x2a2a2e);
 /** A wall between the camera and the room drops to this, so the room reads as a cutaway. */
 const WALL_CUT_HEIGHT = 0.2;
@@ -159,7 +184,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   }
 
   const models = classifyFurniture(config);
-  const byFinish = new Map<FinishKind, { parts: Part[]; owners: (string | null)[] }>();
+  const byFinish = new Map<string, { kind: FinishKind; castShadow: boolean; parts: Part[]; owners: (string | null)[] }>();
   const shadows: BufferGeometry[] = [wallFootShade(edges)];
   const shadowOwners: (string | null)[] = [null];
   const liftables = new Map<string, Liftable>();
@@ -173,11 +198,13 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   const sort = (parts: readonly Part[], owner: string | null = null) => {
     for (const part of parts) {
       const kind = part.finish ?? (SATIN.has(part.color) ? "satin" : "matte");
-      const list = byFinish.get(kind);
+      const castShadow = part.castShadow !== false;
+      const key = castShadow ? kind : `${kind}:overhead`;
+      const list = byFinish.get(key);
       if (list) {
         list.parts.push(part);
         list.owners.push(owner);
-      } else byFinish.set(kind, { parts: [part], owners: [owner] });
+      } else byFinish.set(key, { kind, castShadow, parts: [part], owners: [owner] });
     }
   };
   for (const item of config.furniture) {
@@ -231,7 +258,8 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
       id: hueChannelObjectId(channel.channelIndex),
       kind: "light",
       centre: fixture.glow.at,
-      half: [rx, ry, rz],
+      // A downlight's lens is a centimetre thick: as thin, it was hard to click.
+      half: [rx, Math.max(ry, 0.04), rz],
       angle: 0,
     });
     const outside = corners !== null && outsideOutline(fixture.glow.at.x + W / 2, fixture.glow.at.z + D / 2, corners);
@@ -316,10 +344,17 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   const defines = options.coldKey !== undefined ? { SPIKE_COLD_KEY: options.coldKey } : undefined;
   // Counted before merging: a part goes in unindexed, a shadow as it is.
   const into = (owner: string) => liftables.get(owner);
-  for (const [kind, { parts, owners }] of byFinish) {
+  const materials = new Map<FinishKind, Material>();
+  for (const { kind, castShadow, parts, owners } of byFinish.values()) {
     const counts = parts.map(({ geometry }) => geometry.index?.count ?? geometry.getAttribute("position").count);
-    const mesh = mergeParts(parts, finishMaterial(kind, { lambert: options.lambert, defines }));
+    let material = materials.get(kind);
+    if (!material) {
+      material = finishMaterial(kind, { lambert: options.lambert, defines });
+      materials.set(kind, material);
+    }
+    const mesh = mergeParts(parts, material);
     if (!mesh) continue;
+    mesh.castShadow = castShadow;
     scene.add(mesh);
     spansOf(mesh, counts, owners, into);
   }
@@ -406,34 +441,44 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   const mark = buildSelectionMark(pickables);
   scene.add(mark.group);
 
-  // A room with no lamps keeps its evening light whatever the mode.
-  const evening = { sky: lights.hemisphere.color.clone(), ground: lights.hemisphere.groundColor.clone(), hemi: lights.hemisphere.intensity, key: lights.key.intensity, keyColour: lights.key.color.clone(), fill: lights.fill.intensity };
+  // A room with no lamps keeps its evening light whatever the mode; the Ambient light moves it
+  // toward night or day. A lamp-lit room's unlit end is a dusk, so the lamps going out reads.
+  const evening: Rig = { sky: lights.hemisphere.color.clone(), ground: lights.hemisphere.groundColor.clone(), hemi: lights.hemisphere.intensity, key: lights.key.intensity, keyColour: lights.key.color.clone(), fill: lights.fill.intensity };
   const rigs = {
-    // Far apart so the lamps going out reads, yet Off keeps a cool moonlight that holds walls and floor.
     lit: { sky: new Color(0xffe4c8), ground: new Color(0x6a4c38), hemi: 0.68, key: 0.6, keyColour: evening.keyColour, fill: 0.22 },
+    // Off at night keeps a cool moonlight that holds walls and floor.
     night: { sky: new Color(0x8d9ccc), ground: new Color(0x1c1a26), hemi: 0.25, key: 0.4, keyColour: new Color(0x9fb4ff), fill: 0.08 },
-  };
-  const litSky = new Color();
+    dusk: { sky: new Color(0xb4bbdc), ground: new Color(0x2c2422), hemi: 0.5, key: 0.75, keyColour: new Color(0xd8d6f2), fill: 0.18 },
+    day: { sky: new Color(0xf2f5ff), ground: new Color(0x6e5c4a), hemi: 1.15, key: 1.7, keyColour: new Color(0xfff6ea), fill: 0.5 },
+  } satisfies Record<string, Rig>;
+  const unlit = scratchRig();
+  const target = scratchRig();
   const bounce = new Color();
   const hsl = { h: 0, s: 0, l: 0 };
-  const setMood = (lampColour: number | null, { level, ambient, strip }: MoodLevels, palette?: readonly number[]) => {
-    const from = lampLit ? rigs.night : evening;
-    const to = lampLit ? rigs.lit : evening;
-    const k = lampLit ? ambient : 1;
-    // The bounce takes some of the lamps' colour, so a red room is not lit by a peach sky.
-    // An effect's mean is a pure-RGB average: at full strength its teal washed the wood out.
-    if (lampColour !== null) bounce.set(lampColour);
-    if (palette && palette.length > 1) {
-      bounce.getHSL(hsl);
-      bounce.setHSL(hsl.h, hsl.s * PALETTE_BOUNCE_SATURATION, hsl.l);
+  const setMood = (lampColour: number | null, { level, ambient, strip, daylight }: MoodLevels, palette?: readonly number[]) => {
+    const middle = lampLit ? rigs.dusk : evening;
+    if (daylight <= DUSK_AT) lerpRig(unlit, rigs.night, middle, daylight / DUSK_AT);
+    else lerpRig(unlit, middle, rigs.day, pastDusk(daylight));
+    if (lampLit) {
+      lerpRig(target, rigs.lit, rigs.day, pastDusk(daylight) * DAY_OVER_LAMPS);
+      // The bounce takes some of the lamps' colour, so a red room is not lit by a peach sky.
+      // An effect's mean is a pure-RGB average: at full strength its teal washed the wood out.
+      if (lampColour !== null) {
+        bounce.set(lampColour);
+        if (palette && palette.length > 1) {
+          bounce.getHSL(hsl);
+          bounce.setHSL(hsl.h, hsl.s * PALETTE_BOUNCE_SATURATION, hsl.l);
+        }
+        target.sky.lerp(bounce, LAMP_BOUNCE);
+      }
+      lerpRig(unlit, unlit, target, ambient);
     }
-    const sky = to === rigs.lit && lampColour !== null ? litSky.copy(to.sky).lerp(bounce, LAMP_BOUNCE) : to.sky;
-    lights.hemisphere.color.lerpColors(from.sky, sky, k);
-    lights.hemisphere.groundColor.lerpColors(from.ground, to.ground, k);
-    lights.hemisphere.intensity = from.hemi + (to.hemi - from.hemi) * k;
-    lights.key.color.lerpColors(from.keyColour, to.keyColour, k);
-    lights.key.intensity = from.key + (to.key - from.key) * k;
-    lights.fill.intensity = from.fill + (to.fill - from.fill) * k;
+    lights.hemisphere.color.copy(unlit.sky);
+    lights.hemisphere.groundColor.copy(unlit.ground);
+    lights.hemisphere.intensity = unlit.hemi;
+    lights.key.color.copy(unlit.keyColour);
+    lights.key.intensity = unlit.key;
+    lights.fill.intensity = unlit.fill;
     real?.paint(lampColour, level, palette);
     glow?.paint(lampColour, level, palette);
     spill?.color.set(lampColour ?? STRIP_GLOW).multiplyScalar(strip * BACKLIGHT_GAIN);
@@ -441,7 +486,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
       material.color.set(paletteColour(palette, i + 1) ?? lampColour ?? STRIP_GLOW).lerp(UNLIT_STRIP, 1 - strip),
     );
   };
-  setMood(null, { level: 1, ambient: 1, strip: 1 });
+  setMood(null, { level: 1, ambient: 1, strip: 1, daylight: DUSK_AT });
 
   return {
     scene,

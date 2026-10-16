@@ -486,8 +486,8 @@ light and glow are built into the scene, so it moves as the amber frame alone.
   overhead in a dashed circle, as a reflected ceiling plan draws what is above the floor, and its
   name reads "— overhead".
 - **The running mode sets the room's mood.** `roomMood` (`room-view/model/roomMood.ts`) reads what
-  runs from the lighting control state: Off leaves the lamps dark — the rig falls to a cool night,
-  the bulbs to frosted glass, the TV's backlight out — under a navy sky; Solid lights every lamp in
+  runs from the lighting control state: Off leaves the lamps dark — the rig falls to the unlit room (below),
+  the bulbs to frosted glass, the TV's backlight out; Solid lights every lamp in
   its colour at its brightness, never below a floor so 1% still glows; an effect spreads its palette
   over the room, lamp *i* and strip *i* taking stop *i* mod *n*, the sky and the backlight from the
   stops' mean, and the dock's discs draw the palette (the mean of a rainbow is a grey that read as
@@ -503,6 +503,16 @@ light and glow are built into the scene, so it moves as the amber frame alone.
   gradient, and the lamps ease over 900 ms without rebuilding the scene (`RoomScene.setMood`). The
   colours stay placeholders where the live feed is the truth (Ambilight, an effect's motion) until it
   reaches the view.
+- **How lit the unlit room is is the user's** — Room settings → Daylight, night (0) to day (100),
+  stored as `roomMapAmbient`, a whole percent (default 35). An unlit room has no one right
+  brightness: full night hid the room and its dark lamps, a fixed bright one made a room with its
+  lights off read as lit. The default lands on a dusk where both still read; past it the rig and sky
+  move toward a neutral day, and under it toward the moonlit night Off once always was. A room with
+  no lamps keeps its evening rig at the default. Lit lamps keep their say — a fully lit room's sky does
+  not change, a dimmer one gives way to the day by how dim it is, and at full day the rig is still
+  half the lamps' — so the setting mostly reads with
+  the lights off or dim. It eases with the lamps (`daylight` is a `MoodLevels` level), follows the
+  thumb in this window and is saved where it is let go (`previewPreference`), so a drag is one write.
 - **The camera travels to what is picked.** A light or the screen picked in the room or the dock
   draws the camera most of the way to it at once and then settles (760 ms, an exponential ease-out),
   framed 1.55× closer with its middle 70% of the way from the room's centre to the light, so the

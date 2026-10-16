@@ -9,8 +9,6 @@ import { hueOverhead } from "../model/hueHang";
 import { seatMovedLight } from "../model/lightSeat";
 import { ROOM_VIEW_3D_AVAILABLE, RoomView3DHost } from "@/features/room-view/ui/RoomView3DHost";
 import type { CameraCommand } from "@/features/room-view/ui/RoomView3D";
-import { roomMood } from "@/features/room-view/model/roomMood";
-import { useRunningLightingMode } from "@/features/mode/state/lightingControl";
 import type {
   FurniturePlacement,
   HueChannelPlacement,
@@ -46,6 +44,7 @@ import { useFurnitureModels } from "../state/useFurnitureModels";
 import { useLandCarried } from "../state/useLandCarried";
 import type { RoomMapDocument } from "../state/useRoomMapDocument";
 import { useRoomMapGridSettings } from "../state/useRoomMapGridSettings";
+import { useRoomMood } from "../state/useRoomMood";
 import { useUsbStripStatus } from "../state/useUsbStripStatus";
 import { FootprintWalls } from "./objects/FootprintWalls";
 import {
@@ -209,8 +208,7 @@ export function RoomMapEditor({
     [room3d, setStage, selectHueZone],
   );
   const [cameraCommand, setCameraCommand] = useState<CameraCommand | undefined>(undefined);
-  const running = useRunningLightingMode();
-  const mood = useMemo(() => roomMood(running), [running]);
+  const mood = useRoomMood();
   const landCarriedPiece = useLandCarried(doc);
 
   const { showGrid, setShowGrid, gridStrokeWidth, setGridStrokeWidth, showHueZones, setShowHueZones } = useRoomMapGridSettings();

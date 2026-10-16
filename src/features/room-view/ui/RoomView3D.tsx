@@ -24,7 +24,7 @@ import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 
 import { LAMP_COLOURS } from "../model/lampColours";
 import type { LampFamily } from "../model/lampFamily";
-import { MOOD_LEVELS as LEVELS, type RoomMood } from "../model/roomMood";
+import { DUSK_AT, MOOD_LEVELS as LEVELS, type RoomMood } from "../model/roomMood";
 import { pressStartsCarry } from "../model/carryIntent";
 import { lightPickHalf, pickObject } from "../model/picking";
 import { isWindowVisible } from "@/features/shell/windowVisibility";
@@ -33,6 +33,7 @@ import { prefersReducedMotion } from "@/shared/lib/motion";
 import { buildRoomScene, disposeScene, type RoomScene, type RoomSceneOptions } from "./roomScene";
 import { type Bloom, createBloom } from "./scene/bloom";
 import type { LiftedPiece } from "./scene/lift";
+import { type Plumb, PLUMB_FROM, plumbGuide } from "./scene/plumb";
 import styles from "./RoomView3D.module.css";
 
 /** What a measuring run varies; absent fields take the defaults below. */
@@ -235,7 +236,7 @@ function openRoomView(
       if (ready && frame === 0 && !closed && !away) frame = requestAnimationFrame(draw);
     };
     let shownRoom = "";
-    const moodNow = { colour: new Color(LAMP_COLOURS[0]), level: 1, ambient: 1, strip: 1 };
+    const moodNow = { colour: new Color(LAMP_COLOURS[0]), level: 1, ambient: 1, strip: 1, daylight: DUSK_AT };
     let moodFrame = 0;
     let moodTarget: RoomMood | null = null;
     const paintMood = () => room?.setMood(moodNow.colour.getHex(), moodNow, moodTarget?.palette);
@@ -327,6 +328,8 @@ function openRoomView(
       dx: number;
       dz: number;
       ghost: LineSegments;
+      /** A high light's line to the floor, riding in the ghost. */
+      plumb: Plumb | null;
       lifted: LiftedPiece | null;
       /** Lifted on the first move or turn, whether or not it could be. */
       tried: boolean;
@@ -407,6 +410,11 @@ function openRoomView(
         ghost.position.set(item.centre.x, Math.max(item.centre.y, 0.025), item.centre.z);
         ghost.rotation.y = -item.angle;
         ghost.visible = false;
+        const plumb = item.kind === "light" && item.centre.y - hy >= PLUMB_FROM ? plumbGuide(item.centre.y - hy, CARRY_COLOUR) : null;
+        if (plumb) {
+          plumb.group.position.y = -ghost.position.y;
+          ghost.add(plumb.group);
+        }
         room.scene.add(ghost);
         carry = {
           id,
@@ -414,6 +422,7 @@ function openRoomView(
           dx: item.centre.x - onFloor.x,
           dz: item.centre.z - onFloor.z,
           ghost,
+          plumb,
           lifted: null,
           tried: false,
           moved: false,
@@ -468,6 +477,7 @@ function openRoomView(
       orbit.enabled = true;
       canvas.style.cursor = "";
       c.ghost.removeFromParent();
+      c.plumb?.dispose();
       c.ghost.geometry.dispose();
       (c.ghost.material as LineBasicMaterial).dispose();
       // Landed, it stays where it was let go until the scene is rebuilt from the landed room; a

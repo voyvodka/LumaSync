@@ -1,4 +1,4 @@
-import { Box3, BoxGeometry, type BufferGeometry, DirectionalLight, InstancedMesh, type Material, Matrix4, Mesh, type MeshBasicMaterial, type Scene, type Texture, Vector3 } from "three";
+import { Box3, BoxGeometry, type BufferGeometry, DirectionalLight, HemisphereLight, InstancedMesh, type Material, Matrix4, Mesh, type MeshBasicMaterial, type Scene, type Texture, Vector3 } from "three";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { furnitureObjectId, hueChannelObjectId, TV_ANCHOR_OBJECT_ID } from "@/features/room-map/model/objectId";
@@ -75,6 +75,43 @@ describe("buildRoomScene — draw budget", () => {
     });
     disposeScene(scene.scene);
     expect(fixtures).toBe(bulbs);
+  });
+
+  it("lights an unlit room from night to day by its ambient light, a room with no lamps at its evening by default", () => {
+    const off = { level: 0, ambient: 0, strip: 0 };
+    const hemi = (config: RoomMapConfig, daylight: number) => {
+      const room = buildRoomScene(config, OPTIONS);
+      room.setMood(null, { ...off, daylight });
+      let intensity = 0;
+      room.scene.traverse((object) => {
+        if (object instanceof HemisphereLight) intensity = object.intensity;
+      });
+      disposeScene(room.scene);
+      return intensity;
+    };
+    const bare = { ...furnished, hueChannels: [] };
+    expect(hemi(bare, 0.35)).toBeCloseTo(0.8, 5);
+    expect(hemi(bare, 0)).toBeLessThan(0.8);
+    expect(hemi(bare, 1)).toBeGreaterThan(0.8);
+    expect(hemi(furnished, 0)).toBeLessThan(hemi(furnished, 0.35));
+    expect(hemi(furnished, 0.35)).toBeLessThan(hemi(bare, 0.35));
+    expect(hemi(furnished, 1)).toBeGreaterThan(hemi(furnished, 0.35));
+  });
+
+  // The house has no ceiling, so a pendant's canopy threw its shadow on the floor as a blot.
+  it("casts no shadow from a ceiling light's canopy, while the furniture still casts one", () => {
+    const pendant = { channelIndex: 0, x: 0, y: 0, z: 0.9, zOrigin: "bridge" as const };
+    const room = buildRoomScene({ ...furnished, hueChannels: [pendant] }, { ...OPTIONS, lampFamilies: new Map([[0, "pendant"]]) });
+    const meshes: Mesh[] = [];
+    room.scene.traverse((object) => {
+      if (object instanceof Mesh && !(object instanceof InstancedMesh)) meshes.push(object);
+    });
+    const top = (mesh: Mesh) => new Box3().setFromBufferAttribute(mesh.geometry.getAttribute("position") as never).max.y;
+    const ceiling = DEFAULT_ROOM_MAP.dimensions.heightMeters ?? 2.5;
+    const canopy = meshes.find((mesh) => !mesh.castShadow && Math.abs(top(mesh) - ceiling) < 0.01);
+    expect(canopy).toBeDefined();
+    expect(meshes.filter((mesh) => mesh.castShadow && top(mesh) > 0.3 && top(mesh) < 1.5).length).toBeGreaterThan(0);
+    disposeScene(room.scene);
   });
 
   it("draws the same number of objects for two lamps as for twelve", () => {
@@ -254,9 +291,9 @@ describe("buildRoomScene — mood", () => {
     const bar = stripBar(room.scene);
     expect(bar).toBeDefined();
     const colour = () => (bar!.material as MeshBasicMaterial).color;
-    room.setMood(0xff0000, { level: 1, ambient: 1, strip: 1 });
+    room.setMood(0xff0000, { level: 1, ambient: 1, strip: 1, daylight: 0.35 });
     expect(colour().getHex()).toBe(0xff0000);
-    room.setMood(0xff0000, { level: 0, ambient: 0, strip: 0 });
+    room.setMood(0xff0000, { level: 0, ambient: 0, strip: 0, daylight: 0.35 });
     expect(colour().r).toBeLessThan(0.1);
     disposeScene(room.scene);
   });

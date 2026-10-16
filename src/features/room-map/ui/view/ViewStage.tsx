@@ -4,14 +4,14 @@ import { useTranslation } from "react-i18next";
 import type { LampFamily } from "@/features/room-view/model/lampFamily";
 import type { CameraCommand } from "@/features/room-view/ui/RoomView3D";
 import { RoomView3DHost } from "@/features/room-view/ui/RoomView3DHost";
-import { hexCss, roomMood } from "@/features/room-view/model/roomMood";
-import { useRunningLightingMode } from "@/features/mode/state/lightingControl";
+import { hexCss } from "@/features/room-view/model/roomMood";
 
 import { deriveHueAreaState } from "../../model/hueAreaState";
 import { parseObjectId } from "../../model/objectId";
 import type { RoomAwareStatus } from "../../model/roomAware";
 import { buildViewLights, resolveViewSelection } from "../../model/viewLights";
 import { useHueIdentify } from "../../state/useHueIdentify";
+import { useRoomMood } from "../../state/useRoomMood";
 import type { RoomMapDocument } from "../../state/useRoomMapDocument";
 import { useUsbStripStatus } from "../../state/useUsbStripStatus";
 import { CornerControls } from "../CornerControls";
@@ -49,8 +49,7 @@ export function ViewStage({
   const { scopedConfig, selectedId, select, selectHueZone, hue, hueAreaId, hueBridgeConfigured, hueBridgeIp } = doc;
   const { stripStatus } = useUsbStripStatus(hueReachable);
   const identify = useHueIdentify(hueBridgeIp);
-  const running = useRunningLightingMode();
-  const mood = useMemo(() => roomMood(running), [running]);
+  const mood = useRoomMood();
   const lit = useMemo(() => {
     if (mood.level <= 0) return null;
     const stops = mood.palette?.map(hexCss);

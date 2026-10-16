@@ -432,6 +432,12 @@ export interface ShellState {
    */
   uiZoom?: UiZoom;
   /**
+   * Room settings "Ambient light": how lit the 3D room is with no lamp on, in whole percent from
+   * night (0) to day (100). The frontend's alone; absent ⇒ `ROOM_AMBIENT_DEFAULT`. Additive, no
+   * schema bump.
+   */
+  roomMapAmbient?: number;
+  /**
    * Settings → General "Close button". `"quit"` makes the main window's close
    * quit the app through the normal shutdown; anything else hides to the tray.
    * Read by Rust on each close. Additive, no schema bump.
@@ -615,6 +621,14 @@ export type UiZoom = (typeof UI_ZOOM_STEPS)[number];
 /** Whole percents: a float step such as 1.1 does not survive a JSON round trip through Rust bit for bit. */
 export function resolveUiZoom(stored: unknown): UiZoom {
   return UI_ZOOM_STEPS.find((step) => step === stored) ?? 100;
+}
+
+/** A dim evening, where the room and its unlit lamps read. */
+export const ROOM_AMBIENT_DEFAULT = 35;
+
+/** Whole percents, for the same JSON round trip `resolveUiZoom` keeps to. */
+export function resolveRoomAmbient(stored: unknown): number {
+  return typeof stored === "number" && Number.isFinite(stored) ? Math.min(100, Math.max(0, Math.round(stored))) : ROOM_AMBIENT_DEFAULT;
 }
 
 export const CLOSE_ACTIONS = ["tray", "quit"] as const;

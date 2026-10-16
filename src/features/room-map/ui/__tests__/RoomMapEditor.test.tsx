@@ -31,6 +31,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
+    onSaved: () => () => {},
     load: vi.fn().mockResolvedValue({
       roomMap: null,
       roomMapShowGrid: true,

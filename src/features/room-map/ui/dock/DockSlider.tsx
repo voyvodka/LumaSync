@@ -13,6 +13,7 @@ export function DockSlider({
   step,
   value,
   onChange,
+  onCommit,
   readout,
   ariaValueText,
   disabled = false,
@@ -26,6 +27,8 @@ export function DockSlider({
   step: number;
   value: number;
   onChange: (value: number) => void;
+  /** Where it is let go: the pointer up or cancelled, a key up, or focus leaving. */
+  onCommit?: (value: number) => void;
   /** The value as the row shows it, unit included. */
   readout: string;
   /** What a screen reader says for the value when the raw number names nothing. */
@@ -58,6 +61,10 @@ export function DockSlider({
         disabled={disabled}
         data-testid={testId}
         onChange={(e) => onChange(Number(e.target.value))}
+        onPointerUp={onCommit && ((e) => onCommit(Number(e.currentTarget.value)))}
+        onPointerCancel={onCommit && ((e) => onCommit(Number(e.currentTarget.value)))}
+        onKeyUp={onCommit && ((e) => onCommit(Number(e.currentTarget.value)))}
+        onBlur={onCommit && ((e) => onCommit(Number(e.currentTarget.value)))}
       />
       <span className={styles.readout} aria-hidden="true">
         {readout}

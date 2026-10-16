@@ -35,6 +35,7 @@ vi.mock("@/features/device/state/localOutputsStore", () => ({
 
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
+    onSaved: () => () => {},
     load: () =>
       Promise.resolve({
         lastHueAreaId: "area-1",

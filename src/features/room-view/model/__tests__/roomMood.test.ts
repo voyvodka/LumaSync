@@ -91,4 +91,20 @@ describe("roomMood", () => {
     expect(unchosen.lamp).not.toBe(LAMP_COLOURS[0]);
     expect(roomMood({ kind: LIGHTING_MODE_KIND.SOLID, solid: { r: 255, g: 0, b: 0, brightness: 1 } }).palette).toBeUndefined();
   });
+
+  it("takes the room's ambient light from night to day, and lets a lamp-lit sky keep its colour", () => {
+    const light = (hex: number) => channels(hex).reduce((a, b) => a + b, 0);
+    const off = (daylight: number) => roomMood({ kind: LIGHTING_MODE_KIND.OFF }, daylight);
+    expect(light(off(0).sky.top)).toBeLessThan(light(off(0.35).sky.top));
+    expect(light(off(0.35).sky.top)).toBeLessThan(light(off(1).sky.top));
+    expect(off(0.6).daylight).toBe(0.6);
+    expect(roomMood({ kind: LIGHTING_MODE_KIND.OFF }).sky).toEqual(off(0.35).sky);
+
+    const solid = { kind: LIGHTING_MODE_KIND.SOLID, solid: { r: 255, g: 0, b: 0, brightness: 1 } } as const;
+    expect(roomMood(solid, 1).sky).toEqual(roomMood(solid, 0.35).sky);
+    // Below the default a lit room's sky stays its own; past it a dim one gives way to the day.
+    const cinema = { kind: LIGHTING_MODE_KIND.AMBILIGHT } as const;
+    expect(roomMood(cinema, 0).sky).toEqual(roomMood(cinema, 0.35).sky);
+    expect(light(roomMood(cinema, 1).sky.top)).toBeGreaterThan(light(roomMood(cinema, 0.35).sky.top));
+  });
 });

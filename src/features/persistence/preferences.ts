@@ -18,6 +18,7 @@ import {
   resolveLaunchLights,
   resolveMotionPreference,
   resolveNotificationsPreference,
+  resolveRoomAmbient,
   resolveUiZoom,
   resolveUpdateChannel,
   type ShellState,
@@ -42,6 +43,7 @@ const PREFERENCES = {
   launchLights: resolveLaunchLights,
   awayLights: resolveAwayLights,
   lightingIntensityPreset: resolveSmoothingPreset,
+  roomMapAmbient: resolveRoomAmbient,
   // Read only: Rust writes it with every lit choice.
   lastLitKind: resolveLitModeKind,
 } satisfies { [K in keyof ShellState]?: (stored: unknown) => NonNullable<ShellState[K]> };
@@ -162,6 +164,11 @@ export async function setPreference<K extends PreferenceKey>(
     console.error(`[LumaSync] shellStore.save(${key}) failed:`, err);
     if (revertOnFailure) store.set({ ...store.get(), [key]: previous });
   }
+}
+
+/** Shows `value` in this window without saving it: a slider's live value, saved when let go. */
+export function previewPreference<K extends PreferenceKey>(key: K, value: PreferenceValue<K>): void {
+  store.set({ ...store.get(), [key]: value });
 }
 
 /** Test-only: seed a value without touching the persisted state. */
