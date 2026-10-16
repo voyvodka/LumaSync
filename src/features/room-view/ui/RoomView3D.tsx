@@ -749,8 +749,7 @@ function openRoomView(
         }
         shownRoom = roomKey(config);
       } else if (roomKey(config) !== shownRoom) {
-        // A template looked at and left takes the view back to where the room was being seen from.
-        // Kept from before any dolly to a light, or each return would zoom in on top of the last.
+        // Kept from before any dolly to a light, or each return from a template would zoom in further.
         if (move !== 0) cancelAnimationFrame(move);
         move = 0;
         views.set(shownRoom, home ?? { position: camera.position.clone(), target: orbit.target.clone(), zoom: camera.zoom });

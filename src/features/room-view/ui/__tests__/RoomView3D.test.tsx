@@ -296,7 +296,6 @@ describe("RoomView3D", () => {
       it("ends the morph before a nudge lifts a piece it is still gliding", async () => {
         const { rerender, unmount, view, during } = await morphing();
         rerender(view({ ...after, furniture: [{ ...sofa, id: "t-sofa", x: 2.6 }, chair] }, { morphKey: 1 }));
-        // Settled, then the one sofa lifted to slide: not a second copy of it beside the first.
         expect(builds.scene!.children).toHaveLength(during - 2);
         unmount();
       });

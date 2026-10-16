@@ -100,8 +100,7 @@ export interface RoomMapEditorProps {
   focusOnMount?: boolean;
   /** Each Hue channel's fixture as the bridge names it, for the inspector's model choice. */
   lampFamilies?: ReadonlyMap<number, LampFamily>;
-  /** Lays a template out over the room, one step back in history. */
-  /** The room laid out from a template, the user's own lights and finish kept. */
+  /** The room laid out from a template, the user's own lights and finish kept; one undo step. */
   onApplyTemplate?: (room: RoomMapConfig) => void;
   /** Whether the room can be edited in 3D; a WebGL failure reports through `onRoomFail`. */
   room3d?: boolean;
@@ -796,8 +795,7 @@ export function RoomMapEditor({
     return actions;
   }, [contextMenu, t, handleDuplicate, handleRotate, deleteById, select]);
 
-  // Inline closures on purpose: the dock is not memoised, and every one of these reads the
-  // saved room as it is now, never a preview on the stage.
+  // Inline closures: the dock is not memoised, and each reads the saved room now, never a preview.
   const inspectorActions: InspectorActions = {
     // A chip or swatch group selects on every arrow key; the gesture keeps a run of them one
     // undo step and one save, as the zone inspector's fields do.

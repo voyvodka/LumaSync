@@ -141,7 +141,6 @@ vi.mock("../RoomMapCanvas", () => ({
 }));
 
 vi.mock("../objects/FurnitureObject", () => ({
-  // A click on one adds it to the selection, as a shift-click does.
   FurnitureObject: ({ placement, grouped, onSelect }: { placement: { id: string }; grouped: boolean; onSelect: (id: string, additive: boolean) => void }) => (
     <i data-testid="plan-piece" data-piece={placement.id} data-grouped={grouped || undefined} onClick={() => onSelect(placement.id, true)} />
   ),
