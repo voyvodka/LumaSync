@@ -46,6 +46,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
   },
   view: {
     lightsControl: "Işıklar: {{mode}}",
+    daylightControl: "Gün ışığı: {{value}}",
     allLights: "Tüm ışıklar",
     dock: "Odadaki ışıklar",
     lights: {

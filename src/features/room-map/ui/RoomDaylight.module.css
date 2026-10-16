@@ -1,0 +1,22 @@
+@layer components {
+  /* Three digits and the sign at one width, so the button never shifts as the value changes. */
+  .readout {
+    min-width: 4ch;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    padding: 4px 0 4px 8px;
+  }
+  .label {
+    flex: none;
+    font-size: 12px;
+    color: var(--lm-ink-dim);
+  }
+  .slider { flex: 1; min-width: 0; }
+}

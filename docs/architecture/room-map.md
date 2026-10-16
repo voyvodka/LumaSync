@@ -529,8 +529,9 @@ light and glow are built into the scene, so it moves as the amber frame alone.
   gradient, and the lamps ease over 900 ms without rebuilding the scene (`RoomScene.setMood`). The
   colours stay placeholders where the live feed is the truth (Ambilight, an effect's motion) until it
   reaches the view.
-- **How lit the unlit room is is the user's** — Room settings → Daylight, night (0) to day (100),
-  stored as `roomMapAmbient`, a whole percent (default 35). An unlit room has no one right
+- **How lit the unlit room is is the user's** — the sun value in the corner over the 3D room, in
+  View and on Edit's 3D stage (`RoomDaylight`), night (0) to day (100); it sat in Room settings at
+  first, which View cannot open, and was not found there. Stored as `roomMapAmbient`, a whole percent (default 35). An unlit room has no one right
   brightness: full night hid the room and its dark lamps, a fixed bright one made a room with its
   lights off read as lit. The default lands on a dusk where both still read; past it the rig and sky
   move toward a neutral day, and under it toward the moonlit night Off once always was. A room with

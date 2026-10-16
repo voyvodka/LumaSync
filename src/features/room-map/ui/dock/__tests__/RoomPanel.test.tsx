@@ -1,10 +1,10 @@
 // Room height drives Hue's vertical sampling, every metre readout on a Hue
 // channel, and the TV's "above the ceiling" check — and had no field at all.
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { __resetPreferencesForTests, __setPreferenceForTests, getPreference } from "@/features/persistence/preferences";
+import { __resetPreferencesForTests, __setPreferenceForTests } from "@/features/persistence/preferences";
 import { DEFAULT_ROOM_DIMENSIONS, type RoomDimensions } from "@/shared/contracts/roomMap";
 
 import { RoomPanel, ROOM_HEIGHT_MAX_M, ROOM_HEIGHT_MIN_M, type RoomSettings } from "../RoomPanel";
@@ -160,53 +160,5 @@ describe("RoomPanel — on the 3D stage", () => {
     cleanup();
     renderPanel();
     expect(screen.getByLabelText("roomMap:settings.showGrid")).toBeInTheDocument();
-  });
-});
-
-describe("RoomPanel — the room's ambient light", () => {
-  const surfaces = { value: undefined, onChange: vi.fn<(patch: object) => void>() };
-
-  it("follows the thumb at once and saves only where it is let go", () => {
-    renderPanel(settings({ surfaces }));
-    const slider = screen.getByLabelText("roomMap:settings.daylightRange");
-    fireEvent.change(slider, { target: { value: "60" } });
-    fireEvent.change(slider, { target: { value: "80" } });
-    expect(getPreference("roomMapAmbient")).toBe(80);
-    expect(saves).toEqual([]);
-    fireEvent.pointerUp(slider);
-    fireEvent.blur(slider);
-    expect(saves).toEqual([{ roomMapAmbient: 80 }]);
-  });
-
-  it("saves a value another window moved it away from", () => {
-    renderPanel(settings({ surfaces }));
-    act(() => __setPreferenceForTests("roomMapAmbient", 80));
-    const slider = screen.getByLabelText("roomMap:settings.daylightRange");
-    fireEvent.change(slider, { target: { value: "35" } });
-    fireEvent.pointerUp(slider);
-    expect(saves).toEqual([{ roomMapAmbient: 35 }]);
-  });
-
-  // Esc closed the panel mid-drag, and the room went back to its old light on the next start.
-  it("saves the shown value when the panel closes before the thumb is let go", () => {
-    renderPanel(settings({ surfaces }));
-    fireEvent.change(screen.getByLabelText("roomMap:settings.daylightRange"), { target: { value: "10" } });
-    cleanup();
-    expect(saves).toEqual([{ roomMapAmbient: 10 }]);
-  });
-
-  it("tells a screen reader the band as well as the percent", () => {
-    renderPanel(settings({ surfaces }));
-    const slider = screen.getByLabelText("roomMap:settings.daylightRange");
-    expect(slider.getAttribute("aria-valuetext")).toBe("roomMap:settings.daylightValueText:35:roomMap:settings.daylightBand.dusk");
-    fireEvent.change(slider, { target: { value: "5" } });
-    expect(slider.getAttribute("aria-valuetext")).toBe("roomMap:settings.daylightValueText:5:roomMap:settings.daylightBand.night");
-    fireEvent.change(slider, { target: { value: "90" } });
-    expect(slider.getAttribute("aria-valuetext")).toBe("roomMap:settings.daylightValueText:90:roomMap:settings.daylightBand.day");
-  });
-
-  it("is offered only where the 3D room draws it", () => {
-    renderPanel();
-    expect(screen.queryByLabelText("roomMap:settings.daylightRange")).toBeNull();
   });
 });

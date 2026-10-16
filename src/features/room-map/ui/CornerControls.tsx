@@ -9,6 +9,7 @@ import { IconRedo, IconUndo } from "@/shared/ui/icons";
 import type { RoomAwareStatus } from "../model/roomAware";
 import styles from "./CornerControls.module.css";
 import { RoomAwareIndicator } from "./RoomAwareIndicator";
+import { RoomDaylight } from "./RoomDaylight";
 import { ShortcutsHelp } from "./ShortcutsHelp";
 import { RoomLights } from "./view/RoomLights";
 import { ZoomControl } from "./ZoomControl";
@@ -61,6 +62,7 @@ export function CornerControls({
   view,
   stage,
   lights = false,
+  daylight = false,
 }: {
   roomAware: RoomAwareStatus | null;
   edit?: CornerEditControls;
@@ -68,14 +70,17 @@ export function CornerControls({
   view?: CornerViewControls;
   stage?: CornerStageControls;
   lights?: boolean;
+  /** Where the 3D room is drawn; first in the row, so the stage switch stays put when it goes. */
+  daylight?: boolean;
 }) {
   const { t } = useTranslation();
   const mod = IS_MAC ? "⌘" : "Ctrl+";
   const shift = IS_MAC ? "⇧" : "Shift+";
-  if (!edit && !history && !view && !stage && !lights && !roomAware) return null;
+  if (!edit && !history && !view && !stage && !lights && !daylight && !roomAware) return null;
   const steps = edit ?? history;
   return (
     <div className={styles.corner} data-room-corner="">
+      {daylight && <RoomDaylight buttonClassName={cx(styles.capsule, styles.button, styles.lights)} />}
       {stage && (
         <div className={cx(styles.capsule, styles.stages)} style={{ "--i": stage.value === EDIT_STAGES.ROOM ? 0 : 1 } as CSSProperties}>
           <span className={styles.stageMark} aria-hidden="true" />

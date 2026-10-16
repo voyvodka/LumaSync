@@ -43,6 +43,7 @@ export default {
   },
   view: {
     lightsControl: "Lights: {{mode}}",
+    daylightControl: "Daylight: {{value}}",
     allLights: "All lights",
     dock: "Lights in the room",
     lights: {

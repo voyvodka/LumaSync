@@ -1,7 +1,6 @@
-import { type RefObject, useEffect, useId, useRef } from "react";
+import { type RefObject, useId } from "react";
 import { useTranslation } from "react-i18next";
 
-import { getPreference, previewPreference, setPreference, usePreference } from "@/features/persistence/preferences";
 import { floorSwatchCss, wallSwatchCss } from "@/features/room-view/model/surfaceColours";
 import {
   DEFAULT_ROOM_DIMENSIONS,
@@ -13,7 +12,6 @@ import {
   WALL_COLORS,
   type WallColor,
 } from "@/shared/contracts/roomMap";
-import { ROOM_AMBIENT_DEFAULT } from "@/shared/contracts/shell";
 import { Segmented } from "@/shared/ui/Segmented/Segmented";
 import { Popover } from "@/shared/ui/Popover/Popover";
 import { Toggle } from "@/shared/ui/Toggle/Toggle";
@@ -119,12 +117,7 @@ export function RoomPanel({
         {/* The plan's walls are handles with no mark of their own until hovered; this is where that is said. */}
         <FieldHint>{settings.shape.kind === "rect" ? t("roomMap:shape.planHintRect") : t("roomMap:shape.planHintShaped")}</FieldHint>
 
-        {settings.surfaces ? (
-          <>
-            <SurfaceFields {...settings.surfaces} />
-            <DaylightField />
-          </>
-        ) : null}
+        {settings.surfaces ? <SurfaceFields {...settings.surfaces} /> : null}
 
         {settings.onPlan !== false && (
           <>
@@ -177,56 +170,6 @@ export function RoomPanel({
         <FieldHint id={`${hintId}-reset`}>{t("roomMap:settings.resetMapHint")}</FieldHint>
       </div>
     </Popover>
-  );
-}
-
-const DAYLIGHT_BANDS = {
-  night: "roomMap:settings.daylightBand.night",
-  dusk: "roomMap:settings.daylightBand.dusk",
-  day: "roomMap:settings.daylightBand.day",
-} as const;
-
-/** Where the slider reads as night, dusk and day: dusk around the default. */
-function daylightBand(percent: number): keyof typeof DAYLIGHT_BANDS {
-  if (percent < ROOM_AMBIENT_DEFAULT / 2) return "night";
-  return percent < (ROOM_AMBIENT_DEFAULT + 100) / 2 ? "dusk" : "day";
-}
-
-/** How lit the 3D room is with no lamp on. It follows the thumb and is saved where it is let go. */
-function DaylightField() {
-  const { t } = useTranslation();
-  const ambient = usePreference("roomMapAmbient");
-  // Whether it moved since the last save, not what was saved: another window's write changes the value.
-  const moved = useRef(false);
-  const commit = useRef((value: number) => {
-    if (!moved.current) return;
-    moved.current = false;
-    void setPreference("roomMapAmbient", value);
-  }).current;
-  // Closed mid-drag (Esc), the shown value would otherwise never reach the disk.
-  useEffect(() => () => commit(getPreference("roomMapAmbient")), [commit]);
-  return (
-    <div className={styles.surfaceRow}>
-      <span className={styles.surfaceLabel} aria-hidden="true">
-        {t("roomMap:settings.daylight")}
-      </span>
-      <DockSlider
-        className={styles.daylight}
-        label={t("roomMap:settings.daylightRange")}
-        ariaValueText={t("roomMap:settings.daylightValueText", { percent: ambient, band: t(DAYLIGHT_BANDS[daylightBand(ambient)]) })}
-        min={0}
-        max={100}
-        step={1}
-        value={ambient}
-        onChange={(value) => {
-          moved.current = true;
-          previewPreference("roomMapAmbient", value);
-        }}
-        onCommit={commit}
-        readout={`${ambient}%`}
-        testId="room-ambient"
-      />
-    </div>
   );
 }
 

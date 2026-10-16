@@ -958,6 +958,7 @@ export function RoomMapEditor({
 
         <CornerControls
           roomAware={roomAware}
+          daylight={inRoom}
           stage={room3d ? { value: inRoom ? EDIT_STAGES.ROOM : EDIT_STAGES.PLAN, onChange: changeStage } : undefined}
           view={
             inRoom
