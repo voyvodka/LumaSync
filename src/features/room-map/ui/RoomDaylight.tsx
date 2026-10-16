@@ -27,6 +27,11 @@ export function RoomDaylight({ buttonClassName }: { buttonClassName?: string }) 
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement | null>(null);
   const id = useId();
+  // The popover renders into the body, so Tab from the button would reach it last.
+  useEffect(() => {
+    if (open) document.getElementById(id)?.querySelector<HTMLElement>('input[type="range"]')?.focus({ preventScroll: true });
+  }, [open, id]);
+  const readout = t("roomMap:settings.daylightReadout", { percent: ambient });
   const valueText = t("roomMap:settings.daylightValueText", { percent: ambient, band: t(DAYLIGHT_BANDS[daylightBand(ambient)]) });
   return (
     <>
@@ -38,21 +43,22 @@ export function RoomDaylight({ buttonClassName }: { buttonClassName?: string }) 
         aria-expanded={open}
         aria-controls={open ? id : undefined}
         aria-label={t("roomMap:view.daylightControl", { value: valueText })}
+        title={t("roomMap:settings.daylight")}
         onClick={() => setOpen((was) => !was)}
         data-testid="room-daylight"
       >
         <IconSun />
-        <span className={styles.readout}>{ambient}%</span>
+        <span className={styles.readout}>{readout}</span>
       </button>
       <Popover open={open} onClose={() => setOpen(false)} anchorRef={anchorRef} side="below" width={260} id={id} label={t("roomMap:settings.daylight")} role="dialog">
-        <DaylightSlider valueText={valueText} />
+        <DaylightSlider valueText={valueText} readout={readout} />
       </Popover>
     </>
   );
 }
 
 /** Follows the thumb and is saved where it is let go. */
-function DaylightSlider({ valueText }: { valueText: string }) {
+function DaylightSlider({ valueText, readout }: { valueText: string; readout: string }) {
   const { t } = useTranslation();
   const ambient = usePreference("roomMapAmbient");
   // Whether it moved since the last save, not what was saved: another window's write changes the value.
@@ -82,7 +88,7 @@ function DaylightSlider({ valueText }: { valueText: string }) {
           previewPreference("roomMapAmbient", value);
         }}
         onCommit={commit}
-        readout={`${ambient}%`}
+        readout={readout}
         testId="room-ambient"
       />
     </div>

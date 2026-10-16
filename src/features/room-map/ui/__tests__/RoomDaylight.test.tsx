@@ -7,8 +7,10 @@ import { RoomDaylight } from "../RoomDaylight";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, values?: { percent?: number; band?: string; value?: string }) =>
-      values?.band ? `${key}:${values.percent}:${values.band}` : values?.value ? `${key}:${values.value}` : key,
+    t: (key: string, values?: { percent?: number; band?: string; value?: string }) => {
+      if (key === "roomMap:settings.daylightReadout") return `${values?.percent}%`;
+      return values?.band ? `${key}:${values.percent}:${values.band}` : values?.value ? `${key}:${values.value}` : key;
+    },
   }),
 }));
 
@@ -75,6 +77,13 @@ describe("RoomDaylight", () => {
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     cleanup();
     expect(saves).toEqual([{ roomMapAmbient: 10 }]);
+  });
+
+  it("takes focus to the slider as it opens and gives it back to the button on Esc", () => {
+    const slider = open();
+    expect(document.activeElement).toBe(slider);
+    fireEvent.keyDown(slider, { key: "Escape" });
+    expect(document.activeElement).toBe(screen.getByTestId("room-daylight"));
   });
 
   it("tells a screen reader the band as well as the percent", () => {

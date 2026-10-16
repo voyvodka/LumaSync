@@ -217,6 +217,7 @@ export default {
     daylight: "Daylight",
     daylightRange: "Daylight, night to day",
     daylightValueText: "{{percent}}% — {{band}}",
+    daylightReadout: "{{percent}}%",
     daylightBand: { night: "night", dusk: "dusk", day: "day" },
     roomHeight: "Room height",
     roomHeightHint: "Floor to ceiling. Sets how high Hue lights sample the screen.",

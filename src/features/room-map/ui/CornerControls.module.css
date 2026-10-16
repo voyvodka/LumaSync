@@ -68,13 +68,13 @@
   }
 
   /* A lone button standing as a capsule: `.button` comes later and would clear the panel. */
-  .lights {
+  .solo {
     display: flex;
     gap: 6px;
     padding: 0 10px;
     background: var(--lm-panel);
   }
-  .lights:hover:not(:disabled) { background: var(--lm-panel-2); }
+  .solo:hover:not(:disabled) { background: var(--lm-panel-2); }
 
   /* The stage shown is marked by the face switch's plate, so never by colour alone, and the plate
      slides between the two as the face switch's does; the labels never move. */

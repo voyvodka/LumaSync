@@ -1,7 +1,8 @@
 @layer components {
-  /* Three digits and the sign at one width, so the button never shifts as the value changes. */
+  /* Mono, as the zoom readout: "100%" and "5%" at one width, so the button never shifts. */
   .readout {
-    min-width: 4ch;
+    width: 4ch;
+    font: 11px var(--lm-mono);
     font-variant-numeric: tabular-nums;
     text-align: right;
   }

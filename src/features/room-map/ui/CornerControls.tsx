@@ -80,7 +80,7 @@ export function CornerControls({
   const steps = edit ?? history;
   return (
     <div className={styles.corner} data-room-corner="">
-      {daylight && <RoomDaylight buttonClassName={cx(styles.capsule, styles.button, styles.lights)} />}
+      {daylight && <RoomDaylight buttonClassName={cx(styles.capsule, styles.button, styles.solo)} />}
       {stage && (
         <div className={cx(styles.capsule, styles.stages)} style={{ "--i": stage.value === EDIT_STAGES.ROOM ? 0 : 1 } as CSSProperties}>
           <span className={styles.stageMark} aria-hidden="true" />
@@ -97,7 +97,7 @@ export function CornerControls({
           />
         </div>
       )}
-      {lights && <RoomLights buttonClassName={cx(styles.capsule, styles.button, styles.lights)} />}
+      {lights && <RoomLights buttonClassName={cx(styles.capsule, styles.button, styles.solo)} />}
       {view && !steps && (
         <div className={styles.capsule}>
           <CameraButtons view={view} />

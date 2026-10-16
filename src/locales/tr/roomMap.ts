@@ -220,6 +220,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     daylight: "Gün ışığı",
     daylightRange: "Gün ışığı, geceden gündüze",
     daylightValueText: "%{{percent}} — {{band}}",
+    daylightReadout: "%{{percent}}",
     daylightBand: { night: "gece", dusk: "akşam", day: "gündüz" },
     roomHeight: "Oda yüksekliği",
     roomHeightHint: "Zeminden tavana. Hue ışıklarının ekranı hangi yükseklikten örnekleyeceğini belirler.",
