@@ -20,6 +20,9 @@ import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 
 export const BLOOM_LAYER = 1;
+/** A `userData` flag: an editing aid hidden from the glow pass, whose black stand-in would write
+ *  depth over the bulbs it is drawn around. */
+export const OVERLAY = "overlay";
 
 const STRENGTH = 1.4;
 const RADIUS = 0.35;
@@ -72,7 +75,10 @@ export function createBloom(renderer: WebGLRenderer, multisample: boolean): Bloo
   const darken = (scene: Scene) => {
     scene.traverse((object) => {
       if (object.layers.isEnabled(BLOOM_LAYER) || !object.visible) return;
-      if (object instanceof Mesh) {
+      if (object.userData[OVERLAY]) {
+        hidden.push(object);
+        object.visible = false;
+      } else if (object instanceof Mesh) {
         kept.set(object, object.material);
         object.material = black;
       } else if (object.type === "Points" || object.type === "LineSegments") {

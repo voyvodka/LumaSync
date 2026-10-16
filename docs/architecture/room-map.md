@@ -89,9 +89,15 @@ does is done in 3D too: the palette adds a piece on free floor, a pick in the ro
 Delete, ⌘Z and the arrows work, and a selected piece or light is carried and turned
 (`useLandCarried`). View carries nothing: it is for looking at the room and its lights, and a drag
 there that moved the sofa while turning the room was a layout change made by accident. What only the plan draws stays there — the
-walls' handles, a strip's ends and corners, image layers and Hue zones — so picking or adding an image
-or a zone opens the plan for it (an image only once the file dialog returns one), and going back to 3D
-closes that card. The plan's own switches and keys step aside in 3D: the grid and zone-outline switches
+walls' handles, a strip's ends and corners and image layers — so picking or adding an image opens the
+plan for it once the file dialog returns one, and going back to 3D closes that card. A Hue zone is
+drawn in 3D as well (`scene/zoneBoxes.ts`): the zone being edited, or else the selected light's, as a
+dashed box in its colour over a solid outline where it meets the floor, named over its highest corner
+on screen (over the top's middle the name sat on the lamp inside), and with the zones toggle the area's others faintly,
+as the plan draws them. So a zone picked or added stays in the 3D room, and its card stays open across
+a stage switch. The boxes are built with the scene and only shown or hidden after, so picking a zone
+rebuilds nothing. They are flagged `OVERLAY` for the glow pass, which hides them: its black stand-in
+for every other mesh writes depth, and a zone's box drawn that way put out the bulbs inside it. The plan's own switches and keys step aside in 3D: the grid and zone-outline switches
 are hidden, ⌘0 is the camera's Whole room, the arrows with nothing selected do nothing, and the keys
 list drops panning and box selection. Edit opens on the 3D room where it is built; the stage picked
 is remembered for the session, like the face, and not stored. A room that cannot open in 3D falls back to the plan with

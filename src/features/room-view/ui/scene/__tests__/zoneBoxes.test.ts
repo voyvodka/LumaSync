@@ -1,4 +1,4 @@
-import { LineSegments, Mesh, MeshBasicMaterial } from "three";
+import { type LineSegments, type Mesh, type MeshBasicMaterial, Quaternion, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 
 import type { HueZone } from "@/shared/contracts/roomMap";
@@ -10,8 +10,8 @@ const zone = (id: string): HueZone => ({ id, name: `Zone ${id}`, entertainmentAr
 
 const parts = (boxes: ReturnType<typeof buildZoneBoxes>, i: number) => {
   const one = boxes.group.children[i]!;
-  const [fill, edges, label] = one.children as [Mesh, LineSegments, Mesh];
-  return { one, fill, edges, label };
+  const [fill, edges, foot, label] = one.children as [Mesh, LineSegments, Mesh, Mesh];
+  return { one, fill, edges, foot, label };
 };
 
 describe("buildZoneBoxes", () => {
@@ -34,7 +34,7 @@ describe("buildZoneBoxes", () => {
     expect(boxes.mark({ active: "a", others: ["b"] })).toBe(false);
   });
 
-  it("keeps the name one size on screen, over the box's top", () => {
+  it("keeps the name one size on screen, over the top corner highest on screen", () => {
     const boxes = buildZoneBoxes([zone("a")], dims);
     boxes.mark({ active: "a", others: [] });
     const { label } = parts(boxes, 0);
@@ -42,13 +42,18 @@ describe("buildZoneBoxes", () => {
     const near = label.scale.y;
     boxes.setPixelsPerMetre(50);
     expect(label.scale.y).toBeCloseTo(near * 2);
-    // Half the zone's 1.25 m height, and the lift.
+    // Looking down from the +x +z corner: the far corner (-x, -z) of the 2.5 × 2 × 1.25 m box is highest.
+    const q = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -0.6);
+    q.premultiply(new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI / 4));
+    boxes.orient(q);
+    expect(label.position.x).toBeLessThan(-1.2);
+    expect(label.position.z).toBeLessThan(-0.9);
     expect(label.position.y).toBeGreaterThan(0.625);
   });
 
   it("is outlined in the zone's colour", () => {
     const boxes = buildZoneBoxes([{ ...zone("a"), borderColor: "var(--lm-zone-2)" }], dims);
-    const { edges } = parts(boxes, 0);
-    expect((edges.material as MeshBasicMaterial).color.getHexString()).toBe("10b981");
+    const { foot } = parts(boxes, 0);
+    expect((foot.material as MeshBasicMaterial).color.getHexString()).toBe("10b981");
   });
 });
