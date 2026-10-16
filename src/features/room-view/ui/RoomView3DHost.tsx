@@ -20,11 +20,14 @@ export const ROOM_VIEW_3D_AVAILABLE = RoomView3D !== null;
 /** Flicking between this window and another, or across Spaces, rebuilt the room on every return. */
 export const COVERED_KEEP_MS = 30_000;
 
+// Covered only keeps a room that was on screen: one never seen is not built behind another window.
 function useKeptOnScreen(presence: WindowPresence): boolean {
-  const [expired, setExpired] = useState(false);
+  const [expired, setExpired] = useState(presence !== "visible");
   useEffect(() => {
-    setExpired(false);
-    if (presence !== "covered") return;
+    if (presence !== "covered") {
+      setExpired(presence === "hidden");
+      return;
+    }
     const timer = setTimeout(() => setExpired(true), COVERED_KEEP_MS);
     return () => clearTimeout(timer);
   }, [presence]);

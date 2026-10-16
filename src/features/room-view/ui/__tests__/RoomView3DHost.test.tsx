@@ -82,6 +82,20 @@ describe("RoomView3DHost", () => {
     expect(windowState.mounts).toBe(1);
   });
 
+  it("builds no view for a window that opens covered, or comes back from the tray covered", async () => {
+    windowState.presence = "covered";
+    windowState.mounts = 0;
+    const { rerender } = render(<RoomView3DHost {...PROPS} />);
+    await act(async () => {});
+    expect(screen.queryByTestId("room-view-3d")).toBeNull();
+
+    become("visible", rerender);
+    await screen.findByTestId("room-view-3d-canvas");
+    become("hidden", rerender);
+    become("covered", rerender);
+    expect(screen.queryByTestId("room-view-3d")).toBeNull();
+  });
+
   it("lets a covered view go at once when the window is then put away", async () => {
     const { rerender } = await mounted();
     become("covered", rerender);

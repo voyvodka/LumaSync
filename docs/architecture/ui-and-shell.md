@@ -250,6 +250,11 @@ resume is what makes a chip look fresh the instant the window comes back. A new 
 is a regression even though nothing will fail. The one deliberate exception is Rust's serial port
 watcher (`spawn_serial_watch`, `device-output.md`): lighting runs from the tray with every window
 hidden, and an unplug must still be noticed there. It lists ports without opening any.
+`useWindowPresence` splits hidden in two for a consumer that must tell them apart: "covered" is a
+shown window whose document reads hidden — another window over it on macOS, or another Space — and
+"hidden" is Rust's word that it is in the tray or minimised. WebView2 never hides the document for
+a covered window, so on Windows "covered" does not occur. The 3D room keeps its WebGL view while
+covered (`room-map.md`) and a poll should not care which of the two it is.
 
 **`document.visibilityState` alone is not enough on Windows.** WebView2 can keep reporting
 `visible` while the window sits hidden in the tray — Tauri's `WebviewWindow::hide()` hides the
