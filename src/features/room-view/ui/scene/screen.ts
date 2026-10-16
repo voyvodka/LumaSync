@@ -27,7 +27,7 @@ const TV_UNIT_DEPTH = 0.42;
 const MONITOR_STAND = 0.1;
 const MONITOR_SETBACK = 0.14;
 /** How far a running mode's picture shows over the dark glass: a full one outshone the room's lights. */
-const SCREEN_PICTURE = 0.8;
+const SCREEN_PICTURE = 0.6;
 
 export interface ScreenLayout {
   centre: ScenePoint;
@@ -164,6 +164,8 @@ export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, F
   const right = new Color();
   const picture = new Color();
   const white = new Color(0xfff4e6);
+  // A warm earth under the sky, so a one-colour mode still shows a picture rather than a lit panel.
+  const ground = new Color(0x5a3a2a);
   const paint = (lampColour: number | null, level: number, palette?: readonly number[]) => {
     const on = lampColour === null ? 0 : Math.min(Math.max(level, 0), 1) * SCREEN_PICTURE;
     const array = colours.array as Float32Array;
@@ -183,7 +185,7 @@ export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, F
       const sky = 1 / (1 + Math.exp(-(v - 0.4) * 18));
       const spot = Math.exp(-(((u - 0.64) / 0.16) ** 2 + ((v - 0.62) / 0.2) ** 2));
       const shade = (0.3 + 0.62 * sky) * (1 - 0.4 * ((u - 0.5) * 2) ** 2);
-      picture.copy(left).lerp(right, u).multiplyScalar(shade).lerp(white, spot * 0.45);
+      picture.copy(left).lerp(right, u).lerp(ground, (1 - sky) * 0.5).multiplyScalar(shade).lerp(white, spot * 0.3);
       c.setRGB(glass[i * 3]!, glass[i * 3 + 1]!, glass[i * 3 + 2]!).lerp(picture, on);
       array[i * 3] = c.r;
       array[i * 3 + 1] = c.g;
@@ -205,8 +207,8 @@ export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, F
         x: centre.x,
         y: mount,
         z: onWall ? wallZ + 0.012 : centre.z - depth,
-        width: width * 1.45,
-        height: height * 1.6,
+        width: width * 1.9,
+        height: height * 2.1,
         screenWidth: width,
         screenHeight: height,
       }

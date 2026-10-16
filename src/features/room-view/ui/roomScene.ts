@@ -62,7 +62,8 @@ import { buildSelectionMark } from "./scene/selection";
 import { type LedTape, ledTape, TAPE_DEPTH as STRIP_DEPTH, TAPE_WIDTH as STRIP_WIDTH } from "./scene/ledTape";
 
 const STRIP_GLOW = 0xffc46b;
-const BACKLIGHT_GAIN = 1.6;
+// At 1.6 with a steep fall-off the halo burnt to a white band with a hard edge.
+const BACKLIGHT_GAIN = 0.9;
 const LAMP_BOUNCE = 0.35;
 const PALETTE_BOUNCE_SATURATION = 0.5;
 /** Full day still leaves lit lamps half their say in the room's light. */
@@ -531,7 +532,8 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     lights.fill.intensity = unlit.fill;
     real?.paint(lampColour, level, palette);
     glow?.paint(lampColour, level, palette);
-    screen?.paint(lampColour, level, palette);
+    // By the strip's level: Ambilight keeps the lamps at a fifth, which left the picture all but gone.
+    screen?.paint(lampColour, strip, palette);
     spill?.color.set(lampColour ?? STRIP_GLOW).multiplyScalar(strip * BACKLIGHT_GAIN);
     stripMaterials.forEach((material, i) =>
       material.color.set(paletteColour(palette, i + 1) ?? lampColour ?? STRIP_GLOW).lerp(UNLIT_STRIP, 1 - strip),

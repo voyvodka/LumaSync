@@ -72,7 +72,7 @@ export function rimTexture(size: number, innerWidth: number, innerHeight: number
         const t = Math.min(Math.hypot(dx, dy) / reach, 1);
         const i = (y * size + x) * 4;
         image.data[i] = image.data[i + 1] = image.data[i + 2] = 255;
-        image.data[i + 3] = Math.round(255 * (1 - t) ** 2.2);
+        image.data[i + 3] = Math.round(255 * (1 - t) ** 1.5);
       }
     }
     ctx.putImageData(image, 0, 0);
