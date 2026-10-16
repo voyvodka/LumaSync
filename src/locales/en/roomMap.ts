@@ -416,6 +416,11 @@ export default {
     delete: "Delete",
     rotate: "Rotate 15°",
   },
+  carryHint: {
+    turn: "rotate",
+    rise: "up and down",
+    putBack: "put back",
+  },
   shortcuts: {
     title: "Keyboard shortcuts",
     undo: "Undo",
@@ -433,6 +438,7 @@ export default {
     addToSelection: "Add to or take from the selection",
     boxSelect: "Select what the box covers",
     freeDrag: "Move without snapping",
+    raise: "Move a light or the TV up and down",
     scrollWheel: "Scroll · pinch",
     // Key caps as printed on the keyboard; the TR caps keep the physical labels.
     keys: {
@@ -444,6 +450,7 @@ export default {
       shiftClick: "{{shift}}click",
       floorDrag: "Drag on the floor",
       altDrag: "{{alt}}drag",
+      shiftDrag: "{{shift}}drag",
     },
   },
   templates: {

@@ -11,6 +11,7 @@ const IS_MAC = typeof navigator !== "undefined" && navigator.platform.includes("
 
 // The plan's own gestures, which the 3D stage's camera takes instead.
 const PLAN_ONLY = new Set(["panKeyboard", "pan", "addToSelection", "boxSelect", "freeDrag"]);
+const ROOM_ONLY = new Set(["raise"]);
 
 /** The editor's keys, behind one button; in the 3D room, only those that work there. */
 export function ShortcutsHelp({ buttonClassName, room = false }: { buttonClassName?: string; room?: boolean }) {
@@ -38,7 +39,8 @@ export function ShortcutsHelp({ buttonClassName, room = false }: { buttonClassNa
     { id: "addToSelection", key: t("roomMap:shortcuts.keys.shiftClick", { shift }), desc: t("roomMap:shortcuts.addToSelection") },
     { id: "boxSelect", key: t("roomMap:shortcuts.keys.floorDrag"), desc: t("roomMap:shortcuts.boxSelect") },
     { id: "freeDrag", key: t("roomMap:shortcuts.keys.altDrag", { alt: IS_MAC ? "⌥" : "Alt+" }), desc: t("roomMap:shortcuts.freeDrag") },
-  ].filter((s) => !room || !PLAN_ONLY.has(s.id));
+    { id: "raise", key: t("roomMap:shortcuts.keys.shiftDrag", { shift }), desc: t("roomMap:shortcuts.raise") },
+  ].filter((s) => (room ? !PLAN_ONLY.has(s.id) : !ROOM_ONLY.has(s.id)));
 
   return (
     <>

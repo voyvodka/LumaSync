@@ -419,6 +419,11 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     delete: "Sil",
     rotate: "15° döndür",
   },
+  carryHint: {
+    turn: "döndür",
+    rise: "dikey",
+    putBack: "bırak",
+  },
   shortcuts: {
     title: "Klavye kısayolları",
     undo: "Geri al",
@@ -436,6 +441,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     addToSelection: "Seçime ekle ya da çıkar",
     boxSelect: "Kutunun kapladığını seç",
     freeDrag: "Yapışmadan taşı",
+    raise: "Işığı ya da TV'yi yukarı aşağı taşı",
     scrollWheel: "Kaydırma · kıstırma",
     keys: {
       delete: "Delete",
@@ -446,6 +452,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
       shiftClick: "{{shift}}tıkla",
       floorDrag: "Zeminde sürükle",
       altDrag: "{{alt}}sürükle",
+      shiftDrag: "{{shift}}sürükle",
     },
   },
   templates: {

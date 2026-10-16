@@ -1,8 +1,9 @@
 import { type RoomMapConfig, stripCentre } from "@/shared/contracts/roomMap";
+import { tvMountHeight } from "@/features/room-view/model/roomSpace";
 import { clamp } from "@/shared/lib/math";
 
 import { moveTvWithBacklight } from "./backlight";
-import { planMetresToHue } from "./hueChannelPosition";
+import { hueToMetres, planMetresToHue, resolveHueChannelWorldZ, setHueChannelWorldZ } from "./hueChannelPosition";
 import { parseObjectId } from "./objectId";
 import { keepStripInside, landCarriedPiece, roomBoxOf } from "./pieceGeometry";
 import { ROOM_OBJECT_KINDS, type RoomObjectContext } from "./roomObjectKinds";
@@ -12,6 +13,8 @@ import { ROOM_OBJECT_KINDS, type RoomObjectContext } from "./roomObjectKinds";
  * plan, in metres. Furniture also takes the turn it was given while carried; the TV, a strip and a
  * Hue light keep their own axes. Each kind lands through the same adapter typed positions use, so it
  * stops at the walls and a zone-bound light stays in its zone. Null for what cannot move or is locked.
+ * `raised` takes the TV or a Hue light up or down as well: the TV's centre to `centreY`, a light by
+ * `rise` metres from the height it was drawn at.
  */
 export function landCarried(
   config: RoomMapConfig,
@@ -20,6 +23,7 @@ export function landCarried(
   cy: number,
   turnDeg: number,
   ctx: RoomObjectContext,
+  raised?: Raised,
 ): Partial<RoomMapConfig> | null {
   const ref = parseObjectId(objectId);
   if (!ref) return null;
@@ -33,8 +37,9 @@ export function landCarried(
     case "tv": {
       const tv = config.tvAnchor;
       if (!tv || tv.locked) return null;
-      const moved = ROOM_OBJECT_KINDS.tv.moveTo(config, ref, cx - tv.width / 2, cy - tv.height / 2)?.tvAnchor;
-      if (!moved) return null;
+      const slid = ROOM_OBJECT_KINDS.tv.moveTo(config, ref, cx - tv.width / 2, cy - tv.height / 2)?.tvAnchor;
+      if (!slid) return null;
+      const moved = raised ? { ...slid, mountHeightMeters: centimetres(clamp(raised.centreY, 0, config.dimensions.heightMeters)) } : slid;
       // Its backlight goes with it: left behind, the strip stopped being the screen's.
       const room = roomBoxOf(config);
       const strips = moveTvWithBacklight(config.usbStrips, tv, moved, (s) => keepStripInside(s, room));
@@ -52,12 +57,28 @@ export function landCarried(
       if (ROOM_OBJECT_KINDS.hue.isLocked(config, ref, ctx)) return null;
       const { widthMeters, depthMeters } = config.dimensions;
       const p = planMetresToHue(cx, cy, widthMeters, depthMeters);
-      return ROOM_OBJECT_KINDS.hue.moveTo(config, ref, clamp(p.x, -1, 1), clamp(p.y, -1, 1), ctx);
+      const moved = ROOM_OBJECT_KINDS.hue.moveTo(config, ref, clamp(p.x, -1, 1), clamp(p.y, -1, 1), ctx);
+      if (!moved?.hueChannels || !raised) return moved;
+      const H = config.dimensions.heightMeters;
+      const hueChannels = moved.hueChannels.map((ch) => {
+        if (ch.channelIndex !== ref.channelIndex) return ch;
+        // Drawn at the TV's height until its own is known, so that is where the rise starts from.
+        const from = ch.zOrigin ? hueToMetres(resolveHueChannelWorldZ(ch, config.zones), H) : tvMountHeight(config.tvAnchor, config.dimensions);
+        return setHueChannelWorldZ(ch, config.zones, (clamp(from + raised.rise, 0, H) / H) * 2 - 1);
+      });
+      return { ...moved, hueChannels };
     }
     default:
       return null;
   }
 }
+
+export interface Raised {
+  rise: number;
+  centreY: number;
+}
+
+const centimetres = (m: number) => Math.round(m * 100) / 100;
 
 function centreOf(config: RoomMapConfig, objectId: string): { x: number; y: number } | null {
   const ref = parseObjectId(objectId);
@@ -78,8 +99,9 @@ export function landCarriedWith(
   turnDeg: number,
   riders: readonly string[],
   ctx: RoomObjectContext,
+  raised?: Raised,
 ): Partial<RoomMapConfig> | null {
-  const landed = landCarried(config, objectId, cx, cy, turnDeg, ctx);
+  const landed = landCarried(config, objectId, cx, cy, turnDeg, ctx, raised);
   if (!landed || riders.length === 0) return landed;
   const before = centreOf(config, objectId);
   let next: RoomMapConfig = { ...config, ...landed };

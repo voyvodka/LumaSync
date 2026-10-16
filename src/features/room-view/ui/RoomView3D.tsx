@@ -18,6 +18,7 @@ import {
   PCFShadowMap,
   Plane,
   PlaneGeometry,
+  type Ray,
   Raycaster,
   Scene,
   SRGBColorSpace,
@@ -171,7 +172,7 @@ function openRoomView(
   firstHost: HTMLElement,
   onFail: (error: unknown) => void,
   onPick: (objectId: string | null) => void,
-  onMovePiece: ((objectId: string, sceneX: number, sceneZ: number, turnDeg: number, riders: readonly string[]) => boolean) | null,
+  onMovePiece: MovePiece | null,
   onHover: (objectId: string | null, clientX: number, clientY: number) => void = () => {},
 ): RoomView {
   let host = firstHost;
@@ -374,6 +375,8 @@ function openRoomView(
     const canvas = renderer.domElement;
     const floor = new Plane(new Vector3(0, 1, 0), 0);
     const onFloor = new Vector3();
+    const upright = new Plane(new Vector3(0, 0, 1), 0);
+    const onUpright = new Vector3();
     const rayAt = (clientX: number, clientY: number) => {
       const rect = canvas.getBoundingClientRect();
       pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
@@ -395,11 +398,19 @@ function openRoomView(
       moved: boolean;
       turn: number;
       angle: number;
+      /** The TV and a Hue light go up and down while ⇧ is held; the rest stands where it was built. */
+      rises: boolean;
+      fromY: number;
+      halfY: number;
+      rise: number;
+      /** The pointer's height over the piece's centre when ⇧ went down; null while it slides. */
+      grip: number | null;
     } | null = null;
     const follow = (c: NonNullable<typeof carry>) => {
       if (!c.lifted) return;
       c.lifted.moveTo(c.ghost.position.x, c.ghost.position.z);
       c.lifted.turnTo((c.turn * Math.PI) / 180);
+      if (c.rises) c.lifted.reshape(1, 1, 0, c.rise);
       renderer.shadowMap.needsUpdate = shadows;
     };
     // While a piece of furniture is carried, the wheel or R turns it in 15° steps (⇧ the other way);
@@ -472,8 +483,11 @@ function openRoomView(
         ghost.position.set(item.centre.x, Math.max(item.centre.y, 0.025), item.centre.z);
         ghost.rotation.y = -item.angle;
         ghost.visible = false;
-        const plumb = item.kind === "light" && item.centre.y - hy >= PLUMB_FROM ? plumbGuide(item.centre.y - hy, CARRY_COLOUR) : null;
+        const rises = item.rises === true;
+        const plumb =
+          item.kind === "light" && (rises || item.centre.y - hy >= PLUMB_FROM) ? plumbGuide(item.centre.y - hy, CARRY_COLOUR) : null;
         if (plumb) {
+          plumb.group.visible = item.centre.y - hy >= PLUMB_FROM;
           plumb.group.position.y = -ghost.position.y;
           ghost.add(plumb.group);
         }
@@ -490,6 +504,11 @@ function openRoomView(
           moved: false,
           turn: 0,
           angle: item.angle,
+          rises,
+          fromY: item.centre.y,
+          halfY: hy,
+          rise: 0,
+          grip: null,
         };
         orbit.enabled = false;
         canvas.setPointerCapture(event.pointerId);
@@ -512,18 +531,51 @@ function openRoomView(
         }
         if (!carry || !press) return;
         if (!carry.moved && Math.hypot(event.clientX - press.x, event.clientY - press.y) <= CLICK_SLOP_PX) return;
-        if (!rayAt(event.clientX, event.clientY).intersectPlane(floor, onFloor)) return;
+        const ray = rayAt(event.clientX, event.clientY);
+        if (carry.rises && event.shiftKey) {
+          if (!raise(carry, ray)) return;
+        } else {
+          if (!ray.intersectPlane(floor, onFloor)) return;
+          if (carry.grip !== null) {
+            // Back to sliding at the new height, the pointer keeping its hold on the piece.
+            carry.grip = null;
+            carry.dx = carry.ghost.position.x - onFloor.x;
+            carry.dz = carry.ghost.position.z - onFloor.z;
+          }
+          carry.ghost.position.x = onFloor.x + carry.dx;
+          carry.ghost.position.z = onFloor.z + carry.dz;
+        }
         if (!carry.tried) lift(carry);
         carry.moved = true;
         canvas.style.cursor = "grabbing";
         carry.ghost.visible = true;
-        carry.ghost.position.x = onFloor.x + carry.dx;
-        carry.ghost.position.z = onFloor.z + carry.dz;
         follow(carry);
         request();
       },
       { signal: listening.signal },
     );
+    // Up and down only, along the upright plane through the piece that faces the camera.
+    const raise = (c: NonNullable<typeof carry>, ray: Ray) => {
+      upright.normal.set(camera.position.x - c.ghost.position.x, 0, camera.position.z - c.ghost.position.z);
+      if (upright.normal.lengthSq() < 1e-6) return false;
+      upright.normal.normalize();
+      upright.constant = -upright.normal.dot(c.ghost.position);
+      if (!ray.intersectPlane(upright, onUpright)) return false;
+      const centre = c.fromY + c.rise;
+      if (c.grip === null) c.grip = onUpright.y - centre;
+      const ceiling = shownConfig?.dimensions.heightMeters ?? Number.POSITIVE_INFINITY;
+      // A ceiling light's lit part is built at the ceiling, whatever its height says.
+      const y = Math.min(Math.max(onUpright.y - c.grip, Math.min(c.halfY, c.fromY)), Math.max(ceiling - c.halfY, c.fromY));
+      c.rise = y - c.fromY;
+      c.ghost.position.y = Math.max(y, 0.025);
+      floor.constant = -y;
+      if (c.plumb) {
+        c.plumb.group.position.y = -c.ghost.position.y;
+        c.plumb.setTop(y - c.halfY);
+        c.plumb.group.visible = true;
+      }
+      return true;
+    };
     // Lifted on the first move, not the press: a click on the selected piece leaves the scene as built.
     const lift = (c: NonNullable<typeof carry>) => {
       c.tried = true;
@@ -544,7 +596,8 @@ function openRoomView(
       (c.ghost.material as LineBasicMaterial).dispose();
       // Landed, it stays where it was let go until the scene is rebuilt from the landed room; a
       // landing refused, or Esc, puts it back.
-      const landed = commit && c.moved && onMovePiece?.(c.id, c.ghost.position.x, c.ghost.position.z, c.turn, c.lifted?.riders ?? []) === true;
+      const raised = c.rise !== 0 ? { rise: c.rise, centreY: c.fromY + c.rise } : undefined;
+      const landed = commit && c.moved && onMovePiece?.(c.id, c.ghost.position.x, c.ghost.position.z, c.turn, c.lifted?.riders ?? [], raised) === true;
       // Still lifted where it was let go: the landed room must be built, not read as a slide of it.
       if (landed && c.lifted) builtConfig = null;
       if (c.lifted && !landed) {
@@ -1052,10 +1105,21 @@ function openRoomView(
 
 const NO_FAMILIES: ReadonlyMap<number, LampFamily> = new Map();
 
+/** A piece let go at its centre in the scene; `raised` when ⇧ took it up or down by `rise` metres,
+ *  its centre then `centreY` high. */
+export type MovePiece = (
+  objectId: string,
+  sceneX: number,
+  sceneZ: number,
+  turnDeg: number,
+  riders: readonly string[],
+  raised?: { rise: number; centreY: number },
+) => boolean;
+
 interface Handlers {
   fail: (error: unknown) => void;
   pick: (objectId: string | null) => void;
-  move: (objectId: string, sceneX: number, sceneZ: number, turnDeg: number, riders: readonly string[]) => boolean;
+  move: MovePiece;
   hover: (objectId: string | null, clientX: number, clientY: number) => void;
 }
 const IDLE: Handlers = { fail: () => {}, pick: () => {}, move: () => false, hover: () => {} };
@@ -1128,7 +1192,7 @@ export default function RoomView3D({
   cameraCommand?: CameraCommand;
   mood?: RoomMood;
   /** A piece carried to a new place on the floor: its centre there, in the scene frame. */
-  onMovePiece?: (objectId: string, sceneX: number, sceneZ: number, turnDeg: number, riders: readonly string[]) => boolean;
+  onMovePiece?: MovePiece;
   /** A click in the room: the object it landed on, or null for empty ground. */
   onPick?: (objectId: string | null) => void;
   onHover?: (objectId: string | null, clientX: number, clientY: number) => void;
@@ -1161,7 +1225,7 @@ export default function RoomView3D({
     const mine: Handlers = {
       fail: (error) => onFailRef.current(error),
       pick: (objectId) => onPickRef.current?.(objectId),
-      move: (objectId, x, z, turn, riders) => onMoveRef.current?.(objectId, x, z, turn, riders) ?? false,
+      move: (objectId, x, z, turn, riders, raised) => onMoveRef.current?.(objectId, x, z, turn, riders, raised) ?? false,
       hover: (objectId, x, y) => onHoverRef.current?.(objectId, x, y),
     };
     let kept = unpark(host, mine);
@@ -1172,7 +1236,7 @@ export default function RoomView3D({
           host,
           (error) => handlers.fail(error),
           (objectId) => handlers.pick(objectId),
-          (objectId, x, z, turn, riders) => handlers.move(objectId, x, z, turn, riders),
+          (objectId, x, z, turn, riders, raised) => handlers.move(objectId, x, z, turn, riders, raised),
           (objectId, x, y) => handlers.hover(objectId, x, y),
         );
         kept = { view, handlers };

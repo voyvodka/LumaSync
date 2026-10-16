@@ -35,6 +35,33 @@ describe("landCarried", () => {
     expect(ch).toMatchObject({ x: -1, y: 1 });
   });
 
+  it("raises the TV's centre to where ⇧ let it go, inside the room's height", () => {
+    expect(landCarried(base, "tv", 1, 2, 0, ctx, { rise: 0.3, centreY: 1.312 })?.tvAnchor).toMatchObject({ x: 0.4, mountHeightMeters: 1.31 });
+    expect(landCarried(base, "tv", 1, 2, 0, ctx, { rise: 3, centreY: 4 })?.tvAnchor?.mountHeightMeters).toBe(2.5);
+    expect(landCarried(base, "tv", 1, 2, 0, ctx)?.tvAnchor?.mountHeightMeters).toBeUndefined();
+  });
+
+  it("raises a Hue light from the height it was drawn at, the TV's while its own is unknown", () => {
+    const unknown = landCarried(base, "hue-0", 0, 0, 0, ctx, { rise: 0.5, centreY: 0 })?.hueChannels?.[0];
+    // Drawn at the default mount, 40% of 2.5 m: 1.5 m is z 0.2.
+    expect(unknown?.z).toBeCloseTo(0.2);
+    expect(unknown?.zOrigin).toBe("user");
+    const known = { ...base, hueChannels: [{ channelIndex: 0, x: 0, y: 0, z: 0, zOrigin: "bridge" as const }] };
+    expect(landCarried(known, "hue-0", 0, 0, 0, ctx, { rise: -0.5, centreY: 0 })?.hueChannels?.[0]?.z).toBeCloseTo(-0.4);
+    expect(landCarried(known, "hue-0", 0, 0, 0, ctx, { rise: 9, centreY: 0 })?.hueChannels?.[0]?.z).toBe(1);
+  });
+
+  it("keeps a zone-bound light's rise inside its zone", () => {
+    const zone = { id: "z1", name: "Z", entertainmentAreaId: "a", centerX: 0, centerY: 0, centerZ: 0, scaleX: 1, scaleY: 1, scaleZ: 0.2, channelIndices: [0] };
+    const bound: RoomMapConfig = {
+      ...base,
+      zones: [zone],
+      hueChannels: [{ channelIndex: 0, x: 0, y: 0, z: 0, zOrigin: "user", entertainmentAreaId: "a", zoneId: "z1", zoneRelativePosition: { x: 0, y: 0, z: 0 } }],
+    };
+    const ch = landCarried(bound, "hue-0", 2.5, 2, 0, ctx, { rise: 1, centreY: 0 })?.hueChannels?.[0];
+    expect(ch?.zoneRelativePosition?.z).toBe(1);
+  });
+
   it("slides a strip whole so its middle lands there", () => {
     const strip = landCarried(base, "usb-s1", 2.5, 3, 0, ctx)?.usbStrips?.[0];
     expect(strip).toMatchObject({ startX: 1.5, endX: 3.5, startY: 3, endY: 3 });

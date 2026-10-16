@@ -42,6 +42,7 @@ import {
 } from "../model/objectId";
 import type { RoomAwareStatus } from "../model/roomAware";
 import { applyRoomTemplate } from "../model/roomTemplate";
+import { carryHint } from "../model/carryHint";
 import { roomObjectAdapter } from "../model/roomObjectKinds";
 import { useFurnitureModels } from "../state/useFurnitureModels";
 import { useLandCarried } from "../state/useLandCarried";
@@ -71,6 +72,7 @@ import { imageLayerGestureKey, useRoomMapImageLayers } from "../state/useRoomMap
 import { useRoomMapObjects } from "../state/useRoomMapObjects";
 import { ROOM_MAP_PX_PER_METER, ROOM_MAP_VIEWPORT_ATTR, useRoomMapViewport } from "../state/useRoomMapViewport";
 import { useSnapGuides } from "../state/useSnapGuides";
+import { CarryHint } from "./CarryHint";
 import { ContextMenu, type ContextMenuAction } from "./ContextMenu";
 import { CornerControls, EDIT_STAGES, type EditStage } from "./CornerControls";
 import { ROOM_MAP_FIT_INSETS, ROOM_MAP_PREVIEW_INSETS } from "./dock/dockGeometry";
@@ -1050,6 +1052,7 @@ export function RoomMapEditor({
           </RoomMapCanvas>
         )}
         {!inRoom && <PlanDropGhost ref={planGhostRef} />}
+        {inRoom && <CarryHint hint={preview ? null : carryHint(docConfig, docSelectedId, { hueAreaId })} />}
 
         <CornerControls
           roomAware={roomAware}

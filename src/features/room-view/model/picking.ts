@@ -17,6 +17,8 @@ export interface Pickable {
   angle: number;
   /** A strip: long and a centimetre thick. */
   line?: boolean;
+  /** Carried up and down as well, with ⇧: the TV and a Hue light. */
+  rises?: boolean;
   /** A bent strip's straight runs, picked and marked one by one; the box above is round them all. */
   legs?: readonly PickLeg[];
 }

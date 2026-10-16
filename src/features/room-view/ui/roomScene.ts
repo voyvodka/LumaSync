@@ -284,6 +284,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
       // A downlight's lens is a centimetre thick: as thin, it was hard to click.
       half: [rx, Math.max(ry, 0.04), rz],
       angle: 0,
+      rises: true,
     });
     const outside = corners !== null && outsideOutline(fixture.glow.at.x + W / 2, fixture.glow.at.z + D / 2, corners);
     return {
@@ -320,7 +321,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   if (screen) {
     sort(screen.parts, TV_ANCHOR_OBJECT_ID);
     const { centre, width, height } = screen.layout;
-    pickables.push({ id: TV_ANCHOR_OBJECT_ID, kind: "tv", centre, half: [width / 2, height / 2, 0.06], angle: 0 });
+    pickables.push({ id: TV_ANCHOR_OBJECT_ID, kind: "tv", centre, half: [width / 2, height / 2, 0.06], angle: 0, rises: true });
     for (const f of screen.footprints) {
       shadows.push(contactShadow(f.hw, f.hd, f.shade, new Matrix4().makeTranslation(f.x, 0, f.z)));
       shadowOwners.push(TV_ANCHOR_OBJECT_ID);
