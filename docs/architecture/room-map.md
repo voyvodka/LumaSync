@@ -97,7 +97,11 @@ on screen (over the top's middle the name sat on the lamp inside), and with the 
 as the plan draws them. So a zone picked or added stays in the 3D room, and its card stays open across
 a stage switch. The boxes are built with the scene and only shown or hidden after, so picking a zone
 rebuilds nothing. They are flagged `OVERLAY` for the glow pass, which hides them: its black stand-in
-for every other mesh writes depth, and a zone's box drawn that way put out the bulbs inside it. The plan's own switches and keys step aside in 3D: the grid and zone-outline switches
+for every other mesh writes depth, and a zone's box drawn that way put out the bulbs inside it. A loose
+light let go inside a drawn zone joins it, on the plan or carried in 3D, at the spot it was put down
+(`model/zoneDrop.ts`); the smallest zone wins where they overlap. Only a drawn zone takes it — the
+one being edited, or every zone of the area with the zones toggle — since one hidden took the light
+unseen. The inspector's zone picker still assigns, at the zone's middle. The plan's own switches and keys step aside in 3D: the grid and zone-outline switches
 are hidden, ⌘0 is the camera's Whole room, the arrows with nothing selected do nothing, and the keys
 list drops panning and box selection. Edit opens on the 3D room where it is built; the stage picked
 is remembered for the session, like the face, and not stored. A room that cannot open in 3D falls back to the plan with

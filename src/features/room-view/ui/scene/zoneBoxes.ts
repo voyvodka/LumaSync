@@ -4,6 +4,7 @@
 import {
   BackSide,
   BoxGeometry,
+  type Camera,
   CanvasTexture,
   Color,
   DoubleSide,
@@ -34,6 +35,14 @@ const LABEL_LIFT_PX = 12;
 const DASH_PX = 8;
 const GAP_PX = 6;
 const FLOOR_LIFT = 0.006;
+/** Clear of the top bar and the carry hint under it. */
+const TOP_NDC = 0.72;
+const TOP_CORNERS = [
+  [-1, -1],
+  [-1, 1],
+  [1, -1],
+  [1, 1],
+] as const;
 // One side only: both faces of a box stacked every pixel twice and read at double the opacity.
 const FILL = { active: 0.06, other: 0.02 };
 const EDGE = { active: 0.5, other: 0.3 };
@@ -44,7 +53,8 @@ export interface ZoneBoxes {
   /** True when what is shown changed. */
   mark(marks: ZoneMarks | null): boolean;
   setPixelsPerMetre(ppm: number): void;
-  orient(cameraQuaternion: Quaternion): void;
+  /** With `camera`, the name keeps clear of the view's top edge. */
+  orient(cameraQuaternion: Quaternion, camera?: Camera): void;
 }
 
 function nameTexture(name: string, colour: string): { texture: CanvasTexture; aspect: number } {
@@ -133,6 +143,7 @@ export function buildZoneBoxes(zones: readonly HueZone[], dims: RoomDimensions):
   let ppm = 0;
   const up = new Vector3();
   const corner = new Vector3();
+  const probe = new Vector3();
   return {
     group,
     mark(marks) {
@@ -161,21 +172,17 @@ export function buildZoneBoxes(zones: readonly HueZone[], dims: RoomDimensions):
         label.scale.setScalar(LABEL_PX / ppm);
       }
     },
-    // Over the top corner highest on screen: over the top face's middle, it sat on the lamp inside.
-    orient(q) {
+    // Over the top corner highest on screen, as long as the name stays in view: over the top face's
+    // middle it sat on the lamp inside, and over a corner past the top edge it was cut off.
+    orient(q, camera) {
       up.set(0, 1, 0).applyQuaternion(q);
-      for (const { label, half } of built) {
+      camera?.updateMatrixWorld();
+      const lift = ppm > 0 ? (LABEL_LIFT_PX + LABEL_PX) / ppm : 0;
+      for (const { one, label, half } of built) {
         if (!label.visible) continue;
-        let best = Number.NEGATIVE_INFINITY;
-        for (const sx of [-1, 1]) {
-          for (const sz of [-1, 1]) {
-            const height = up.x * sx * half.x + up.y * half.y + up.z * sz * half.z;
-            if (height > best) {
-              best = height;
-              corner.set(sx * half.x, half.y, sz * half.z);
-            }
-          }
-        }
+        const corners = TOP_CORNERS.map(([sx, sz]) => new Vector3(sx * half.x, half.y, sz * half.z)).sort((a, b) => up.dot(b) - up.dot(a));
+        const fits = (c: Vector3) => !camera || probe.copy(c).addScaledVector(up, lift).add(one.position).project(camera).y < TOP_NDC;
+        corner.copy(corners.find(fits) ?? corners[corners.length - 1]!);
         label.quaternion.copy(q);
         label.position.copy(corner).addScaledVector(up, ppm > 0 ? (LABEL_LIFT_PX + LABEL_PX / 2) / ppm : 0);
       }

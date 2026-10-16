@@ -6,6 +6,7 @@ import { lampColour } from "../model/lampColours";
 import {
   AdditiveBlending,
   type BufferGeometry,
+  type Camera,
   Color,
   DoubleSide,
   InstancedMesh,
@@ -166,7 +167,7 @@ export interface RoomScene {
   /** Outlines the Hue zones being edited, or none; true when that changed. */
   markZones(marks: ZoneMarks | null): boolean;
   /** Turns what faces the camera (the selection's ring, a zone's name) to it; call before each draw. */
-  faceCamera(cameraQuaternion: Quaternion): void;
+  faceCamera(cameraQuaternion: Quaternion, camera?: Camera): void;
   /** `null` keeps each lamp's own colour; a palette gives lamp i stop i mod n. */
   setMood(lampColour: number | null, levels: MoodLevels, palette?: readonly number[]): void;
   /** Null for a lamp: its light and glow are built into the scene. Without riders a desk leaves its
@@ -576,9 +577,9 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     pickables,
     select: mark.select,
     markZones: zoneBoxes.mark,
-    faceCamera(q) {
+    faceCamera(q, camera) {
       mark.orient(q);
-      zoneBoxes.orient(q);
+      zoneBoxes.orient(q, camera);
     },
     lift(objectId: string, withRiders = true) {
       const piece = liftables.get(objectId);

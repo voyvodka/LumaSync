@@ -155,6 +155,21 @@ describe("useRoomMapHueZones — pre-mutation payloads", () => {
   });
 });
 
+describe("useRoomMapHueZones — a light dropped into a zone", () => {
+  it("joins it where it was put down, sending that spot, and keeps what the drop changed", async () => {
+    mockAssign.mockResolvedValue(applied([ZONE_A], [CHANNEL_0]));
+    const { result, apply } = renderZones();
+    const dropped = { ...CHANNEL_0, zOrigin: "user" as const };
+
+    act(() => result.current.handleAssignChannelToZone(0, "zone-a", { channel: dropped, at: { x: 0.5, y: -0.25, z: 0.1 } }));
+
+    const written = apply.mock.calls[0][0];
+    expect(written.hueChannels[0]).toMatchObject({ zoneId: "zone-a", zOrigin: "user", zoneRelativePosition: { x: 0.5, y: -0.25, z: 0.1 } });
+    await waitFor(() => expect(mockAssign).toHaveBeenCalledTimes(1));
+    expect(mockAssign.mock.calls[0][0].zoneRelativePosition).toEqual({ x: 0.5, y: -0.25, z: 0.1 });
+  });
+});
+
 // Channel 0 of another area is a different light; the index alone matched it.
 describe("useRoomMapHueZones — assignment stays inside the viewed area", () => {
   it("binds the viewed area's channel and leaves the other area's channel and zones alone", async () => {

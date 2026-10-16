@@ -1,4 +1,4 @@
-import { type LineSegments, type Mesh, type MeshBasicMaterial, Quaternion, Vector3 } from "three";
+import { type LineSegments, type Mesh, type MeshBasicMaterial, OrthographicCamera, Quaternion, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 
 import type { HueZone } from "@/shared/contracts/roomMap";
@@ -49,6 +49,23 @@ describe("buildZoneBoxes", () => {
     expect(label.position.x).toBeLessThan(-1.2);
     expect(label.position.z).toBeLessThan(-0.9);
     expect(label.position.y).toBeGreaterThan(0.625);
+  });
+
+  it("takes a lower corner when the highest would put the name past the view's top", () => {
+    const boxes = buildZoneBoxes([zone("a")], dims);
+    boxes.mark({ active: "a", others: [] });
+    boxes.setPixelsPerMetre(100);
+    const { one, label } = parts(boxes, 0);
+    // Close in, so the box's far top corner is above the frame.
+    const camera = new OrthographicCamera(-1.5, 1.5, 1, -1, 0.1, 50);
+    camera.position.set(6, 6, 6);
+    camera.lookAt(0, 1.25, 0);
+    camera.updateMatrixWorld();
+    boxes.orient(camera.quaternion);
+    const free = label.position.clone();
+    boxes.orient(camera.quaternion, camera);
+    expect(label.position.equals(free)).toBe(false);
+    expect(label.position.clone().add(one.position).project(camera).y).toBeLessThan(0.72);
   });
 
   it("is outlined in the zone's colour", () => {

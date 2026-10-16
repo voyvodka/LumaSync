@@ -281,7 +281,7 @@ function openRoomView(
       cut(room, t0);
       pixelsPerMetre = host.clientHeight / ((camera.top - camera.bottom) / camera.zoom);
       room.setPixelsPerMetre(pixelsPerMetre);
-      room.faceCamera(camera.quaternion);
+      room.faceCamera(camera.quaternion, camera);
       if (bloom) bloom.render(room.scene, camera);
       else renderer.render(room.scene, camera);
       const now = performance.now();

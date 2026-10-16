@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_ROOM_MAP, type RoomMapConfig } from "@/shared/contracts/roomMap";
 
-import { furnitureObjectId } from "../../model/objectId";
+import { furnitureObjectId, hueChannelObjectId } from "../../model/objectId";
 import { useLandCarried } from "../useLandCarried";
 import type { RoomMapDocument } from "../useRoomMapDocument";
 
@@ -24,6 +24,25 @@ describe("useLandCarried", () => {
     expect(result.current(furnitureObjectId("bed"), 0, 0, 0)).toBe(false);
     expect(apply).not.toHaveBeenCalled();
     expect(result.current(furnitureObjectId("sofa"), 0.5, 0, 0)).toBe(true);
+    expect(apply).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("useLandCarried — a light let go", () => {
+  const lit: RoomMapConfig = { ...config, hueChannels: [{ channelIndex: 2, x: -0.5, y: 0.5, z: 0 }] };
+
+  it("is offered to `dropInto` where it landed, and written only when that declines it", () => {
+    const apply = vi.fn<RoomMapDocument["apply"]>();
+    const dropInto = vi.fn((_: unknown) => true);
+    const { result, rerender } = renderHook(({ take }) => useLandCarried({ apply, config: lit, hueAreaId: null, scopedConfig: lit }, (ch) => dropInto(ch) && take), {
+      initialProps: { take: true },
+    });
+    expect(result.current(hueChannelObjectId(2), 1, 0, 0)).toBe(true);
+    // 1 m right of a 4 m room's middle is x 0.5 of the bridge cube.
+    expect(dropInto.mock.calls[0]?.[0]).toMatchObject({ channelIndex: 2, x: 0.5 });
+    expect(apply).not.toHaveBeenCalled();
+    rerender({ take: false });
+    expect(result.current(hueChannelObjectId(2), 1, 0, 0)).toBe(true);
     expect(apply).toHaveBeenCalledTimes(1);
   });
 });

@@ -44,6 +44,7 @@ import type { RoomAwareStatus } from "../model/roomAware";
 import { applyRoomTemplate } from "../model/roomTemplate";
 import { carryHint } from "../model/carryHint";
 import { buildObjectList } from "../model/objectList";
+import { dropZones, zoneDrop } from "../model/zoneDrop";
 import { zoneMarks } from "../model/zoneMarks";
 import { roomObjectAdapter } from "../model/roomObjectKinds";
 import { useFurnitureModels } from "../state/useFurnitureModels";
@@ -225,7 +226,6 @@ export function RoomMapEditor({
   );
   const [cameraCommand, setCameraCommand] = useState<CameraCommand | undefined>(undefined);
   const mood = useRoomMood();
-  const landCarriedPiece = useLandCarried(doc);
 
   const { showGrid, setShowGrid, gridStrokeWidth, setGridStrokeWidth, showHueZones, setShowHueZones } = useRoomMapGridSettings();
 
@@ -259,6 +259,16 @@ export function RoomMapEditor({
     () => (hueAreaId ? hueZones.filter((zone) => zone.entertainmentAreaId === hueAreaId) : hueZones),
     [hueZones, hueAreaId],
   );
+  const dropIntoZone = useCallback(
+    (channel: HueChannelPlacement) => {
+      const into = zoneDrop(channel, dropZones(areaZones, activeHueZoneId, showHueZones));
+      if (!into) return false;
+      handleAssignChannelToZone(channel.channelIndex, into.zoneId, { channel, at: into.at });
+      return true;
+    },
+    [areaZones, showHueZones, activeHueZoneId, handleAssignChannelToZone],
+  );
+  const landCarriedPiece = useLandCarried(doc, dropIntoZone);
   const roomZones = useMemo(
     () => (inRoom && !preview ? zoneMarks(scopedConfig, areaZones.map((zone) => zone.id), activeHueZoneId, selectedId, showHueZones) : null),
     [inRoom, preview, scopedConfig, areaZones, activeHueZoneId, selectedId, showHueZones],
@@ -567,6 +577,7 @@ export function RoomMapEditor({
   );
   const handleHueChannelChange = useCallback(
     (updated: HueChannelPlacement) => {
+      if (dropIntoZone(updated)) return;
       apply((cfg) => {
         const before = cfg.hueChannels.find(
           (ch) => ch.channelIndex === updated.channelIndex && (ch.entertainmentAreaId ?? "") === (updated.entertainmentAreaId ?? ""),
@@ -574,7 +585,7 @@ export function RoomMapEditor({
         return { hueChannels: replaceHueChannel(cfg.hueChannels, before ? seatMovedLight(before, updated, cfg) : updated) };
       });
     },
-    [apply],
+    [apply, dropIntoZone],
   );
   const handleImageLayerSelect = useCallback((id: string) => select(imageLayerObjectId(id)), [select]);
   const handleImageLayerTransformChange = useCallback(

@@ -1,10 +1,12 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type {
+  HueChannelPlacement,
   HueZone,
   HueZoneCommandResult,
   HueZoneStatusCode,
   RoomMapConfig,
+  ZoneRelativePosition,
 } from "@/shared/contracts/roomMap";
 import { isHueZoneApplied, replaceHueChannel } from "@/shared/contracts/roomMap";
 import { findScopedHueChannel } from "../model/hueChannelScope";
@@ -38,9 +40,16 @@ export interface UseRoomMapHueZonesReturn {
   handleAddHueZone: () => void;
   handleDeleteHueZone: (zoneId: string) => void;
   handleRenameHueZone: (zoneId: string, name: string) => void;
-  handleAssignChannelToZone: (channelIndex: number, targetZoneId: string | null) => void;
+  /** `dropped`: the light as it was put down, and where in the zone that is; without it, the stored
+   *  light at the zone's middle. */
+  handleAssignChannelToZone: (channelIndex: number, targetZoneId: string | null, dropped?: DroppedLight) => void;
   handleHueZoneCenterChange: (zoneId: string, centerX: number, centerY: number) => void;
   handleHueZoneUpdate: (zoneId: string, patch: Partial<HueZone>) => void;
+}
+
+export interface DroppedLight {
+  channel: HueChannelPlacement;
+  at: ZoneRelativePosition;
 }
 
 // Hue Zone CRUD. Every handler is local-first and optimistic: the local edit
@@ -158,8 +167,9 @@ export function useRoomMapHueZones({
   // It writes three fields that must stay in sync — `zoneId`,
   // `zoneRelativePosition`, `channelIndices` — see docs/architecture/room-map.md.
   const handleAssignChannelToZone = useCallback(
-    (channelIndex: number, targetZoneId: string | null) => {
-      const channel = findScopedHueChannel(config.hueChannels, hueAreaId, channelIndex);
+    (channelIndex: number, targetZoneId: string | null, dropped?: DroppedLight) => {
+      const channel = dropped?.channel ?? findScopedHueChannel(config.hueChannels, hueAreaId, channelIndex);
+      const at = dropped?.at ?? { x: 0, y: 0, z: 0 };
       if (!channel) return;
       // No-op if already in the target bucket — avoids spurious invokes.
       const currentZoneId = channel.zoneId ?? null;
@@ -180,13 +190,12 @@ export function useRoomMapHueZones({
       const entertainmentAreaId =
         targetZone?.entertainmentAreaId ?? hueAreaId ?? "";
 
-      // Default zone-relative position lands on the zone center so the
-      // dot is visible inside the dashed bounds; the user can drag it
-      // afterwards to refine the placement.
+      // From the menu it lands on the zone's middle, inside the dashed bounds; dropped into the zone,
+      // where it was put down.
       const nextChannels = replaceHueChannel(
         config.hueChannels,
         targetZoneId
-          ? { ...channel, zoneId: targetZoneId, zoneRelativePosition: { x: 0, y: 0, z: 0 } }
+          ? { ...channel, zoneId: targetZoneId, zoneRelativePosition: at }
           : { ...channel, zoneId: undefined, zoneRelativePosition: undefined },
       );
       // Keep Hue zones' `channelIndices` in sync — remove from old zone,
@@ -212,7 +221,7 @@ export function useRoomMapHueZones({
         assignChannelToHueZone({
           channelIndex,
           zoneId: targetZoneId,
-          zoneRelativePosition: targetZoneId ? { x: 0, y: 0, z: 0 } : null,
+          zoneRelativePosition: targetZoneId ? at : null,
           entertainmentAreaId,
           existingZones: config.zones,
           channels: config.hueChannels,
