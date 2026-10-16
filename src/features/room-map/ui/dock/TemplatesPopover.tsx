@@ -17,7 +17,6 @@ export interface TemplatesPopoverProps {
   onClose: () => void;
   anchorRef: RefObject<HTMLElement | null>;
   id: string;
-  /** The template the pointer or the keys rest on, shown in the room behind; `null` for the room as it is. */
   onPreview: (template: RoomMapConfig | null) => void;
   onApply: (template: RoomMapConfig) => void;
 }

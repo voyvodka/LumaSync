@@ -3,7 +3,6 @@ import { type RoomMapConfig, resolveFurnitureType } from "@/shared/contracts/roo
 
 import { roomToScene } from "./roomSpace";
 
-/** A piece of one room, where it stands in that room's scene. */
 export interface MorphPiece {
   objectId: string;
   kind: string;
@@ -37,8 +36,7 @@ function piecesOf(config: RoomMapConfig): MorphPiece[] {
   return pieces;
 }
 
-/** How one room's furniture becomes another's: each kind paired off nearest first, the rest going
- *  or coming. Both rooms are centred on the scene's origin, so a different size still pairs. */
+/** Both rooms are centred on the scene's origin, so rooms of different sizes still pair. */
 export function planMorph(from: RoomMapConfig, to: RoomMapConfig): MorphPlan {
   const before = piecesOf(from);
   const after = piecesOf(to);

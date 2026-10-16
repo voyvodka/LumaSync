@@ -276,8 +276,7 @@ export function RoomMapEditor({
   const { setCanvasContainer, canvasSize, zoom, setZoom, panOffset, setPanOffset, spaceHeld, fitToView, handleArrowPan } =
     useRoomMapViewport(config.dimensions, ROOM_MAP_FIT_INSETS);
 
-  // The plan follows a previewed template's size and goes back to where it was left; an applied
-  // template is fitted, as the room it now is.
+  // The plan fits a previewed template, goes back to where it was left, and fits an applied one.
   const planView = useRef<{ zoom: number; pan: { x: number; y: number } } | null>(null);
   const followTemplate = useRef(false);
   const dockTemplates = useMemo(

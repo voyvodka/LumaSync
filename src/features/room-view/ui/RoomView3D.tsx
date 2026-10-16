@@ -894,7 +894,6 @@ function openRoomView(
       renderer.shadowMap.needsUpdate = shadows;
       request();
     };
-    // The landed card sinks onto the piece just added under it, its tint going as it touches down.
     const settleDrop = () => {
       const held = dropGhost;
       if (!held || settleFrame || !held.mesh || prefersReducedMotion()) {

@@ -17,16 +17,10 @@ const clamp01 = (t: number) => Math.min(Math.max(t, 0), 1);
 export interface Morph {
   /** Poses every piece for `now`; false once all of them have arrived. */
   step(now: number): boolean;
-  /** Puts every piece where it ends, at once. */
   finish(): void;
 }
 
-/**
- * One room's furniture becoming another's, in the new room's scene: a paired piece slides, turns and
- * stretches from where it stood before, one that goes is pressed down into the floor, one that comes
- * grows up out of it, nearest the middle first. `leaving` were lifted from the old scene before it
- * was disposed and rehomed into the new one.
- */
+/** `leaving` were lifted from the old scene before it was disposed, and rehomed into the new one. */
 export function startMorph(plan: MorphPlan, lift: (objectId: string) => LiftedPiece | null, leaving: readonly LiftedPiece[], start: number): Morph {
   const gliding = plan.matched.flatMap(({ from, to }) => {
     const lifted = lift(to.objectId);
