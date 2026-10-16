@@ -10,11 +10,15 @@ import {
   type ScreenKind,
   screenHeightPerWidth,
   type TvAnchorPlacement,
+  type UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
 import { roundTo } from "@/shared/lib/math";
 import { IconTv } from "@/shared/ui/icons";
 import { InfoTip } from "@/shared/ui/InfoTip/InfoTip";
 
+import { shortPortName } from "@/features/device/model/deviceRail";
+
+import { backlightBinding, isBacklightStrip } from "../../model/backlight";
 import { defaultTvMountHeight } from "../../model/roomAware";
 import { TYPE_DOT_COLOR } from "../../model/zoneColor";
 import { DecimalField } from "../DecimalField";
@@ -26,6 +30,7 @@ import { GlyphDiagonal, GlyphHeight } from "./fieldGlyphs";
 // The worker accepts 0, but a screen centre on the floor is never meant.
 const MIN_MOUNT_HEIGHT_M = 0.01;
 const AUTO = "auto";
+const NO_BACKLIGHT = "none";
 
 const SCREEN_KIND_LABEL = {
   tv: "roomMap:inspector.screenKind.tv",
@@ -37,6 +42,7 @@ export function TvAnchorInspector({
   roomHeightMeters,
   autoKind,
   modelChoices,
+  strips,
   outside = false,
   sizeUnit,
   onSizeUnitChange,
@@ -53,6 +59,7 @@ export function TvAnchorInspector({
   autoKind: ScreenKind;
   /** The screen kind is drawn only by the 3D room; a build without it does not offer it. */
   modelChoices: boolean;
+  strips: readonly UsbStripPlacement[];
   sizeUnit: SizeUnit;
   onSizeUnitChange: (unit: SizeUnit) => void;
   onUpdate: (patch: Partial<TvAnchorPlacement>) => void;
@@ -71,6 +78,16 @@ export function TvAnchorInspector({
   // The centre stays put: Hue sampling and a backlight strip both read the screen from it.
   const resize = (width: number, more: Partial<TvAnchorPlacement> = {}) => onUpdate({ ...more, width, x: tv.x - (width - tv.width) / 2 });
   const unit = SIZE_UNITS[sizeUnit];
+  const stripLabel = (strip: UsbStripPlacement) =>
+    [t("roomMap:objectPanel.ledLabel", { count: String(strip.ledCount) }), strip.portName && shortPortName(strip.portName)].filter(Boolean).join(" · ");
+  const near = strips.filter((strip) => isBacklightStrip(strip, { tvAnchor: { ...tv, backlightStripId: undefined }, usbStrips: strips }));
+  const binding = backlightBinding({ tvAnchor: tv, usbStrips: strips });
+  const autoLabel =
+    near.length > 1
+      ? t("roomMap:inspector.backlightAutoMany", { count: near.length })
+      : near[0]
+        ? t("roomMap:inspector.backlightAuto", { name: stripLabel(near[0]) })
+        : t("roomMap:inspector.backlightAutoNone");
   const otherUnit: SizeUnit = sizeUnit === "inch" ? "cm" : "inch";
 
   return (
@@ -167,6 +184,27 @@ export function TvAnchorInspector({
               </InfoTip>
             </FieldTip>
           </FieldRow>
+          {strips.length > 0 && (
+            <>
+              <DockPicker
+                label={t("roomMap:inspector.backlightLabel")}
+                value={binding === "none" ? NO_BACKLIGHT : binding === "near" ? AUTO : binding.strip.stripId}
+                width={170}
+                disabled={locked}
+                testId="tv-backlight"
+                options={[
+                  {
+                    value: AUTO,
+                    label: autoLabel,
+                  },
+                  ...strips.map((strip) => ({ value: strip.stripId, label: stripLabel(strip) })),
+                  { value: NO_BACKLIGHT, label: t("roomMap:inspector.backlightNone") },
+                ]}
+                onChange={(next) => onUpdate({ backlightStripId: next === AUTO ? undefined : next === NO_BACKLIGHT ? null : next })}
+              />
+              <InfoTip label={t("common:hintFor", { label: t("roomMap:inspector.backlightLabel") })}>{t("roomMap:inspector.backlightInfo")}</InfoTip>
+            </>
+          )}
         </>
       }
     />

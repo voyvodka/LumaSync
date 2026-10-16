@@ -143,6 +143,7 @@ export function DockInspector({
           roomHeightMeters={config.dimensions.heightMeters}
           autoKind={autoScreenKind(config)}
           modelChoices={modelChoices}
+          strips={config.usbStrips}
           sizeUnit={screenUnit}
           onSizeUnitChange={(unit) => void setPreference("roomMapScreenUnit", unit)}
           outside={outsideOutline(target.tv.x + target.tv.width / 2, target.tv.y + target.tv.height / 2, resolveRoomFootprint(config))}
@@ -180,7 +181,7 @@ export function DockInspector({
       const id = usbStripObjectId(strip.stripId);
       const { status, port } = stripStatus(strip);
       // Behind the screen a strip is drawn as its backlight, at the screen and by no height of its own.
-      const backlight = config.tvAnchor !== undefined && isBacklightStrip(strip, config.tvAnchor);
+      const backlight = isBacklightStrip(strip, config);
       const stuck = strip.locked || backlight ? null : stickStripToWall(strip, config);
       const fitTo = stripFitOffer(strip, config);
       const bends = resolveStripCorners(strip).length;

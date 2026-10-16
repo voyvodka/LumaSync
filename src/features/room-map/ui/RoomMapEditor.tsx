@@ -959,7 +959,7 @@ export function RoomMapEditor({
                 panMode={spaceHeld}
                 connectionStatus={stripStatus(strip).status}
                 room={roomBox}
-                bendable={!(config.tvAnchor && isBacklightStrip(strip, config.tvAnchor))}
+                bendable={!isBacklightStrip(strip, config)}
                 onSelect={handleUsbStripSelect}
                 onChange={handleUsbStripChange}
               />

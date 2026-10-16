@@ -121,7 +121,10 @@ export const ROOM_OBJECT_KINDS = {
     toggleLock: (config, ref) => ({
       usbStrips: config.usbStrips.map((s) => (s.stripId === ref.stripId ? { ...s, locked: !s.locked } : s)),
     }),
-    remove: (config, ref) => ({ usbStrips: config.usbStrips.filter((s) => s.stripId !== ref.stripId) }),
+    remove: (config, ref) => ({
+      usbStrips: config.usbStrips.filter((s) => s.stripId !== ref.stripId),
+      ...(config.tvAnchor?.backlightStripId === ref.stripId ? { tvAnchor: { ...config.tvAnchor, backlightStripId: undefined } } : {}),
+    }),
     duplicate: (config, ref, offset) => {
       const src = config.usbStrips.find((s) => s.stripId === ref.stripId);
       if (!src) return null;

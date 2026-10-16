@@ -1,6 +1,8 @@
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
+import { seatBacklight } from "../model/backlight";
 import { parseObjectId } from "../model/objectId";
+import { keepStripInside, roomBoxOf } from "../model/pieceGeometry";
 import { roomObjectAdapter } from "../model/roomObjectKinds";
 
 export const MAX_HISTORY = 50;
@@ -117,9 +119,11 @@ export function roomMapReducer(state: RoomMapState, action: RoomMapAction): Room
       };
     case "apply": {
       const partial = resolvePatch(action.patch, state.config);
-      const config = action.replace
-        ? (partial as RoomMapConfig)
-        : { ...state.config, ...partial };
+      const merged = action.replace ? (partial as RoomMapConfig) : { ...state.config, ...partial };
+      // One place for every writer: whatever moved the screen or its bound strip, the strip ends behind it.
+      const room = roomBoxOf(merged);
+      const seated = seatBacklight(merged, (s) => keepStripInside(s, room));
+      const config = seated ? { ...merged, usbStrips: seated } : merged;
       const merges = action.gesture !== undefined && joinsOpenGesture(state.gesture, action.gesture);
       return {
         config,

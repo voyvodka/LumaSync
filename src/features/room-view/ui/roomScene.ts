@@ -336,7 +336,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   const tapes: LedTape[] = [];
   for (const strip of config.usbStrips) {
     const id = usbStripObjectId(strip.stripId);
-    if (config.tvAnchor && screen && isBacklightStrip(strip, config.tvAnchor)) {
+    if (screen && isBacklightStrip(strip, config)) {
       const { centre, width, height } = screen.layout;
       pickables.push({ id, kind: "light", centre, half: [width / 2 + 0.05, height / 2 + 0.05, 0.08], angle: 0 });
       continue;

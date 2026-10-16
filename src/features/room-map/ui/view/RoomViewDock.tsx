@@ -129,7 +129,7 @@ export function RoomViewDock({
     selected?.kind === "usb"
       ? strips.find((s) => s.stripId === selected.stripId)
       : selected?.kind === "tv" && tv
-        ? strips.find((s) => isBacklightStrip(s, tv))
+        ? strips.find((s) => isBacklightStrip(s, { tvAnchor: tv, usbStrips: strips }))
         : undefined;
   const stripNow = strip ? stripStatus(strip) : undefined;
   const hueFailure = selected && identify.failure?.id === selected.id ? identify.failure.code : null;

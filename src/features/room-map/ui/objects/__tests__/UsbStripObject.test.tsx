@@ -209,7 +209,7 @@ describe("UsbStripObject — corners", () => {
           pxPerMeter={PX_PER_METER}
           selected
           onSelect={vi.fn<(id: string) => void>()}
-          onChange={(updated) => setPlacement((before) => refitRetapedStrip(before, updated, {}))}
+          onChange={(updated) => setPlacement((before) => refitRetapedStrip(before, updated, { usbStrips: [] }))}
         />
       );
     }

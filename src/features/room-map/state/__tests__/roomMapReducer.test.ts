@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_ROOM_MAP, type RoomMapConfig } from "@/shared/contracts/roomMap";
+import { DEFAULT_ROOM_MAP, type RoomMapConfig, stripCentre } from "@/shared/contracts/roomMap";
 import { furnitureObjectId } from "../../model/objectId";
 import {
   GESTURE_COALESCE_MS,
@@ -75,6 +75,34 @@ describe("roomMapReducer — apply", () => {
     let s = loaded();
     for (let i = 0; i < MAX_HISTORY + 10; i++) s = roomMapReducer(s, moveSofa(i));
     expect(s.past).toHaveLength(MAX_HISTORY);
+  });
+});
+
+describe("roomMapReducer — the bound backlight", () => {
+  const strip = { stripId: "far", startX: 0, startY: 3, endX: 1, endY: 3, ledCount: 60 };
+  const tv = { x: 2, y: 0, width: 1.2, height: 0.1 };
+
+  it("keeps the bound strip behind the screen through a bind, a move and a resize, each one undo step", () => {
+    const bound = run(loaded({ usbStrips: [strip], tvAnchor: tv }), { type: "apply", patch: { tvAnchor: { ...tv, backlightStripId: "far" } } });
+    expect(stripCentre(bound.config.usbStrips[0]!)).toEqual({ x: 2.6, y: 0.05 });
+    const moved = run(bound, { type: "apply", patch: (cfg) => ({ tvAnchor: { ...cfg.tvAnchor!, x: 3 } }) });
+    expect(stripCentre(moved.config.usbStrips[0]!).x).toBeCloseTo(3.6);
+    const wider = run(moved, { type: "apply", patch: (cfg) => ({ tvAnchor: { ...cfg.tvAnchor!, x: 2.8, width: 1.6 } }) });
+    expect(stripCentre(wider.config.usbStrips[0]!).x).toBeCloseTo(3.6);
+    const undone = run(wider, { type: "undo" }, { type: "undo" });
+    expect(stripCentre(undone.config.usbStrips[0]!).x).toBeCloseTo(2.6);
+  });
+
+  it("takes the strip back behind the screen when it is dragged off on its own", () => {
+    const bound = run(loaded({ usbStrips: [strip], tvAnchor: { ...tv, backlightStripId: "far" } }), { type: "apply", patch: {} });
+    const dragged = run(bound, { type: "apply", patch: (cfg) => ({ usbStrips: cfg.usbStrips.map((s) => ({ ...s, startY: 2, endY: 2 })) }) });
+    expect(stripCentre(dragged.config.usbStrips[0]!).y).toBeCloseTo(0.05);
+  });
+
+  it("takes a locked bound strip along when the screen moves", () => {
+    const bound = run(loaded({ usbStrips: [{ ...strip, locked: true }], tvAnchor: { ...tv, backlightStripId: "far" } }), { type: "apply", patch: {} });
+    const moved = run(bound, { type: "apply", patch: (cfg) => ({ tvAnchor: { ...cfg.tvAnchor!, x: 3 } }) });
+    expect(stripCentre(moved.config.usbStrips[0]!).x).toBeCloseTo(3.6);
   });
 });
 

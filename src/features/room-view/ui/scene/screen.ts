@@ -2,6 +2,7 @@
 // over a low unit with a soundbar when it hangs on the wall.
 import { BufferAttribute, Color, PlaneGeometry } from "three";
 
+import { backlightBinding } from "@/features/room-map/model/backlight";
 import {
   type RoomMapConfig,
   resolveFurnitureTop,
@@ -198,7 +199,8 @@ export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, F
 
   const sx = tv.x + tv.width / 2;
   const sy = tv.y + tv.height / 2;
-  const lit = config.usbStrips.some((s) => {
+  const binding = backlightBinding(config);
+  const lit = binding === "none" ? false : binding !== "near" || config.usbStrips.some((s) => {
     const { x: mx, y: my } = stripCentre(s);
     const xs = stripPoints(s).map((p) => p.x);
     const overlaps = Math.max(...xs) >= tv.x && Math.min(...xs) <= tv.x + tv.width;

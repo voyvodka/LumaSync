@@ -534,6 +534,9 @@ export interface TvAnchorPlacement {
   screenKind?: ScreenKind;
   /** Absent ⇒ 16:9. Frontend-only like `screenKind`: the screen's height is drawn, never sampled. */
   screenAspect?: ScreenAspect;
+  /** Absent ⇒ strips near the screen; null ⇒ none; a string ⇒ that strip. Frontend-only like
+   * `screenKind`; absent must keep meaning proximity, or stored files need a migration. */
+  backlightStripId?: string | null;
 }
 
 /** What the captured screen is drawn as. */
@@ -545,6 +548,12 @@ export const SCREEN_KINDS = {
 export type ScreenKind = (typeof SCREEN_KINDS)[keyof typeof SCREEN_KINDS];
 
 const SCREEN_KIND_VALUES = new Set<string>(Object.values(SCREEN_KINDS));
+
+/** Anything but a strip id or null reads as absent. */
+export function resolveBacklightBinding(stored: unknown): string | null | undefined {
+  if (stored === null) return null;
+  return typeof stored === "string" && stored.length > 0 ? stored : undefined;
+}
 
 /** The stored screen kind when it is a known one, else none (Auto). */
 export function resolveScreenKind(stored: unknown): ScreenKind | undefined {

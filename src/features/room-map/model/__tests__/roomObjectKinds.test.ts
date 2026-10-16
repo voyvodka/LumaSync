@@ -88,3 +88,20 @@ describe("ROOM_OBJECT_KINDS", () => {
     expect(moved.hueChannels?.[0]?.y).toBeCloseTo(0.05);
   });
 });
+
+describe("removing the bound backlight strip", () => {
+  it("takes the screen's binding with it, and leaves another strip's alone", () => {
+    const config: RoomMapConfig = {
+      ...DEFAULT_ROOM_MAP,
+      tvAnchor: { x: 1, y: 0, width: 1, height: 0.1, backlightStripId: "a" },
+      usbStrips: [
+        { stripId: "a", startX: 1, startY: 0.1, endX: 2, endY: 0.1, ledCount: 30 },
+        { stripId: "b", startX: 0, startY: 3, endX: 1, endY: 3, ledCount: 30 },
+      ],
+    };
+    const removeA = ROOM_OBJECT_KINDS.usb.remove!(config, { kind: "usb", stripId: "a" });
+    expect(removeA.tvAnchor?.backlightStripId).toBeUndefined();
+    expect(removeA.tvAnchor).toMatchObject({ x: 1, width: 1 });
+    expect(ROOM_OBJECT_KINDS.usb.remove!(config, { kind: "usb", stripId: "b" }).tvAnchor).toBeUndefined();
+  });
+});

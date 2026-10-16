@@ -349,6 +349,17 @@ backlight with it — a strip whose middle is within a metre of the screen's (`m
 the rule the 3D room draws backlights by) — on the plan too, so moving the screen never leaves its
 backlight drawn as a stray line along the wall.
 
+**The backlight can be named instead of guessed.** `tvAnchor.backlightStripId` binds one strip, or
+`null` says the screen has none; absent keeps the metre rule, so older files read as they did and
+need no migration. A bound strip is put back behind the screen on every reducer `apply`
+(`seatBacklight`), its own drag included: the binding is the user's word for where it sits, and a
+strip dragged off the screen would light the room as a backlight from across it. A lock does not
+exempt it, for the same reason: the plan would draw it across the room while the 3D room still lit
+and picked it as the screen's. An id naming no
+strip reads as absent, and deleting the strip clears it. Like `screenKind`, the field is the
+editor's alone — Rust stores it in the file it owns and never reads it — so the inspector offers
+it with nothing below changing.
+
 The carried piece itself follows the pointer, not a stand-in. The scene merges every piece into one
 mesh per finish, so a piece cannot be moved on its own, and rebuilding the scene costs about 40 ms
 for the Showroom — far over a frame. On the first move, `RoomScene.lift` copies the piece's vertices

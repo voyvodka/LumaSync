@@ -75,3 +75,18 @@ describe("buildScreen — the picture", () => {
     expect(colours(built)[at(0) * 3]!).toBeLessThan(full[at(0) * 3]!);
   });
 });
+
+describe("buildScreen — the backlight", () => {
+  const tv: TvAnchorPlacement = { x: 1.4, y: 0, width: 1.2, height: 0.1 };
+  const behind = { stripId: "bl", startX: 1.4, startY: 0.1, endX: 2.6, endY: 0.1, ledCount: 40 };
+  const across = { stripId: "far", startX: 0, startY: 3.5, endX: 1, endY: 3.5, ledCount: 60 };
+  const backlit = (anchor: TvAnchorPlacement, usbStrips = [behind, across]) =>
+    buildScreen({ ...DEFAULT_ROOM_MAP, dimensions: dims, tvAnchor: anchor, usbStrips }, new Map())?.layout.backlight !== null;
+
+  it("lights a screen with a strip near it or bound to it, and none set to have none", () => {
+    expect(backlit(tv)).toBe(true);
+    expect(backlit(tv, [across])).toBe(false);
+    expect(backlit({ ...tv, backlightStripId: "far" }, [across])).toBe(true);
+    expect(backlit({ ...tv, backlightStripId: null })).toBe(false);
+  });
+});

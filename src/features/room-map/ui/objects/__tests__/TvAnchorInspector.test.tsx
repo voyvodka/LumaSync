@@ -5,7 +5,7 @@ import { afterEach, describe, it, expect, vi, beforeEach } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { TvAnchorInspector } from "../TvAnchorInspector";
-import type { TvAnchorPlacement } from "@/shared/contracts/roomMap";
+import type { TvAnchorPlacement, UsbStripPlacement } from "@/shared/contracts/roomMap";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -16,7 +16,13 @@ vi.mock("react-i18next", () => ({
 
 const baseTv: TvAnchorPlacement = { x: 1.5, y: 0, width: 1.2, height: 0.1 };
 
-function renderInspector(tv: TvAnchorPlacement = baseTv, roomHeightMeters = 2.5, sizeUnit: "inch" | "cm" = "inch", modelChoices = true) {
+function renderInspector(
+  tv: TvAnchorPlacement = baseTv,
+  roomHeightMeters = 2.5,
+  sizeUnit: "inch" | "cm" = "inch",
+  modelChoices = true,
+  strips: readonly UsbStripPlacement[] = [],
+) {
   const onUpdate = vi.fn<(patch: Partial<TvAnchorPlacement>) => void>();
   const onDelete = vi.fn<() => void>();
   const onSizeUnitChange = vi.fn<(unit: "inch" | "cm") => void>();
@@ -26,6 +32,7 @@ function renderInspector(tv: TvAnchorPlacement = baseTv, roomHeightMeters = 2.5,
       roomHeightMeters={roomHeightMeters}
       autoKind="tv"
       modelChoices={modelChoices}
+      strips={strips}
       sizeUnit={sizeUnit}
       onSizeUnitChange={onSizeUnitChange}
       onUpdate={onUpdate}
@@ -224,5 +231,59 @@ describe("TvAnchorInspector — screen kind", () => {
     const { onUpdate } = renderInspector({ ...baseTv, screenKind: "monitor" });
     choose(/roomMap:inspector\.screenKindAuto/);
     expect(onUpdate).toHaveBeenLastCalledWith({ screenKind: undefined });
+  });
+});
+
+describe("TvAnchorInspector — backlight", () => {
+  beforeEach(() => {
+    cleanup();
+    vi.useFakeTimers();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  // Behind the screen (its middle within a metre of the screen's), and one across the room.
+  const behind: UsbStripPlacement = { stripId: "bl", startX: 1.5, startY: 0.1, endX: 2.7, endY: 0.1, ledCount: 40, portName: "COM3" };
+  const across: UsbStripPlacement = { stripId: "far", startX: 0, startY: 3, endX: 1, endY: 3, ledCount: 60 };
+  const picker = () => screen.getByTestId("tv-backlight");
+  const choose = (name: string | RegExp) => {
+    fireEvent.click(picker());
+    fireEvent.click(screen.getByRole("option", { name }));
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+  };
+
+  it("names the strip Auto picks, by its LEDs and port, and binds another", () => {
+    const { onUpdate } = renderInspector(baseTv, 2.5, "inch", true, [behind, across]);
+    expect(picker().textContent).toContain('roomMap:inspector.backlightAuto {"name":"roomMap:objectPanel.ledLabel {\\"count\\":\\"40\\"} · COM3"}');
+    choose('roomMap:objectPanel.ledLabel {"count":"60"}');
+    expect(onUpdate).toHaveBeenLastCalledWith({ backlightStripId: "far" });
+  });
+
+  it("stores None as null and Auto as no binding", () => {
+    const { onUpdate } = renderInspector({ ...baseTv, backlightStripId: "far" }, 2.5, "inch", true, [behind, across]);
+    choose("roomMap:inspector.backlightNone");
+    expect(onUpdate).toHaveBeenLastCalledWith({ backlightStripId: null });
+    choose(/roomMap:inspector\.backlightAuto/);
+    expect(onUpdate).toHaveBeenLastCalledWith({ backlightStripId: undefined });
+  });
+
+  it("names a port by its device, and counts the strips Auto takes when there are several", () => {
+    const usb = { ...behind, portName: "/dev/cu.usbserial-110" };
+    const beside = { ...behind, stripId: "bl2", portName: undefined };
+    renderInspector(baseTv, 2.5, "inch", true, [usb, beside]);
+    fireEvent.click(picker());
+    expect(screen.getByRole("option", { name: 'roomMap:objectPanel.ledLabel {"count":"40"} · cu.usbserial-110' })).toBeTruthy();
+    expect(screen.getByRole("option", { name: 'roomMap:inspector.backlightAutoMany {"count":2}' })).toBeTruthy();
+  });
+
+  it("reads a binding to a strip that is gone as Auto", () => {
+    renderInspector({ ...baseTv, backlightStripId: "deleted" }, 2.5, "inch", true, [behind, across]);
+    expect(picker().textContent).toContain("roomMap:inspector.backlightAuto");
+  });
+
+  it("is not offered in a room with no strips", () => {
+    renderInspector();
+    expect(screen.queryByTestId("tv-backlight")).toBeNull();
   });
 });
