@@ -12,14 +12,14 @@ vi.mock("react-i18next", () => ({
 
 type Apply = (template: RoomMapConfig, name: string) => void;
 
-function Harness(props: { onPreview: (template: RoomMapConfig | null) => void; onApply: Apply; onClose?: () => void }) {
+function Harness(props: { onPreview: (template: RoomMapConfig | null) => void; onApply: Apply; onClose?: () => void; open?: boolean }) {
   const anchor = useRef<HTMLButtonElement | null>(null);
   return (
     <>
       <button ref={anchor} type="button">
         anchor
       </button>
-      <TemplatesPopover open onClose={props.onClose ?? (() => {})} anchorRef={anchor} id="t" onPreview={props.onPreview} onApply={props.onApply} />
+      <TemplatesPopover open={props.open ?? true} onClose={props.onClose ?? (() => {})} anchorRef={anchor} id="t" onPreview={props.onPreview} onApply={props.onApply} />
     </>
   );
 }
@@ -75,5 +75,17 @@ describe("TemplatesPopover", () => {
     fireEvent.blur(card("tv55"), { relatedTarget: null });
     expect(onClose).toHaveBeenCalledOnce();
     expect(screen.getByRole("button", { name: "anchor" })).toHaveFocus();
+  });
+
+  // Its cards animate out under a still pointer, and leaving them then asked for the room back.
+  it("previews nothing once closed, from a rest that was pending or a leave on the way out", () => {
+    const onPreview = vi.fn<(template: RoomMapConfig | null) => void>();
+    const onApply = vi.fn<Apply>();
+    const { rerender } = render(<Harness onPreview={onPreview} onApply={onApply} />);
+    fireEvent.pointerEnter(card("tv55"));
+    rerender(<Harness onPreview={onPreview} onApply={onApply} open={false} />);
+    fireEvent.pointerLeave(screen.getByTestId("templates-cards"));
+    wait(PREVIEW_INTENT_MS * 2);
+    expect(onPreview).not.toHaveBeenCalled();
   });
 });

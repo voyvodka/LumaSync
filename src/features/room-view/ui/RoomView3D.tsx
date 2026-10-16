@@ -133,6 +133,10 @@ const ZOOM_STEP = 1.25;
  */
 let sessionCamera: { position: Vector3; target: Vector3; zoom: number; room: string } | null = null;
 const roomKey = (config: RoomMapConfig) => `${config.dimensions.widthMeters}x${config.dimensions.depthMeters}`;
+const sameRoom = (a: RoomMapConfig, b: RoomMapConfig) => {
+  const keys = Object.keys(a) as (keyof RoomMapConfig)[];
+  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key]);
+};
 /** The frame of a piece being carried: the app's amber. */
 const CARRY_COLOUR = 0xffb020;
 const REFUSED_COLOUR = 0xff5a4f;
@@ -668,14 +672,16 @@ function openRoomView(
     };
     const show = (config: RoomMapConfig, lampFamilies: ReadonlyMap<number, LampFamily>, morphing = false) => {
       if (closed) return;
-      // A view adopted across a face switch is handed the room it already shows.
-      if (config === shownConfig && lampFamilies === shownFamilies) return;
+      // Adopted across a face switch, or an applied preview's copy: rebuilding would cut its morph short.
+      if (shownConfig && sameRoom(config, shownConfig) && lampFamilies === shownFamilies) return;
       const sameFamilies = lampFamilies === shownFamilies;
       shownConfig = config;
       shownFamilies = lampFamilies;
       if (morphing) morphNext = true;
       if (room && builtConfig && sameFamilies && !carry && !morphNext) {
         const nudge = pieceNudge(builtConfig, config);
+        // A gliding piece is already lifted out; lifting it again would copy its emptied spans.
+        if (nudge) endMorph();
         const lifted = nudge ? (nudged?.id === nudge.objectId ? nudged.lifted : room.lift(nudge.objectId, false)) : null;
         if (nudge && lifted) {
           nudged = { id: nudge.objectId, lifted, dx: nudge.dx, dz: nudge.dy };
@@ -698,6 +704,7 @@ function openRoomView(
     const build = (config: RoomMapConfig, lampFamilies: ReadonlyMap<number, LampFamily>) => {
       if (settle !== null) clearTimeout(settle);
       settle = null;
+      const slid = nudged;
       nudged = null;
       endMorph();
       const was = builtConfig;
@@ -715,7 +722,7 @@ function openRoomView(
         detachDrop();
         if (plan) {
           for (const piece of plan.leaving) {
-            const lifted = room.lift(piece.objectId, false);
+            const lifted = slid?.id === piece.objectId ? slid.lifted : room.lift(piece.objectId, false);
             if (!lifted) continue;
             // Lifted copies are the old scene's children; disposing it would empty them.
             lifted.rehome(holding);
@@ -743,7 +750,11 @@ function openRoomView(
         shownRoom = roomKey(config);
       } else if (roomKey(config) !== shownRoom) {
         // A template looked at and left takes the view back to where the room was being seen from.
-        views.set(shownRoom, { position: camera.position.clone(), target: orbit.target.clone(), zoom: camera.zoom });
+        // Kept from before any dolly to a light, or each return would zoom in on top of the last.
+        if (move !== 0) cancelAnimationFrame(move);
+        move = 0;
+        views.set(shownRoom, home ?? { position: camera.position.clone(), target: orbit.target.clone(), zoom: camera.zoom });
+        home = null;
         const back = views.get(roomKey(config));
         if (back) {
           camera.position.copy(back.position);

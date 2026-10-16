@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, Group, Mesh, type Object3D, type Scene } from "three";
+import { BufferAttribute, BufferGeometry, Group, type Material, Mesh, type MeshBasicMaterial, type Object3D, type Scene } from "three";
 
 export interface Span {
   mesh: Mesh;
@@ -65,6 +65,15 @@ export function spanHider(spans: readonly Span[]): (hidden: boolean) => void {
     });
     kept = null;
   };
+}
+
+function disposeMaterials(node: Object3D) {
+  if (!(node instanceof Mesh)) return;
+  const materials: Material[] = Array.isArray(node.material) ? node.material : [node.material];
+  for (const material of materials) {
+    (material as MeshBasicMaterial).map?.dispose();
+    material.dispose();
+  }
 }
 
 function copySpan({ mesh, start, count }: Span): BufferGeometry {
@@ -138,6 +147,8 @@ export function liftPiece(home: Scene, piece: Liftable, riders: ReadonlyMap<stri
       pivot.traverse((node) => {
         if (node instanceof Mesh) node.geometry.dispose();
       });
+      // The copies borrow the merged meshes' materials, gone with their scene; an extra owns its own.
+      for (const extra of piece.extras) extra.traverse(disposeMaterials);
     },
     restore() {
       for (const { lifted } of carried) lifted.restore();

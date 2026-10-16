@@ -100,8 +100,6 @@ export function RoomMapSurface({
     },
     [config, replace],
   );
-  // From the editor's drawer: the room changes under it, so nothing fades in again.
-  const handleTemplateApply = useCallback((template: RoomMapConfig) => replace(applyRoomTemplate(config, template)), [config, replace]);
 
   if (doc.loading) {
     return (
@@ -149,7 +147,7 @@ export function RoomMapSurface({
             roomAware={roomAware}
             focusOnMount={editTakesFocus}
             lampFamilies={lampFamilies}
-            onApplyTemplate={handleTemplateApply}
+            onApplyTemplate={replace}
             room3d={view3dAvailable && !failed}
             onRoomFail={handleViewFail}
           />

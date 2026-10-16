@@ -141,7 +141,10 @@ vi.mock("../RoomMapCanvas", () => ({
 }));
 
 vi.mock("../objects/FurnitureObject", () => ({
-  FurnitureObject: () => <i data-testid="plan-piece" />,
+  // A click on one adds it to the selection, as a shift-click does.
+  FurnitureObject: ({ placement, grouped, onSelect }: { placement: { id: string }; grouped: boolean; onSelect: (id: string, additive: boolean) => void }) => (
+    <i data-testid="plan-piece" data-piece={placement.id} data-grouped={grouped || undefined} onClick={() => onSelect(placement.id, true)} />
+  ),
 }));
 
 vi.mock("../objects/TvAnchorObject", () => ({
@@ -242,6 +245,7 @@ const room3d = vi.hoisted(() => ({
   pick: null as ((objectId: string | null) => void) | null,
   fail: null as ((error: unknown) => void) | null,
   camera: undefined as { kind: string } | undefined,
+  config: null as Record<string, unknown> | null,
 }));
 
 vi.mock("@/features/room-view/ui/RoomView3DHost", () => ({
@@ -249,14 +253,17 @@ vi.mock("@/features/room-view/ui/RoomView3DHost", () => ({
   // `view3dAvailable` itself.
   ROOM_VIEW_3D_AVAILABLE: false,
   RoomView3DHost: ({
+    config,
     onPick,
     onFail,
     cameraCommand,
   }: {
+    config: Record<string, unknown>;
     onPick?: (objectId: string | null) => void;
     onFail: (error: unknown) => void;
     cameraCommand?: { kind: string };
   }) => {
+    room3d.config = config;
     room3d.pick = onPick ?? null;
     room3d.camera = cameraCommand;
     room3d.fail = onFail;
@@ -784,6 +791,81 @@ describe("RoomMapEditor — the 3D room as the editing stage", () => {
     await act(async () => room3d.fail?.(new Error("no WebGL")));
     expect(view.getByTestId("room-map-canvas")).toBeInTheDocument();
     expect(view.queryByRole("radio", { name: "roomMap:stage.plan" })).toBeNull();
+  });
+
+  // A drawer closed with nothing previewed left the plan following templates: the next resize refitted it.
+  it("leaves a later room resize unfitted after a drawer closed without a preview", async () => {
+    const view = await openEdit();
+    await act(async () => stageRadio(view, "roomMap:stage.plan").click());
+    await act(async () => view.getByTestId("leave-template").click());
+    const canvas = view.getByTestId("room-map-canvas");
+    const pan = [canvas.dataset.panX, canvas.dataset.panY];
+    persistState.configOverride = { dimensions: { widthMeters: 9, depthMeters: 7 } };
+    view.rerender(<RoomMapSurface view3dAvailable />);
+    await act(async () => {});
+    expect([canvas.dataset.panX, canvas.dataset.panY]).toEqual(pan);
+    persistState.configOverride = {};
+  });
+
+  it("keeps a group selection through a preview", async () => {
+    persistState.configOverride = {
+      furniture: [
+        { id: "m1", type: "chair", x: 1, y: 1, width: 0.5, height: 0.5 },
+        { id: "m2", type: "chair", x: 2, y: 1, width: 0.5, height: 0.5 },
+      ],
+    };
+    const view = await openEdit();
+    await act(async () => stageRadio(view, "roomMap:stage.plan").click());
+    const piece = (id: string) => view.container.querySelector(`[data-piece="${id}"]`) as HTMLElement;
+    await act(async () => piece("m1").click());
+    await act(async () => piece("m2").click());
+    expect(piece("m2")).toHaveAttribute("data-grouped");
+    await act(async () => view.getByTestId("preview-template").click());
+    await act(async () => view.getByTestId("leave-template").click());
+    expect(piece("m1")).toHaveAttribute("data-grouped");
+    expect(piece("m2")).toHaveAttribute("data-grouped");
+    persistState.configOverride = {};
+  });
+
+  it("resizes the saved room, not the template on show", async () => {
+    persistState.apply.mockClear();
+    persistState.configOverride = { furniture: [{ id: "mine", type: "chair", x: 1, y: 1, width: 0.5, height: 0.5 }] };
+    const view = await openEdit();
+    await act(async () => view.getByTestId("preview-template").click());
+    await act(async () => view.getByTestId("grow-room").click());
+    const patch = persistState.apply.mock.calls[0]![0] as { dimensions: { widthMeters: number }; furniture: Array<{ id: string; x: number }> };
+    expect(patch.furniture.map((f) => f.id)).toEqual(["mine"]);
+    // The saved room is 5 m wide: a metre more each side of its middle.
+    expect(patch.furniture[0]!.x).toBeCloseTo(2);
+    persistState.configOverride = {};
+  });
+
+  // The drawer's cards sit in a portal, and their keys still bubble to the editor through React.
+  it("leaves Cmd+Z unanswered while a template is previewed", async () => {
+    persistState.undo.mockClear();
+    const view = await openEdit();
+    const root = view.container.querySelector(".lm-room-editor") as HTMLElement;
+    await act(async () => view.getByTestId("preview-template").click());
+    await act(async () => fireEvent.keyDown(root, { key: "z", code: "KeyZ", metaKey: true }));
+    expect(persistState.undo).not.toHaveBeenCalled();
+    await act(async () => view.getByTestId("leave-template").click());
+    await act(async () => fireEvent.keyDown(root, { key: "z", code: "KeyZ", metaKey: true }));
+    expect(persistState.undo).toHaveBeenCalledOnce();
+  });
+
+  // Laid out again from the template, the room came back as new objects and the 3D morph restarted.
+  it("applies the very room it previewed", async () => {
+    persistState.replace.mockClear();
+    persistState.configOverride = {
+      usbStrips: [{ stripId: "strip-1", portName: "/dev/cu.usb", ledCount: 60, startX: 0, startY: 0, endX: 1, endY: 0 }],
+    };
+    const view = await openEdit();
+    await act(async () => view.getByTestId("preview-template").click());
+    const shown = room3d.config!;
+    await act(async () => view.getByTestId("apply-template").click());
+    const applied = persistState.replace.mock.calls[0]![0] as Record<string, unknown>;
+    expect(Object.keys(applied).filter((key) => applied[key] !== shown[key])).toEqual([]);
+    persistState.configOverride = {};
   });
 
   it("shows a template the drawer rests on without saving it, and lays it out as one step when applied", async () => {

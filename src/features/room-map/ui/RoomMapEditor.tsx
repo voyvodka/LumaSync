@@ -101,7 +101,8 @@ export interface RoomMapEditorProps {
   /** Each Hue channel's fixture as the bridge names it, for the inspector's model choice. */
   lampFamilies?: ReadonlyMap<number, LampFamily>;
   /** Lays a template out over the room, one step back in history. */
-  onApplyTemplate?: (template: RoomMapConfig) => void;
+  /** The room laid out from a template, the user's own lights and finish kept. */
+  onApplyTemplate?: (room: RoomMapConfig) => void;
   /** Whether the room can be edited in 3D; a WebGL failure reports through `onRoomFail`. */
   room3d?: boolean;
   onRoomFail?: (error: unknown) => void;
@@ -282,6 +283,8 @@ export function RoomMapEditor({
   const dockTemplates = useMemo(
     () => ({
       onPreview: (next: RoomMapConfig | null) => {
+        // A drawer closed without a preview changes nothing, or the plan would fit the next resize.
+        if (next === template) return;
         if (next && !planView.current) planView.current = { zoom, pan: panOffset };
         followTemplate.current = true;
         setTemplate(next);
@@ -292,10 +295,11 @@ export function RoomMapEditor({
         followTemplate.current = true;
         setTemplate(null);
         setMorphKey((key) => key + 1);
-        onApplyTemplate?.(next);
+        // The very room on show, so the 3D view sees nothing new and its morph plays on.
+        onApplyTemplate?.(preview && next === template ? preview : applyRoomTemplate(docConfig, next));
       },
     }),
-    [zoom, panOffset, onApplyTemplate],
+    [zoom, panOffset, onApplyTemplate, template, preview, docConfig],
   );
   // biome-ignore lint/correctness/useExhaustiveDependencies: the room's size and the preview are the triggers
   useEffect(() => {
@@ -409,8 +413,8 @@ export function RoomMapEditor({
     };
   }, []);
   useEffect(() => {
-    if (selectedId === null || (grouped && !groupSet.has(selectedId))) clearGroup();
-  }, [selectedId, grouped, groupSet, clearGroup]);
+    if (docSelectedId === null || (grouped && !groupSet.has(docSelectedId))) clearGroup();
+  }, [docSelectedId, grouped, groupSet, clearGroup]);
   const pick = useCallback(
     (objectId: string, additive: boolean) => {
       if (additive) {
@@ -587,6 +591,8 @@ export function RoomMapEditor({
       // A field's keys are the field's: Backspace in the LED count deleted the
       // strip, and Cmd+Z replaced the field's own undo with the editor's.
       if (isEditableTarget(e.target)) return;
+      // From a drawer card through its portal: an undo there would change a room hidden behind the preview.
+      if (preview) return;
       // Matched on the physical key: with ⇧ the key is "Z", and on a Turkish layout ⌥ changes it.
       // Undo: Cmd+Z (Mac) / Ctrl+Z (Win/Linux)
       if ((e.metaKey || e.ctrlKey) && e.code === "KeyZ" && !e.shiftKey) {
@@ -634,7 +640,7 @@ export function RoomMapEditor({
         handleArrowPan(e);
       }
     },
-    [handleDeleteSelection, handleRotate, handleArrowNudge, handleArrowPan, handleDuplicate, undo, redo, popSelection, selectedId, fitToView, inRoom],
+    [handleDeleteSelection, handleRotate, handleArrowNudge, handleArrowPan, handleDuplicate, undo, redo, popSelection, selectedId, fitToView, inRoom, preview],
   );
 
   /** Everything in the room moved by (`dxM`, `dyM`) metres, as a patch. Hue channels and zones live
@@ -680,31 +686,33 @@ export function RoomMapEditor({
     [apply, zoom, setPanOffset, shiftedContents],
   );
 
+  // On the saved room, as the dock that calls these shows it: a preview's furniture is no one's yet.
   const handleDimensionsChange = useCallback(
     (d: RoomDimensions) => {
+      const { widthMeters: savedWidth, depthMeters: savedDepth } = docConfig.dimensions;
       // Keep room center fixed on screen when resizing (pxPerMeter is constant)
-      const oldCenterScreenX = panOffset.x + (widthMeters / 2) * pxPerMeter * zoom;
-      const oldCenterScreenY = panOffset.y + (depthMeters / 2) * pxPerMeter * zoom;
+      const oldCenterScreenX = panOffset.x + (savedWidth / 2) * pxPerMeter * zoom;
+      const oldCenterScreenY = panOffset.y + (savedDepth / 2) * pxPerMeter * zoom;
 
       const newPanX = oldCenterScreenX - (d.widthMeters / 2) * pxPerMeter * zoom;
       const newPanY = oldCenterScreenY - (d.depthMeters / 2) * pxPerMeter * zoom;
       setPanOffset({ x: newPanX, y: newPanY });
 
       // Shift all objects so they keep their position relative to room center
-      const dxM = (d.widthMeters - widthMeters) / 2;
-      const dyM = (d.depthMeters - depthMeters) / 2;
+      const dxM = (d.widthMeters - savedWidth) / 2;
+      const dyM = (d.depthMeters - savedDepth) / 2;
 
       // A height-only change leaves the outline as it is stored.
       const footprint =
-        config.footprint !== undefined && (d.widthMeters !== widthMeters || d.depthMeters !== depthMeters)
-          ? resizeFootprint(config.footprint, config.dimensions, d)
-          : config.footprint;
-      const patch: Partial<typeof config> = { dimensions: d, ...shiftedContents(config, dxM, dyM, { dimensions: d, footprint }) };
-      if (footprint !== config.footprint) patch.footprint = footprint;
+        docConfig.footprint !== undefined && (d.widthMeters !== savedWidth || d.depthMeters !== savedDepth)
+          ? resizeFootprint(docConfig.footprint, docConfig.dimensions, d)
+          : docConfig.footprint;
+      const patch: Partial<typeof docConfig> = { dimensions: d, ...shiftedContents(docConfig, dxM, dyM, { dimensions: d, footprint }) };
+      if (footprint !== docConfig.footprint) patch.footprint = footprint;
 
       apply(patch);
     },
-    [apply, config, panOffset, widthMeters, depthMeters, zoom, setPanOffset, shiftedContents],
+    [apply, docConfig, panOffset, zoom, setPanOffset, shiftedContents],
   );
 
   const outline = useMemo(
@@ -728,10 +736,14 @@ export function RoomMapEditor({
     onLanded: focusEditor,
   });
   const roomShape = useMemo(() => describeFootprint(config.footprint, config.dimensions), [config.footprint, config.dimensions]);
-  const minimumSize = useMemo(() => footprintMinimumSize(config.footprint, config.dimensions), [config.footprint, config.dimensions]);
+  const savedShape = useMemo(
+    () => (preview ? describeFootprint(docConfig.footprint, docConfig.dimensions) : roomShape),
+    [preview, docConfig.footprint, docConfig.dimensions, roomShape],
+  );
+  const minimumSize = useMemo(() => footprintMinimumSize(docConfig.footprint, docConfig.dimensions), [docConfig.footprint, docConfig.dimensions]);
   const handleShapeChange = useCallback(
-    (shape: FootprintShape) => apply({ footprint: buildFootprint(shape, config.dimensions) }),
-    [apply, config.dimensions],
+    (shape: FootprintShape) => apply({ footprint: buildFootprint(shape, docConfig.dimensions) }),
+    [apply, docConfig.dimensions],
   );
 
   const handleContextMenu = useCallback(
@@ -1120,9 +1132,9 @@ export function RoomMapEditor({
               : null
           }
           room={{
-            dimensions: config.dimensions,
+            dimensions: docConfig.dimensions,
             onDimensionsChange: handleDimensionsChange,
-            shape: roomShape,
+            shape: savedShape,
             onShapeChange: handleShapeChange,
             minimumSize,
             showGrid,

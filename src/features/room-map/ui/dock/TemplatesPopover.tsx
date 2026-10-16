@@ -32,6 +32,8 @@ export function TemplatesPopover({ open, onClose, anchorRef, id, onPreview, onAp
   const landing = useRef(false);
   const want = (id: string | null, template: RoomMapConfig | null) => {
     if (intent.current !== null) clearTimeout(intent.current);
+    // The pointer leaves the cards as they animate out: a preview from then would outlive the drawer.
+    if (!open) return;
     intent.current = setTimeout(() => {
       intent.current = null;
       setPreviewed(id);
@@ -45,6 +47,7 @@ export function TemplatesPopover({ open, onClose, anchorRef, id, onPreview, onAp
       landing.current = false;
     } else {
       if (intent.current !== null) clearTimeout(intent.current);
+      intent.current = null;
       setPreviewed(null);
     }
   }, [open]);

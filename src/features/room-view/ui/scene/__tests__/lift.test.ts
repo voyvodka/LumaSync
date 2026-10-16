@@ -1,5 +1,5 @@
-import { BufferAttribute, BufferGeometry, Mesh, MeshBasicMaterial, Scene, Vector3 } from "three";
-import { describe, expect, it } from "vitest";
+import { BufferAttribute, BufferGeometry, Mesh, MeshBasicMaterial, Scene, Texture, Vector3 } from "three";
+import { describe, expect, it, vi } from "vitest";
 
 import { type Liftable, liftPiece, spansOf } from "../lift";
 
@@ -67,5 +67,27 @@ describe("liftPiece", () => {
     lifted.reshape(1, 1, 0, 0);
     scene.updateMatrixWorld(true);
     expect(point.getWorldPosition(new Vector3()).toArray()).toEqual([2.5, 1.5, -1]);
+  });
+
+  it("discards an extra with its material and texture, but not the material its copies borrow", () => {
+    const scene = new Scene();
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new BufferAttribute(new Float32Array(12), 3));
+    const merged = new MeshBasicMaterial();
+    const mesh = new Mesh(geometry, merged);
+    scene.add(mesh);
+    const map = new Texture();
+    const own = new MeshBasicMaterial({ map });
+    const panel = new Mesh(new BufferGeometry(), own);
+    scene.add(panel);
+    const lifted = liftPiece(scene, { spans: [{ mesh, start: 0, count: 4 }], extras: [panel], pivot: { x: 0, z: 0 } });
+    const borrowed = vi.spyOn(merged, "dispose");
+    const owned = vi.spyOn(own, "dispose");
+    const texture = vi.spyOn(map, "dispose");
+    lifted.discard();
+    expect(owned).toHaveBeenCalled();
+    expect(texture).toHaveBeenCalled();
+    expect(borrowed).not.toHaveBeenCalled();
+    expect(panel.parent?.parent?.parent?.parent ?? null).toBeNull();
   });
 });

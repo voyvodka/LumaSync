@@ -1,4 +1,5 @@
 import { act, cleanup, render } from "@testing-library/react";
+import type { Mesh, Object3D } from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { hueChannelObjectId } from "@/features/room-map/model/objectId";
@@ -8,7 +9,7 @@ import RoomView3D, { __closeParkedRoomViewForTests, type RoomDropTarget } from "
 
 const gl = vi.hoisted(() => ({
   throwOnCreate: false,
-  orbits: [] as Array<{ target: { x: number; y: number; z: number; set: (x: number, y: number, z: number) => void } }>,
+  orbits: [] as Array<{ object: { zoom: number }; target: { x: number; y: number; z: number; set: (x: number, y: number, z: number) => void } }>,
   renderers: [] as Array<{
     domElement: HTMLCanvasElement;
     render: ReturnType<typeof vi.fn>;
@@ -46,7 +47,7 @@ vi.mock("three/addons/controls/OrbitControls.js", async () => {
   return {
     OrbitControls: class {
       target = new Vector3();
-      constructor() {
+      constructor(public object: unknown) {
         gl.orbits.push(this as never);
       }
       update = () => false;
@@ -58,7 +59,7 @@ vi.mock("three/addons/controls/OrbitControls.js", async () => {
   };
 });
 
-const builds = vi.hoisted(() => ({ count: 0, last: null as unknown, scene: null as { children: unknown[] } | null, throwNext: false }));
+const builds = vi.hoisted(() => ({ count: 0, last: null as unknown, scene: null as Object3D | null, throwNext: false }));
 vi.mock("../roomScene", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../roomScene")>();
   return {
@@ -275,6 +276,81 @@ describe("RoomView3D", () => {
       unmount();
     });
 
+    describe("mid-morph", () => {
+      const bed = { id: "bed", type: "bed" as const, x: 2, y: 1, width: 1.6, height: 2 };
+      const chair = { id: "chair", type: "chair" as const, x: 0.2, y: 0.2, width: 0.5, height: 0.5 };
+      const before = { ...room(1), furniture: [{ ...sofa, x: 1 }, bed] };
+      const after = { ...room(1), furniture: [{ ...sofa, id: "t-sofa", x: 2.5 }, chair] };
+      const morphing = async () => {
+        const opened = await open();
+        opened.rerender(opened.view(before));
+        await rest();
+        opened.rerender(opened.view(after, { morphKey: 1 }));
+        const during = builds.scene!.children.length;
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(100);
+        });
+        return { ...opened, during };
+      };
+
+      it("ends the morph before a nudge lifts a piece it is still gliding", async () => {
+        const { rerender, unmount, view, during } = await morphing();
+        rerender(view({ ...after, furniture: [{ ...sofa, id: "t-sofa", x: 2.6 }, chair] }, { morphKey: 1 }));
+        // Settled, then the one sofa lifted to slide: not a second copy of it beside the first.
+        expect(builds.scene!.children).toHaveLength(during - 2);
+        unmount();
+      });
+
+      // Applying the previewed template hands the view a copy of the room it is morphing into.
+      it("plays on when handed a copy of the room it is morphing into", async () => {
+        const { rerender, unmount, view, during } = await morphing();
+        builds.count = 0;
+        rerender(view({ ...after }, { morphKey: 2 }));
+        expect(builds.count).toBe(0);
+        expect(builds.scene!.children).toHaveLength(during);
+        unmount();
+      });
+
+      it("settles the morph before building again, so nothing of it plays on in the new room", async () => {
+        const { rerender, unmount, view, during } = await morphing();
+        rerender(view(after, { morphKey: 1, lampFamilies: new Map() }));
+        const scene = builds.scene!;
+        expect(scene.children).toHaveLength(during - 3);
+        const draws = gl.renderers[0]!.render.mock.calls.length;
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(1500);
+        });
+        expect(scene.children).toHaveLength(during - 3);
+        // A morph left running would keep posing the old room's pieces, a frame each.
+        expect(gl.renderers[0]!.render.mock.calls.length - draws).toBeLessThanOrEqual(2);
+        unmount();
+      });
+    });
+
+    it("lets a slid piece leave a template by sinking, not vanishing", async () => {
+      const bed = { id: "bed", type: "bed" as const, x: 2, y: 1, width: 1.6, height: 2 };
+      const kept = { ...sofa, x: 1 };
+      const { rerender, unmount, view } = await open();
+      rerender(view({ ...room(1), furniture: [kept, bed] }));
+      await rest();
+      rerender(view({ ...room(1), furniture: [kept, { ...bed, x: 2.1 }] }));
+      expect(builds.count).toBe(1);
+      rerender(view({ ...room(1), furniture: [kept] }, { morphKey: 1 }));
+      // A lifted piece is a pivot, a stretch and an inner group around its copies.
+      const lifted = builds.scene!.children.filter((child) => child.type === "Group" && child.children[0]?.children[0]?.type === "Group");
+      const drawn = (group: (typeof lifted)[number]) => {
+        let points = false;
+        group.traverse((node) => {
+          const geometry = (node as Mesh).isMesh ? (node as Mesh).geometry : null;
+          if (geometry && Array.from(geometry.getAttribute("position").array).some((v) => v !== 0)) points = true;
+        });
+        return points;
+      };
+      expect(lifted.length).toBeGreaterThan(0);
+      expect(lifted.every(drawn)).toBe(true);
+      unmount();
+    });
+
     it("waits for the rest with any edit under 200 ms after a build, and builds new fixtures at once", async () => {
       const { rerender, unmount, view } = await open();
       rerender(view(room(1, 2.2)));
@@ -373,6 +449,38 @@ describe("RoomView3D", () => {
       await vi.advanceTimersByTimeAsync(1500);
     });
     expect(distance(target(), before)).toBeLessThan(1e-3);
+    unmount();
+  });
+
+  // A template looked at while a light was picked: dropping the pick took the camera back to the old room's view.
+  it("keeps a template's camera when its preview drops the pick, and frames the light once on the way back", async () => {
+    const config = { ...DEFAULT_ROOM_MAP, hueChannels: [{ channelIndex: 0, x: 0.8, y: 0.8, z: 0, zOrigin: "bridge" as const }] };
+    const template = { ...DEFAULT_ROOM_MAP, dimensions: { ...DEFAULT_ROOM_MAP.dimensions, widthMeters: DEFAULT_ROOM_MAP.dimensions.widthMeters + 2 } };
+    const onFail = vi.fn<(error: unknown) => void>();
+    const view = (room: RoomMapConfig, selectedId: string | null, morphKey: number) => (
+      <RoomView3D config={room} label="Room" selectedId={selectedId} morphKey={morphKey} onFail={onFail} />
+    );
+    const settle = () =>
+      act(async () => {
+        await vi.advanceTimersByTimeAsync(1500);
+      });
+    const { rerender, unmount } = render(view(config, null, 0));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    const camera = gl.orbits[0]!.object;
+    rerender(view(config, hueChannelObjectId(0), 0));
+    await settle();
+    const framed = camera.zoom;
+
+    rerender(view(template, null, 1));
+    const shown = camera.zoom;
+    await settle();
+    expect(camera.zoom).toBeCloseTo(shown);
+
+    rerender(view(config, hueChannelObjectId(0), 2));
+    await settle();
+    expect(camera.zoom).toBeCloseTo(framed);
     unmount();
   });
 
