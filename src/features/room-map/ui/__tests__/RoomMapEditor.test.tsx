@@ -795,7 +795,6 @@ describe("RoomMapEditor — the 3D room as the editing stage", () => {
     await act(async () => stageRadio(view, "roomMap:stage.plan").click());
     await act(async () => view.getByTestId("preview-template").click());
     expect(view.getAllByTestId("plan-piece")).toHaveLength(2);
-    // The dock goes on showing the room as it is.
     expect(view.getByTestId("room-dock")).toHaveAttribute("data-furniture", "1");
     expect(stage).toHaveAttribute("data-previewing");
     await act(async () => view.getByTestId("leave-template").click());
