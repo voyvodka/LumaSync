@@ -92,7 +92,7 @@ function Harness({
       onSelectTv: vi.fn<() => void>(),
       onAddStrip: vi.fn<() => void>(),
       onAddImage: spies.onAddImage,
-      onAddZone: vi.fn<() => void>(),
+      onAddZone: vi.fn<(keyboard: boolean) => void>(),
     },
     hue: null,
     room: {

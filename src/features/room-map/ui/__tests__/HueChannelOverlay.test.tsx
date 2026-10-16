@@ -449,7 +449,7 @@ describe("HueChannelOverlay — keyboard", () => {
 
 describe("HueChannelOverlay — zone grips", () => {
   // 5×4 m at 100 px a metre: the zone is x 1.75–3.25 m, y 1.4–2.6 m.
-  function renderGrips() {
+  function renderGrips(zone: HueZone = ZONE) {
     const onHueZoneResize = vi.fn<(zoneId: string, footprint: Pick<HueZone, "centerX" | "centerY" | "scaleX" | "scaleY">) => void>();
     const view = render(
       <HueChannelOverlay
@@ -460,8 +460,8 @@ describe("HueChannelOverlay — zone grips", () => {
         selectedId={null}
         onSelect={() => {}}
         onChange={() => {}}
-        activeHueZone={ZONE}
-        allHueZones={[ZONE]}
+        activeHueZone={zone}
+        allHueZones={[zone]}
         onHueZoneResize={onHueZoneResize}
       />,
     );
@@ -494,6 +494,13 @@ describe("HueChannelOverlay — zone grips", () => {
     expect(footprint.scaleY).toBeCloseTo(0.45);
     expect(footprint.centerX).toBeCloseTo(0.3);
     expect(footprint.centerY).toBeCloseTo(-0.15);
+  });
+
+  it("drops a side's middle grip when the side is too short to hold three", () => {
+    // 0.6 m wide, 1.2 m deep: 60 px and 120 px on screen.
+    renderGrips({ ...ZONE, scaleX: 0.12, scaleY: 0.3 });
+    const handles = Array.from(document.querySelectorAll<HTMLElement>("[data-zone-handle]")).map((el) => el.dataset.zoneHandle);
+    expect(handles.sort()).toEqual(["e", "ne", "nw", "se", "sw", "w"]);
   });
 
   it("puts everything back on Escape and writes nothing", () => {

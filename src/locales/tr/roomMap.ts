@@ -434,7 +434,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     turn: "döndür",
     rise: "dikey",
     letGo: "bırak",
-    draw: "Bölgeyi sürükleyerek çiz",
+    draw: "Sürükleyerek bölge çiz",
     square: "kare",
     cancel: "vazgeç",
   },

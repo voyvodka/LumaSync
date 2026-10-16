@@ -121,7 +121,7 @@ model. The template cards draw their rooms with it (`RoomPreview`).
 
 **Every typed number is one field, and the inspector holds them all.** `ui/DecimalField.tsx` is
 the room map's only number input: the inspectors' position, size, height and rotation, a strip's
-LED count, a zone's edge and the room's size. It reads as a value at rest, applies on leaving or
+LED count, a zone's width and depth and the room's size. It reads as a value at rest, applies on leaving or
 Enter, takes a comma as the decimal mark (Turkish writes one), and puts the old value back for a
 number out of range, as Esc does — the design language's rule, where the fields it replaced had
 clamped. ↑/↓ step and apply at once, so a caller that saves per commit passes a gesture key: typed

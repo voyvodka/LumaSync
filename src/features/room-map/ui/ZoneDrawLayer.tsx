@@ -1,8 +1,9 @@
-import { type CSSProperties, useEffect, useRef } from "react";
+import { type CSSProperties, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 import { CLICK_SLOP_PX } from "../model/snapGeometry";
 import { clickedZoneRect, drawnZoneRect, type ZoneRect } from "../model/zoneRect";
+import { useEscapeCancels } from "./objects/dragIntent";
 import styles from "./ZoneDrawLayer.module.css";
 
 export function ZoneDrawLayer({
@@ -10,6 +11,7 @@ export function ZoneDrawLayer({
   depthM,
   pxPerMeter,
   zoom,
+  panMode,
   colour,
   onDraw,
   onCancel,
@@ -18,6 +20,8 @@ export function ZoneDrawLayer({
   depthM: number;
   pxPerMeter: number;
   zoom: number;
+  /** Space held: the press goes on to the canvas, which pans. */
+  panMode: boolean;
   colour: string;
   onDraw: (rect: ZoneRect) => void;
   onCancel: () => void;
@@ -27,20 +31,7 @@ export function ZoneDrawLayer({
   const boxRef = useRef<HTMLDivElement | null>(null);
   const sizeRef = useRef<HTMLSpanElement | null>(null);
   const press = useRef<{ x: number; y: number; clientX: number; clientY: number; moved: boolean } | null>(null);
-  const onCancelRef = useRef(onCancel);
-  onCancelRef.current = onCancel;
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      // Ahead of the editor's own Escape, which would also drop the selection.
-      e.preventDefault();
-      e.stopPropagation();
-      onCancelRef.current();
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, []);
+  useEscapeCancels(() => true, onCancel);
 
   const metresAt = (e: React.PointerEvent<HTMLDivElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -64,10 +55,11 @@ export function ZoneDrawLayer({
   return (
     <div
       className={styles.layer}
+      data-pan={panMode || undefined}
       data-testid="zone-draw-layer"
       style={{ width: widthM * pxPerMeter, height: depthM * pxPerMeter, "--draw-colour": colour, "--draw-scale": 1 / zoom } as CSSProperties}
       onPointerDown={(e) => {
-        if (e.button !== 0) return;
+        if (panMode || e.button !== 0) return;
         e.stopPropagation();
         e.currentTarget.setPointerCapture(e.pointerId);
         press.current = { ...metresAt(e), clientX: e.clientX, clientY: e.clientY, moved: false };

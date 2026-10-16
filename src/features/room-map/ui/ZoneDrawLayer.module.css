@@ -7,6 +7,7 @@
     cursor: crosshair;
     touch-action: none;
   }
+  .layer[data-pan] { cursor: grab; }
   .box {
     position: absolute;
     border: calc(1.5px * var(--draw-scale)) dashed var(--draw-colour);

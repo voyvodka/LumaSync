@@ -217,8 +217,11 @@ export function RoomMapEditor({
     },
     [planFor, select],
   );
-  // The other way, the card of something the room does not draw closes with the plan.
   const [drawingZone, setDrawingZone] = useState(false);
+  // Anything picked or changed meanwhile ends the draw: the layer would put a zone on top of it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each is a trigger, not a value read.
+  useEffect(() => setDrawingZone(false), [docSelectedId, activeHueZoneId, docConfig]);
+  // The other way, the card of something the room does not draw closes with the plan.
   const changeStage = useCallback(
     (next: EditStage) => {
       setDrawingZone(false);
@@ -903,6 +906,7 @@ export function RoomMapEditor({
     <div
       ref={rootRef}
       className="lm-room-editor relative h-full"
+      data-drawing-zone={drawingZone || undefined}
       onKeyDown={handleKeyDown}
       // Not :focus-visible, which WebKit sets on focus an action hands back; Tab's keyup lands here.
       onKeyUp={(event) => {
@@ -1086,6 +1090,7 @@ export function RoomMapEditor({
                 depthM={depthMeters}
                 pxPerMeter={pxPerMeter}
                 zoom={zoom}
+                panMode={spaceHeld}
                 colour={zoneToken(hueZones.length)}
                 onDraw={(rect) => {
                   setDrawingZone(false);
@@ -1174,7 +1179,7 @@ export function RoomMapEditor({
             onSelectTv: handleTvSelect,
             onAddStrip: handleAddUsb,
             onAddImage: () => void handleAddImage(),
-            onAddZone: inRoom ? () => handleAddHueZone() : () => setDrawingZone(true),
+            onAddZone: (keyboard) => (inRoom || keyboard ? handleAddHueZone() : setDrawingZone(true)),
             drop: libraryDrop,
           }}
           hue={

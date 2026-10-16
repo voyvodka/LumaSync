@@ -2,6 +2,7 @@ import type { HueZone } from "@/shared/contracts/roomMap";
 
 import { rectToZone, resizeZoneRect, ZONE_HANDLES, type ZoneHandle, zoneRect } from "../model/zoneRect";
 import { pastSlop } from "./objects/dragIntent";
+import styles from "./ZoneResizeHandles.module.css";
 
 type Footprint = Pick<HueZone, "centerX" | "centerY" | "scaleX" | "scaleY">;
 
@@ -104,15 +105,21 @@ export function ZoneResizeHandles({
     window.addEventListener("keydown", esc, true);
   };
 
+  // Below three targets a side, its middle grip would cover the corners and the centre marker.
+  const roomy = (side: number) => side * pxPerMeter * zoom >= 72;
+  const wide = roomy(Math.abs(zone.scaleX) * widthM);
+  const deep = roomy(Math.abs(zone.scaleY) * depthM);
+  const shown = ZONE_HANDLES.filter((h) => h.length === 2 || ((h === "n" || h === "s") ? wide : deep));
+
   return (
     <>
-      {ZONE_HANDLES.map((handle) => (
+      {shown.map((handle) => (
         <span
           key={handle}
           data-zone-handle={handle}
-          className="lm-room-zone-grip"
+          className={`${styles.grip} ${styles[handle]}`}
           aria-hidden="true"
-          style={{ "--lm-zone-grip-scale": 1 / zoom } as React.CSSProperties}
+          style={{ "--grip-scale": 1 / zoom } as React.CSSProperties}
           onPointerDown={(e) => begin(handle, e)}
           onClick={(e) => e.stopPropagation()}
         />

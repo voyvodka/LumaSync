@@ -15,7 +15,7 @@ export type ZoneHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
 
 export const ZONE_HANDLES: readonly ZoneHandle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
 
-// Mirrors `HUE_ZONE_SCALE_MIN` in `commands/room_map/hue_zone.rs`.
+// Mirrors `HUE_ZONE_SCALE_MIN` in `commands/room_map/hue_zone.rs` — the two must move together.
 export const ZONE_SCALE_MIN = 0.05;
 
 type Footprint = Pick<HueZone, "centerX" | "centerY" | "scaleX" | "scaleY">;

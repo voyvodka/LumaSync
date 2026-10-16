@@ -37,7 +37,8 @@ export interface DockAdd {
   onSelectTv: () => void;
   onAddStrip: () => void;
   onAddImage: () => void;
-  onAddZone: () => void;
+  /** `keyboard`: pressed with a key, so a draw the pointer would make cannot be asked of it. */
+  onAddZone: (keyboard: boolean) => void;
   drop?: LibraryDrop;
 }
 
@@ -351,7 +352,7 @@ export function RoomDock(props: RoomDockProps) {
           onAddTv={(event) => fromDock(event, add.onAddTv)}
           onSelectTv={(event) => fromDock(event, add.onSelectTv)}
           onAddStrip={(event) => fromDock(event, add.onAddStrip)}
-          onAddZone={(event) => fromDock(event, add.onAddZone)}
+          onAddZone={(event) => fromDock(event, () => add.onAddZone(event.detail === 0))}
           onTemplates={props.templates && ((event) => openTemplates(event.currentTarget))}
           templatesOpen={templatesOpen}
           templatesId={templatesId}

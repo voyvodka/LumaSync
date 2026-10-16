@@ -176,7 +176,7 @@ vi.mock("../dock/RoomDock", () => ({
   }: {
     templates?: { onPreview: (template: unknown) => void; onApply: (template: unknown) => void };
     onSelect: (id: string) => void;
-    add: { onAddZone: () => void };
+    add: { onAddZone: (keyboard: boolean) => void };
     selectedId: string | null;
     activeHueZoneId: string | null;
     onSelectZone: (zoneId: string) => void;
@@ -199,7 +199,8 @@ vi.mock("../dock/RoomDock", () => ({
       <button type="button" data-testid="apply-template" onClick={() => templates?.onApply(TEMPLATE)} />
       <button type="button" data-testid="dock-tab" />
       <button type="button" data-testid="pick-zone" onClick={() => onSelectZone("zone-1")} />
-      <button type="button" data-testid="add-zone" onClick={add.onAddZone} />
+      <button type="button" data-testid="add-zone" onClick={() => add.onAddZone(false)} />
+      <button type="button" data-testid="add-zone-key" onClick={() => add.onAddZone(true)} />
       <button type="button" data-testid="pick-image" onClick={() => onSelect("img-layer-1")} />
       <input data-testid="dock-field" type="text" defaultValue={60} />
       <button
@@ -813,6 +814,17 @@ describe("RoomMapEditor — the 3D room as the editing stage", () => {
     await act(async () => view.getByTestId("add-zone").click());
     await act(async () => stageRadio(view, "roomMap:stage.room").click());
     await act(async () => stageRadio(view, "roomMap:stage.plan").click());
+    expect(view.queryByTestId("zone-draw-layer")).toBeNull();
+  });
+
+  it("adds a zone at once from the keyboard, which cannot drag one, and ends a draw on a pick", async () => {
+    const view = await openEdit();
+    await act(async () => stageRadio(view, "roomMap:stage.plan").click());
+    await act(async () => view.getByTestId("add-zone-key").click());
+    expect(view.queryByTestId("zone-draw-layer")).toBeNull();
+    await act(async () => view.getByTestId("add-zone").click());
+    expect(view.getByTestId("zone-draw-layer")).toBeInTheDocument();
+    await act(async () => view.getByTestId("pick-zone").click());
     expect(view.queryByTestId("zone-draw-layer")).toBeNull();
   });
 
