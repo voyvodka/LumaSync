@@ -19,6 +19,25 @@
   }
 }
 
+/* A light overhead, in the dashed ring a ceiling plan draws what is above the floor in. */
+.lm-room-hue-overhead {
+  width: 24px;
+  height: 24px;
+  margin: -12px 0 0 -12px;
+  border: 1px dashed var(--lm-ink-dim);
+  border-radius: 50%;
+}
+.lm-room-hue-overhead--selected {
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+}
+@media (forced-colors: active) {
+  .lm-room-hue-overhead {
+    border-color: CanvasText;
+  }
+}
+
 /* Which way a one-sided light throws its light: a wedge off the dot's centre, turned inline. */
 .lm-room-hue-beam {
   width: 22px;

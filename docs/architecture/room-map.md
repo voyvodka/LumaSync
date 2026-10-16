@@ -466,6 +466,14 @@ light and glow are built into the scene, so it moves as the amber frame alone.
   the piece under it, but the stored height — which the stream and room-aware sampling read — was
   left at the floor until typed in. The inspector offers "Stand on {piece}" for a light over a piece
   it is not on.
+- **A light chosen as a ceiling light goes up to where it hangs** (`model/hueHang.ts`). The 3D room
+  draws a ceiling light on the ceiling and a pendant under it whatever the stored height says, and
+  the stream samples the stored height, so a light set to Ceiling on the floor glowed overhead and
+  was coloured as if at the floor. Choosing Ceiling or Pendant now moves it in the same undo step —
+  the ceiling, or a shade 0.75 m below it — unless it hangs already or its zone stops short; a spot,
+  or a bulb on nothing, is offered "Hang from the ceiling". The plan rings a light that hangs
+  overhead in a dashed circle, as a reflected ceiling plan draws what is above the floor, and its
+  name reads "— overhead".
 - **The running mode sets the room's mood.** `roomMood` (`room-view/model/roomMood.ts`) reads what
   runs from the lighting control state: Off leaves the lamps dark — the rig falls to a cool night,
   the bulbs to frosted glass, the TV's backlight out — under a navy sky; Solid lights every lamp in

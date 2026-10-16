@@ -47,6 +47,30 @@ const CHANNEL_IN_ZONE: HueChannelPlacement = {
   zoneRelativePosition: { x: 0.33, y: 0.33, z: 0 },
 };
 
+describe("HueChannelOverlay — overhead lights", () => {
+  it("rings a light that hangs overhead and says so, and leaves a standing one plain", () => {
+    const { container } = render(
+      <HueChannelOverlay
+        channels={[
+          { channelIndex: 0, x: 0, y: 0, z: 1 },
+          { channelIndex: 1, x: 0.5, y: 0.5, z: -1 },
+        ]}
+        overhead={new Set([0])}
+        pxPerMeter={80}
+        roomWidthM={5}
+        roomDepthM={4}
+        selectedId={null}
+        onSelect={() => {}}
+        onChange={() => {}}
+      />,
+    );
+    const [hung, standing] = Array.from(container.querySelectorAll<HTMLElement>("[data-object-id]"));
+    expect(hung.querySelector('[data-testid="hue-overhead"]')).not.toBeNull();
+    expect(hung.querySelector('[role="button"]')?.getAttribute("aria-label")).toBe("roomMap:hueChannel.overheadLabel");
+    expect(standing.querySelector('[data-testid="hue-overhead"]')).toBeNull();
+  });
+});
+
 describe("HueChannelOverlay — bug #52(a) drag-time zone clamp", () => {
   it("never lets a zone-bound channel drag past the zone bounds", () => {
     const onChange = vi.fn();

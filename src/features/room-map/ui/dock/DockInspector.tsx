@@ -37,7 +37,7 @@ export interface InspectorActions {
   /** A typed position, in the kind's own units: a strip by its start point, a Hue channel in the cube. */
   onMoveObject: (objectId: string, x: number, y: number) => void;
   onHueChannelHeightChange: (channelIndex: number, worldZ: number) => void;
-  onUpdateHueChannel: (channelIndex: number, patch: Pick<HueChannelPlacement, "facing" | "fixture">) => void;
+  onUpdateHueChannel: (channelIndex: number, patch: Pick<HueChannelPlacement, "facing" | "fixture">, worldZ?: number) => void;
   onRename: (objectId: string, label: string) => void;
   onToggleLock: (objectId: string) => void;
   onDuplicate: (objectId: string) => void;
@@ -236,7 +236,7 @@ export function DockInspector({
           bridgeFixture={lampFamilies.get(ch.channelIndex) ?? null}
           autoFacing={autoHueFacing(ch, config)}
           seat={seatUnder(ch, config)}
-          onUpdate={(patch) => actions.onUpdateHueChannel(ch.channelIndex, patch)}
+          onUpdate={(patch, worldZ) => actions.onUpdateHueChannel(ch.channelIndex, patch, worldZ)}
           onAssignZone={(zoneId) => actions.onAssignChannelToZone(ch.channelIndex, zoneId)}
           onRename={(label) => actions.onRename(id, label)}
           onToggleLock={() => actions.onToggleLock(id)}

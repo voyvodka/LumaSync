@@ -227,6 +227,7 @@ export default {
     defaultLabel: "Channel {{id}}",
     unresolvedLabel: "Unmatched channel",
     ghostLabel: "{{name}} — no longer in this area",
+    overheadLabel: "{{name}} — overhead",
   },
   hueZones: {
     defaultName: "Hue Zone {{N}}",
@@ -307,6 +308,7 @@ export default {
     hueModelAutoUnknown: "Auto",
     hueModelInfo: "Auto draws the light as the bridge names it. Pick one when the bridge only knows the bulb inside your lamp.",
     hueSeatOn: "Stand on {{name}}",
+    hueHang: "Hang from the ceiling",
     hueFacingLabel: "Facing",
     hueFacingInfo: "Which way it throws its light. Leave empty to turn it to the nearest wall ({{degrees}}°).",
     toneLabel: "Tone",

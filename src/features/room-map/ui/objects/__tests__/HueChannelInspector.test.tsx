@@ -414,14 +414,94 @@ describe("HueChannelInspector model and facing", () => {
   });
 });
 
-describe("HueChannelInspector standing on a piece", () => {
-  beforeEach(cleanup);
+describe("HueChannelInspector hanging from the ceiling", () => {
+  beforeEach(() => {
+    cleanup();
+    vi.useFakeTimers();
+  });
+  afterEach(() => vi.useRealTimers());
 
-  const renderSeat = (worldZ: number) => {
+  const renderHang = (worldZ: number, stored: Partial<HueChannelPlacement> = {}, maxZ = 1) => {
+    const onUpdate = vi.fn<(patch: Pick<HueChannelPlacement, "facing" | "fixture">, worldZ?: number) => void>();
     const onHeightChange = vi.fn<(z: number) => void>();
     render(
       <HueChannelInspector
-        channel={channel}
+        channel={{ ...channel, ...stored }}
+        zones={[]}
+        worldZ={worldZ}
+        heightRange={{ min: -1, max: maxZ, zone: null }}
+        roomHeightMeters={2.5}
+        world={{ x: 0, y: 0 }}
+        roomWidthMeters={5}
+        roomDepthMeters={4}
+        onMove={vi.fn<(x: number, y: number) => void>()}
+        onHeightChange={onHeightChange}
+        onRename={vi.fn<(label: string) => void>()}
+        onToggleLock={vi.fn<() => void>()}
+        onClose={vi.fn<() => void>()}
+        modelChoices
+        onUpdate={onUpdate}
+      />,
+    );
+    return { onUpdate, onHeightChange };
+  };
+  const pickModel = (option: string) => {
+    fireEvent.click(screen.getByRole("button", { name: /^roomMap:inspector\.modelLabel: / }));
+    fireEvent.click(screen.getByRole("option", { name: option }));
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+  };
+
+  // Drawn on the ceiling but sampled where it stood: the stream had it at the floor.
+  it("takes a light chosen as a ceiling light up to the ceiling, in the same step", () => {
+    const { onUpdate } = renderHang(-1);
+    pickModel("roomMap:view.family.ceiling");
+    expect(onUpdate).toHaveBeenLastCalledWith({ fixture: "ceiling" }, 1);
+  });
+
+  it("hangs a pendant's shade below the ceiling, and leaves one already hung where it is", () => {
+    const { onUpdate } = renderHang(-1);
+    pickModel("roomMap:view.family.pendant");
+    expect(onUpdate.mock.lastCall?.[1]).toBeCloseTo(((2.5 - 0.75) / 2.5) * 2 - 1);
+    cleanup();
+    const hung = renderHang(0.2).onUpdate;
+    pickModel("roomMap:view.family.pendant");
+    expect(hung).toHaveBeenLastCalledWith({ fixture: "pendant" }, undefined);
+  });
+
+  it("moves no light chosen as one that stands", () => {
+    const { onUpdate } = renderHang(-1);
+    pickModel("roomMap:view.family.floorLamp");
+    expect(onUpdate).toHaveBeenLastCalledWith({ fixture: "floorLamp" }, undefined);
+  });
+
+  it("offers to hang a bulb from the ceiling, and says nothing once it hangs there", () => {
+    const { onHeightChange } = renderHang(-1);
+    fireEvent.click(screen.getByText("roomMap:inspector.hueHang"));
+    expect(onHeightChange).toHaveBeenCalledWith(1);
+    cleanup();
+    renderHang(1);
+    expect(screen.queryByText("roomMap:inspector.hueHang")).toBeNull();
+  });
+
+  it("offers nothing for a floor lamp, or where the light's zone stops below the ceiling", () => {
+    renderHang(-1, { fixture: "floorLamp" });
+    expect(screen.queryByText("roomMap:inspector.hueHang")).toBeNull();
+    cleanup();
+    renderHang(-1, {}, 0.2);
+    expect(screen.queryByText("roomMap:inspector.hueHang")).toBeNull();
+  });
+});
+
+describe("HueChannelInspector standing on a piece", () => {
+  beforeEach(cleanup);
+
+  const renderSeat = (worldZ: number, stored: Partial<HueChannelPlacement> = {}) => {
+    const onHeightChange = vi.fn<(z: number) => void>();
+    render(
+      <HueChannelInspector
+        channel={{ ...channel, ...stored }}
         zones={[]}
         worldZ={worldZ}
         roomHeightMeters={2.5}
@@ -447,6 +527,16 @@ describe("HueChannelInspector standing on a piece", () => {
 
   it("says nothing once the light stands on it", () => {
     renderSeat(0.8 / 2.5 * 2 - 1);
+    expect(screen.queryByText("roomMap:inspector.hueSeatOn")).toBeNull();
+  });
+
+  it("offers no ceiling to a bulb on a piece, which is a lamp's", () => {
+    renderSeat(-1);
+    expect(screen.queryByText("roomMap:inspector.hueHang")).toBeNull();
+  });
+
+  it("offers no piece to stand a pendant or a ceiling light on", () => {
+    renderSeat(0, { fixture: "pendant" });
     expect(screen.queryByText("roomMap:inspector.hueSeatOn")).toBeNull();
   });
 });

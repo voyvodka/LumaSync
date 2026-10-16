@@ -600,6 +600,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- A Hue light set to Ceiling light or Pendant in the room map goes up to where it hangs — the
+  ceiling, or a pendant's shade a little below it — in the same undo step, so the 3D room and the
+  colours it gets agree on its height; a spot or a bulb can be hung from the ceiling with one click,
+  and the plan draws a dashed ring around a light that hangs overhead.
 - The 3D room stays put while another window or Space covers the app and comes back as it was,
   instead of being built again on every return when flicking between windows; it is let go after
   30 seconds covered, and at once when the window is closed to the tray or minimised.

@@ -230,6 +230,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     defaultLabel: "Kanal {{id}}",
     unresolvedLabel: "Eşleşmemiş kanal",
     ghostLabel: "{{name}} — artık bu alanda değil",
+    overheadLabel: "{{name}} — tavanda",
   },
   hueZones: {
     defaultName: "Hue Bölgesi {{N}}",
@@ -310,6 +311,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     hueModelAutoUnknown: "Otomatik",
     hueModelInfo: "Otomatik, ışığı köprünün verdiği adla çizer. Köprü yalnızca lambanın içindeki ampulü biliyorsa birini seç.",
     hueSeatOn: "{{name}} üstüne koy",
+    hueHang: "Tavana as",
     hueFacingLabel: "Yön",
     hueFacingInfo: "Işığını hangi yöne verdiği. En yakın duvara dönmesi için boş bırak ({{degrees}}°).",
     toneLabel: "Ton",

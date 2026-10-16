@@ -262,6 +262,36 @@ describe("RoomMapEditor — stepping a typed position is one undo step and one s
   });
 });
 
+describe("RoomMapEditor — a light chosen as a ceiling light goes up in the same step", () => {
+  it("writes the fixture and the height in one save, and one undo takes both back", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    stored(
+      {
+        tvAnchor: { x: 2, y: 0.3, width: 1, height: 0.1 },
+        hueChannels: [{ channelIndex: 0, x: 0.5, y: 0, z: -1, zOrigin: "user", entertainmentAreaId: "area-b", label: "Lamp B" }],
+      },
+      { lastHueAreaId: "area-b" },
+    );
+    const { root } = await renderEditor();
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "Lamp B" }));
+
+    fireEvent.click(screen.getByRole("button", { name: /^roomMap:inspector\.modelLabel: / }));
+    fireEvent.click(screen.getByRole("option", { name: "roomMap:view.family.ceiling" }));
+    act(() => vi.advanceTimersByTime(200));
+    await act(async () => {
+      vi.advanceTimersByTime(GESTURE_COALESCE_MS);
+    });
+    expect(roomMapSaves()).toHaveLength(1);
+    expect(roomMapSaves()[0]?.hueChannels[0]).toMatchObject({ fixture: "ceiling", z: 1, zOrigin: "user" });
+
+    fireEvent.keyDown(root, { key: "z", code: "KeyZ", metaKey: true });
+    await flush();
+    expect(roomMapSaves()[1]?.hueChannels[0]).toMatchObject({ z: -1 });
+    expect(roomMapSaves()[1]?.hueChannels[0]?.fixture).toBeUndefined();
+  });
+});
+
 describe("canvas objects are memoised", () => {
   // The editor keeps their callbacks stable so a pan commit re-renders none of
   // them; that is worth nothing if the components themselves are not memos.

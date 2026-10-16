@@ -14,6 +14,8 @@ interface HueChannelOverlayProps {
   channels: HueChannelPlacement[];
   /** A one-sided light's facing in plan degrees (0 toward the TV wall), drawn as a beam off its dot. */
   facings?: ReadonlyMap<number, number>;
+  /** Channels that hang overhead, drawn in a dashed ring as a ceiling plan draws what is above. */
+  overhead?: ReadonlySet<number>;
   pxPerMeter: number;
   roomWidthM: number;
   roomDepthM: number;
@@ -210,6 +212,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
   allHueZones,
   hidePassiveZoneBounds = false,
   facings,
+  overhead,
 }: HueChannelOverlayProps) {
   const { t } = useTranslation();
 
@@ -694,9 +697,12 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
           liveChannelIds != null && ch.channelId != null && !liveChannelIds.has(ch.channelId);
         const baseLabel = hueChannelName(ch, t);
         const facing = facings?.get(ch.channelIndex);
+        const isOverhead = overhead?.has(ch.channelIndex) ?? false;
         const dotLabel = isGhost
           ? t("roomMap:hueChannel.ghostLabel", { name: baseLabel })
-          : baseLabel;
+          : isOverhead
+            ? t("roomMap:hueChannel.overheadLabel", { name: baseLabel })
+            : baseLabel;
 
         return (
           <div
@@ -721,6 +727,19 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
                 data-testid="hue-facing"
                 className="lm-room-hue-beam pointer-events-none absolute left-1/2 top-1/2"
                 style={{ transform: `rotate(${facing - 90}deg)` }}
+              />
+            )}
+            {isOverhead && !isGhost && (
+              <span
+                aria-hidden="true"
+                data-testid="hue-overhead"
+                className={cx(
+                  "lm-room-hue-overhead pointer-events-none absolute left-1/2 top-1/2",
+                  isSelected && "lm-room-hue-overhead--selected",
+                  dimmedByHueZone && "opacity-30",
+                )}
+                // The layer scales with the zoom; the dash should not.
+                style={{ borderWidth: 1 / zoom }}
               />
             )}
             {fan && (

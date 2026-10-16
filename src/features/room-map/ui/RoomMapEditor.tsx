@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { type FurnitureModel, modelTop } from "@/features/room-view/model/furnitureModel";
 import type { LampFamily } from "@/features/room-view/model/lampFamily";
 import { hueFacings } from "../model/hueFacing";
+import { hueOverhead } from "../model/hueHang";
 import { seatMovedLight } from "../model/lightSeat";
 import { ROOM_VIEW_3D_AVAILABLE, RoomView3DHost } from "@/features/room-view/ui/RoomView3DHost";
 import type { CameraCommand } from "@/features/room-view/ui/RoomView3D";
@@ -238,6 +239,7 @@ export function RoomMapEditor({
     () => (ROOM_VIEW_3D_AVAILABLE ? hueFacings(visibleHueChannels, config, lampFamilies) : undefined),
     [visibleHueChannels, config, lampFamilies],
   );
+  const overhead = useMemo(() => hueOverhead(visibleHueChannels, config, lampFamilies), [visibleHueChannels, config, lampFamilies]);
   // The zones a light of the shown area can join: another area's zone holds another area's lights.
   const areaZones = useMemo(
     () => (hueAreaId ? hueZones.filter((zone) => zone.entertainmentAreaId === hueAreaId) : hueZones),
@@ -744,12 +746,13 @@ export function RoomMapEditor({
     },
     // A held arrow in X or Y steps many times; the gesture keeps it one undo step and one save.
     onMoveObject: (id, x, y) => handleUpdatePosition(id, x, y, { gesture: `move:${id}` }),
-    onUpdateHueChannel: (channelIndex, patch) => {
+    onUpdateHueChannel: (channelIndex, patch, worldZ) => {
       // The shown area's channel: the same index names another light in every other area.
       const target = visibleHueChannels.find((ch) => ch.channelIndex === channelIndex);
       if (!target) return;
+      const next = { ...target, ...patch };
       apply(
-        { hueChannels: replaceHueChannel(config.hueChannels, { ...target, ...patch }) },
+        { hueChannels: replaceHueChannel(config.hueChannels, worldZ === undefined ? next : setHueChannelWorldZ(next, config.zones, worldZ)) },
         { gesture: `hue:${channelIndex}:${Object.keys(patch).sort().join(",")}` },
       );
     },
@@ -939,6 +942,7 @@ export function RoomMapEditor({
                 allHueZones={hueZones}
                 hidePassiveZoneBounds={!showHueZones}
                 facings={facings}
+                overhead={overhead}
               />
             )}
 

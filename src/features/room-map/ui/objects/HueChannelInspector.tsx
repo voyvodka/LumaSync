@@ -14,6 +14,7 @@ import { StateWord } from "@/shared/ui/StateWord/StateWord";
 
 import { hueChannelDotText, hueChannelIdLabel, hueChannelName } from "../../model/hueChannelLabel";
 import { hueToMetres, hueToPlanMetres, planMetresToHue } from "../../model/hueChannelPosition";
+import { HANGING_FIXTURES, hangHeight, isHung } from "../../model/hueHang";
 import { getZoneColor } from "../../model/zoneColor";
 import { DecimalField } from "../DecimalField";
 import { DockPicker } from "../dock/DockPicker";
@@ -101,7 +102,8 @@ export function HueChannelInspector({
   autoFacing?: number;
   /** The piece under the light and its top, in metres: one click stands the light on it. */
   seat?: { item: FurniturePlacement; top: number } | null;
-  onUpdate?: (patch: Pick<HueChannelPlacement, "facing" | "fixture">) => void;
+  /** `worldZ` moves the light with the patch, in the same step: a ceiling light chosen goes up. */
+  onUpdate?: (patch: Pick<HueChannelPlacement, "facing" | "fixture">, worldZ?: number) => void;
 }) {
   const { t } = useTranslation();
   const locked = !!channel.locked;
@@ -122,6 +124,21 @@ export function HueChannelInspector({
 
   const fixture = resolveHueFixture(channel);
   const drawnAs = fixture ?? bridgeFixture ?? "bulb";
+  const shownMetres = hueToMetres(shownZ, roomHeightMeters);
+  /** Where `family` hangs in the cube, or null when it stands, is hung already, or its zone stops short. */
+  const hangZ = (family: LampFamily): number | null => {
+    const metres = hangHeight(family, roomHeightMeters);
+    if (metres === null || isHung(family, shownMetres, roomHeightMeters)) return null;
+    const z = metresToHue(metres, roomHeightMeters);
+    return z <= maxZ + 0.005 ? Math.max(minZ, z) : null;
+  };
+  // A bulb on a piece is a lamp's: offering the ceiling too would contradict "Stand on".
+  const hangTo = drawnAs === "bulb" && seat ? null : hangZ(drawnAs);
+  const pickFixture = (next: LampFamily | typeof AUTO) => {
+    const picked = next === AUTO ? undefined : next;
+    const family = picked ?? bridgeFixture ?? "bulb";
+    onUpdate?.({ fixture: picked }, HANGING_FIXTURES.has(family) ? (hangZ(family) ?? undefined) : undefined);
+  };
 
   const zoneIndex = channel.zoneId ? zones.findIndex((z) => z.id === channel.zoneId) : -1;
   const zone = zoneIndex >= 0 ? zones[zoneIndex] : undefined;
@@ -221,7 +238,10 @@ export function HueChannelInspector({
             })}
             readout={t("roomMap:inspector.hueHeightReadout", { metres: heightMetres(shownZ) })}
           />
-          {seat && !standsOn(hueToMetres(shownZ, roomHeightMeters), seat.top) && !locked && (
+          {hangTo !== null && !locked && (
+            <RowLink onClick={() => onHeightChange(hangTo)}>{t("roomMap:inspector.hueHang")}</RowLink>
+          )}
+          {seat && !HANGING_FIXTURES.has(drawnAs) && !standsOn(shownMetres, seat.top) && !locked && (
             <RowLink onClick={() => onHeightChange(metresToHue(seat.top, roomHeightMeters))}>
               {t("roomMap:inspector.hueSeatOn", {
                 name: seat.item.label ?? t(`roomMap:furniture.type.${resolveFurnitureType(seat.item.type)}`),
@@ -244,7 +264,7 @@ export function HueChannelInspector({
                   },
                   ...FIXTURE_ORDER.map((value) => ({ value, label: t(FAMILY_KEY[value]) })),
                 ]}
-                onChange={(next) => onUpdate({ fixture: next === AUTO ? undefined : next })}
+                onChange={pickFixture}
               />
               <InfoTip label={t("common:hintFor", { label: t("roomMap:inspector.modelLabel") })}>{t("roomMap:inspector.hueModelInfo")}</InfoTip>
               {ONE_SIDED.has(drawnAs) && (
