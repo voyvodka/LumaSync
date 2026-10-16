@@ -30,7 +30,7 @@ function renderInspector(item: FurniturePlacement = table, model: FurnitureModel
 
 /** Opens a picker by its name and presses one of its options; a pick lands after the list's short exit. */
 function choose(picker: string, option: string) {
-  fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${picker.replace(/\./g, "\\.")}: `) }));
+  fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${picker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}: `) }));
   fireEvent.click(screen.getByRole("option", { name: option }));
   act(() => {
     vi.advanceTimersByTime(200);
