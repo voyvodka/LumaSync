@@ -732,7 +732,6 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
 
         const isGhost =
           liveChannelIds != null && ch.channelId != null && !liveChannelIds.has(ch.channelId);
-        // A light the bridge no longer has, or one outside the zone being edited, is not lit for this room.
         const halo = glow && !isGhost && !dimmedByHueZone ? `0 0 ${4 + 10 * glow.level}px ${1 + 3 * glow.level}px ${glow.colour}` : null;
         const ringStyle: React.CSSProperties = ring || halo ? { boxShadow: [ring, halo].filter(Boolean).join(", ") } : {};
         const baseLabel = hueChannelName(ch, t);

@@ -1115,7 +1115,6 @@ export function RoomMapEditor({
             chipRef={hover.chipRef}
             name={hoveredName}
             lit={glow !== null}
-            // A light says whether it is on, as in the view; a piece is only named.
             level={hover.hoveredId && parseObjectId(hover.hoveredId)?.kind === "hue" ? (glow?.level ?? 0) : undefined}
           />
         )}
