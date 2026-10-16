@@ -1,7 +1,7 @@
 import { Color, type InstancedMesh, Matrix4, Texture, Vector3 } from "three";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { buildGlow, type WallPlane } from "../glow";
+import { buildGlow, poolTexture, type WallPlane } from "../glow";
 
 const lamp = (x: number, outside?: boolean) => ({ at: { x, y: 1, z: 0 }, radii: [0.1, 0.1, 0.1] as [number, number, number], color: 0xffaa00, outside });
 
@@ -113,5 +113,31 @@ describe("buildGlow — lit shapes", () => {
     const drums = glow.objects.filter((mesh) => mesh.geometry.type === "CylinderGeometry") as InstancedMesh[];
     expect(drums.some((mesh) => shown(mesh, 1))).toBe(true);
     expect(drums.some((mesh) => shown(mesh, 0) || shown(mesh, 2))).toBe(false);
+  });
+});
+
+describe("poolTexture", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  // WebKit dithered a drawn gradient in premultiplied space, and the straight-alpha upload wrapped
+  // a channel past 255 to near 0: the pools came out freckled with primaries.
+  it("is written as white texels with a falling alpha, never drawn as a gradient", () => {
+    let written: Uint8ClampedArray | null = null;
+    const ctx = {
+      createImageData: (w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4) }),
+      putImageData: (image: { data: Uint8ClampedArray }) => {
+        written = image.data;
+      },
+    };
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx as unknown as CanvasRenderingContext2D);
+    poolTexture(16);
+    const data = written as Uint8ClampedArray | null;
+    expect(data).not.toBeNull();
+    const alpha = (x: number, y: number) => data![(y * 16 + x) * 4 + 3]!;
+    for (let i = 0; i < data!.length; i += 4) expect([data![i], data![i + 1], data![i + 2]]).toEqual([255, 255, 255]);
+    expect(alpha(8, 8)).toBeGreaterThan(alpha(11, 8));
+    expect(alpha(11, 8)).toBeGreaterThan(alpha(14, 8));
+    expect(alpha(8, 8)).toBeLessThanOrEqual(Math.round(255 * 0.75));
+    expect(alpha(0, 0)).toBe(0);
   });
 });

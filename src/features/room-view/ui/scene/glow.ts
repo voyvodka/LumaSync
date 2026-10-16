@@ -63,31 +63,38 @@ export interface WallPlane {
 const WASH_REACH = 1.6;
 const WASH_SIZE = 2.4;
 
-/** Light thrown on the wall by a strip behind a screen: brightest at the screen's edge and falling
- *  off from it, a rim rather than a round pool. `inner` is the screen's share of the texture. */
-export function rimTexture(size: number, innerWidth: number, innerHeight: number): CanvasTexture {
+/** White texels with the alpha `alphaAt` gives each texel's centre, in [0, 1] across the texture.
+ *  Written as data, never drawn: WebKit dithers a canvas gradient in premultiplied space, and three's
+ *  straight-alpha upload then wraps a channel past 255 to near 0, freckling pools with primaries. */
+function alphaTexture(size: number, alphaAt: (u: number, v: number) => number): CanvasTexture {
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext("2d");
   if (ctx) {
     const image = ctx.createImageData(size, size);
-    const hw = innerWidth / 2;
-    const hh = innerHeight / 2;
-    const reach = Math.min(0.5 - hw, 0.5 - hh);
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
-        const dx = Math.max(Math.abs((x + 0.5) / size - 0.5) - hw, 0);
-        const dy = Math.max(Math.abs((y + 0.5) / size - 0.5) - hh, 0);
-        const t = Math.min(Math.hypot(dx, dy) / reach, 1);
         const i = (y * size + x) * 4;
         image.data[i] = image.data[i + 1] = image.data[i + 2] = 255;
-        image.data[i + 3] = Math.round(255 * (1 - t) ** 1.5);
+        image.data[i + 3] = Math.round(255 * alphaAt((x + 0.5) / size, (y + 0.5) / size));
       }
     }
     ctx.putImageData(image, 0, 0);
   }
   return new CanvasTexture(canvas);
+}
+
+/** Light thrown on the wall by a strip behind a screen: brightest at the screen's edge and falling
+ *  off from it, a rim rather than a round pool. `inner` is the screen's share of the texture. */
+export function rimTexture(size: number, innerWidth: number, innerHeight: number): CanvasTexture {
+  const hw = innerWidth / 2;
+  const hh = innerHeight / 2;
+  const reach = Math.min(0.5 - hw, 0.5 - hh);
+  return alphaTexture(size, (u, v) => {
+    const t = Math.min(Math.hypot(Math.max(Math.abs(u - 0.5) - hw, 0), Math.max(Math.abs(v - 0.5) - hh, 0)) / reach, 1);
+    return (1 - t) ** 1.5;
+  });
 }
 
 function additive(texture: Texture, opacity: number): MeshBasicMaterial {
@@ -128,25 +135,27 @@ export interface Glow {
   paint(lampColour: number | null, level: number, palette?: readonly number[]): void;
 }
 
+const POOL_STOPS: ReadonlyArray<readonly [number, number]> = [
+  [0, 0.75],
+  [0.25, 0.5],
+  [0.55, 0.16],
+  [1, 0],
+];
+
 /** A wide, soft fall-off for light thrown on a surface: no bright core, so pools from neighbouring
  *  lamps mix their colours instead of adding up to white. */
 export function poolTexture(size: number): CanvasTexture {
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  if (ctx) {
-    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-    g.addColorStop(0, "rgba(255,255,255,0.75)");
-    g.addColorStop(0.25, "rgba(255,255,255,0.5)");
-    g.addColorStop(0.55, "rgba(255,255,255,0.16)");
-    g.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, size, size);
-  }
-  return new CanvasTexture(canvas);
+  return alphaTexture(size, (u, v) => {
+    const r = Math.hypot(u - 0.5, v - 0.5) * 2;
+    for (let i = 1; i < POOL_STOPS.length; i++) {
+      const [r1, a1] = POOL_STOPS[i]!;
+      if (r > r1) continue;
+      const [r0, a0] = POOL_STOPS[i - 1]!;
+      return a0 + ((a1 - a0) * (r - r0)) / (r1 - r0);
+    }
+    return 0;
+  });
 }
-
 export function buildGlow(
   lamps: readonly Lamp[],
   walls: readonly WallPlane[],

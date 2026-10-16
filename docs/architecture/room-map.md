@@ -486,6 +486,12 @@ other edit does: at once, or at the rest when a build was under 200 ms ago.
   contact shadows are geometry with per-vertex alpha merged into one mesh — a stretched blur texture
   smeared on a long sofa — and include a soft band along the foot of every wall. The night backdrop
   is a CSS gradient behind a transparent canvas, so it costs no draw.
+- **A pool or wash texture is written as data, never drawn.** three uploads a canvas with straight
+  alpha, so WebKit un-premultiplies it; a canvas gradient is dithered in premultiplied space, and a
+  texel whose colour came out one above its alpha wrapped past 255 to near 0 instead of clamping.
+  Magnified over a pool, those texels were soft blobs tinted the lamp colour's complement with dark
+  cores — in the app only, since Chromium clamps. `alphaTexture` in `scene/glow.ts` writes white
+  texels with the alpha through `putImageData`; measured in a WKWebView, no texel drops below 254.
 - **The lamps light the room; they are not painted on it.** The first six lamps in the room each get
   a real `PointLight` (`scene/lampLights.ts`), three of them casting a small cube shadow, and the
   evening rig — sky, key and fill — gives way to two rigs set far apart: a lamp-lit one, a warm
