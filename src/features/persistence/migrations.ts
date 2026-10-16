@@ -161,7 +161,37 @@ export function migrateShellState(state: ShellState): ShellState {
     next = migrateV9ToV10(next);
   }
 
+  // 10 → 11: zones span floor to ceiling
+  if ((next.schemaVersion ?? 1) < 11) {
+    next = migrateV10ToV11(next);
+  }
+
   return next;
+}
+
+// ---------------------------------------------------------------------------
+// 10 → 11 — a zone spans the room's full height
+// ---------------------------------------------------------------------------
+
+/** Zones were made at `centerZ 0, scaleZ 0.5`, which held a bound light to the middle half of the
+ *  room's height. Each bound light's relative z is rewritten to the world z it resolved to, then
+ *  its zone becomes `(0, 1)`, so no light moves. Channel by channel, through the first zone with
+ *  its id, as both resolvers find it. A zone with a non-finite z cannot come off disk; it is left
+ *  as it is rather than binding lights that resolved unbound. Its own clamp: a step is frozen. */
+function migrateV10ToV11(state: ShellState): ShellState {
+  const next = { ...state, schemaVersion: 11 } as ShellState;
+  const room = state.roomMap;
+  if (!room?.zones?.length) return next;
+  const unit = (v: number) => Math.max(-1, Math.min(1, v));
+  const finite = (z: HueZone) => Number.isFinite(z.centerZ) && Number.isFinite(z.scaleZ);
+  const hueChannels = (room.hueChannels ?? []).map((ch) => {
+    const zone = ch.zoneId ? room.zones.find((z) => z.id === ch.zoneId) : undefined;
+    const rel = ch.zoneRelativePosition;
+    if (!zone || !rel || !finite(zone) || (zone.centerZ === 0 && zone.scaleZ === 1)) return ch;
+    return { ...ch, zoneRelativePosition: { ...rel, z: unit(zone.centerZ + zone.scaleZ * rel.z) } };
+  });
+  const zones = room.zones.map((z) => (finite(z) ? { ...z, centerZ: 0, scaleZ: 1 } : z));
+  return { ...next, roomMap: { ...room, zones, hueChannels } };
 }
 
 // ---------------------------------------------------------------------------

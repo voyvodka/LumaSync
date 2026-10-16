@@ -115,7 +115,7 @@ const LIVING_ZONE: HueZone = {
   centerZ: 0,
   scaleX: 0.8,
   scaleY: 0.6,
-  scaleZ: 0.5,
+  scaleZ: 1,
   channelIndices: [0, 1, 2],
 };
 

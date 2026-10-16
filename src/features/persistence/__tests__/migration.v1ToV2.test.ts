@@ -61,10 +61,11 @@ describe("migrateShellState — schemaVersion 1 → 2 (W4-F2)", () => {
       entertainmentAreaId: "ea-living",
       centerX: 0.1,
       centerY: -0.2,
-      centerZ: 0.3,
+      // 10 → 11 opens every zone floor to ceiling.
+      centerZ: 0,
       scaleX: 0.4,
       scaleY: 0.5,
-      scaleZ: 0.6,
+      scaleZ: 1,
       channelIndices: [0, 1, 2],
       borderColor: "#ff0",
     });
