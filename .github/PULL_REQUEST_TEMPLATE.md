@@ -2,6 +2,8 @@
 
 Describe what changed and why.
 
+User-visible: one sentence from the user's side, about 25 words — or `none`. The release notes are written from this line; do not edit `CHANGELOG.md`.
+
 ## Related Issues
 
 - Closes #
@@ -33,6 +35,5 @@ If UI behavior changed, add before/after visuals.
 
 - [ ] No version bump in this PR
 - [ ] Version bump is included and SemVer rationale is documented
-- [ ] `CHANGELOG.md` updated with user-facing changes
 - [ ] Security impact reviewed (`SECURITY.md` process if needed)
 - [ ] Compatibility impact documented (if contracts/status codes changed)
