@@ -9,7 +9,9 @@ import {
   resolveFurnitureTone,
   resolveFurnitureType,
   resolveFurnitureVariant,
+  resolveScreenAspect,
   resolveScreenKind,
+  screenHeightPerWidth,
   SCREEN_KINDS,
   type ScreenKind,
 } from "@/shared/contracts/roomMap";
@@ -121,7 +123,7 @@ interface ScreenSpot {
 function screenSpot(config: RoomMapConfig): ScreenSpot | null {
   const tv = config.tvAnchor;
   if (!tv) return null;
-  const height = tv.width * 0.5625;
+  const height = tv.width * screenHeightPerWidth(resolveScreenAspect(tv.screenAspect));
   return {
     x: tv.x + tv.width / 2,
     y: tv.y + tv.height / 2,

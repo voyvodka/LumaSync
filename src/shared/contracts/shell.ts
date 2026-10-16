@@ -437,6 +437,8 @@ export interface ShellState {
    * schema bump.
    */
   roomMapAmbient?: number;
+  /** What a screen's diagonal is shown in. The frontend's alone; absent ⇒ inches. Additive. */
+  roomMapScreenUnit?: RoomMapScreenUnit;
   /**
    * Settings → General "Close button". `"quit"` makes the main window's close
    * quit the app through the normal shutdown; anything else hides to the tray.
@@ -625,6 +627,12 @@ export function resolveUiZoom(stored: unknown): UiZoom {
 
 /** A dim evening, where the room and its unlit lamps read. */
 export const ROOM_AMBIENT_DEFAULT = 35;
+
+export type RoomMapScreenUnit = "inch" | "cm";
+
+export function resolveRoomMapScreenUnit(stored: unknown): RoomMapScreenUnit {
+  return stored === "cm" ? "cm" : "inch";
+}
 
 /** Whole percents, for the same JSON round trip `resolveUiZoom` keeps to. */
 export function resolveRoomAmbient(stored: unknown): number {

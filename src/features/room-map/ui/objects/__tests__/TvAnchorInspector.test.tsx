@@ -16,15 +16,18 @@ vi.mock("react-i18next", () => ({
 
 const baseTv: TvAnchorPlacement = { x: 1.5, y: 0, width: 1.2, height: 0.1 };
 
-function renderInspector(tv: TvAnchorPlacement = baseTv, roomHeightMeters = 2.5) {
+function renderInspector(tv: TvAnchorPlacement = baseTv, roomHeightMeters = 2.5, sizeUnit: "inch" | "cm" = "inch", modelChoices = true) {
   const onUpdate = vi.fn<(patch: Partial<TvAnchorPlacement>) => void>();
   const onDelete = vi.fn<() => void>();
+  const onSizeUnitChange = vi.fn<(unit: "inch" | "cm") => void>();
   render(
     <TvAnchorInspector
       tv={tv}
       roomHeightMeters={roomHeightMeters}
       autoKind="tv"
-      modelChoices
+      modelChoices={modelChoices}
+      sizeUnit={sizeUnit}
+      onSizeUnitChange={onSizeUnitChange}
       onUpdate={onUpdate}
       onToggleLock={vi.fn<() => void>()}
       onDelete={onDelete}
@@ -32,7 +35,7 @@ function renderInspector(tv: TvAnchorPlacement = baseTv, roomHeightMeters = 2.5)
     />,
   );
   const mount = screen.getByLabelText("roomMap:inspector.tvMountHeightLabel") as HTMLInputElement;
-  return { onUpdate, onDelete, mount };
+  return { onUpdate, onDelete, onSizeUnitChange, mount };
 }
 
 function commit(input: HTMLInputElement, value: string) {
@@ -121,10 +124,75 @@ describe("TvAnchorInspector mount height", () => {
     expect(screen.getByRole("button", { name: "roomMap:objectPanel.delete" })).toBeDisabled();
   });
 
-  it("labels the footprint field as depth, not height", () => {
+});
+
+describe("TvAnchorInspector — screen size", () => {
+  beforeEach(() => {
+    cleanup();
+    vi.useFakeTimers();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const size = () => screen.getByTestId("tv-size") as HTMLInputElement;
+
+  // The footprint's depth moved the screen off its wall and read as the screen's size.
+  it("asks for the diagonal, not the footprint", () => {
     renderInspector();
-    expect(screen.getByLabelText("roomMap:inspector.tvDepthLabel")).toBeInTheDocument();
-    expect(screen.queryByLabelText("roomMap:inspector.heightLabel")).toBeNull();
+    expect(size().value).toBe("54");
+    expect(size()).toHaveAccessibleName('roomMap:inspector.screenSizeLabel {"width":"1.20","height":"0.68"}');
+    expect(screen.getAllByRole("spinbutton")).toHaveLength(4);
+  });
+
+  it("writes the width a typed diagonal makes, keeping the screen's centre", () => {
+    const { onUpdate } = renderInspector();
+    commit(size(), "65");
+    const patch = onUpdate.mock.lastCall![0];
+    expect(patch.width).toBeCloseTo(1.439, 3);
+    expect(patch.x! + patch.width! / 2).toBeCloseTo(baseTv.x + baseTv.width / 2, 6);
+  });
+
+  it("shows centimetres where they were chosen, and its unit switches between the two", () => {
+    const { onSizeUnitChange } = renderInspector(baseTv, 2.5, "cm");
+    expect(size().value).toBe("138");
+    const unit = screen.getByRole("button", { name: "roomMap:inspector.screenSizeToInch" });
+    fireEvent.pointerDown(unit, { button: 0 });
+    fireEvent.pointerUp(unit, { button: 0 });
+    fireEvent.click(unit);
+    expect(onSizeUnitChange).toHaveBeenCalledWith("inch");
+    expect(size()).not.toHaveFocus();
+  });
+
+  it("switches the unit of a locked screen too, a view choice that writes nothing", () => {
+    const { onUpdate, onSizeUnitChange } = renderInspector({ ...baseTv, locked: true });
+    fireEvent.click(screen.getByRole("button", { name: "roomMap:inspector.screenSizeToCm" }));
+    expect(onSizeUnitChange).toHaveBeenCalledWith("cm");
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  it("offers a shape only where the 3D room draws it", () => {
+    renderInspector(baseTv, 2.5, "inch", false);
+    expect(screen.queryByRole("button", { name: /^roomMap:inspector\.screenAspectLabel: / })).toBeNull();
+  });
+
+  it("keeps the diagonal across a new shape, and stores 16:9 as nothing", () => {
+    const { onUpdate } = renderInspector();
+    fireEvent.click(screen.getByRole("button", { name: /^roomMap:inspector\.screenAspectLabel: / }));
+    fireEvent.click(screen.getByRole("option", { name: "21:9" }));
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    const patch = onUpdate.mock.lastCall![0];
+    expect(patch.screenAspect).toBe("21:9");
+    expect(patch.width! * Math.hypot(1, 9 / 21)).toBeCloseTo(baseTv.width * Math.hypot(1, 9 / 16), 3);
+    expect(patch.x! + patch.width! / 2).toBeCloseTo(baseTv.x + baseTv.width / 2, 6);
+    cleanup();
+    const again = renderInspector({ ...baseTv, screenAspect: "21:9" });
+    fireEvent.click(screen.getByRole("button", { name: /^roomMap:inspector\.screenAspectLabel: / }));
+    fireEvent.click(screen.getByRole("option", { name: "16:9" }));
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(again.onUpdate.mock.lastCall![0]).toHaveProperty("screenAspect", undefined);
   });
 });
 

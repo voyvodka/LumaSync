@@ -80,6 +80,29 @@
     color: var(--lm-ink-faint);
   }
 
+  .unitSwitch {
+    display: grid;
+    place-items: center;
+    min-width: 32px;
+    align-self: stretch;
+    margin: 0 -6px 0 0;
+    padding: 0 4px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+  }
+  .unitSwitch:hover {
+    color: var(--lm-ink);
+    background: rgb(255 255 255 / 6%);
+  }
+  .unitSwitch:focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--lm-focus-ring-inset);
+  }
+  :global(:root[data-reduced-motion]) .unitSwitch { transition: none; }
+
   .disabled { cursor: not-allowed; }
   .disabled .input {
     color: var(--lm-ink-faint);
@@ -101,5 +124,10 @@
   @media (forced-colors: active) {
     .editing { outline: 2px solid Highlight; }
     .field::after { background: Highlight; }
+    .unitSwitch {
+      border: 1px solid ButtonBorder;
+      color: ButtonText;
+    }
+    .unitSwitch:focus-visible { outline: 2px solid Highlight; }
   }
 }

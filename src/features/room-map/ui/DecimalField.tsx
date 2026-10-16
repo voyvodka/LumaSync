@@ -20,6 +20,8 @@ interface CommonProps {
   /** Folds a typed or stepped number into range before it is checked — rotation's 360 to 0. */
   normalize?: (value: number) => number;
   unit?: string;
+  /** Makes the unit a button that changes it, named by `label`; a view choice, so a locked field keeps it. */
+  unitSwitch?: { label: string; onPress: () => void };
   disabled?: boolean;
   describedBy?: string;
   id?: string;
@@ -76,6 +78,7 @@ export function DecimalField(props: DecimalFieldProps) {
     max = Number.POSITIVE_INFINITY,
     normalize,
     unit,
+    unitSwitch,
     disabled = false,
     describedBy,
     id,
@@ -87,7 +90,7 @@ export function DecimalField(props: DecimalFieldProps) {
   const format = (v: number | undefined) => (v === undefined ? "" : v.toFixed(decimals));
   const [draft, setDraft] = useState(() => format(value));
   const [editing, setEditing] = useState(false);
-  const boxRef = useRef<HTMLLabelElement | null>(null);
+  const boxRef = useRef<HTMLElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const scrub = useRef<{ x: number; base: number; moved: boolean } | null>(null);
   const [scrubbing, setScrubbing] = useState(false);
@@ -148,7 +151,7 @@ export function DecimalField(props: DecimalFieldProps) {
     commit(roundTo(clamp(folded, min, max), decimals));
   };
 
-  const startScrub = (event: React.PointerEvent<HTMLLabelElement>) => {
+  const startScrub = (event: React.PointerEvent<HTMLElement>) => {
     if (disabled || editing || event.button !== 0) return;
     // Kept from focusing until the press turns out to be a click, so a drag does not open the text.
     event.preventDefault();
@@ -156,7 +159,7 @@ export function DecimalField(props: DecimalFieldProps) {
     const fallback = props.optional ? parseDecimal(props.placeholder) : null;
     scrub.current = { x: event.clientX, base: value ?? fallback ?? 0, moved: false };
   };
-  const moveScrub = (event: React.PointerEvent<HTMLLabelElement>) => {
+  const moveScrub = (event: React.PointerEvent<HTMLElement>) => {
     const s = scrub.current;
     if (!s) return;
     const dx = event.clientX - s.x;
@@ -181,9 +184,11 @@ export function DecimalField(props: DecimalFieldProps) {
     }
   };
 
+  // A button may not sit inside a label; the box needs none of a label's own behaviour anyway.
+  const Box = unitSwitch ? "div" : "label";
   return (
-    <label
-      ref={boxRef}
+    <Box
+      ref={boxRef as React.Ref<HTMLLabelElement & HTMLDivElement>}
       className={cx(
         styles.field,
         editing && styles.editing,
@@ -219,7 +224,8 @@ export function DecimalField(props: DecimalFieldProps) {
         disabled={disabled}
         className={styles.input}
         // As wide as the number: the value sits by its mark and unit instead of across the field.
-        style={{ width: `${Math.max(draft.length, props.optional ? props.placeholder.length : 1, 1) + 0.5}ch` }}
+        // With a unit that switches, room for the widest value, so the switch never moves under the pointer.
+        style={{ width: `${Math.max(draft.length, props.optional ? props.placeholder.length : 1, unitSwitch && Number.isFinite(max) ? String(Math.round(max)).length : 1) + 0.5}ch` }}
         value={draft}
         placeholder={props.optional ? props.placeholder : undefined}
         data-testid={testId}
@@ -248,12 +254,28 @@ export function DecimalField(props: DecimalFieldProps) {
           }
         }}
       />
-      {unit && (
-        <span className={styles.unit} aria-hidden="true">
-          {unit}
-        </span>
-      )}
-    </label>
+      {unit &&
+        (unitSwitch ? (
+          <button
+            type="button"
+            className={cx(styles.unit, styles.unitSwitch)}
+            aria-label={unitSwitch.label}
+            title={unitSwitch.label}
+            // Its own press, not the start of a drag across the field.
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.preventDefault();
+              unitSwitch.onPress();
+            }}
+          >
+            {unit}
+          </button>
+        ) : (
+          <span className={styles.unit} aria-hidden="true">
+            {unit}
+          </span>
+        ))}
+    </Box>
   );
 }
 

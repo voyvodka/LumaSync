@@ -10,6 +10,7 @@ import type {
 import { fitStripLength, MAX_STRIP_CORNERS, resolveRoomFootprint, resolveStripCorners } from "@/shared/contracts/roomMap";
 import { autoScreenKind, classifyFurniture } from "@/features/room-view/model/furnitureModel";
 import type { LampFamily } from "@/features/room-view/model/lampFamily";
+import { setPreference, usePreference } from "@/features/persistence/preferences";
 
 import { hueChannelZRange, hueToPlanMetres, resolveHueChannelWorld, resolveHueChannelWorldZ } from "../../model/hueChannelPosition";
 import { furnitureObjectId, hueChannelObjectId, imageLayerObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "../../model/objectId";
@@ -113,6 +114,7 @@ export function DockInspector({
   onClose,
 }: DockInspectorProps) {
   const key = inspectorKey(target);
+  const screenUnit = usePreference("roomMapScreenUnit");
   switch (target.kind) {
     case "hueZone": {
       const zone = target.zone;
@@ -141,6 +143,8 @@ export function DockInspector({
           roomHeightMeters={config.dimensions.heightMeters}
           autoKind={autoScreenKind(config)}
           modelChoices={modelChoices}
+          sizeUnit={screenUnit}
+          onSizeUnitChange={(unit) => void setPreference("roomMapScreenUnit", unit)}
           outside={outsideOutline(target.tv.x + target.tv.width / 2, target.tv.y + target.tv.height / 2, resolveRoomFootprint(config))}
           onUpdate={actions.onUpdateTvAnchor}
           onToggleLock={() => actions.onToggleLock(TV_ANCHOR_OBJECT_ID)}

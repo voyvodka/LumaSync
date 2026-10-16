@@ -532,6 +532,8 @@ export interface TvAnchorPlacement {
   /** Absent ⇒ a monitor when a desk stands under it, else a TV. Frontend-only: never mirrored in
    * Rust, which reads the anchor's place and mount height alone. */
   screenKind?: ScreenKind;
+  /** Absent ⇒ 16:9. Frontend-only like `screenKind`: the screen's height is drawn, never sampled. */
+  screenAspect?: ScreenAspect;
 }
 
 /** What the captured screen is drawn as. */
@@ -547,6 +549,28 @@ const SCREEN_KIND_VALUES = new Set<string>(Object.values(SCREEN_KINDS));
 /** The stored screen kind when it is a known one, else none (Auto). */
 export function resolveScreenKind(stored: unknown): ScreenKind | undefined {
   return typeof stored === "string" && SCREEN_KIND_VALUES.has(stored) ? (stored as ScreenKind) : undefined;
+}
+
+export const SCREEN_ASPECTS = {
+  R16_9: "16:9",
+  R16_10: "16:10",
+  R21_9: "21:9",
+  R32_9: "32:9",
+  R4_3: "4:3",
+} as const;
+
+export type ScreenAspect = (typeof SCREEN_ASPECTS)[keyof typeof SCREEN_ASPECTS];
+
+const SCREEN_ASPECT_VALUES = new Set<string>(Object.values(SCREEN_ASPECTS));
+
+export function resolveScreenAspect(stored: unknown): ScreenAspect {
+  return typeof stored === "string" && SCREEN_ASPECT_VALUES.has(stored) ? (stored as ScreenAspect) : SCREEN_ASPECTS.R16_9;
+}
+
+/** Height over width — the inverse of how an aspect is written. */
+export function screenHeightPerWidth(aspect: ScreenAspect): number {
+  const [w, h] = aspect.split(":").map(Number) as [number, number];
+  return h / w;
 }
 
 /** Mirrors `DEFAULT_TV_MOUNT_HEIGHT_FRACTION` in `commands/room_affinity.rs`;

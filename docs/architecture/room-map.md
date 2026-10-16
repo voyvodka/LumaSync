@@ -427,10 +427,15 @@ other edit does: at once, or at the rest when a build was under 200 ms ago.
   - A type change is the one place that clears (`retypeFurniture`): a variant or tone the new type
     does not take goes, because `dining` means a table and a chair alike and a spread would carry it
     across silently.
-  The piece's own height is `topMeters` — `height` on this type is the footprint's depth (and the
-  inspector now says Depth for it). `screenKind` is the editor's alone: Rust receives it in the file
-  it owns but never mirrors or projects it — `toRoomGeometry` copies the anchor field by field, and
-  the shared parity fixture pins it. `resolveScreenKind` and `resolveFurnitureTop` read the two
+  The piece's own height is `topMeters` — `height` on this type is the footprint's depth. The TV
+  inspector offers no field for it: it moved the screen off its wall and read as the screen's size.
+  The screen is sized as it is sold, by its diagonal in inches or centimetres
+  (`roomMapScreenUnit`), and `screenAspect` gives its shape; `width` stays what is stored, and a
+  new diagonal or shape rewrites it about the screen's centre, since Hue sampling and the backlight
+  match both read the screen from there. A width the room cannot hold is clamped, so a very wide
+  pick reads back smaller. `screenKind` and `screenAspect` are the editor's alone: Rust receives
+  them in the file it owns but never mirrors or projects them — `toRoomGeometry` copies the anchor
+  field by field, and the shared parity fixture pins it. `resolveScreenKind` and `resolveFurnitureTop` read the two
   without a type's help, so a value from a newer build or a hand-edited file reads as absent. The
   model, tone, height and screen choices are offered only where the 3D room is built
   (`ROOM_VIEW_3D_AVAILABLE`): nothing stores what nothing draws. Their inspector edits carry a

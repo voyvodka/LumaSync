@@ -28,6 +28,15 @@ export function GlyphDepth() {
   );
 }
 
+export function GlyphDiagonal() {
+  return (
+    <svg {...PROPS}>
+      <rect x="1.5" y="2.5" width="9" height="7" rx="1" />
+      <path d="M3.5 7.5l5-3" />
+    </svg>
+  );
+}
+
 export function GlyphHeight() {
   return (
     <svg {...PROPS}>

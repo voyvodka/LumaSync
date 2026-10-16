@@ -5,7 +5,9 @@ import { BufferAttribute, Color, PlaneGeometry } from "three";
 import {
   type RoomMapConfig,
   resolveFurnitureTop,
+  resolveScreenAspect,
   resolveScreenKind,
+  screenHeightPerWidth,
   SCREEN_KINDS,
   stripCentre,
   stripPoints,
@@ -55,7 +57,7 @@ export function buildScreen(config: RoomMapConfig, models: ReadonlyMap<string, F
   if (!tv) return null;
   const dims = config.dimensions;
   const width = tv.width;
-  const height = width * 0.5625;
+  const height = width * screenHeightPerWidth(resolveScreenAspect(tv.screenAspect));
   const desk = config.furniture.find((f) => {
     const model = models.get(f.id);
     return model?.kind === "desk" && model.screenX !== null;

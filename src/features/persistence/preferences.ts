@@ -19,6 +19,7 @@ import {
   resolveMotionPreference,
   resolveNotificationsPreference,
   resolveRoomAmbient,
+  resolveRoomMapScreenUnit,
   resolveUiZoom,
   resolveUpdateChannel,
   type ShellState,
@@ -44,6 +45,7 @@ const PREFERENCES = {
   awayLights: resolveAwayLights,
   lightingIntensityPreset: resolveSmoothingPreset,
   roomMapAmbient: resolveRoomAmbient,
+  roomMapScreenUnit: resolveRoomMapScreenUnit,
   // Read only: Rust writes it with every lit choice.
   lastLitKind: resolveLitModeKind,
 } satisfies { [K in keyof ShellState]?: (stored: unknown) => NonNullable<ShellState[K]> };

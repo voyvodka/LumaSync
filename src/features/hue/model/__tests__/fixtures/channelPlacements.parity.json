@@ -282,12 +282,12 @@
       }
     },
     {
-      "name": "a screen kind and the room's surfaces are the editor's alone and never reach the runtime",
+      "name": "a screen kind and aspect and the room's surfaces are the editor's alone and never reach the runtime",
       "state": {
         "roomMap": {
           "dimensions": { "widthMeters": 4, "depthMeters": 5, "heightMeters": 2.5 },
           "surfaces": { "floor": "tileDark", "walls": "charcoal" },
-          "tvAnchor": { "x": 1, "y": 0, "width": 1.2, "height": 0.1, "locked": true, "screenKind": "monitor", "mountHeightMeters": 1.1 },
+          "tvAnchor": { "x": 1, "y": 0, "width": 1.2, "height": 0.1, "locked": true, "screenKind": "monitor", "screenAspect": "21:9", "mountHeightMeters": 1.1 },
           "hueChannels": [
             { "channelIndex": 0, "channelId": 4, "entertainmentAreaId": "area-1", "x": 0.5, "y": 1, "z": 0.3, "zOrigin": "user" },
             { "channelIndex": 0, "channelId": 9, "entertainmentAreaId": "area-2", "x": -0.5, "y": -1, "z": 0 }
