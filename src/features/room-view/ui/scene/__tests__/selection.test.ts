@@ -2,6 +2,7 @@ import { Box3, Mesh, type Object3D, RingGeometry } from "three";
 import { describe, expect, it } from "vitest";
 
 import type { Pickable } from "../../../model/picking";
+import { PLUMB_NAME } from "../plumb";
 import { buildSelectionMark } from "../selection";
 
 const frameOf = (pickable: Pickable) => {
@@ -9,13 +10,14 @@ const frameOf = (pickable: Pickable) => {
   mark.select(pickable.id);
   const isHalo = (o: Object3D) => o instanceof Mesh && o.geometry instanceof RingGeometry;
   const halo = mark.group.children.filter(isHalo);
-  const frame = mark.group.children.find((o) => !isHalo(o))!;
+  const frame = mark.group.children.find((o) => !isHalo(o) && o.name !== PLUMB_NAME)!;
   frame.updateMatrixWorld(true);
   const frames: Mesh[] = [];
   frame.traverse((o) => {
     if (o instanceof Mesh) frames.push(o);
   });
-  return { haloShown: halo.some((m) => m.visible), box: new Box3().setFromObject(frame), frames };
+  const plumb = mark.group.children.find((o) => o.name === PLUMB_NAME)!;
+  return { haloShown: halo.some((m) => m.visible), box: new Box3().setFromObject(frame), frames, plumb, floorShown: frame.visible };
 };
 
 describe("buildSelectionMark", () => {
@@ -48,5 +50,23 @@ describe("buildSelectionMark", () => {
 
   it("still rings a lamp", () => {
     expect(frameOf({ id: "hue-1", kind: "light", centre: { x: 0, y: 1, z: 0 }, half: [0.1, 0.1, 0.1], angle: 0 }).haloShown).toBe(true);
+  });
+
+  // A ceiling light's outline on the floor read as a stray ring with nothing linking it to the light.
+  it("drops a line from a light high in the room to a ring on the floor under it", () => {
+    const { plumb, floorShown } = frameOf({ id: "hue-1", kind: "light", centre: { x: 0.4, y: 2.46, z: -0.3 }, half: [0.19, 0.025, 0.19], angle: 0 });
+    expect(floorShown).toBe(false);
+    expect(plumb.visible).toBe(true);
+    plumb.updateMatrixWorld(true);
+    const box = new Box3().setFromObject(plumb);
+    expect(box.max.y).toBeCloseTo(2.435, 3);
+    expect(box.min.y).toBeLessThan(0.01);
+    expect((box.min.x + box.max.x) / 2).toBeCloseTo(0.4, 3);
+  });
+
+  it("keeps the floor outline and no line for a light within reach of the floor", () => {
+    const { plumb, floorShown } = frameOf({ id: "hue-1", kind: "light", centre: { x: 0, y: 0.8, z: 0 }, half: [0.1, 0.1, 0.1], angle: 0 });
+    expect(floorShown).toBe(true);
+    expect(plumb.visible).toBe(false);
   });
 });

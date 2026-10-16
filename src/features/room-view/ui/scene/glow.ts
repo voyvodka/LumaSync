@@ -165,7 +165,10 @@ export function buildGlow(
   // An evening room: each lamp throws a wide pool, so the lights read as what lights the room.
   const pools = new InstancedMesh(new PlaneGeometry(1, 1), additive(surface, 0.62), lamps.length);
   lamps.forEach((lamp, i) => {
-    const size = lamp.outside ? 0 : 1.6 + Math.min(Math.max(lamp.at.y, 0), heightM) * 0.9;
+    const height = Math.min(Math.max(lamp.at.y, 0), heightM);
+    // Thrown straight down, the pool is the cone's footprint rather than a wide wash.
+    const down = lamp.beam && lamp.beam.aim.y < -0.9 ? Math.min(Math.max(1.4 * height * Math.tan(lamp.beam.spread), 0.7), 2.6) : null;
+    const size = lamp.outside ? 0 : (down ?? 1.6 + height * 0.9);
     pools.setMatrixAt(i, m.compose(new Vector3(lamp.at.x, 0.006, lamp.at.z), FLAT, new Vector3(size, size, 1)));
   });
 

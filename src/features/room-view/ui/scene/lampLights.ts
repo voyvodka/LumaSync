@@ -11,6 +11,8 @@ export const LAMP_SPOTS = 3;
 // Cube shadow maps, redrawn only when a wall cuts: the cost is memory.
 const SHADOW_LAMPS = 3;
 const SHADOW_MAP = 256;
+/** A cone thrown down shadows with one 2D map, cheaper than a point's cube. */
+const SPOT_SHADOW_MAP = 512;
 const INTENSITY = 7;
 // A cone puts all of a lamp's light on one side: the same intensity read twice as bright there.
 const SPOT_INTENSITY = 9;
@@ -28,7 +30,12 @@ export interface LampLights {
 
 export function lampLights(lamps: Lamp[], roomReach: number, shadows: boolean): LampLights {
   const inside = lamps.filter((lamp) => !lamp.outside);
-  const coned = inside.filter((lamp) => lamp.beam).slice(0, LAMP_SPOTS);
+  // A light thrown down reads nearly as well from a point; one thrown sideways does not, so it goes first.
+  const down = (lamp: Lamp) => (lamp.beam?.aim.y ?? 0) < -0.9;
+  const coned = inside
+    .filter((lamp) => lamp.beam)
+    .sort((a, b) => Number(down(a)) - Number(down(b)))
+    .slice(0, LAMP_SPOTS);
   const round = inside.filter((lamp) => !coned.includes(lamp)).slice(0, LAMP_LIGHTS);
   for (const lamp of [...coned, ...round]) lamp.litByLight = true;
   const colour = new Color();
@@ -61,7 +68,17 @@ export function lampLights(lamps: Lamp[], roomReach: number, shadows: boolean): 
     const light = new SpotLight(0xffffff, 0, roomReach, lamp?.beam?.spread ?? 1, 1, 2);
     if (lamp?.beam) {
       const { aim } = lamp.beam;
-      light.position.set(lamp.at.x - aim.x * SPOT_SETBACK, lamp.at.y - aim.y * SPOT_SETBACK, lamp.at.z - aim.z * SPOT_SETBACK);
+      // Down from a ceiling the cone starts under the lens: set back, it lit the trim's top a hot spot.
+      const setback = down(lamp) ? -0.02 : SPOT_SETBACK;
+      light.position.set(lamp.at.x - aim.x * setback, lamp.at.y - aim.y * setback, lamp.at.z - aim.z * setback);
+      light.castShadow = shadows && down(lamp);
+      if (light.castShadow) {
+        light.shadow.mapSize.set(SPOT_SHADOW_MAP, SPOT_SHADOW_MAP);
+        light.shadow.radius = 6;
+        light.shadow.bias = -0.002;
+        light.shadow.camera.near = 0.05;
+        light.shadow.intensity = 0.4;
+      }
       light.target.position.set(lamp.at.x + aim.x, lamp.at.y + aim.y, lamp.at.z + aim.z);
     } else {
       light.position.set(0, -10, 0);

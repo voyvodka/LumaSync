@@ -424,7 +424,8 @@ light and glow are built into the scene, so it moves as the amber frame alone.
   gesture key, because a chip or swatch group selects on every arrow key and each save re-applies
   the running mode.
 - **The 3D room keeps its draw count fixed.** Furniture merges into one mesh per material by
-  vertex colour; the lamps' lit parts are one draw per shape (globe, drum shade, flared shade, bar —
+  vertex colour, and what hangs on the ceiling into one more per material that casts no shadow —
+  the house has no ceiling, so a canopy's shadow from the key light fell on the floor as a blot; the lamps' lit parts are one draw per shape (globe, drum shade, flared shade, bar —
   each mesh holds every lamp and shows only its own), floor pools and wall washes one draw each,
   whatever the lamp count;
   contact shadows are geometry with per-vertex alpha merged into one mesh — a stretched blur texture
@@ -447,6 +448,16 @@ light and glow are built into the scene, so it moves as the amber frame alone.
   its lit face, its body and its cone. With no facing stored it turns to the wall it stands nearest
   (`nearestWallFacing`), which is how these lights are set up in a room; a fourth falls back to a
   point light. Go, Iris and Bloom are three archetypes and three models, not one portable lamp.
+  A light thrown straight down — a pendant, a downlight — reads nearly as well from a point, so the
+  cones go to the sideways ones first.
+- **A light at the ceiling is drawn as one that hangs there** (`scene/lamps.ts`). A spot at the
+  ceiling is a downlight — a trim ring round a lens that stands proud of it, since the camera only
+  ever sees the ceiling from above — and a bulb there hangs on a short cord from a socket. Both,
+  and a pendant, throw their light down as a cone that shadows on one 2D map, and their floor pool
+  is the cone's footprint rather than a lamp's wide wash. A light whose bottom is 1.2 m up or more
+  shows, while selected or carried, a dashed plumb line to a ring on the floor under it
+  (`scene/plumb.ts`): from above, a light in the air reads at any height until its floor point is
+  drawn.
 - **A Hue light's model and facing are the map's to override.** `HueChannelPlacement.fixture` draws
   a light as another fixture than its archetype names — the bridge only knows the bulb inside a
   lamp — and `facing` turns a one-sided one, in plan degrees clockwise from the TV wall (the

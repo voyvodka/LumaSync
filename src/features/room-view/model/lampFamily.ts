@@ -50,6 +50,9 @@ const FAMILY_OF: Readonly<Record<string, LampFamily>> = {
   hue_tube: "tube",
 };
 
+/** Within this of the ceiling, a spot or a bulb is drawn mounted on it rather than standing. */
+export const CEILING_MOUNT_M = 0.1;
+
 /** Fixtures that light one side only, so the room turns them to a wall or to the stored facing. */
 export const ONE_SIDED: ReadonlySet<LampFamily> = new Set<LampFamily>(["playBar", "signe", "iris", "bloom"]);
 

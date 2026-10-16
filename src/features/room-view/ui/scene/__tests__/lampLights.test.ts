@@ -39,6 +39,24 @@ describe("lampLights", () => {
   });
 
   // A Play bar turned to the wall lit the room all round, as if it had no back.
+  // Three downlights took every cone, and the Play bar beside them lit all round.
+  it("gives the cones to the lamps thrown sideways before the ones thrown down", () => {
+    const downlight = (x: number): Lamp => ({ ...lamp(x), beam: { aim: new Vector3(0, -1, 0), spread: 0.55 } });
+    const lamps = [downlight(1), downlight(2), downlight(3), coned(4)];
+    const spots = lampLights(lamps, 5, false).objects.filter((o): o is SpotLight => o instanceof SpotLight && o.intensity > 0);
+    expect(spots.map((s) => Math.round(s.position.x))).toEqual([4, 1, 2]);
+  });
+
+  it("shadows with a light thrown down, from under its lens, and not with one thrown sideways", () => {
+    const downlight: Lamp = { ...lamp(1), beam: { aim: new Vector3(0, -1, 0), spread: 0.42 } };
+    const spots = lampLights([downlight, coned(2)], 5, true).objects.filter((o): o is SpotLight => o instanceof SpotLight && o.intensity > 0);
+    const [down, side] = [spots.find((s) => Math.round(s.position.x) === 1)!, spots.find((s) => Math.round(s.position.x) === 2)!];
+    expect(down.castShadow).toBe(true);
+    expect(down.position.y).toBeLessThan(downlight.at.y);
+    expect(side.castShadow).toBe(false);
+    expect(lampLights([downlight], 5, false).objects.some((o) => o instanceof SpotLight && o.castShadow)).toBe(false);
+  });
+
   it("throws a one-sided lamp's light as a cone along its aim", () => {
     const lights = lightsOf([coned(1), lamp(2)]);
     const spot = lights.find((l): l is SpotLight => l instanceof SpotLight && l.intensity > 0);

@@ -3,10 +3,10 @@
 // the one bulb mesh, so a live colour later recolours an instance instead of rebuilding the room.
 import { Matrix4, Quaternion, Vector3 } from "three";
 
-import { type LampFamily, ONE_SIDED } from "../../model/lampFamily";
+import { CEILING_MOUNT_M, type LampFamily, ONE_SIDED } from "../../model/lampFamily";
 import type { ScenePoint } from "../../model/roomSpace";
 import { PALETTE } from "./palette";
-import { block, type Part, rod, transformParts } from "./parts";
+import { block, type Part, ring, rod, transformParts } from "./parts";
 
 export type LampShape = "globe" | "drum" | "flare" | "bar";
 
@@ -31,6 +31,11 @@ export interface LampFixture {
 const CANOPY = 0xefe9df;
 const BAR = 0x1d1e21;
 const BULB_RADIUS = 0.055;
+/** A bulb in a ceiling socket hangs this far below on its cord. */
+const BULB_DROP = 0.32;
+/** Half-angles of the light thrown straight down: a downlight's narrow cone, a pendant's wide one. */
+const DOWNLIGHT_SPREAD = 0.42;
+const PENDANT_SPREAD = 1.05;
 
 /** The fixture for one light at `at`, standing on a surface at `surface` (the floor or the top of
  *  the piece under it), in a room `ceiling` high. The light's own point stays where the bridge or
@@ -66,16 +71,17 @@ export function lampFixture(family: LampFamily, at: ScenePoint, surface: number,
       // Hung at least to head height: placed on the floor, its cord ran the room's height.
       const shadeY = Math.min(Math.max(y, 1.2), ceiling - 0.3);
       return {
-        body: [
+        body: overhead([
           rod(0.004, 0.004, Math.max(ceiling - shadeY - 0.06, 0.02), x, shadeY + 0.06, z, BAR, 6),
           rod(0.06, 0.06, 0.02, x, ceiling - 0.02, z, CANOPY, 16),
-        ],
+        ]),
         glow: { at: { x, y: shadeY, z }, radii: [0.18, 0.09, 0.18], shape: "flare" },
+        beam: { aim: DOWN.clone(), spread: PENDANT_SPREAD },
       };
     }
     case "ceiling":
       return {
-        body: [rod(0.2, 0.2, 0.03, x, ceiling - 0.03, z, CANOPY, 32)],
+        body: overhead([rod(0.2, 0.2, 0.03, x, ceiling - 0.03, z, CANOPY, 32)]),
         glow: { at: { x, y: ceiling - 0.04, z }, radii: [0.19, 0.025, 0.19], shape: "drum" },
       };
     case "go": {
@@ -87,6 +93,15 @@ export function lampFixture(family: LampFamily, at: ScenePoint, surface: number,
       };
     }
     case "spot": {
+      if (y >= ceiling - CEILING_MOUNT_M) {
+        // Set in the ceiling: a trim ring round a lens that throws its light down. The lens stands
+        // proud of the trim, since the camera only ever sees the ceiling from above.
+        return {
+          body: overhead([ring(0.045, 0.065, 0.01, x, ceiling - 0.01, z, CANOPY)]),
+          glow: { at: { x, y: ceiling - 0.004, z }, radii: [0.05, 0.008, 0.05], shape: "drum" },
+          beam: { aim: DOWN.clone(), spread: DOWNLIGHT_SPREAD },
+        };
+      }
       const headY = Math.max(y, surface + 0.12);
       return {
         body: [rod(0.04, 0.045, 0.02, x, surface, z, BAR, 12), rod(0.01, 0.01, Math.max(headY - surface - 0.06, 0.02), x, surface + 0.02, z, BAR, 6)],
@@ -95,8 +110,22 @@ export function lampFixture(family: LampFamily, at: ScenePoint, surface: number,
     }
     case "wall":
       return { body: [], glow: { at: { x, y, z }, radii: [0.1, 0.14, 0.06], shape: "drum" } };
-    default:
-      return { body: [], glow: { at: { x, y, z }, radii: [BULB_RADIUS, BULB_RADIUS, BULB_RADIUS], shape: "globe" } };
+    default: {
+      if (y < ceiling - CEILING_MOUNT_M) {
+        return { body: [], glow: { at: { x, y, z }, radii: [BULB_RADIUS, BULB_RADIUS, BULB_RADIUS], shape: "globe" } };
+      }
+      // A bulb in a ceiling socket hangs from a short cord, as a bare smart bulb does.
+      const bulbY = ceiling - BULB_DROP;
+      const socket = bulbY + BULB_RADIUS * 0.7;
+      return {
+        body: overhead([
+          rod(0.022, 0.018, 0.05, x, socket, z, BAR, 12),
+          rod(0.004, 0.004, ceiling - socket - 0.065, x, socket + 0.05, z, BAR, 6),
+          rod(0.045, 0.045, 0.015, x, ceiling - 0.015, z, CANOPY, 20),
+        ]),
+        glow: { at: { x, y: bulbY, z }, radii: [BULB_RADIUS, BULB_RADIUS * 1.15, BULB_RADIUS], shape: "globe" },
+      };
+    }
   }
 }
 
@@ -157,5 +186,11 @@ function oneSided(family: LampFamily, at: ScenePoint, surface: number, facing: n
   return { body, glow, beam };
 }
 
+function overhead(parts: Part[]): Part[] {
+  for (const part of parts) part.castShadow = false;
+  return parts;
+}
+
 const UP = new Vector3(0, 1, 0);
+const DOWN = new Vector3(0, -1, 0);
 const SIDE = new Vector3(1, 0, 0);

@@ -4,6 +4,7 @@
 import { DoubleSide, Group, Mesh, MeshBasicMaterial, type Object3D, Path, type Quaternion, RingGeometry, Shape, ShapeGeometry } from "three";
 
 import type { Pickable } from "../../model/picking";
+import { PLUMB_FROM, plumbGuide } from "./plumb";
 
 /** `--lm-amber`. */
 export const SELECTION_COLOUR = 0xffb020;
@@ -72,6 +73,9 @@ export function buildSelectionMark(pickables: readonly Pickable[]): SelectionMar
   through.opacity = 0.35;
 
   let floor: Object3D | null = null;
+  const plumb = plumbGuide(1, SELECTION_COLOUR);
+  plumb.group.visible = false;
+  group.add(plumb.group);
   const halo = new Mesh(new RingGeometry(0.84, 1, 64), material);
   const haloThrough = new Mesh(halo.geometry, through);
   haloThrough.renderOrder = 10;
@@ -101,6 +105,7 @@ export function buildSelectionMark(pickables: readonly Pickable[]): SelectionMar
       const next = item ? item.id : null;
       if (next === current) return false;
       current = next;
+      plumb.group.visible = false;
       if (floor) {
         group.remove(floor);
         floor.traverse((o) => {
@@ -140,8 +145,14 @@ export function buildSelectionMark(pickables: readonly Pickable[]): SelectionMar
         floor = new Mesh(outline(radius * 2 - MARGIN * 2, radius * 2 - MARGIN * 2), material);
         floor.rotation.set(-Math.PI / 2, 0, 0);
         floor.position.set(item.centre.x, FLOOR_LIFT, item.centre.z);
-        // A light high on a wall or the ceiling has no floor under it worth marking.
-        floor.visible = item.centre.y - hy < 1.2;
+        // A light high on a wall or the ceiling is shown its floor by a plumb line instead.
+        const bottom = item.centre.y - hy;
+        floor.visible = bottom < PLUMB_FROM;
+        if (!floor.visible) {
+          plumb.setTop(bottom);
+          plumb.group.position.set(item.centre.x, 0, item.centre.z);
+          plumb.group.visible = true;
+        }
       } else {
         halo.visible = false;
         haloThrough.visible = false;

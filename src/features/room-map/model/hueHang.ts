@@ -1,14 +1,13 @@
 // Where an overhead light hangs. The 3D room draws a ceiling light on the ceiling whatever its
 // height says, and the stream samples the height, so the two are kept together here.
-import type { LampFamily } from "@/features/room-view/model/lampFamily";
+import { CEILING_MOUNT_M, type LampFamily } from "@/features/room-view/model/lampFamily";
 import { type HueChannelPlacement, type RoomMapConfig, resolveHueFixture } from "@/shared/contracts/roomMap";
 
 import { hueToMetres, resolveHueChannelWorldZ } from "./hueChannelPosition";
 
 /** A pendant's shade below its canopy: about where one hangs over a table. */
 export const PENDANT_DROP_M = 0.75;
-/** Within this of the ceiling, a spot or a bulb is mounted on it. */
-export const AT_CEILING_M = 0.1;
+export const AT_CEILING_M = CEILING_MOUNT_M;
 /** The reach `lamps.ts` gives a pendant's cord, from head height to just under the canopy. */
 const PENDANT_LOWEST_M = 1.2;
 const PENDANT_CLEARANCE_M = 0.3;

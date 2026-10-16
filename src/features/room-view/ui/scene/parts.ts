@@ -4,10 +4,12 @@ import {
   type BufferGeometry,
   Color,
   CylinderGeometry,
+  LatheGeometry,
   type Material,
   type Matrix4,
   Mesh,
   SphereGeometry,
+  Vector2,
 } from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
@@ -19,6 +21,8 @@ export interface Part {
   geometry: BufferGeometry;
   color: number;
   finish?: FinishKind;
+  /** Off for what hangs on the ceiling: the house has no ceiling, so its shadow fell on the floor as a blot. */
+  castShadow?: false;
 }
 
 /** Below this a size is floored, so a squeezed model degrades instead of failing to build. */
@@ -63,6 +67,14 @@ export function rod(
     segments,
   );
   geometry.translate(x, y + Math.max(h, MIN_SIZE) / 2, z);
+  return { geometry, color };
+}
+
+/** A flat ring standing on `y`, open in the middle. */
+export function ring(inner: number, outer: number, h: number, x: number, y: number, z: number, color: number, segments = 24): Part {
+  const profile = [new Vector2(inner, 0), new Vector2(outer, 0), new Vector2(outer, h), new Vector2(inner, h), new Vector2(inner, 0)];
+  const geometry = new LatheGeometry(profile, segments);
+  geometry.translate(x, y, z);
   return { geometry, color };
 }
 
