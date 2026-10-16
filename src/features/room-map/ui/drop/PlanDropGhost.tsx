@@ -24,8 +24,7 @@ export interface PlanDropGhostHandle {
 
 const sameCard = (a: LibraryCard | null, b: LibraryCard) => a !== null && a.kind === b.kind && (a.kind === "tv" || (b.kind === "furniture" && a.type === b.type));
 
-/** A library card held over the plan, drawn as the plan draws its piece. It moves by style alone: a
- *  render per pointer move is what the plan's own drags avoid. */
+/** Moves by style alone: a render per pointer move is what the plan's own drags avoid. */
 export function PlanDropGhost({ ref }: { ref: Ref<PlanDropGhostHandle> }) {
   const box = useRef<HTMLDivElement | null>(null);
   const [card, setCard] = useState<LibraryCard | null>(null);

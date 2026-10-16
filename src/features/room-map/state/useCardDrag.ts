@@ -6,12 +6,10 @@ import { CLICK_SLOP_PX } from "../model/snapGeometry";
 export const LIBRARY_DRAG_ATTR = "data-library-drag";
 
 export interface CardDrag {
-  /** Starts watching a press on a card; it becomes a drag once it travels past the click slop. */
   onPointerDown: (card: LibraryCard) => (event: ReactPointerEvent<HTMLButtonElement>) => void;
 }
 
-/** The card's half of a library drag. It listens on the window: the drawer closes once the drag
- *  starts, and the card goes with it. */
+/** Listens on the window: the drawer, and the card with it, closes once the drag starts. */
 export function useCardDrag(drop: LibraryDrop | undefined, { onStart, onAbandon }: { onStart: () => void; onAbandon: () => void }): CardDrag {
   const stop = useRef<(() => void) | null>(null);
   const handlers = useRef({ onStart, onAbandon });

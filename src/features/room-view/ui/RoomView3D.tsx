@@ -86,7 +86,6 @@ export interface DropGhost {
   valid: boolean;
 }
 
-/** What a drag from outside the view asks of it. */
 export interface RoomDropTarget {
   /** The floor under a client point, in the scene frame. */
   floorAt(clientX: number, clientY: number): { x: number; z: number } | null;

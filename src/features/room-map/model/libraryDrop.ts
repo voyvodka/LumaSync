@@ -3,7 +3,6 @@ import { clamp } from "@/shared/lib/math";
 
 import { FURNITURE_DEFAULT_SIZE } from "./furnitureKinds";
 
-/** A library card that can be dragged into the room. */
 export type LibraryCard = { kind: "furniture"; type: FurnitureType } | { kind: "tv" };
 
 export const TV_DEFAULT_FOOTPRINT = { width: 1.0, depth: 0.1 } as const;
@@ -31,7 +30,6 @@ export function dropRect(card: LibraryCard, centre: { x: number; y: number }, ro
   };
 }
 
-/** What the library's drag asks of the stage under the pointer. */
 export interface LibraryDrop {
   /** Shows where the card would land; false off the stage. */
   hover(card: LibraryCard, clientX: number, clientY: number): boolean;

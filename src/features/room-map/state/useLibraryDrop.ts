@@ -27,8 +27,7 @@ export interface LibraryDropArgs {
   onLanded: () => void;
 }
 
-/** The editor's half of a library drag: where a card would land, its ghost, and the add on drop.
- *  Nothing reaches the map, the history or the selection until the drop. */
+/** Nothing reaches the map, the history or the selection until the drop. */
 export function useLibraryDrop(args: LibraryDropArgs): LibraryDrop {
   const latest = useRef(args);
   latest.current = args;

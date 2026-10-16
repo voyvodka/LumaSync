@@ -30,7 +30,6 @@ export interface DockAdd {
   onAddStrip: () => void;
   onAddImage: () => void;
   onAddZone: () => void;
-  /** Where a card dragged out of the library lands. */
   drop?: LibraryDrop;
 }
 
