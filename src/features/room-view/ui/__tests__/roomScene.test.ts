@@ -369,7 +369,7 @@ describe("buildRoomScene — picking and the selection mark", () => {
     room.select("furniture-sofa");
     const outlines: BufferGeometry[] = [];
     room.scene.traverse((o) => {
-      if (o instanceof Mesh && o.geometry.type === "ShapeGeometry") outlines.push(o.geometry);
+      if (o instanceof Mesh && o.geometry.name === "floorBand") outlines.push(o.geometry);
     });
     expect(outlines).toHaveLength(1);
     const dispose = vi.spyOn(outlines[0]!, "dispose");

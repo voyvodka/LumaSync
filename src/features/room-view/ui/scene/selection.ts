@@ -1,7 +1,7 @@
 // The selection's mark in the room: an amber outline on the floor around what is selected, and for
 // a light a second ring around the lit part itself. Built once per scene and moved, never rebuilt,
 // so a new selection costs one draw.
-import { DoubleSide, Group, Mesh, MeshBasicMaterial, type Object3D, Path, type Quaternion, RingGeometry, Shape, ShapeGeometry } from "three";
+import { BufferGeometry, DoubleSide, Float32BufferAttribute, Group, Mesh, MeshBasicMaterial, type Object3D, type Quaternion, RingGeometry } from "three";
 
 import type { Pickable } from "../../model/picking";
 import { PLUMB_FROM, plumbGuide } from "./plumb";
@@ -20,27 +20,37 @@ const HALO_MIN_PX = 20;
  *  slab. */
 const STRIP_MARGIN = 0.025;
 const STRIP_LINE = 0.012;
+const CORNER_STEPS = 6;
 
-/** A rounded-rectangle band `line` wide around a `w` × `d` rectangle, in the xy plane. */
-export function floorBand(w: number, d: number, margin = MARGIN, line = LINE): ShapeGeometry {
-  const rect = <P extends Path>(hw: number, hd: number, r: number, path: P): P => {
-    path.moveTo(-hw + r, -hd);
-    path.lineTo(hw - r, -hd);
-    path.quadraticCurveTo(hw, -hd, hw, -hd + r);
-    path.lineTo(hw, hd - r);
-    path.quadraticCurveTo(hw, hd, hw - r, hd);
-    path.lineTo(-hw + r, hd);
-    path.quadraticCurveTo(-hw, hd, -hw, hd - r);
-    path.lineTo(-hw, -hd + r);
-    path.quadraticCurveTo(-hw, -hd, -hw + r, -hd);
-    return path;
-  };
+/** A rounded-rectangle band `line` wide around a `w` × `d` rectangle, in the xy plane. Stitched
+ *  from two matching outlines by hand: `ShapeGeometry` brought three's whole curve family along. */
+export function floorBand(w: number, d: number, margin = MARGIN, line = LINE): BufferGeometry {
   const hw = w / 2 + margin;
   const hd = d / 2 + margin;
   const r = Math.min(0.12, hw, hd);
-  const shape = rect(hw, hd, r, new Shape());
-  shape.holes.push(rect(hw - line, hd - line, Math.max(r - line, 0.005), new Path()));
-  return new ShapeGeometry(shape, 6);
+  const outline = (hw: number, hd: number, r: number) =>
+    [1, 1, -1, -1].flatMap((sx, i) => {
+      const sy = i === 0 || i === 3 ? -1 : 1;
+      // Into the corner along one side and out along the next, turning anticlockwise.
+      const [ax, ay, bx, by] = i % 2 ? [sx * hw, sy * (hd - r), sx * (hw - r), sy * hd] : [sx * (hw - r), sy * hd, sx * hw, sy * (hd - r)];
+      return Array.from({ length: CORNER_STEPS + 1 }, (_, k) => {
+        const t = k / CORNER_STEPS;
+        const u = 1 - t;
+        return [u * u * ax + 2 * u * t * sx * hw + t * t * bx, u * u * ay + 2 * u * t * sy * hd + t * t * by, 0];
+      });
+    });
+  const outer = outline(hw, hd, r);
+  const inner = outline(hw - line, hd - line, Math.max(r - line, 0.005));
+  const n = outer.length;
+  const index = outer.flatMap((_, i) => {
+    const j = (i + 1) % n;
+    return [i, j, n + i, j, n + j, n + i];
+  });
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute([...outer, ...inner].flat(), 3));
+  geometry.setIndex(index);
+  geometry.name = "floorBand";
+  return geometry;
 }
 
 export interface SelectionMark {

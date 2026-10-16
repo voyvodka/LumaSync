@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Pickable } from "../../../model/picking";
 import { PLUMB_NAME } from "../plumb";
-import { buildSelectionMark } from "../selection";
+import { buildSelectionMark, floorBand } from "../selection";
 
 const frameOf = (pickable: Pickable) => {
   const mark = buildSelectionMark([pickable]);
@@ -68,5 +68,26 @@ describe("buildSelectionMark", () => {
     const { plumb, floorShown } = frameOf({ id: "hue-1", kind: "light", centre: { x: 0, y: 0.8, z: 0 }, half: [0.1, 0.1, 0.1], angle: 0 });
     expect(floorShown).toBe(true);
     expect(plumb.visible).toBe(false);
+  });
+});
+
+describe("floorBand", () => {
+  it("is a band facing up, the margin out from the piece and the line wide", () => {
+    const band = floorBand(2, 1, 0.1, 0.03);
+    band.computeBoundingBox();
+    expect(band.boundingBox!.max.x).toBeCloseTo(1.1);
+    expect(band.boundingBox!.max.y).toBeCloseTo(0.6);
+    const at = band.getAttribute("position");
+    const index = band.getIndex()!.array;
+    let area = 0;
+    for (let i = 0; i < index.length; i += 3) {
+      const [a, b, c] = [index[i]!, index[i + 1]!, index[i + 2]!];
+      const twice = (at.getX(b) - at.getX(a)) * (at.getY(c) - at.getY(a)) - (at.getX(c) - at.getX(a)) * (at.getY(b) - at.getY(a));
+      expect(twice).toBeGreaterThan(0);
+      area += twice / 2;
+    }
+    // About the outline's length times the line, the rounded corners taking a little off.
+    expect(area).toBeGreaterThan(2 * (2.2 + 1.2) * 0.03 * 0.9);
+    expect(area).toBeLessThan(2 * (2.2 + 1.2) * 0.03);
   });
 });
