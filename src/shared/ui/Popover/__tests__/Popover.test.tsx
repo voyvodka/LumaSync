@@ -108,8 +108,6 @@ describe("Popover", () => {
     vi.unstubAllGlobals();
   });
 
-  // A child that scrolls itself and reaches over the padding was scrolled again by the popover:
-  // a second bar on Windows, where scrollbars take room.
   it("leaves the scrolling to a child that scrolls itself", () => {
     const anchor = createRef<HTMLButtonElement>();
     const ui = (childScrolls: boolean) => (

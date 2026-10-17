@@ -52,8 +52,6 @@ describe("useHueTargetAutoAdd", () => {
     expect(onSelectTargets).not.toHaveBeenCalled();
   });
 
-  // A bridge whose key was lost stays configured, so pairing it again never
-  // crossed the configured edge and Hue stayed out of the outputs.
   it("adds Hue when a configured bridge is paired again", () => {
     const { onSelectTargets } = mount({ hueConfigured: true });
 

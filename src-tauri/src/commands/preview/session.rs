@@ -731,7 +731,7 @@ fn undo_open<R: Runtime>(app: &AppHandle<R>, return_to: Option<i32>, main_hidden
 /// main window out of the way. Already open ⇒ the popup comes back.
 ///
 /// Async only to hand the open to the main thread as one step (`main_thread`):
-/// built from a sync command, the twin never finished on Windows.
+/// a twin built from a sync command never finishes on Windows.
 #[tauri::command]
 pub async fn open_preview<R: Runtime>(app: AppHandle<R>) -> Result<PreviewSessionResult, String> {
     match on_main(&app, |app| {
@@ -1276,8 +1276,8 @@ mod tests {
             .all(|label| !is_preview_window(label)));
     }
 
-    /// The Windows build pump can run the tray's Close Overlays mid-build: a
-    /// sweep then destroyed the twin the open went on to record.
+    /// The Windows build pump can run the tray's Close Overlays mid-build; a
+    /// sweep there would destroy the twin the open is about to record.
     #[test]
     fn an_end_arriving_mid_open_is_left_to_the_open() {
         let app = tauri::test::mock_app();

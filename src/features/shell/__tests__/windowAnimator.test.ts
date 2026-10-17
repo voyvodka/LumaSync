@@ -95,7 +95,6 @@ describe("Scenario 11 — boot restores the persisted UI mode", () => {
   });
 
   it("a compact round trip brings an odd-sized full window back to the pixel it left", async () => {
-    // A .5 centre rounded up both ways, so each trip moved the window one pixel right and down.
     innerSizeMock.mockResolvedValue({ width: 1151, height: 753 });
     outerPositionMock.mockResolvedValue({ x: 400, y: 150 });
     setupPersistedState(makePersistedState({ uiMode: "full" }));

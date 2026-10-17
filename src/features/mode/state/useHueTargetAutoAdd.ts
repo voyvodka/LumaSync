@@ -21,7 +21,7 @@ export interface HueTargetAutoAddInput {
  * Only the edge counts — a setup that was already there at launch, or a Hue
  * the user turned off afterwards, is left as it is. Pairing again is an edge
  * too, and adds back a Hue the user turned off: a bridge whose key was lost
- * stays configured, so re-pairing it never crossed the first one.
+ * stays configured, so re-pairing it crosses no other edge.
  */
 export function useHueTargetAutoAdd({
   ready,

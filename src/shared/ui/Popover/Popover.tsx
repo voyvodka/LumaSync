@@ -29,8 +29,7 @@ interface PopoverProps {
   role?: "dialog" | "listbox";
   /**
    * The child is the scroller, reaching over the popover's padding so its scrollbar runs along the
-   * border. The popover's own scroll box then stands down: kept, it scrolled the child's reach as a
-   * second bar on Windows, where scrollbars take room.
+   * border; the popover's own scroll box stands down, or Windows draws a second bar.
    */
   childScrolls?: boolean;
   children: ReactNode;

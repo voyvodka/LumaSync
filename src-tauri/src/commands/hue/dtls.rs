@@ -30,8 +30,7 @@ pub(crate) struct UdpSocketWrapper(pub(super) std::net::UdpSocket);
 impl std::io::Read for UdpSocketWrapper {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         // Windows reports a timed-out read as `TimedOut`, Unix as `WouldBlock`,
-        // and only `WouldBlock` is a retry to rust-openssl: as `TimedOut` the
-        // handshake failed instead of resending.
+        // and only `WouldBlock` is a retry to rust-openssl.
         match self.0.recv(buf) {
             Err(error) if error.kind() == std::io::ErrorKind::TimedOut => {
                 Err(std::io::ErrorKind::WouldBlock.into())
@@ -203,8 +202,6 @@ mod tests {
         assert!(hex_decode("+1").is_err(), "a sign is not a hex digit");
     }
 
-    // Every stream start sat 5 s behind a lost ClientHello: the read timeout was
-    // the only retransmit clock.
     #[test]
     fn a_lost_client_hello_is_resent_on_openssls_schedule() {
         use openssl::ssl::{Ssl, SslContext, SslMethod};

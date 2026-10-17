@@ -60,8 +60,7 @@ export async function applyModeLimits(
   // resize below it, so the window cannot be made to fit at all.
   const min = fitSizeToWorkArea(scaleSize(UI_MODE_MIN_SIZES[mode], zoom), workArea ?? null);
   await win.setMinSize(new LogicalSize(min.width, min.height));
-  // Compact is a fixed layout: zoomed, it stretched a 320 px column across the screen. This also
-  // stops the title bar's double-click, which Tauri gates on the same flag.
+  // Compact is a fixed layout. Tauri gates the title bar's double-click on the same flag.
   await win.setMaximizable(mode === "full");
 }
 
@@ -78,11 +77,7 @@ async function unzoom(win: ReturnType<typeof getCurrentWindow>): Promise<void> {
   await waitForFrames(1);
 }
 
-/**
- * The remembered full size, unless it is smaller than any floor the app sets — a minimized
- * window's frame, recorded before the persist skipped one. No user chose it, and growing it to
- * the floor opened full at its smallest; the first-run size is the better guess.
- */
+/** Under every floor the app sets is a minimized window's frame, which no user chose: the first-run size replaces it. */
 function rememberedFullSize(
   size: { width: number; height: number } | null | undefined,
 ): { width: number; height: number } | null {
@@ -193,14 +188,11 @@ export async function resizeToMode(
 
   const partialUpdate: Partial<ShellState> = { uiMode: mode };
 
-  // The rect read below has to be the user's: a zoomed full window's is the screen's, which became
-  // the remembered full size and came back as an ordinary window over the screen's edge. macOS
-  // unzooms as an AppKit animation that ends long after `unmaximize` returns, so a read there lands
-  // mid-animation; its zoom is only a frame the resize below replaces, and the size remembered
-  // before it stays.
+  // The rect read below has to be the user's, not a zoomed window's screen-sized one. macOS unzooms
+  // as an animation that outlasts `unmaximize`, so there the size remembered before the zoom stays.
   const leavingFull = currentMode === "full" && mode !== "full";
   const zoomed = leavingFull && (await win.isMaximized().catch(() => false));
-  // Read here, not through `detectPlatform`: importing `windowDragApi` put it in every window's entry.
+  // Read here, not through `detectPlatform`: importing `windowDragApi` would put it in every window's entry.
   const keepRememberedSize = zoomed && /Mac/i.test(navigator.userAgent);
   if (zoomed && !keepRememberedSize) await unzoom(win);
 
@@ -242,8 +234,8 @@ export async function resizeToMode(
   const { width: targetWidth, height: targetHeight } = fitSizeToWorkArea(requested, workArea);
 
   // Anchor target around the current window center so the window grows/shrinks
-  // in place instead of teleporting to monitor center. Both halves floor: rounding a .5 centre
-  // moved an odd-sized window a pixel per compact round trip.
+  // in place instead of teleporting to monitor center. Both halves floor, so a compact round trip
+  // is exactly reversible.
   const centerX = fromX + Math.floor(fromWidth / 2);
   const centerY = fromY + Math.floor(fromHeight / 2);
   let targetX = centerX - Math.floor(targetWidth / 2);

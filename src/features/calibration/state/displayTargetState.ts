@@ -195,8 +195,8 @@ export function createDisplayTargetState(deps: CreateDisplayTargetStateDeps): Di
       return inFlightSwitch;
     },
     closeActiveDisplay: async () => {
-      // An open in flight records its display only when it lands, so closing before then closed
-      // nothing and left its overlay on screen. A click still waiting its turn is dropped.
+      // An open in flight records its display only when it lands, so a close waits for it. A click
+      // still waiting its turn is dropped.
       switchGuard.begin();
       while (inFlightSwitch !== null) {
         await inFlightSwitch.catch(() => undefined);

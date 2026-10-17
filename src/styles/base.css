@@ -21,11 +21,9 @@ body {
   color: var(--lm-ink);
 }
 
-/* The chrome is controls, not a document: a drag or a double-click across a row, a chip or a
-   label highlighted it, as it never does in a native app. A field is set to `text` outright rather
-   than left to `auto`, which WebKit has not always resolved to selectable under a `none` ancestor;
-   text worth copying opts back in: a code or an error's stack as itself, an address or an error
-   line with `data-selectable`. */
+/* The chrome is controls, not a document, so it does not select. A field is set to `text`
+   outright: WebKit has not always resolved `auto` to selectable under a `none` ancestor. Text worth
+   copying opts back in: a code or an error's stack as itself, anything else with `data-selectable`. */
 body {
   -webkit-user-select: none;
   user-select: none;

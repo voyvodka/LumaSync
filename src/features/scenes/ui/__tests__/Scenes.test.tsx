@@ -297,7 +297,7 @@ describe("making and editing a scene", () => {
     seed([movie]);
     const { onApply } = renderPage(RED);
     await editFromLibrary("m");
-    // Waited for, not slept on: a fixed 20 ms lost the race to the opening apply on a loaded runner.
+    // Waited for: on a loaded runner the restore lands after the opening apply.
     await waitFor(() => expect(onApply).toHaveBeenLastCalledWith(toModeConfig(movie)));
     expect(getPreference("lightingIntensityPreset")).toBe("subtle");
     setLight(blue(0.3));

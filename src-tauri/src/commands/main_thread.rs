@@ -1,11 +1,8 @@
-//! Window builds handed to the main thread from an async command.
-//!
-//! On Windows a webview built from a sync command never finishes — Tauri
-//! documents the deadlock on `WebviewWindowBuilder::build` — and the LED
-//! preview's twin stuck at 800×600 with no popup. Posted to the event loop
-//! instead, the build completes, and an open that has started is still one
-//! main-thread step no close lands inside. A close sent before the open reached
-//! the main thread runs first, so a caller that closes waits for its open.
+//! Window builds handed to the main thread from an async command: on Windows a
+//! webview built from a sync command never finishes (Tauri documents the
+//! deadlock on `WebviewWindowBuilder::build`). An open posted here is one
+//! main-thread step no close lands inside; a close sent before it reached the
+//! main thread runs first, so a caller that closes waits for its open.
 
 use tauri::{AppHandle, Runtime};
 
