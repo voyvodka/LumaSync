@@ -125,14 +125,6 @@ impl<'a, R: Runtime> Transaction<'a, R> {
             .and_then(|state| hue_start_request(&state, HueRuntimeTriggerSource::ModeControl))
     }
 
-    async fn apply(
-        &mut self,
-        kind: &LightingModeKind,
-        targets: &[OutputTarget],
-    ) -> Result<LightingModeCommandResult, String> {
-        self.apply_waiving(kind, targets, false).await
-    }
-
     /// `waive_hue_gate` keeps a mode that already runs on Hue on it while the
     /// stream is between sessions (reconnecting): the worker follows the slot.
     async fn apply_waiving(
@@ -430,12 +422,15 @@ impl<'a, R: Runtime> Transaction<'a, R> {
                     || self.state.outputs.boot_hue_parked()));
         let running_before = running_targets(running);
         let hue_ran_before = running_before.contains(&OutputTarget::Hue);
+        // A join keeps a reconnecting Hue as the settings refresh does: a start
+        // answers "already active", and the gate would then stop the stream.
+        let waive_hue_gate = self.kind == TxKind::SinkJoin && hue_ran_before;
 
         self.state.tuning.close(Some(intent.kind)).await;
 
         // Phase 1 — Hue first: the worker is handed the stream it will drive,
         // so a stream that is not up yet leaves the worker without Hue.
-        let mut hue_ok = self.hue_live();
+        let mut hue_ok = self.hue_live() || waive_hue_gate;
         let mut had_config = true;
         let mut hue_moved = false;
         if want_hue && hue_ok {
@@ -517,7 +512,10 @@ impl<'a, R: Runtime> Transaction<'a, R> {
             self.applied_generation = self.state.tuning.stored().generation;
         } else {
             self.publish_phase(LightingPhase::Applying);
-            let mut result = match self.apply(&intent.kind, &run_on).await {
+            let mut result = match self
+                .apply_waiving(&intent.kind, &run_on, waive_hue_gate)
+                .await
+            {
                 Ok(result) => result,
                 Err(error) => {
                     warn!("[outputs] apply failed: {error}");
@@ -546,7 +544,10 @@ impl<'a, R: Runtime> Transaction<'a, R> {
                 if self.superseded() {
                     return Ok(Ending::Superseded);
                 }
-                result = match self.apply(&intent.kind, &run_on).await {
+                result = match self
+                    .apply_waiving(&intent.kind, &run_on, waive_hue_gate)
+                    .await
+                {
                     Ok(result) => result,
                     Err(error) => {
                         return self
@@ -579,7 +580,10 @@ impl<'a, R: Runtime> Transaction<'a, R> {
                     if self.superseded() {
                         return Ok(Ending::Superseded);
                     }
-                    result = match self.apply(&intent.kind, &run_on).await {
+                    result = match self
+                        .apply_waiving(&intent.kind, &run_on, waive_hue_gate)
+                        .await
+                    {
                         Ok(result) => result,
                         Err(error) => {
                             return self
@@ -615,7 +619,10 @@ impl<'a, R: Runtime> Transaction<'a, R> {
                 if self.superseded() {
                     return Ok(Ending::Superseded);
                 }
-                result = match self.apply(&intent.kind, &run_on).await {
+                result = match self
+                    .apply_waiving(&intent.kind, &run_on, waive_hue_gate)
+                    .await
+                {
                     Ok(result) => result,
                     Err(error) => {
                         return self

@@ -2599,6 +2599,32 @@ fn a_strip_the_user_deselected_does_not_join() {
     assert_eq!(rig.state().snapshot.read().active_targets, vec![Hue]);
 }
 
+fn targets(rig: &Rig) -> Option<Vec<String>> {
+    rig.running().targets
+}
+
+fn names(targets: &[&str]) -> Option<Vec<String>> {
+    Some(targets.iter().map(|t| t.to_string()).collect())
+}
+
+#[test]
+fn a_strip_that_joins_while_hue_reconnects_keeps_hue() {
+    let rig = restoring(json!(["usb", "hue"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+    rig.hue.stream_drops();
+    // What the runtime answers a start while it reconnects.
+    rig.hue.script_starts(&["HUE_START_NOOP_ALREADY_ACTIVE"]);
+
+    strip_connects(&rig);
+
+    wait_until("the strip never joined beside Hue", || {
+        targets(&rig) == names(&["usb", "hue"])
+    });
+    assert!(!has(&rig, "hue:stop:system"), "{:?}", events(&rig));
+    assert_eq!(rig.state().snapshot.read().selected_targets, vec![Usb, Hue]);
+}
+
 // ---------------------------------------------------------------------------
 // The saved Hue area moves the stream
 // ---------------------------------------------------------------------------
