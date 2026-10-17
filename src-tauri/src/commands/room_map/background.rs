@@ -312,6 +312,55 @@ mod tests {
         }
     }
 
+    #[test]
+    fn a_kept_room_keeps_its_images() {
+        let scratch = Scratch::new();
+        let other_room = file_of(&scratch.0, "other-room.png", 1);
+        let other_legacy = file_of(&scratch.0, "other-legacy.jpg", 1);
+        let orphan = file_of(&scratch.0, "orphan.png", 1);
+        let raw = serde_json::json!({ "shell-state": {
+            "roomMap": { "imageLayers": [] },
+            "roomLayouts": { "activeId": "a", "rooms": [
+                { "id": "a" },
+                { "id": "b", "config": {
+                    "imageLayers": [{ "id": "x", "path": other_room.to_string_lossy() }],
+                    "backgroundImagePath": other_legacy.to_string_lossy(),
+                } },
+                { "id": "c", "config": {} },
+            ] },
+        } })
+        .to_string();
+        let state = parsed(&raw);
+
+        let orphans =
+            unreferenced_backgrounds(&scratch.0, state.as_ref(), later(), PRUNE_GRACE).unwrap();
+
+        assert_eq!(orphans, vec![orphan]);
+    }
+
+    #[test]
+    fn unreadable_room_layouts_prune_nothing() {
+        let scratch = Scratch::new();
+        file_of(&scratch.0, "a.png", 1);
+        for layouts in [
+            serde_json::json!("not a record"),
+            serde_json::json!({ "activeId": "a", "rooms": "not a list" }),
+            serde_json::json!({ "activeId": "a", "rooms": [{ "id": "b", "config": { "imageLayers": 3 } }] }),
+        ] {
+            let raw = serde_json::json!({ "shell-state": {
+                "roomMap": { "imageLayers": [] },
+                "roomLayouts": layouts,
+            } })
+            .to_string();
+            let state = parsed(&raw);
+            assert_eq!(
+                unreferenced_backgrounds(&scratch.0, state.as_ref(), later(), PRUNE_GRACE),
+                None,
+                "{raw}"
+            );
+        }
+    }
+
     /// Through the real owner of the file: `ShellStateStore` loads it and
     /// `persisted()` is what startup hands the prune.
     #[test]

@@ -121,20 +121,41 @@ impl PersistedShellState {
         self.read("updateChannel")
     }
 
-    /// Every image path the room map references: `imageLayers[].path` plus the
-    /// legacy `backgroundImagePath`. `None` when `roomMap.imageLayers` is not an
-    /// array, so a store without a room map never reads as "no image is used".
+    /// Every image path a room references: `imageLayers[].path` plus the legacy
+    /// `backgroundImagePath`, of `roomMap` and of each room kept in
+    /// `roomLayouts`. `None` when `roomMap.imageLayers` is not an array, or
+    /// `roomLayouts` is there but unreadable, so a store this build cannot read
+    /// whole never reads as "no image is used".
     pub fn room_map_image_paths(&self) -> Option<Vec<String>> {
+        fn paths_of(room: &Value, layers: &[Value], out: &mut Vec<String>) {
+            out.extend(
+                layers
+                    .iter()
+                    .filter_map(|layer| layer.get("path")?.as_str())
+                    .chain(room.get("backgroundImagePath").and_then(Value::as_str))
+                    .map(str::to_owned),
+            );
+        }
         let room_map = self.0.get("roomMap")?;
-        let layers = room_map.get("imageLayers")?.as_array()?;
-        Some(
-            layers
-                .iter()
-                .filter_map(|layer| layer.get("path")?.as_str())
-                .chain(room_map.get("backgroundImagePath").and_then(Value::as_str))
-                .map(str::to_owned)
-                .collect(),
-        )
+        let mut paths = Vec::new();
+        paths_of(
+            room_map,
+            room_map.get("imageLayers")?.as_array()?,
+            &mut paths,
+        );
+        if let Some(layouts) = self.0.get("roomLayouts") {
+            for room in layouts.get("rooms")?.as_array()? {
+                let Some(config) = room.get("config") else {
+                    continue;
+                };
+                let layers = match config.get("imageLayers") {
+                    None => &[][..],
+                    Some(layers) => layers.as_array()?.as_slice(),
+                };
+                paths_of(config, layers, &mut paths);
+            }
+        }
+        Some(paths)
     }
 
     /// The LED control popup's centre, in logical px.

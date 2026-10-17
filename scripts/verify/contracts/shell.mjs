@@ -68,6 +68,8 @@ const REQUIRED_V15_STATE_FIELDS = [
   "notifications",
   // Lights on launch; additive, absent ⇒ resume the saved mode.
   "launchLights",
+  // Room layouts; additive, absent ⇒ one implicit room, the stored `roomMap`.
+  "roomLayouts",
 ];
 
 /** v1.5 contract surface that must be exported alongside the new fields. */
@@ -274,7 +276,7 @@ check(
 // Several writers share these keys; a save replaces the whole key and reverts what another writer
 // stored between its read and its write. `shellStore.update` re-reads under the store's revision.
 // Syntactic: a save handed a variable rather than an object literal is not seen.
-const SHARED_KEYS = /\b(roomMap|hueBridgeSyncedPositions)\b/;
+const SHARED_KEYS = /\b(roomMap|roomLayouts|hueBridgeSyncedPositions)\b/;
 function saveCallArguments(text) {
   const args = [];
   for (const m of text.matchAll(/\b(?:shellStore\.save|saveShellState)\s*\(/g)) {

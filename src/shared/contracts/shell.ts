@@ -12,6 +12,7 @@ import type {
   HueRuntimeTarget,
 } from "./hue";
 import type { RoomMapConfig } from "./roomMap";
+import type { StoredRoomLayouts } from "./roomLayouts";
 import type { StoredScene } from "./scenes";
 import type { LedStrip } from "./strips";
 
@@ -260,6 +261,12 @@ export interface ShellState {
    * Additive, no schema bump.
    */
   scenes?: StoredScene[];
+  /**
+   * The rooms besides the one the lights follow, which stays `roomMap`. Frontend-owned; Rust reads it
+   * only for the image paths its startup prune keeps. Kept out of `DEFAULT_SHELL_STATE`: absent reads
+   * as one implicit room. Additive, no schema bump.
+   */
+  roomLayouts?: StoredRoomLayouts;
   /**
    * The last mode that lit something, which Lights' power button turns back on. Written by Rust
    * (`persist_mode`) with every lit choice, from any window or the tray; an Off leaves it. Absent
