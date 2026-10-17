@@ -2,6 +2,7 @@
 // screen and is torn down with it (`disposeScene`). Lamp colours are placeholders until the live
 // feed reaches the view.
 import type { ZoneMarks } from "@/features/room-map/model/zoneMarks";
+import type { ZoneRect } from "@/features/room-map/model/zoneRect";
 import { lampColour } from "../model/lampColours";
 import {
   AdditiveBlending,
@@ -166,6 +167,8 @@ export interface RoomScene {
   select(objectId: string | null): boolean;
   /** Outlines the Hue zones being edited, or none; true when that changed. */
   markZones(marks: ZoneMarks | null): boolean;
+  /** A zone carried or resized, as its whole box on the plan rectangle; null sets it down. */
+  holdZone(zoneId: string, rect: ZoneRect | null): boolean;
   /** Turns what faces the camera (the selection's ring, a zone's name) to it; call before each draw. */
   faceCamera(cameraQuaternion: Quaternion, camera?: Camera): void;
   /** `null` keeps each lamp's own colour; a palette gives lamp i stop i mod n. */
@@ -588,6 +591,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     pickables,
     select: mark.select,
     markZones: zoneBoxes.mark,
+    holdZone: zoneBoxes.hold,
     faceCamera(q, camera) {
       mark.orient(q);
       zoneBoxes.orient(q, camera);

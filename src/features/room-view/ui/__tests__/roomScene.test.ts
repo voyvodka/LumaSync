@@ -1,10 +1,11 @@
-import { Box3, BoxGeometry, type BufferGeometry, DirectionalLight, HemisphereLight, InstancedMesh, type Material, Matrix4, Mesh, type MeshBasicMaterial, type Scene, type Texture, Vector3 } from "three";
+import { Box3, BoxGeometry, type BufferGeometry, DirectionalLight, HemisphereLight, InstancedMesh, type Material, Matrix4, Mesh, type MeshBasicMaterial, type Object3D, type Scene, type Texture, Vector3 } from "three";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { furnitureObjectId, hueChannelObjectId, TV_ANCHOR_OBJECT_ID } from "@/features/room-map/model/objectId";
 import { DEFAULT_ROOM_MAP, type RoomMapConfig, type UsbStripPlacement } from "@/shared/contracts/roomMap";
 
 import { hueChannelScenePoint, roomToScene, tvMountHeight } from "../../model/roomSpace";
+import { OVERLAY } from "../scene/bloom";
 import { LAMP_LIGHTS } from "../scene/lampLights";
 import { buildRoomScene, disposeScene } from "../roomScene";
 
@@ -297,8 +298,10 @@ describe("buildRoomScene — an outline that is not a rectangle", () => {
   const room: RoomMapConfig = { ...DEFAULT_ROOM_MAP, dimensions: { widthMeters: 4, depthMeters: 4, heightMeters: 2.5 } };
   const walls = (scene: { traverse: (fn: (o: unknown) => void) => void }) => {
     const found: Mesh[] = [];
+    // A held zone's box is a box too, kept in the overlay.
+    const overlaid = (o: Object3D | null): boolean => !!o && (o.userData[OVERLAY] === true || overlaid(o.parent));
     scene.traverse((o) => {
-      if (o instanceof Mesh && o.geometry instanceof BoxGeometry) found.push(o);
+      if (o instanceof Mesh && o.geometry instanceof BoxGeometry && !overlaid(o)) found.push(o);
     });
     return found;
   };

@@ -1,10 +1,12 @@
 // Built with the scene and only shown or hidden after, so picking a zone builds nothing.
 import {
   BackSide,
+  BoxGeometry,
   BufferGeometry,
   type Camera,
   CanvasTexture,
   DoubleSide,
+  EdgesGeometry,
   Float32BufferAttribute,
   Group,
   LineBasicMaterial,
@@ -19,9 +21,11 @@ import {
 
 import { zoneHex } from "@/features/room-map/model/zoneColor";
 import type { ZoneMarks } from "@/features/room-map/model/zoneMarks";
+import type { ZoneRect } from "@/features/room-map/model/zoneRect";
 import type { HueZone, RoomDimensions } from "@/shared/contracts/roomMap";
 
 import { zoneSceneBox } from "../../model/roomSpace";
+import { zoneGrips } from "../../model/zoneGesture";
 import { OVERLAY } from "./bloom";
 import { floorBand } from "./selection";
 
@@ -41,11 +45,19 @@ const TOP_CORNERS = [
 const WALL_OPACITY = 0.16;
 const POST_OPACITY = 0.6;
 const FOOT = { active: 0.9, other: 0.35 };
+/** The plan's zone grip: a 10 px mark, amber round the app's ground, one size on screen. */
+const GRIP_PX = 10;
+const GRIP_INNER_PX = 7;
+const GRIP_RIM = 0xffb020;
+const GRIP_FILL = 0x0e0e14;
+const HELD_FILL_OPACITY = 0.07;
 
 export interface ZoneBoxes {
   group: Group;
   /** True when what is shown changed. */
   mark(marks: ZoneMarks | null): boolean;
+  /** Its whole box on `rect` (plan metres) in place of its low wall while held; null sets it down. */
+  hold(zoneId: string, rect: ZoneRect | null): boolean;
   setPixelsPerMetre(ppm: number): void;
   orient(cameraQuaternion: Quaternion, camera?: Camera): void;
 }
@@ -175,40 +187,103 @@ export function buildZoneBoxes(zones: readonly HueZone[], dims: RoomDimensions):
     return { id: zone.id, one, wall, posts, foot, label, half: new Vector3(w / 2, wallH, d / 2) };
   });
 
+  const grips = new Group();
+  grips.visible = false;
+  for (const { at } of zoneGrips({ x0: -0.5, y0: -0.5, x1: 0.5, y1: 0.5 })) {
+    const over = { transparent: true, depthTest: false, depthWrite: false, toneMapped: false };
+    const rim = new Mesh(new PlaneGeometry(1, 1), new MeshBasicMaterial({ ...over, color: GRIP_RIM }));
+    const fill = new Mesh(new PlaneGeometry(GRIP_INNER_PX / GRIP_PX, GRIP_INNER_PX / GRIP_PX), new MeshBasicMaterial({ ...over, color: GRIP_FILL }));
+    rim.renderOrder = 12;
+    fill.renderOrder = 13;
+    rim.add(fill);
+    rim.userData.at = at;
+    grips.add(rim);
+  }
+  group.add(grips);
+
+  const ghostTint = { transparent: true, depthWrite: false, toneMapped: false };
+  const ghost = new Group();
+  const ghostEdges = new LineSegments(new EdgesGeometry(new BoxGeometry(1, 1, 1)), new LineBasicMaterial({ ...ghostTint, opacity: 0.9 }));
+  const ghostFill = new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial({ ...ghostTint, side: BackSide, opacity: HELD_FILL_OPACITY }));
+  ghost.add(ghostFill, ghostEdges);
+  ghost.visible = false;
+  group.add(ghost);
+
+  let marked: ZoneMarks | null = null;
+  let held: string | null = null;
   let shown = "";
   let ppm = 0;
+  const placeGrips = () => {
+    const at = built.find((b) => b.id === marked?.held && b.one.visible);
+    grips.visible = at !== undefined && held === null;
+    if (!at) return;
+    grips.position.set(at.one.position.x, 0, at.one.position.z);
+    for (const rim of grips.children) {
+      const unit = rim.userData.at as { x: number; y: number };
+      rim.position.set(unit.x * at.half.x * 2, 0, unit.y * at.half.z * 2);
+    }
+  };
   const up = new Vector3();
   const corner = new Vector3();
   const probe = new Vector3();
+  const mark = (marks: ZoneMarks | null): boolean => {
+    const key = marks ? `${marks.active}|${marks.held}|${marks.others.join()}` : "";
+    if (key === shown) return false;
+    shown = key;
+    marked = marks;
+    let any = false;
+    for (const { id, one, wall, posts, foot, label } of built) {
+      const active = marks?.active === id;
+      one.visible = id !== held && (active || Boolean(marks?.others.includes(id)));
+      any ||= one.visible;
+      // The others are their footprint alone, so several zones leave the floor readable.
+      wall.visible = active;
+      posts.visible = active;
+      foot.material.opacity = active ? FOOT.active : FOOT.other;
+      label.visible = active;
+    }
+    group.visible = any || held !== null;
+    placeGrips();
+    return true;
+  };
   return {
     group,
-    mark(marks) {
-      const key = marks ? `${marks.active}|${marks.others.join()}` : "";
-      if (key === shown) return false;
-      shown = key;
-      let any = false;
-      for (const { id, one, wall, posts, foot, label } of built) {
-        const active = marks?.active === id;
-        one.visible = active || Boolean(marks?.others.includes(id));
-        any ||= one.visible;
-        // The others are their footprint alone, so several zones leave the floor readable.
-        wall.visible = active;
-        posts.visible = active;
-        foot.material.opacity = active ? FOOT.active : FOOT.other;
-        label.visible = active;
+    mark,
+    hold(zoneId, rect) {
+      const zone = zones.find((z) => z.id === zoneId);
+      const at = built.find((b) => b.id === zoneId);
+      if (!rect || !zone || !at) {
+        if (held === null) return false;
+        held = null;
+        ghost.visible = false;
+        shown = "";
+        mark(marked);
+        return true;
       }
-      group.visible = any;
+      held = zoneId;
+      at.one.visible = false;
+      grips.visible = false;
+      const { centre, size } = zoneSceneBox(zone, dims);
+      const colour = zoneHex(zone.borderColor, zones.indexOf(zone));
+      ghostEdges.material.color.set(colour);
+      ghostFill.material.color.set(colour);
+      ghost.scale.set(Math.max(rect.x1 - rect.x0, 0.01), Math.max(size.y, 0.01), Math.max(rect.y1 - rect.y0, 0.01));
+      ghost.position.set((rect.x0 + rect.x1) / 2 - dims.widthMeters / 2, centre.y, (rect.y0 + rect.y1) / 2 - dims.depthMeters / 2);
+      ghost.visible = true;
+      group.visible = true;
       return true;
     },
     setPixelsPerMetre(next) {
       if (next === ppm || next <= 0) return;
       ppm = next;
       for (const { label } of built) label.scale.setScalar(LABEL_PX / ppm);
+      for (const rim of grips.children) rim.scale.setScalar(GRIP_PX / ppm);
     },
     // The highest top corner still in view: over the top's middle the name sat on the lamp inside.
     orient(q, camera) {
       up.set(0, 1, 0).applyQuaternion(q);
       camera?.updateMatrixWorld();
+      for (const rim of grips.children) rim.quaternion.copy(q);
       const lift = ppm > 0 ? (LABEL_LIFT_PX + LABEL_PX) / ppm : 0;
       for (const { one, label, half } of built) {
         if (!label.visible) continue;

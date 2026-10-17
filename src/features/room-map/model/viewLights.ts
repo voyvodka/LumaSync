@@ -67,7 +67,6 @@ function hueLight(channel: HueChannelPlacement, sources: ViewLightSources, t: TF
   };
 }
 
-/** Hue channels by index, the house's lights, then the strips, then the screen. */
 export function buildViewLights(sources: ViewLightSources, t: TFunction): ViewLight[] {
   const { config } = sources;
   const hue = [...config.hueChannels].sort((a, b) => a.channelIndex - b.channelIndex).map((c) => hueLight(c, sources, t));

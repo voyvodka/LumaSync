@@ -23,7 +23,7 @@ describe("buildZoneBoxes", () => {
 
   it("draws the zone being edited named and walled, the others as their footprint alone", () => {
     const boxes = buildZoneBoxes([zone("a"), zone("b"), zone("c")], dims);
-    expect(boxes.mark({ active: "a", others: ["b"] })).toBe(true);
+    expect(boxes.mark({ active: "a", held: null, others: ["b"] })).toBe(true);
     const a = parts(boxes, 0);
     const b = parts(boxes, 1);
     expect(boxes.group.visible).toBe(true);
@@ -32,12 +32,12 @@ describe("buildZoneBoxes", () => {
     expect(b.label.visible).toBe(false);
     expect([a.wall.visible, a.posts.visible, b.wall.visible, b.posts.visible]).toEqual([true, true, false, false]);
     expect((a.foot.material as MeshBasicMaterial).opacity).toBeGreaterThan((b.foot.material as MeshBasicMaterial).opacity);
-    expect(boxes.mark({ active: "a", others: ["b"] })).toBe(false);
+    expect(boxes.mark({ active: "a", held: null, others: ["b"] })).toBe(false);
   });
 
   it("keeps the name one size on screen, over the top corner highest on screen", () => {
     const boxes = buildZoneBoxes([zone("a")], dims);
-    boxes.mark({ active: "a", others: [] });
+    boxes.mark({ active: "a", held: null, others: [] });
     const { label } = parts(boxes, 0);
     boxes.setPixelsPerMetre(100);
     const near = label.scale.y;
@@ -54,7 +54,7 @@ describe("buildZoneBoxes", () => {
 
   it("takes a lower corner when the highest would put the name past the view's top", () => {
     const boxes = buildZoneBoxes([zone("a")], dims);
-    boxes.mark({ active: "a", others: [] });
+    boxes.mark({ active: "a", held: null, others: [] });
     boxes.setPixelsPerMetre(100);
     const { one, label } = parts(boxes, 0);
     // Close in, so the wall's far top corner is above the frame.
@@ -78,6 +78,37 @@ describe("buildZoneBoxes", () => {
     const alpha = wall.geometry.getAttribute("color");
     const pos = wall.geometry.getAttribute("position");
     for (let i = 0; i < pos.count; i++) expect(alpha.getW(i)).toBe(pos.getY(i) === 0 ? 1 : 0);
+  });
+
+  it("offers its grips only on the zone that is itself the selection", () => {
+    const boxes = buildZoneBoxes([zone("a"), zone("b")], dims);
+    const grips = boxes.group.children[2]!;
+    boxes.mark({ active: "a", held: null, others: ["b"] });
+    expect(grips.visible).toBe(false);
+    boxes.mark({ active: "a", held: "a", others: ["b"] });
+    expect(grips.visible).toBe(true);
+    expect(grips.children).toHaveLength(8);
+    // The zone spans 2.5 × 2 m round the middle: its corners are 1.25 and 1 m out.
+    expect(grips.children.map((g) => [g.position.x, g.position.z])).toContainEqual([-1.25, -1]);
+    boxes.setPixelsPerMetre(100);
+    expect(grips.children[0]!.scale.x).toBeCloseTo(0.1);
+  });
+
+  it("draws a held zone as its whole box where it is being put, and puts the low wall back after", () => {
+    const boxes = buildZoneBoxes([zone("a")], dims);
+    boxes.mark({ active: "a", held: "a", others: [] });
+    const { one } = parts(boxes, 0);
+    const [grips, ghost] = boxes.group.children.slice(1);
+    expect(boxes.hold("a", { x0: 0, y0: 0, x1: 1, y1: 2 })).toBe(true);
+    expect([one.visible, grips!.visible, ghost!.visible]).toEqual([false, false, true]);
+    // Its real height, the room's 2.5 m, not the 0.45 m wall it rests as.
+    expect(ghost!.scale.toArray()).toEqual([1, 2.5, 2]);
+    expect([ghost!.position.x, ghost!.position.z]).toEqual([-2, -1]);
+    boxes.mark({ active: "a", held: "a", others: [] });
+    expect(one.visible).toBe(false);
+    expect(boxes.hold("a", null)).toBe(true);
+    expect([one.visible, grips!.visible, ghost!.visible]).toEqual([true, true, false]);
+    expect(boxes.hold("a", null)).toBe(false);
   });
 
   it("is outlined in the zone's colour", () => {

@@ -158,7 +158,6 @@ export function RowLink({
   children: ReactNode;
   onClick: () => void;
   ref?: Ref<HTMLButtonElement>;
-  /** It opens a list: whether that list is open, and its id while it is. */
   menu?: { open: boolean; id: string };
 }) {
   return (

@@ -12,13 +12,19 @@ const ids = ["a", "b", "c"];
 
 describe("zoneMarks", () => {
   it("names the zone being edited over the selected light's", () => {
-    expect(zoneMarks(config, ids, "a", hueChannelObjectId(3), false)).toEqual({ active: "a", others: [] });
+    expect(zoneMarks(config, ids, "a", hueChannelObjectId(3), false)).toEqual({ active: "a", held: null, others: [] });
   });
 
   it("falls back to the zone the selected light is bound to, and to none for a loose one", () => {
     expect(zoneMarks(config, ids, null, hueChannelObjectId(3), false).active).toBe("b");
     expect(zoneMarks(config, ids, null, hueChannelObjectId(4), false).active).toBeNull();
     expect(zoneMarks(config, ids, null, "tv", false).active).toBeNull();
+  });
+
+  it("holds the zone only when it is itself the selection, not one shown for a selected light", () => {
+    expect(zoneMarks(config, ids, "a", null, false).held).toBe("a");
+    expect(zoneMarks(config, ids, "a", hueChannelObjectId(3), false).held).toBeNull();
+    expect(zoneMarks(config, ids, null, hueChannelObjectId(3), false).held).toBeNull();
   });
 
   it("adds the area's other zones only with the zones toggle", () => {

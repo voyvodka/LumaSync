@@ -8,7 +8,6 @@ import { hueChannelDotText, hueChannelName } from "../../model/hueChannelLabel";
 import { Disc, Meta, RowLink } from "./InspectorParts";
 import styles from "./DockPicker.module.css";
 
-/** An action, not a value: it lists the Hue lights that can take a house light's place. */
 export function DecorDrivePicker({ channels, onDrive }: { channels: readonly HueChannelPlacement[]; onDrive: (channelIndex: number) => void }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);

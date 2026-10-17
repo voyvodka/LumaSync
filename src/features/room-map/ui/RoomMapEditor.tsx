@@ -33,7 +33,7 @@ import { Callout } from "@/shared/ui/Callout/Callout";
 
 import { decorLightNames, driveDecorWithHue, listDecorLights, setDecorLightHeight, updateDecorLight } from "../model/decorLight";
 import { deriveHueAreaState } from "../model/hueAreaState";
-import { hueToPlanMetres, resolveHueChannelWorld, setHueChannelWorldZ } from "../model/hueChannelPosition";
+import { hueToPlanMetres, planMetresToHue, resolveHueChannelWorld, setHueChannelWorldZ } from "../model/hueChannelPosition";
 import { moveGroup } from "../model/groupMove";
 import {
   decorLightObjectId,
@@ -51,7 +51,7 @@ import { buildObjectList } from "../model/objectList";
 import { dropZones, zoneDrop } from "../model/zoneDrop";
 import { zoneMarks } from "../model/zoneMarks";
 import { zoneToken } from "../model/zoneColor";
-import { rectToZone } from "../model/zoneRect";
+import { rectToZone, type ZoneRect } from "../model/zoneRect";
 import { roomObjectAdapter } from "../model/roomObjectKinds";
 import { useFurnitureModels } from "../state/useFurnitureModels";
 import { useHoverChip } from "../state/useHoverChip";
@@ -421,6 +421,27 @@ export function RoomMapEditor({
       focusEditor();
     },
     [selectFromList, clearSelection, focusEditor],
+  );
+  const handleRoomZonePick = useCallback(
+    (zoneId: string) => {
+      select(null);
+      selectHueZone(zoneId);
+      focusEditor();
+    },
+    [select, selectHueZone, focusEditor],
+  );
+  // Carried, only its middle is written: its size stays as stored, not re-read from a rectangle clamped to the room.
+  const handleRoomZoneChange = useCallback(
+    (zoneId: string, rect: ZoneRect, resized: boolean) => {
+      if (resized) {
+        handleHueZoneResize(zoneId, rectToZone(rect, widthMeters, depthMeters));
+        return true;
+      }
+      const centre = planMetresToHue((rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2, widthMeters, depthMeters);
+      handleHueZoneCenterChange(zoneId, centre.x, centre.y);
+      return true;
+    },
+    [handleHueZoneResize, handleHueZoneCenterChange, widthMeters, depthMeters],
   );
   const handleUsbStripChange = useCallback(
     (updated: UsbStripPlacement) => {
@@ -966,6 +987,8 @@ export function RoomMapEditor({
             onPick={handleRoomPick}
             onHover={hover.onHover}
             onMovePiece={landCarriedPiece}
+            onPickZone={handleRoomZonePick}
+            onChangeZone={handleRoomZoneChange}
             onFail={(failure) => onRoomFail?.(failure)}
             dropRef={roomDropRef}
             morphKey={morphKey}

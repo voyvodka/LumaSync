@@ -1,9 +1,11 @@
 import { act, cleanup, render } from "@testing-library/react";
-import type { Mesh, Object3D } from "three";
+import { type Camera, type Mesh, type Object3D, Vector3 } from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { hueChannelObjectId } from "@/features/room-map/model/objectId";
-import { DEFAULT_ROOM_MAP, type RoomMapConfig } from "@/shared/contracts/roomMap";
+import type { ZoneMarks } from "@/features/room-map/model/zoneMarks";
+import type { ZoneRect } from "@/features/room-map/model/zoneRect";
+import { DEFAULT_ROOM_MAP, type HueZone, type RoomMapConfig } from "@/shared/contracts/roomMap";
 
 import RoomView3D, { __closeParkedRoomViewForTests, parkedViewReady, type RoomDropTarget } from "../RoomView3D";
 
@@ -723,6 +725,94 @@ describe("RoomView3D", () => {
       press(canvas, "pointercancel", 10);
       press(canvas, "pointerup", 10);
       expect(onPick).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("a Hue zone", () => {
+    // Centred and 3 × 2 m in a 6 × 4 m room: x 1.5–4.5, y 1–3 on the plan. A size no other test
+    // opens, so the camera kept for the session from one of them is not reused.
+    const zone: HueZone = { id: "a", name: "Sofa", entertainmentAreaId: "x", centerX: 0, centerY: 0, centerZ: 0, scaleX: 0.5, scaleY: 0.5, scaleZ: 1, channelIndices: [] };
+    const config: RoomMapConfig = { ...DEFAULT_ROOM_MAP, dimensions: { widthMeters: 6, depthMeters: 4, heightMeters: 2.5 }, zones: [zone] };
+    const HELD: ZoneMarks = { active: "a", held: "a", others: [] };
+
+    const open = async (zones: ZoneMarks) => {
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 400, 400));
+      const onPick = vi.fn<(id: string | null) => void>();
+      const onPickZone = vi.fn<(zoneId: string) => void>();
+      const onChangeZone = vi.fn<(zoneId: string, rect: ZoneRect, resized: boolean) => boolean>(() => true);
+      render(<RoomView3D config={config} label="Room" zones={zones} onPick={onPick} onPickZone={onPickZone} onChangeZone={onChangeZone} onFail={() => {}} />);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+      const canvas = gl.renderers[0]?.domElement as HTMLCanvasElement;
+      const camera = gl.orbits[0]!.object as unknown as Camera;
+      const at = (x: number, y: number) => {
+        // The fake renderer never draws, so nothing else brings the camera's matrices up to date.
+        camera.updateMatrixWorld();
+        const p = new Vector3(x - 3, 0, y - 2).project(camera);
+        return { x: ((p.x + 1) / 2) * 400, y: ((1 - p.y) / 2) * 400 };
+      };
+      const press = (type: string, p: { x: number; y: number }) =>
+        canvas.dispatchEvent(new PointerEvent(type, { clientX: p.x, clientY: p.y, button: 0, pointerId: 1, bubbles: true }));
+      return { onPick, onPickZone, onChangeZone, at, press };
+    };
+
+    afterEach(() => vi.restoreAllMocks());
+
+    it("is carried whole from its floor, and written once when let go", async () => {
+      const { onChangeZone, at, press } = await open(HELD);
+      press("pointerdown", at(3, 2));
+      press("pointermove", at(3.25, 2.25));
+      press("pointermove", at(3.5, 2.5));
+      expect(onChangeZone).not.toHaveBeenCalled();
+      press("pointerup", at(3.5, 2.5));
+      expect(onChangeZone).toHaveBeenCalledTimes(1);
+      const [id, rect, resized] = onChangeZone.mock.calls[0]!;
+      expect([id, resized]).toEqual(["a", false]);
+      expect(rect.x0).toBeCloseTo(2);
+      expect(rect.y1).toBeCloseTo(3.5);
+      expect(rect.x1 - rect.x0).toBeCloseTo(3);
+    });
+
+    it("is resized from a corner grip", async () => {
+      const { onChangeZone, at, press } = await open(HELD);
+      press("pointerdown", at(4.5, 3));
+      press("pointermove", at(5, 3.5));
+      press("pointerup", at(5, 3.5));
+      const [, rect, resized] = onChangeZone.mock.calls[0]!;
+      expect(resized).toBe(true);
+      expect([rect.x0, rect.y0]).toEqual([1.5, 1]);
+      expect(rect.x1).toBeCloseTo(5);
+      expect(rect.y1).toBeCloseTo(3.5);
+    });
+
+    it("goes back where it was on Esc, writing nothing", async () => {
+      const { onChangeZone, at, press } = await open(HELD);
+      press("pointerdown", at(3, 2));
+      press("pointermove", at(3.5, 2.5));
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      press("pointerup", at(3.5, 2.5));
+      expect(onChangeZone).not.toHaveBeenCalled();
+    });
+
+    // A zone only shown for a selected light: a drag over it turns the room, as one over any other floor.
+    it("is not carried unless it is itself the selection", async () => {
+      const { onChangeZone, at, press } = await open({ active: "a", held: null, others: [] });
+      press("pointerdown", at(3, 2));
+      press("pointermove", at(3.5, 2.5));
+      press("pointerup", at(3.5, 2.5));
+      expect(onChangeZone).not.toHaveBeenCalled();
+    });
+
+    it("is picked where a click finds only its floor, and the room's empty floor picks nothing", async () => {
+      const { onPick, onPickZone, at, press } = await open({ active: null, held: null, others: ["a"] });
+      press("pointerdown", at(2, 2));
+      press("pointerup", at(2, 2));
+      expect(onPickZone).toHaveBeenCalledWith("a");
+      expect(onPick).not.toHaveBeenCalled();
+      press("pointerdown", at(0.5, 0.5));
+      press("pointerup", at(0.5, 0.5));
+      expect(onPick).toHaveBeenCalledWith(null);
     });
   });
 });

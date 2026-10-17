@@ -106,11 +106,18 @@ there that moved the sofa while turning the room was a layout change made by acc
 walls' handles, a strip's ends and corners and image layers — so picking or adding an image opens the
 plan for it once the file dialog returns one, and going back to 3D closes that card. A Hue zone is
 drawn in 3D as well (`scene/zoneBoxes.ts`): the zone being edited, or else the selected light's, as a
-dashed box in its colour over a solid outline where it meets the floor, named over its highest corner
-on screen (over the top's middle the name sat on the lamp inside), and with the zones toggle the area's others faintly,
-as the plan draws them. So a zone picked or added stays in the 3D room, and its card stays open across
-a stage switch. The boxes are built with the scene and only shown or hidden after, so picking a zone
-rebuilds nothing. They are flagged `OVERLAY` for the glow pass, which hides them: its black stand-in
+low wall in its colour that fades upward over a solid outline where it meets the floor, named over its
+highest corner on screen (over the top's middle the name sat on the lamp inside), and with the zones
+toggle the area's others faintly, as the plan draws them. So a zone picked or added stays in the 3D room,
+and its card stays open across a stage switch. The boxes are built with the scene and only shown or
+hidden after, so picking a zone rebuilds nothing. A drawn zone is picked in 3D under everything else:
+only where the press finds nothing but its floor (`model/zoneGesture.ts`), because its box stands round
+the furniture inside it and a nearest-hit rule gave it the sofa's clicks. It is carried from its floor
+and resized from eight grips only when it is itself the selection (`ZoneMarks.held`), not when it is
+shown for a selected light, whose drag carries the light. While held it is drawn as its whole box, to
+its real height; at rest the low wall keeps the furniture readable. One write on release, through the
+plan's own zone handlers: a live write rebuilt the room on every move. Carried, only its middle is
+written, so a zone against a wall stops there instead of shrinking. They are flagged `OVERLAY` for the glow pass, which hides them: its black stand-in
 for every other mesh writes depth, and a zone's box drawn that way put out the bulbs inside it. A loose
 light let go inside a drawn zone joins it, on the plan or carried in 3D, at the spot it was put down
 (`model/zoneDrop.ts`); the smallest zone wins where they overlap. Only a drawn zone takes it — the

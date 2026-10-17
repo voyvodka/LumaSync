@@ -2,6 +2,7 @@
 // on a change, and hands back everything — context included — on unmount. The rules it follows are
 // in docs/architecture/ui-and-shell.md, "Per-window bundles".
 import type { ZoneMarks } from "@/features/room-map/model/zoneMarks";
+import { resizeZoneRect, type ZoneHandle, type ZoneRect, zoneRect } from "@/features/room-map/model/zoneRect";
 import { type MutableRefObject, useEffect, useRef } from "react";
 import {
   BoxGeometry,
@@ -40,6 +41,7 @@ import type { FurnitureModel } from "../model/furnitureModel";
 import { pieceNudge } from "../model/pieceNudge";
 import { roomToScene } from "../model/roomSpace";
 import { planMorph } from "../model/templateMorph";
+import { GRIP_CURSOR, gripAt, insideRect, moveZoneRect, type PlanPoint, sameRect, sceneToPlan, zoneAtFloor, zoneGrips } from "../model/zoneGesture";
 import { isWindowVisible } from "@/features/shell/windowVisibility";
 import { prefersReducedMotion } from "@/shared/lib/motion";
 
@@ -168,6 +170,8 @@ const POLAR = 0.8;
  *  plan's rule, `CLICK_SLOP_PX` in snapGeometry.ts, so a nudge while clicking a lamp does not throw
  *  the selection away). */
 const CLICK_SLOP_PX = 6;
+/** A zone's grip is a 10 px mark taken anywhere within a 32 px target, as the plan's. */
+const GRIP_HIT_PX = 16;
 const DRAW_TIMINGS_KEPT = 600;
 
 /** The renderer, camera and controls live as long as the view; a room-map change swaps only the
@@ -179,6 +183,7 @@ function openRoomView(
   onMovePiece: MovePiece | null,
   onHover: (objectId: string | null, clientX: number, clientY: number) => void = () => {},
   onDrawn: () => void = () => {},
+  onZone: ZoneEdit | null = null,
 ): RoomView {
   let host = firstHost;
   const options: SpikeOptions = window.__roomViewSpikeOptions ?? {};
@@ -441,6 +446,44 @@ function openRoomView(
       /** The pointer's height over the piece's centre when ⇧ went down; null while it slides. */
       grip: number | null;
     } | null = null;
+    let zoneDrag: { id: string; handle: ZoneHandle | null; start: ZoneRect; from: PlanPoint; rect: ZoneRect; moved: boolean } | null = null;
+    const ground = new Plane(new Vector3(0, 1, 0), 0);
+    const onGround = new Vector3();
+    const gripPoint = new Vector3();
+    const groundAt = (ray: Ray) =>
+      builtConfig && ray.intersectPlane(ground, onGround) ? sceneToPlan(onGround.x, onGround.z, builtConfig.dimensions) : null;
+    // What a press here would do to the held zone: pull a grip, carry it, or nothing — a piece over its floor keeps the press.
+    const zoneUnder = (clientX: number, clientY: number) => {
+      const id = zoneMarks?.held;
+      const zone = id && builtConfig ? builtConfig.zones.find((z) => z.id === id) : undefined;
+      if (!onZone || !room || !zone || !builtConfig) return null;
+      const { widthMeters, depthMeters } = builtConfig.dimensions;
+      const rect = zoneRect(zone, widthMeters, depthMeters);
+      const ray = rayAt(clientX, clientY);
+      const from = groundAt(ray);
+      if (!from) return null;
+      const box = canvas.getBoundingClientRect();
+      const onScreen = zoneGrips(rect).map(({ handle, at }) => {
+        gripPoint.set(at.x - widthMeters / 2, 0, at.y - depthMeters / 2).project(camera);
+        return { handle, x: box.left + ((gripPoint.x + 1) / 2) * box.width, y: box.top + ((1 - gripPoint.y) / 2) * box.height };
+      });
+      const handle = gripAt(onScreen, { x: clientX, y: clientY }, GRIP_HIT_PX);
+      if (handle) return { id: zone.id, handle, rect, from };
+      if (!insideRect(rect, from) || pickObject(ray, room.pickables, lightPickHalf(pixelsPerMetre)) !== null) return null;
+      return { id: zone.id, handle: null, rect, from };
+    };
+    const dropZone = (commit: boolean) => {
+      const z = zoneDrag;
+      if (!z) return false;
+      zoneDrag = null;
+      orbit.enabled = true;
+      canvas.style.cursor = "";
+      const changed = commit && z.moved && !sameRect(z.rect, z.start);
+      // Landed, its whole box stays where it was let go until the room is rebuilt with it there.
+      const landed = changed && onZone?.change(z.id, z.rect, z.handle !== null) === true;
+      if (!landed && room?.holdZone(z.id, null)) request();
+      return z.moved;
+    };
     const follow = (c: NonNullable<typeof carry>) => {
       if (!c.lifted) return;
       c.lifted.moveTo(c.ghost.position.x, c.ghost.position.z);
@@ -472,13 +515,14 @@ function openRoomView(
     window.addEventListener(
       "keydown",
       (event) => {
-        if (!carry || event.key !== "Escape") return;
+        if ((!carry && !zoneDrag) || event.key !== "Escape") return;
         // Put down where it was picked up: nothing is written.
         event.preventDefault();
         event.stopPropagation();
         if (press && canvas.hasPointerCapture(press.id)) canvas.releasePointerCapture(press.id);
         press = null;
         drop(false);
+        dropZone(false);
       },
       { signal: listening.signal, capture: true },
     );
@@ -498,10 +542,20 @@ function openRoomView(
       (event) => {
         press = event.button === 0 ? { x: event.clientX, y: event.clientY, id: event.pointerId } : null;
         onHover(null, 0, 0);
-        if (!press || !room || !onMovePiece) return;
+        if (!press || !room || (!onMovePiece && !onZone)) return;
         endMorph();
         settleNow();
         if (!room) return;
+        const held = zoneUnder(event.clientX, event.clientY);
+        if (held) {
+          zoneDrag = { id: held.id, handle: held.handle, start: held.rect, from: held.from, rect: held.rect, moved: false };
+          orbit.enabled = false;
+          if (move !== 0) cancelAnimationFrame(move);
+          move = 0;
+          canvas.setPointerCapture(event.pointerId);
+          return;
+        }
+        if (!onMovePiece) return;
         const ray = rayAt(event.clientX, event.clientY);
         // The selected one is carried when the press lands on it, even behind something nearer:
         // the TV's backlight strip covers the TV and took every press on it.
@@ -568,7 +622,22 @@ function openRoomView(
           // The selected piece says it can be picked up; nothing else changes the cursor.
           const mine = room.pickables.find((p) => p.id === selected);
           const over = mine !== undefined && pickObject(ray, [mine], lightPickHalf(pixelsPerMetre)) === mine.id;
-          canvas.style.cursor = over && pressStartsCarry(mine, selected) ? "grab" : "";
+          const zone = zoneMarks?.held ? zoneUnder(event.clientX, event.clientY) : null;
+          canvas.style.cursor = zone ? (zone.handle ? GRIP_CURSOR[zone.handle] : "grab") : over && pressStartsCarry(mine, selected) ? "grab" : "";
+          return;
+        }
+        if (zoneDrag && press) {
+          if (!zoneDrag.moved && Math.hypot(event.clientX - press.x, event.clientY - press.y) <= CLICK_SLOP_PX) return;
+          const at = groundAt(rayAt(event.clientX, event.clientY));
+          if (!at || !builtConfig) return;
+          const dims = builtConfig.dimensions;
+          const [dx, dy] = [at.x - zoneDrag.from.x, at.y - zoneDrag.from.y];
+          zoneDrag.rect = zoneDrag.handle
+            ? resizeZoneRect(zoneDrag.start, zoneDrag.handle, dx, dy, dims.widthMeters, dims.depthMeters, event.shiftKey)
+            : moveZoneRect(zoneDrag.start, dx, dy, dims);
+          zoneDrag.moved = true;
+          canvas.style.cursor = zoneDrag.handle ? GRIP_CURSOR[zoneDrag.handle] : "grabbing";
+          if (room?.holdZone(zoneDrag.id, zoneDrag.rect)) request();
           return;
         }
         if (!carry || !press) return;
@@ -654,13 +723,18 @@ function openRoomView(
       (event) => {
         const start = press;
         press = null;
-        if (drop(true)) return;
+        if (dropZone(true) || drop(true)) return;
         if (!start || start.id !== event.pointerId || !room) return;
         if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > CLICK_SLOP_PX) return;
         const rect = canvas.getBoundingClientRect();
         pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
         raycaster.setFromCamera(pointer, camera);
-        onPick(pickObject(raycaster.ray, room.pickables, lightPickHalf(pixelsPerMetre)));
+        const hit = pickObject(raycaster.ray, room.pickables, lightPickHalf(pixelsPerMetre));
+        // Under everything: a zone is picked where the press found only its floor.
+        const floorAt = hit === null && onZone ? groundAt(raycaster.ray) : null;
+        const zoneId = floorAt && builtConfig ? zoneAtFloor(floorAt, builtConfig.zones, zoneMarks, builtConfig.dimensions) : null;
+        if (zoneId && onZone) onZone.pick(zoneId);
+        else onPick(hit);
       },
       { signal: listening.signal },
     );
@@ -670,6 +744,7 @@ function openRoomView(
       () => {
         press = null;
         drop(false);
+        dropZone(false);
       },
       { signal: listening.signal },
     );
@@ -806,9 +881,10 @@ function openRoomView(
       morphNext = false;
       builtConfig = config;
       // Rebuilt by another writer mid-carry: put the piece down first, while its buffers still exist.
-      if (carry) {
+      if (carry || zoneDrag) {
         press = null;
         drop(false);
+        dropZone(false);
       }
       const first = room === null;
       const leaving: LiftedPiece[] = [];
@@ -1143,6 +1219,7 @@ function openRoomView(
         away = true;
         press = null;
         drop(false);
+        dropZone(false);
         onHover(null, 0, 0);
         observer?.disconnect();
         if (frame !== 0) cancelAnimationFrame(frame);
@@ -1182,14 +1259,30 @@ export type MovePiece = (
   raised?: { rise: number; centreY: number },
 ) => boolean;
 
+/** A Hue zone picked in the room, or let go carried or resized: its floor on the plan, in metres. */
+export interface ZoneEdit {
+  pick(zoneId: string): void;
+  change(zoneId: string, rect: ZoneRect, resized: boolean): boolean;
+}
+
 interface Handlers {
   fail: (error: unknown) => void;
   pick: (objectId: string | null) => void;
   move: MovePiece;
+  pickZone: ZoneEdit["pick"];
+  changeZone: ZoneEdit["change"];
   hover: (objectId: string | null, clientX: number, clientY: number) => void;
   drawn: () => void;
 }
-const IDLE: Handlers = { fail: () => {}, pick: () => {}, move: () => false, hover: () => {}, drawn: () => {} };
+const IDLE: Handlers = {
+  fail: () => {},
+  pick: () => {},
+  move: () => false,
+  pickZone: () => {},
+  changeZone: () => false,
+  hover: () => {},
+  drawn: () => {},
+};
 /** A new context, its shaders and the scene paused every face or stage switch; one is kept this long. */
 const PARK_MS = 20_000;
 let parked: { view: RoomView; handlers: Handlers; timer: ReturnType<typeof setTimeout> } | null = null;
@@ -1247,6 +1340,8 @@ export default function RoomView3D({
   onPick,
   onHover,
   onMovePiece,
+  onPickZone,
+  onChangeZone,
   onFail,
   onDrawn,
   dropRef,
@@ -1269,6 +1364,10 @@ export default function RoomView3D({
   onMovePiece?: MovePiece;
   /** A click in the room: the object it landed on, or null for empty ground. */
   onPick?: (objectId: string | null) => void;
+  /** A drawn zone clicked where nothing else was. */
+  onPickZone?: ZoneEdit["pick"];
+  /** The zone that is the selection let go carried or resized; false puts it back. */
+  onChangeZone?: ZoneEdit["change"];
   onHover?: (objectId: string | null, clientX: number, clientY: number) => void;
   /** No view could be drawn — no WebGL context, or the scene failed to build. */
   onFail: (error: unknown) => void;
@@ -1288,6 +1387,10 @@ export default function RoomView3D({
   onPickRef.current = onPick;
   const onMoveRef = useRef(onMovePiece);
   onMoveRef.current = onMovePiece;
+  const onPickZoneRef = useRef(onPickZone);
+  onPickZoneRef.current = onPickZone;
+  const onChangeZoneRef = useRef(onChangeZone);
+  onChangeZoneRef.current = onChangeZone;
   const onHoverRef = useRef(onHover);
   onHoverRef.current = onHover;
   const onDrawnRef = useRef(onDrawn);
@@ -1306,6 +1409,8 @@ export default function RoomView3D({
       fail: (error) => onFailRef.current(error),
       pick: (objectId) => onPickRef.current?.(objectId),
       move: (objectId, x, z, turn, riders, raised) => onMoveRef.current?.(objectId, x, z, turn, riders, raised) ?? false,
+      pickZone: (zoneId) => onPickZoneRef.current?.(zoneId),
+      changeZone: (zoneId, rect, resized) => onChangeZoneRef.current?.(zoneId, rect, resized) ?? false,
       hover: (objectId, x, y) => onHoverRef.current?.(objectId, x, y),
       drawn: () => onDrawnRef.current?.(),
     };
@@ -1320,6 +1425,7 @@ export default function RoomView3D({
           (objectId, x, z, turn, riders, raised) => handlers.move(objectId, x, z, turn, riders, raised),
           (objectId, x, y) => handlers.hover(objectId, x, y),
           () => handlers.drawn(),
+          { pick: (zoneId) => handlers.pickZone(zoneId), change: (zoneId, rect, resized) => handlers.changeZone(zoneId, rect, resized) },
         );
         kept = { view, handlers };
       } catch (error) {
