@@ -32,7 +32,8 @@ import { isEditableTarget } from "@/shared/lib/editableTarget";
 import { Callout } from "@/shared/ui/Callout/Callout";
 
 import { deriveHueAreaState } from "../model/hueAreaState";
-import { setHueChannelWorldZ } from "../model/hueChannelPosition";
+import { hueToPlanMetres, resolveHueChannelWorld, setHueChannelWorldZ } from "../model/hueChannelPosition";
+import { moveGroup } from "../model/groupMove";
 import {
   furnitureObjectId,
   hueChannelObjectId,
@@ -448,11 +449,17 @@ export function RoomMapEditor({
     const track = (e: KeyboardEvent) => {
       shiftHeld.current = e.shiftKey;
     };
+    // A key let go in another window sends no keyup here.
+    const blur = () => {
+      shiftHeld.current = false;
+    };
     window.addEventListener("keydown", track);
     window.addEventListener("keyup", track);
+    window.addEventListener("blur", blur);
     return () => {
       window.removeEventListener("keydown", track);
       window.removeEventListener("keyup", track);
+      window.removeEventListener("blur", blur);
     };
   }, []);
   useEffect(() => {
@@ -485,7 +492,10 @@ export function RoomMapEditor({
           ? [TV_ANCHOR_OBJECT_ID]
           : []),
         ...visibleHueChannels
-          .filter((ch) => within(((ch.x + 1) / 2) * widthMeters, ((1 - ch.y) / 2) * depthMeters))
+          .filter((ch) => {
+            const at = hueToPlanMetres(resolveHueChannelWorld(ch, config.zones), widthMeters, depthMeters);
+            return within(at.x, at.y);
+          })
           .map((ch) => hueChannelObjectId(ch.channelIndex)),
         ...config.usbStrips
           .filter((st) => {
@@ -498,7 +508,7 @@ export function RoomMapEditor({
       setGroup(next);
       select(next[next.length - 1] ?? null);
     },
-    [config.furniture, config.tvAnchor, config.usbStrips, visibleHueChannels, widthMeters, depthMeters, group, select],
+    [config.furniture, config.tvAnchor, config.usbStrips, config.zones, visibleHueChannels, widthMeters, depthMeters, group, select],
   );
   // Followers move with the drag by a CSS `translate` on their own element, which composes with
   // their placement and rotation and costs no render per move; the drop writes them all at once.
@@ -520,34 +530,9 @@ export function RoomMapEditor({
     (dragger: string, dx: number, dy: number) => {
       for (const el of followers(dragger)) el.style.translate = "";
       if (dx === 0 && dy === 0) return;
-      const round = (v: number) => Math.round(v * 100) / 100;
-      const clampCube = (v: number) => Math.min(1, Math.max(-1, v));
-      apply((cfg) => {
-        let hueChannels = cfg.hueChannels;
-        for (const ch of visibleHueChannels) {
-          if (!groupSet.has(hueChannelObjectId(ch.channelIndex)) || ch.locked) continue;
-          hueChannels = replaceHueChannel(hueChannels, {
-            ...ch,
-            x: clampCube(ch.x + (2 * dx) / widthMeters),
-            y: clampCube(ch.y - (2 * dy) / depthMeters),
-          });
-        }
-        const tv = cfg.tvAnchor;
-        return {
-          furniture: cfg.furniture.map((f) =>
-            groupSet.has(furnitureObjectId(f.id)) && !f.locked ? { ...f, x: round(f.x + dx), y: round(f.y + dy) } : f,
-          ),
-          ...(tv && groupSet.has(TV_ANCHOR_OBJECT_ID) && !tv.locked ? { tvAnchor: { ...tv, x: round(tv.x + dx), y: round(tv.y + dy) } } : {}),
-          usbStrips: cfg.usbStrips.map((st) =>
-            groupSet.has(usbStripObjectId(st.stripId)) && !st.locked
-              ? translateStrip(st, dx, dy)
-              : st,
-          ),
-          hueChannels,
-        };
-      });
+      apply((cfg) => moveGroup(cfg, groupSet, hueAreaId, dx, dy));
     },
-    [apply, followers, groupSet, visibleHueChannels, widthMeters, depthMeters],
+    [apply, followers, groupSet, hueAreaId],
   );
   const handleDeleteSelection = useCallback(() => {
     if (!grouped) {
@@ -796,8 +781,12 @@ export function RoomMapEditor({
       // plan has a menu.
       if (!(e.target instanceof Element) || e.target.closest(`[${ROOM_MAP_VIEWPORT_ATTR}]`) === null) return;
       e.preventDefault();
-      if (!selectedId) return;
-      setContextMenu({ x: e.clientX, y: e.clientY, targetId: selectedId });
+      const hit = e.target.closest("[data-object-id]")?.getAttribute("data-object-id");
+      // Empty ground has no menu; a strip's grips sit outside its tagged line, so anything else is the selection's.
+      const onFloor = e.target.matches(`[${ROOM_MAP_VIEWPORT_ATTR}], [data-room-map-object-layer]`);
+      const targetId = hit ?? (onFloor ? null : selectedId);
+      if (!targetId) return;
+      setContextMenu({ x: e.clientX, y: e.clientY, targetId });
     },
     [selectedId],
   );

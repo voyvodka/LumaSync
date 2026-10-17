@@ -300,6 +300,35 @@ describe("HueChannelOverlay — W4-J #3 simultaneous zone visibility", () => {
   });
 });
 
+describe("HueChannelOverlay — a zone-centre drag the zone does not outlive", () => {
+  const overlay = (zone: HueZone | null, onHueZoneCenterChange = vi.fn<(id: string, x: number, y: number, held?: boolean) => void>()) => (
+    <HueChannelOverlay
+      channels={[]}
+      pxPerMeter={80}
+      roomWidthM={5}
+      roomDepthM={4}
+      zoom={1}
+      selectedId={null}
+      onSelect={() => {}}
+      onChange={() => {}}
+      activeHueZone={zone}
+      allHueZones={zone ? [zone] : []}
+      onHueZoneCenterChange={onHueZoneCenterChange}
+    />
+  );
+
+  it("lets go of Escape when the zone goes away mid-drag", () => {
+    const { container, rerender } = render(overlay(ZONE));
+    const marker = container.querySelector(`[data-zone-center-id="${ZONE.id}"]`) as HTMLElement;
+    marker.setPointerCapture = () => {};
+    fireEvent.pointerDown(marker, { clientX: 100, clientY: 100, pointerId: 1 });
+    rerender(overlay(null));
+    const esc = new KeyboardEvent("keydown", { key: "Escape", cancelable: true });
+    window.dispatchEvent(esc);
+    expect(esc.defaultPrevented).toBe(false);
+  });
+});
+
 describe("HueChannelOverlay — bug #50 + #52(b) zone center drag", () => {
   it("tags zone-bound channels with data-zone-channel-id so the center handler can move them", () => {
     const { container } = render(
@@ -423,10 +452,10 @@ describe("HueChannelOverlay — keyboard", () => {
     const { marker, onHueZoneCenterChange } = renderWithZone(ZONE);
 
     fireEvent.keyDown(marker, { key: "ArrowRight" });
-    expect(onHueZoneCenterChange).toHaveBeenLastCalledWith("zone-1", 0.05, 0);
+    expect(onHueZoneCenterChange).toHaveBeenLastCalledWith("zone-1", 0.05, 0, true);
 
     fireEvent.keyDown(marker, { key: "ArrowUp", shiftKey: true });
-    expect(onHueZoneCenterChange).toHaveBeenLastCalledWith("zone-1", 0, 0.2);
+    expect(onHueZoneCenterChange).toHaveBeenLastCalledWith("zone-1", 0, 0.2, true);
   });
 
   it("keeps the zone box inside the cube and stops the editor's own arrow handling", () => {

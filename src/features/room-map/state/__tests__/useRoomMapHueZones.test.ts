@@ -125,6 +125,20 @@ beforeEach(() => {
 // The pre-image contract
 // ---------------------------------------------------------------------------
 
+describe("useRoomMapHueZones — a zone centre stepped by key", () => {
+  it("is one gesture for the run, and a drag's drop is its own step", () => {
+    mockUpdate.mockResolvedValue(applied([ZONE_A]));
+    const { result, apply } = renderZones();
+    act(() => result.current.handleHueZoneCenterChange("zone-a", 0.1, 0, true));
+    act(() => result.current.handleHueZoneCenterChange("zone-a", 0.2, 0, true));
+    act(() => result.current.handleHueZoneCenterChange("zone-a", 0.4, 0));
+    const [first, second, dropped] = apply.mock.calls.map((call) => call[1]);
+    expect(first?.gesture).toBeTruthy();
+    expect(second?.gesture).toBe(first?.gesture);
+    expect(dropped).toBeUndefined();
+  });
+});
+
 describe("useRoomMapHueZones — pre-mutation payloads", () => {
   it("sends the untouched zone list on update, not the optimistic one", async () => {
     mockUpdate.mockResolvedValue(applied([ZONE_A]));

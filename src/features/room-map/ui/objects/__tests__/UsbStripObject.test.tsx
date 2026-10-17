@@ -8,7 +8,7 @@
  * the SVG line element is present and the two circular handle divs are
  * positioned at the start and end pixel coordinates.
  */
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, it, expect, vi } from "vitest";
 
@@ -100,6 +100,7 @@ describe("UsbStripObject", () => {
     const input = container.querySelector("input[type=number]");
     expect(input).not.toBeNull();
     expect((input as HTMLInputElement).value).toBe(String(PLACEMENT.ledCount));
+    expect(screen.getByLabelText("roomMap:usbStrip.ledCount")).toBe(input);
   });
 });
 

@@ -71,9 +71,16 @@ export function useRoomMapViewport(dimensions: RoomDimensions, fitInsets: FitIns
       if (!e.repeat) setSpaceHeld(true);
     };
     const up = (e: KeyboardEvent) => { if (e.key === " ") setSpaceHeld(false); };
+    // A key let go in another window sends no keyup here.
+    const blur = () => setSpaceHeld(false);
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
-    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
+    window.addEventListener("blur", blur);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", blur);
+    };
   }, []);
 
   const { widthMeters, depthMeters } = dimensions;

@@ -90,3 +90,34 @@ describe("RoomMapCanvas — an image layer", () => {
     expect(onTransform).not.toHaveBeenCalled();
   });
 });
+
+describe("RoomMapCanvas — a marquee the system takes", () => {
+  it("selects nothing, and the next click on the floor still lands", () => {
+    const onMarquee = vi.fn<(box: { x0: number; y0: number; x1: number; y1: number }, additive: boolean) => void>();
+    const onCanvasClick = vi.fn<() => void>();
+    const view = render(
+      <RoomMapCanvas
+        config={DEFAULT_ROOM_MAP}
+        pxPerMeter={100}
+        canvasSize={{ w: 800, h: 500 }}
+        showGrid={false}
+        gridStrokeWidth={1}
+        selectedId={null}
+        onCanvasClick={onCanvasClick}
+        onMarquee={onMarquee}
+      />,
+    );
+    const floor = view.getByTestId("room-map-object-layer");
+    floor.setPointerCapture = () => {};
+    floor.parentElement!.setPointerCapture = () => {};
+    fireEvent.pointerDown(floor, { button: 0, clientX: 10, clientY: 10, pointerId: 1 });
+    fireEvent.pointerMove(floor, { clientX: 120, clientY: 120, pointerId: 1 });
+    fireEvent.pointerCancel(floor, { pointerId: 1 });
+    expect(onMarquee).not.toHaveBeenCalled();
+
+    fireEvent.pointerDown(floor, { button: 0, clientX: 50, clientY: 50, pointerId: 2 });
+    fireEvent.pointerUp(floor, { clientX: 50, clientY: 50, pointerId: 2 });
+    fireEvent.click(floor);
+    expect(onCanvasClick).toHaveBeenCalledOnce();
+  });
+});

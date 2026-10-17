@@ -1,4 +1,4 @@
-import { memo, useRef, useState } from "react";
+import { memo, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MAX_STRIP_CORNERS, type RoomCorner, resolveStripCorners, stripRunLength, translateStrip, type UsbStripPlacement } from "@/shared/contracts/roomMap";
 import { clamp } from "@/shared/lib/math";
@@ -52,6 +52,7 @@ export const UsbStripObject = memo(function UsbStripObject({
   onChange,
 }: UsbStripObjectProps) {
   const { t } = useTranslation();
+  const ledCountId = useId();
 
   // The strip as drawn while a drag is under way; it is the placement at rest.
   const [local, setLocal] = useState(placement);
@@ -234,7 +235,8 @@ export const UsbStripObject = memo(function UsbStripObject({
             onLostPointerCapture={cancelDrag}
             onClick={(e) => {
               e.stopPropagation();
-              onSelect(placement.stripId);
+              // A pointer's press already picked it; picking again would undo a ⇧-pick.
+              if (e.detail === 0) onSelect(placement.stripId);
             }}
             onDoubleClick={canBend ? (e) => handleLineDoubleClick(e, leg) : undefined}
           />
@@ -397,10 +399,11 @@ export const UsbStripObject = memo(function UsbStripObject({
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <label className="text-[10px] text-zinc-400 whitespace-nowrap">
+          <label htmlFor={ledCountId} className="text-[10px] text-zinc-400 whitespace-nowrap">
             {t("roomMap:usbStrip.ledCount")}
           </label>
           <input
+            id={ledCountId}
             type="number"
             min={1}
             max={1000}

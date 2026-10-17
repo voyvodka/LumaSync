@@ -2,7 +2,7 @@
 // (RoomMapEditor shows a placeholder while the map loads), so the observer must
 // attach when the element appears — yet the fit stays one-shot and first-render.
 import { useState } from "react";
-import { render, act } from "@testing-library/react";
+import { render, renderHook, act } from "@testing-library/react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { Mock } from "vitest";
 import type { RoomDimensions } from "@/shared/contracts/roomMap";
@@ -296,5 +296,19 @@ describe("useRoomMapViewport — arrow-key panning", () => {
     expect(consumed).toBe(false);
     expect(e.preventDefault).not.toHaveBeenCalled();
     expect(viewport.panOffset).toEqual(start);
+  });
+});
+
+describe("useRoomMapViewport — space held", () => {
+  it("lets go of pan mode when the window loses focus mid-press", () => {
+    const { result } = renderHook(() => useRoomMapViewport({ widthMeters: 4, depthMeters: 4, heightMeters: 2.6 }));
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: " " }));
+    });
+    expect(result.current.spaceHeld).toBe(true);
+    act(() => {
+      window.dispatchEvent(new Event("blur"));
+    });
+    expect(result.current.spaceHeld).toBe(false);
   });
 });

@@ -43,7 +43,8 @@ export interface UseRoomMapHueZonesReturn {
   handleRenameHueZone: (zoneId: string, name: string) => void;
   /** Without `dropped`, the stored light lands at the zone's middle. */
   handleAssignChannelToZone: (channelIndex: number, targetZoneId: string | null, dropped?: DroppedLight) => void;
-  handleHueZoneCenterChange: (zoneId: string, centerX: number, centerY: number) => void;
+  /** `held`: a key's run of steps, one undo step and one save. */
+  handleHueZoneCenterChange: (zoneId: string, centerX: number, centerY: number, held?: boolean) => void;
   handleHueZoneUpdate: (zoneId: string, patch: Partial<HueZone>) => void;
   /** One undo step per release: unlike a field's stream, two resizes a beat apart must not merge. */
   handleHueZoneResize: (zoneId: string, footprint: Pick<HueZone, "centerX" | "centerY" | "scaleX" | "scaleY">) => void;
@@ -239,7 +240,7 @@ export function useRoomMapHueZones({
     : null;
 
   const handleHueZoneCenterChange = useCallback(
-    (zoneId: string, centerX: number, centerY: number) => {
+    (zoneId: string, centerX: number, centerY: number, held = false) => {
       let updated: HueZone | undefined;
       const next = config.zones.map((z) => {
         if (z.id === zoneId) {
@@ -248,7 +249,7 @@ export function useRoomMapHueZones({
         }
         return z;
       });
-      apply({ zones: next });
+      apply({ zones: next }, held ? { gesture: `hue-zone:${zoneId}:centerX,centerY` } : undefined);
       if (updated) {
         settle(
           "update_hue_zone (center)",

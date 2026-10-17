@@ -337,7 +337,8 @@ describe("RoomMapEditor — several pieces at once", () => {
   it("carries the TV and a strip in the selection along with the piece dragged", async () => {
     const TV = { x: 1, y: 0.1, width: 1.2, height: 0.1 };
     const STRIP = { stripId: "s1", startX: 1, startY: 0.2, endX: 2, endY: 0.2, ledCount: 60 };
-    stored({ furniture: [SOFA], tvAnchor: TV, usbStrips: [STRIP] });
+    const FAR = { stripId: "s2", startX: 0, startY: 3, endX: 1, endY: 3, ledCount: 60 };
+    stored({ furniture: [SOFA], tvAnchor: TV, usbStrips: [STRIP, FAR] });
     await renderEditor();
     const tv = document.querySelector('[data-object-id="tv"]') as HTMLElement;
     fireEvent.pointerDown(piece("sofa"), { clientX: 100, clientY: 100, pointerId: 1 });
@@ -358,8 +359,52 @@ describe("RoomMapEditor — several pieces at once", () => {
     const moved = last.furniture[0]!.x - SOFA.x;
     expect(moved).toBeGreaterThan(0);
     expect(last.tvAnchor!.x - TV.x).toBeCloseTo(moved);
-    // The strip was not in the selection: it stays.
-    expect(last.usbStrips[0]!.startX).toBe(STRIP.startX);
+    // The screen's backlight goes with it, as on a drag of the TV alone; a strip elsewhere stays.
+    expect(last.usbStrips[0]!.startX - STRIP.startX).toBeCloseTo(moved);
+    expect(last.usbStrips[1]!.startX).toBe(FAR.startX);
+  });
+
+  it("adds a Hue light and a strip to the selection on a ⇧-click, and drags them along", async () => {
+    const STRIP = { stripId: "s1", startX: 3, startY: 3, endX: 4, endY: 3, ledCount: 60 };
+    stored(
+      { furniture: [SOFA], usbStrips: [STRIP], hueChannels: [{ channelIndex: 0, x: 0.5, y: 0, z: 0, entertainmentAreaId: "area-b", label: "Lamp B" }] },
+      { lastHueAreaId: "area-b" },
+    );
+    await renderEditor();
+    await flush();
+    fireEvent.pointerDown(piece("sofa"), { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerUp(piece("sofa"), { clientX: 100, clientY: 100, pointerId: 1 });
+    const dot = screen.getByRole("button", { name: "Lamp B" });
+    const strip = document.querySelector('[data-object-id="usb-s1"] line') as Element;
+    fireEvent.keyDown(window, { key: "Shift", shiftKey: true });
+    for (const [target, pointerId] of [[dot, 2], [strip, 3]] as const) {
+      fireEvent.pointerDown(target, { clientX: 200, clientY: 200, pointerId, shiftKey: true });
+      fireEvent.pointerUp(target, { clientX: 200, clientY: 200, pointerId, shiftKey: true });
+      fireEvent.click(target, { detail: 1, shiftKey: true });
+    }
+    fireEvent.keyUp(window, { key: "Shift", shiftKey: false });
+    await flush();
+
+    fireEvent.pointerDown(piece("sofa"), { clientX: 100, clientY: 100, pointerId: 4 });
+    fireEvent.pointerMove(piece("sofa"), { clientX: 180, clientY: 100, pointerId: 4, altKey: true });
+    fireEvent.pointerUp(piece("sofa"), { clientX: 180, clientY: 100, pointerId: 4, altKey: true });
+    await flush();
+    const saves = roomMapSaves();
+    const last = saves[saves.length - 1]!;
+    expect(last.furniture[0]!.x).toBeGreaterThan(SOFA.x);
+    expect(last.hueChannels[0]!.x).toBeGreaterThan(0.5);
+    expect(last.usbStrips[0]!.startX).toBeGreaterThan(STRIP.startX);
+  });
+
+  it("opens no menu for the selection on a right-click on empty ground", async () => {
+    stored({ furniture: [SOFA] });
+    await renderEditor();
+    fireEvent.pointerDown(piece("sofa"), { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerUp(piece("sofa"), { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.contextMenu(screen.getByTestId("room-map-object-layer"));
+    expect(screen.queryByRole("menu")).toBeNull();
+    fireEvent.contextMenu(piece("sofa"));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
   });
 
   it("deletes the whole selection with Delete", async () => {

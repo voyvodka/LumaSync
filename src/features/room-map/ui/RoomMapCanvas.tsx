@@ -437,6 +437,8 @@ export function RoomMapCanvas({
 
   const handleCanvasPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      // A cancelled press has no click to take the flag back.
+      swallowClick.current = false;
       const onFloor = e.target === e.currentTarget || e.target === objectLayerRef.current;
       if (!panMode && e.button === 0 && onFloor && onMarquee) {
         const rect = canvasRef.current?.getBoundingClientRect();
@@ -515,6 +517,15 @@ export function RoomMapCanvas({
       onPanChange?.({ x: pan.x, y: pan.y });
     }
   }, [onPanChange, marquee, onMarquee, pxPerMeter, zoom, panOffset]);
+
+  const handleCanvasPointerCancel = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!marqueeRef.current) return handleCanvasPointerUp(e);
+      marqueeRef.current = null;
+      setMarquee(null);
+    },
+    [handleCanvasPointerUp],
+  );
 
   const handleBackgroundClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -631,7 +642,7 @@ export function RoomMapCanvas({
       onPointerDown={handleCanvasPointerDown}
       onPointerMove={handleCanvasPointerMove}
       onPointerUp={handleCanvasPointerUp}
-      onPointerCancel={handleCanvasPointerUp}
+      onPointerCancel={handleCanvasPointerCancel}
     >
       {/* Object layer with zoom/pan transform (z-index 10+) */}
       <div

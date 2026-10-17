@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef } from "react";
+import { memo, useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 import { findHueChannel } from "@/shared/contracts/roomMap";
@@ -42,7 +42,8 @@ interface HueChannelOverlayProps {
    */
   activeHueZone?: HueZone | null;
   /** Called when the user drags the zone center marker. */
-  onHueZoneCenterChange?: (zoneId: string, centerX: number, centerY: number) => void;
+  /** `held` for a key's run of steps, which is one undo step. */
+  onHueZoneCenterChange?: (zoneId: string, centerX: number, centerY: number, held?: boolean) => void;
   /** The lights' colour and level while they are on, as the room view draws them; absent while off. */
   glow?: { colour: string; level: number } | null;
   /** Lines a dragged light up with the room's pieces and its other lights; ⌥ drags it free. */
@@ -250,6 +251,11 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
 
   const activeHueZoneRef = useRef(activeHueZone);
   activeHueZoneRef.current = activeHueZone;
+
+  // An undo or a refusal can take the zone away mid-drag; its window listener must not outlive it.
+  const zoneDragLive = useRef<(() => void) | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the zone's id is the trigger.
+  useEffect(() => () => zoneDragLive.current?.(), [activeHueZone?.id]);
 
   // The full list, not just the active zone — the drag handler must resolve
   // `ch.zoneId` for passive zones too. See docs/architecture/room-map.md.
@@ -586,7 +592,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
                 Math.abs(activeHueZone.scaleY),
               );
               if (next.x !== activeHueZone.centerX || next.y !== activeHueZone.centerY) {
-                onHueZoneCenterChange(activeHueZone.id, next.x, next.y);
+                onHueZoneCenterChange(activeHueZone.id, next.x, next.y, true);
               }
             }}
             onPointerDown={(e) => {
@@ -684,6 +690,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
                 target.removeEventListener("pointerup", upHandler);
                 target.removeEventListener("pointercancel", cancelHandler);
                 window.removeEventListener("keydown", escHandler, true);
+                zoneDragLive.current = null;
               };
               // Esc or a pointer the system took: the zone and its lights go back, nothing is written.
               const restore = () => {
@@ -722,6 +729,10 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
               target.addEventListener("pointerup", upHandler);
               target.addEventListener("pointercancel", cancelHandler);
               window.addEventListener("keydown", escHandler, true);
+              zoneDragLive.current = () => {
+                stop(e.pointerId);
+                restore();
+              };
             }}
           />
         </>
@@ -835,7 +846,8 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
               onLostPointerCapture={cancelDrag}
               onClick={(e) => {
                 e.stopPropagation();
-                onSelect(ch.channelIndex);
+                // A pointer's press already picked it; picking again would undo a ⇧-pick.
+                if (e.detail === 0) onSelect(ch.channelIndex);
               }}
               onKeyDown={(e) => {
                 if (dimmedByHueZone) return;
