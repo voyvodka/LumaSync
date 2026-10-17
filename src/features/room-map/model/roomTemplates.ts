@@ -123,7 +123,6 @@ function showroom(t: TFunction): RoomMapConfig {
   });
 }
 
-/** A template's piece, named by its model, or its type where it has none. */
 function piece(
   t: TFunction,
   id: string,
@@ -157,8 +156,8 @@ function rooms(t: TFunction) {
   };
 }
 
-// Pieces stand at their real sizes, a sofa about 3 m from a 55" screen; rugs come first so the plan
-// draws them under what stands on them, and a piece backed onto the TV wall is turned to face the room.
+// Rugs come first so the plan draws them under what stands on them; a piece backed onto the TV wall is
+// turned to face the room.
 function livingRoom(t: TFunction): RoomMapConfig {
   const r = rooms(t);
   return makeTemplate({

@@ -4,7 +4,6 @@ import { type RoomMapConfig, resolveScreenAspect, screenHeightPerWidth } from "@
 
 import { screenDiagonal } from "./screenSize";
 
-/** A template card's second line: the room's floor, and its screen's size where it has one. */
 export function templateFacts(config: RoomMapConfig, t: TFunction, language: string | undefined): string {
   const metres = new Intl.NumberFormat(language, { maximumFractionDigits: 1 });
   const w = metres.format(config.dimensions.widthMeters);

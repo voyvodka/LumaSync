@@ -11,7 +11,6 @@ import { resolveHueChannelWorld, resolveHueChannelWorldZ } from "./hueChannelPos
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** A stored name kept as typed, or absent when it is not one: blank, too long trimmed to the limit. */
 export function roomName(raw: unknown): string | undefined {
   if (typeof raw !== "string") return undefined;
   const trimmed = raw.trim().slice(0, ROOM_NAME_MAX);

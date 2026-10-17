@@ -38,7 +38,6 @@ export interface RoomPickerProps {
   triggerRef?: React.RefObject<HTMLButtonElement | null>;
 }
 
-/** The room the lights follow, and the others: switched, renamed, deleted or added from here. */
 export function RoomPicker({ rooms, activeId, busy, failed, announce, onSwitch, onRename, onDelete, onCopy, onFromTemplate, triggerRef }: RoomPickerProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);

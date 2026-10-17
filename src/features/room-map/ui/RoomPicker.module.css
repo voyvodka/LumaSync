@@ -1,5 +1,4 @@
 @layer components {
-  /* FaceSwitch's capsule: the room's name at rest, the list on a press. */
   .trigger {
     display: inline-flex;
     align-items: center;
