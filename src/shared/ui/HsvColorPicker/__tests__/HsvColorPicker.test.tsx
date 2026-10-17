@@ -133,6 +133,21 @@ describe("HsvColorPicker drag throttle", () => {
     expect(lastHex).toMatch(/^#[0-9a-fA-F]{6}$/);
   });
 
+  it("a tap on the hue ring picks that hue and remembers it", () => {
+    // The ring only read the angle on pointermove, so a tap committed nothing and pointer-up
+    // pushed the unchanged colour into the recent strip.
+    const onChange = vi.fn();
+    const { container } = render(<HsvColorPicker value="#0000ff" onChange={onChange} hideHex />);
+    const hueGroup = container.querySelectorAll("svg > g")[0] as SVGGElement;
+
+    // The ring's right-hand edge, 3 o'clock: hue 0.
+    fireEvent(hueGroup, pointerEvent("pointerdown", 185, 100));
+    fireEvent(hueGroup, pointerEvent("pointerup", 185, 100));
+
+    expect(onChange).toHaveBeenCalledWith("#ff0000");
+    expect(JSON.parse(window.localStorage.getItem("lm-recent-colors") ?? "[]")[0]).toBe("#ff0000");
+  });
+
   it("fires onChange immediately on keyboard arrow nudges (not throttled)", () => {
     const onChange = vi.fn();
     const { container } = render(

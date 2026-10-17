@@ -139,6 +139,15 @@ function svAtPointer(
   };
 }
 
+/** Hue under the pointer, in degrees. */
+function hueAtPointer(ring: SVGCircleElement | null, pointer: { clientX: number; clientY: number }): number {
+  const rect = (ring?.ownerSVGElement as SVGSVGElement).getBoundingClientRect();
+  const dx = pointer.clientX - (rect.left + rect.width / 2);
+  const dy = pointer.clientY - (rect.top + rect.height / 2);
+  // atan2 gives -180..180 with 0° at 3 o'clock, clockwise on screen — the wedges' frame.
+  return ((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 360;
+}
+
 // ---------------------------------------------------------------------------
 // Drag throttle
 // ---------------------------------------------------------------------------
@@ -320,20 +329,16 @@ export function HsvColorPicker({
       const target = e.currentTarget;
       target.setPointerCapture(e.pointerId);
       setDraggingHue(true);
+      // A tap on the ring picks its hue, as a tap on the square does.
+      commitImmediate({ ...hsv, h: hueAtPointer(ringRef.current, e) });
     },
-    [disabled],
+    [disabled, hsv, commitImmediate],
   );
 
   const handleHuePointerMove = useCallback(
     (e: React.PointerEvent<SVGElement>) => {
       if (!draggingHue || !ringRef.current) return;
-      const rect = (ringRef.current.ownerSVGElement as SVGSVGElement).getBoundingClientRect();
-      const dx = e.clientX - (rect.left + rect.width / 2);
-      const dy = e.clientY - (rect.top + rect.height / 2);
-      let deg = (Math.atan2(dy, dx) * 180) / Math.PI;
-      // atan2 gives -180..180 with 0° at 3 o'clock, clockwise on screen — the wedges' frame.
-      deg = (deg + 360) % 360;
-      commitDrag({ ...hsv, h: deg });
+      commitDrag({ ...hsv, h: hueAtPointer(ringRef.current, e) });
     },
     [draggingHue, hsv, commitDrag],
   );
