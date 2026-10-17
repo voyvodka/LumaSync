@@ -62,6 +62,19 @@ export async function applyModeMinSize(
   await win.setMinSize(new LogicalSize(min.width, min.height));
 }
 
+/**
+ * The remembered full size, unless it is smaller than any floor the app sets — a minimized
+ * window's frame, recorded before the persist skipped one. No user chose it, and growing it to
+ * the floor opened full at its smallest; the first-run size is the better guess.
+ */
+function rememberedFullSize(
+  size: { width: number; height: number } | null | undefined,
+): { width: number; height: number } | null {
+  if (!size) return null;
+  const floor = UI_MODE_MIN_SIZES.compact;
+  return size.width < floor.width || size.height < floor.height ? null : size;
+}
+
 function atLeast(
   size: { width: number; height: number },
   floor: { width: number; height: number },
@@ -195,7 +208,7 @@ export async function resizeToMode(
     ? atLeast(
         rescalingFull
           ? { width: fromWidth, height: fromHeight }
-          : currentState.lastFullSize ?? scaleSize(firstRunFullSize(workArea ? scaleSize(workArea, 1 / zoom) : null), zoom),
+          : rememberedFullSize(currentState.lastFullSize) ?? scaleSize(firstRunFullSize(workArea ? scaleSize(workArea, 1 / zoom) : null), zoom),
         scaleSize(UI_MODE_MIN_SIZES.full, zoom),
       )
     : scaleSize(UI_MODE_SIZES[mode], zoom);

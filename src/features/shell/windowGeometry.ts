@@ -300,7 +300,11 @@ export async function restoreWindowState(saved?: ShellState): Promise<void> {
   const win = getCurrentWindow();
   const state = saved ?? (await loadShellState());
 
-  if (state.windowCenterX !== null && state.windowCenterY !== null) {
+  if (
+    state.windowCenterX !== null &&
+    state.windowCenterY !== null &&
+    !isMinimizedCenter(state.windowCenterX, state.windowCenterY)
+  ) {
     const currentSize = await win.outerSize();
     const topLeft = rectTopLeftFromCenter(
       { x: state.windowCenterX, y: state.windowCenterY },
@@ -347,6 +351,15 @@ export async function restoreWindowState(saved?: ShellState): Promise<void> {
 }
 
 /**
+ * A centre recorded from a minimized Windows window, before the persist skipped one: the frame
+ * sits at (-32000, -32000), far past any real monitor arrangement. Clamping it put the window in
+ * the corner of whichever screen was nearest, so it is read as no saved place at all.
+ */
+function isMinimizedCenter(x: number, y: number): boolean {
+  return x <= -30_000 && y <= -30_000;
+}
+
+/**
  * Persist current window geometry to shell state store.
  *
  * Saves the window **center** (physical px) computed from `outerPosition` +
@@ -362,8 +375,12 @@ export async function persistWindowState(
 ): Promise<void> {
   const win = getCurrentWindow();
   // A zoomed window's frame is the screen's, not the user's: recording it opened the next launch
-  // at screen size as an ordinary window, with nothing to zoom back to.
-  if (await isZoomed(win)) return;
+  // at screen size as an ordinary window, with nothing to zoom back to. A minimized one on Windows
+  // reports a 160×28 frame at (-32000, -32000), and a launch after a shutdown that found it
+  // minimized opened in the screen's corner at the size floor.
+  // Unknown is treated as not zoomed: persisting as before beats never persisting.
+  const unknown = () => false;
+  if ((await win.isMaximized().catch(unknown)) || (await win.isMinimized().catch(unknown))) return;
   const { width, height } = await win.outerSize();
   const { x, y } = await win.outerPosition();
   const center = rectCenter({ x, y, width, height });
@@ -386,15 +403,6 @@ export async function persistWindowState(
   }
 
   await saveShellState(update);
-}
-
-async function isZoomed(win: ReturnType<typeof getCurrentWindow>): Promise<boolean> {
-  try {
-    return await win.isMaximized();
-  } catch {
-    // Unknown is treated as not zoomed: persisting as before beats never persisting.
-    return false;
-  }
 }
 
 /** Read the current main-window inner size in LOGICAL (DPI-independent) px. */

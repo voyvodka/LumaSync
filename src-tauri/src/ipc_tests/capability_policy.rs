@@ -49,6 +49,7 @@ const POLICY: &[(&str, [bool; 5])] = &[
     ("plugin:window|available_monitors", MAIN_ONLY),
     ("plugin:window|outer_size", MAIN_ONLY),
     ("plugin:window|is_maximized", MAIN_ONLY),
+    ("plugin:window|is_minimized", MAIN_ONLY),
     ("plugin:window|center", MAIN_ONLY),
     ("plugin:window|set_position", MAIN_ONLY),
     ("plugin:window|set_size", MAIN_ONLY),

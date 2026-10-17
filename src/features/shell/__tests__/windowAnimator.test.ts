@@ -468,3 +468,14 @@ describe("Interface size", () => {
     expect(lastSize()).toMatchObject({ width: 352, height: 528 });
   });
 });
+
+describe("a remembered full size", () => {
+  it("smaller than any floor is a minimized frame, and the first-run size replaces it", async () => {
+    setupPersistedState(makePersistedState({ uiMode: "compact", lastFullSize: { width: 144, height: 19 } }));
+
+    await resizeToMode("full", { animate: false });
+
+    const size = setSizeMock.mock.calls[0][0] as { width: number; height: number };
+    expect(size).toMatchObject(firstRunFullSize({ width: 1920, height: 1080 }));
+  });
+});
