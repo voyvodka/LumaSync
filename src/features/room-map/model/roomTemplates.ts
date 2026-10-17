@@ -121,68 +121,211 @@ function showroom(t: TFunction): RoomMapConfig {
   });
 }
 
+/** A template's piece, named by its model, or its type where it has none. */
+function piece(
+  t: TFunction,
+  id: string,
+  type: FurnitureType,
+  variant: FurnitureVariant | null,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  rotation = 0,
+): FurniturePlacement {
+  return { ...shown(t, type, variant, x, y, width, height, rotation), id };
+}
+
+type WallItem = { x: number; y: number; width: number };
+
+function rooms(t: TFunction) {
+  const label = (kind: RoomStructure["kind"]) => t(STRUCTURE_NAME_KEYS[kind]);
+  return {
+    window: (id: string, at: WallItem, sillMeters = 0.9, heightMeters = 1.3): RoomStructure => ({ id, kind: "window", label: label("window"), ...at, sillMeters, heightMeters }),
+    door: (id: string, at: WallItem, hinge: "left" | "right", swing: "in" | "out" = "in"): RoomStructure => ({ id, kind: "door", label: label("door"), ...at, heightMeters: 2.05, hinge, swing }),
+    light: (id: string, x: number, y: number, fixture: "ceiling" | "pendant" | "spot" | "bulb", kelvin?: number): RoomStructure => ({
+      id,
+      kind: "light",
+      label: label("light"),
+      x,
+      y,
+      fixture,
+      ...(kelvin !== undefined ? { kelvin } : {}),
+    }),
+  };
+}
+
+// Pieces stand at their real sizes, a sofa about 3 m from a 55" screen; rugs come first so the plan
+// draws them under what stands on them, and a piece backed onto the TV wall is turned to face the room.
+function livingRoom(t: TFunction): RoomMapConfig {
+  const r = rooms(t);
+  return makeTemplate({
+    dimensions: { widthMeters: 4.4, depthMeters: 3.8, heightMeters: 2.6 },
+    tvAnchor: { x: 1.59, y: 0.06, width: 1.22, height: 0.08, mountHeightMeters: 1.0, screenKind: "tv", backlightStripId: "usb-tv" },
+    usbStrips: [{ stripId: "usb-tv", startX: 1.64, startY: 0.05, endX: 2.76, endY: 0.05, ledCount: 60 }],
+    furniture: [
+      piece(t, "rug-1", "rug", "rectangle", 1.2, 1.45, 2.0, 1.4),
+      piece(t, "tv-unit", "storage", "tvUnit", 1.2, 0, 2.0, 0.42, 180),
+      piece(t, "coffee-table", "table", "coffee", 1.7, 1.8, 1.0, 0.5),
+      piece(t, "sofa-1", "sofa", "straight", 1.1, 2.8, 2.2, 0.9),
+      piece(t, "side-table", "table", "side", 0.5, 3.1, 0.45, 0.45),
+      piece(t, "plant-1", "plant", "leafy", 3.75, 0.1, 0.55, 0.55),
+    ],
+    structures: [
+      r.window("window-left", { x: 0, y: 1.6, width: 1.4 }),
+      r.door("door-back", { x: 3.85, y: 3.8, width: 0.85 }, "right"),
+      r.light("light-ceiling", 2.2, 1.9, "ceiling"),
+    ],
+  });
+}
+
+function deskSetup(t: TFunction): RoomMapConfig {
+  const r = rooms(t);
+  return makeTemplate({
+    dimensions: { widthMeters: 3.2, depthMeters: 3.0, heightMeters: 2.5 },
+    tvAnchor: { x: 0.95, y: 0.12, width: 0.71, height: 0.05, mountHeightMeters: 1.05, screenKind: "monitor", backlightStripId: "usb-desk" },
+    usbStrips: [{ stripId: "usb-desk", startX: 1.0, startY: 0.1, endX: 1.61, endY: 0.1, ledCount: 30 }],
+    furniture: [
+      piece(t, "desk-side", "table", "desk", 0, 0, 0.6, 1.3),
+      piece(t, "desk-main", "table", "desk", 0.6, 0, 1.4, 0.7),
+      piece(t, "chair-1", "chair", "office", 1.0, 0.85, 0.6, 0.6),
+      piece(t, "bookshelf", "storage", "bookshelf", 2.05, 2.68, 1.0, 0.32),
+      piece(t, "armchair", "chair", "armchair", 0.25, 2.0, 0.85, 0.85),
+      piece(t, "plant-1", "plant", "topiary", 2.55, 0.1, 0.5, 0.5),
+    ],
+    structures: [
+      r.window("window-right", { x: 3.2, y: 1.0, width: 1.2 }),
+      r.door("door-back", { x: 1.45, y: 3.0, width: 0.85 }, "left"),
+      r.light("light-ceiling", 1.6, 1.5, "ceiling"),
+    ],
+  });
+}
+
+function fullRoom(t: TFunction): RoomMapConfig {
+  const r = rooms(t);
+  return makeTemplate({
+    dimensions: { widthMeters: 5.5, depthMeters: 4.6, heightMeters: 2.7 },
+    tvAnchor: { x: 2.03, y: 0.07, width: 1.44, height: 0.08, mountHeightMeters: 1.05, screenKind: "tv", backlightStripId: "usb-tv" },
+    usbStrips: [{ stripId: "usb-tv", startX: 2.08, startY: 0.06, endX: 3.42, endY: 0.06, ledCount: 90 }],
+    furniture: [
+      piece(t, "rug-1", "rug", "rectangle", 1.45, 1.4, 2.6, 2.0),
+      piece(t, "tv-unit", "storage", "tvUnit", 1.65, 0, 2.2, 0.45, 180),
+      piece(t, "bookshelf", "storage", "bookshelf", 0.2, 0, 1.0, 0.32, 180),
+      piece(t, "coffee-table", "table", "coffee", 2.2, 1.95, 1.1, 0.6),
+      piece(t, "sofa-1", "sofa", "cornerLeft", 1.4, 2.9, 2.6, 1.6),
+      piece(t, "armchair", "chair", "armchair", 0.35, 1.6, 0.85, 0.85),
+      piece(t, "side-table", "table", "side", 4.15, 3.95, 0.5, 0.5),
+      piece(t, "plant-1", "plant", "topiary", 4.85, 0.15, 0.5, 0.5),
+      piece(t, "plant-2", "plant", "palm", 4.7, 1.3, 0.7, 0.7),
+    ],
+    structures: [
+      r.window("window-left", { x: 0, y: 3.2, width: 1.6 }),
+      r.window("window-right", { x: 5.5, y: 2.8, width: 1.4 }),
+      r.door("door-back", { x: 0.75, y: 4.6, width: 0.9 }, "left"),
+      r.light("light-ceiling", 2.75, 2.3, "ceiling"),
+      r.light("light-reading", 0.8, 2.05, "pendant", 2400),
+    ],
+  });
+}
+
+function gamingCorner(t: TFunction): RoomMapConfig {
+  const r = rooms(t);
+  return makeTemplate({
+    dimensions: { widthMeters: 3.6, depthMeters: 3.2, heightMeters: 2.5 },
+    // A 34" ultrawide.
+    tvAnchor: { x: 1.4, y: 0.14, width: 0.79, height: 0.06, mountHeightMeters: 1.1, screenKind: "monitor", screenAspect: "21:9", backlightStripId: "usb-desk" },
+    usbStrips: [{ stripId: "usb-desk", startX: 1.44, startY: 0.12, endX: 2.15, endY: 0.12, ledCount: 45 }],
+    furniture: [
+      piece(t, "rug-1", "rug", "round", 1.2, 0.55, 1.4, 1.4),
+      piece(t, "desk-main", "table", "desk", 1.0, 0, 1.6, 0.75),
+      piece(t, "chair-1", "chair", "office", 1.5, 0.9, 0.65, 0.65),
+      piece(t, "bookshelf", "storage", "bookshelf", 0.1, 0, 0.8, 0.32, 180),
+      piece(t, "beanbag", "chair", "beanbag", 2.45, 2.0, 0.9, 0.9),
+      piece(t, "plant-1", "plant", "palm", 3.0, 0.1, 0.5, 0.5),
+    ],
+    structures: [
+      r.window("window-right", { x: 3.6, y: 1.2, width: 1.1 }),
+      r.door("door-back", { x: 0.65, y: 3.2, width: 0.85 }, "left"),
+      r.light("light-spot-1", 1.4, 1.2, "spot", 4000),
+      r.light("light-spot-2", 2.2, 1.2, "spot", 4000),
+    ],
+  });
+}
+
+function bedroom(t: TFunction): RoomMapConfig {
+  const r = rooms(t);
+  return makeTemplate({
+    dimensions: { widthMeters: 4.0, depthMeters: 3.9, heightMeters: 2.6 },
+    // A 50" screen on the wall, over a dresser.
+    tvAnchor: { x: 1.45, y: 0.05, width: 1.11, height: 0.06, mountHeightMeters: 1.3, screenKind: "tv", backlightStripId: "usb-tv" },
+    usbStrips: [{ stripId: "usb-tv", startX: 1.5, startY: 0.04, endX: 2.51, endY: 0.04, ledCount: 60 }],
+    furniture: [
+      piece(t, "rug-1", "rug", "rectangle", 0.9, 1.25, 2.2, 1.3),
+      piece(t, "dresser", "storage", "dresser", 1.4, 0, 1.2, 0.5, 180),
+      piece(t, "wardrobe", "storage", "wardrobe", 2.85, 0, 1.15, 0.6, 180),
+      piece(t, "bed-1", "bed", null, 1.2, 1.85, 1.6, 2.05),
+      piece(t, "nightstand-left", "storage", "nightstand", 0.7, 3.5, 0.45, 0.4),
+      piece(t, "nightstand-right", "storage", "nightstand", 2.85, 3.5, 0.45, 0.4),
+      piece(t, "plant-1", "plant", "leafy", 0.1, 0.1, 0.55, 0.55),
+    ],
+    structures: [
+      r.window("window-left", { x: 0, y: 2.0, width: 1.3 }),
+      r.door("door-right", { x: 4.0, y: 1.2, width: 0.85 }, "left"),
+      r.light("light-ceiling", 2.0, 1.6, "ceiling"),
+      r.light("light-bed-left", 0.92, 3.55, "pendant", 2200),
+      r.light("light-bed-right", 3.07, 3.55, "pendant", 2200),
+    ],
+  });
+}
+
+function studio(t: TFunction): RoomMapConfig {
+  const r = rooms(t);
+  return makeTemplate({
+    dimensions: { widthMeters: 6.0, depthMeters: 5.0, heightMeters: 2.7 },
+    // An L: the living space and the bed along the TV wall, the kitchen down its left leg.
+    footprint: [
+      { x: 0, y: 0 },
+      { x: 6, y: 0 },
+      { x: 6, y: 3 },
+      { x: 3.6, y: 3 },
+      { x: 3.6, y: 5 },
+      { x: 0, y: 5 },
+    ],
+    tvAnchor: { x: 1.69, y: 0.06, width: 1.22, height: 0.08, mountHeightMeters: 1.0, screenKind: "tv", backlightStripId: "usb-tv" },
+    usbStrips: [{ stripId: "usb-tv", startX: 1.74, startY: 0.05, endX: 2.86, endY: 0.05, ledCount: 60 }],
+    furniture: [
+      piece(t, "rug-1", "rug", "rectangle", 1.2, 0.9, 2.2, 1.4),
+      piece(t, "tv-unit", "storage", "tvUnit", 1.3, 0, 2.0, 0.42, 180),
+      piece(t, "coffee-table", "table", "coffee", 1.8, 1.25, 1.0, 0.5),
+      piece(t, "sofa-1", "sofa", "straight", 1.2, 2.0, 2.2, 0.9),
+      piece(t, "bed-1", "bed", null, 4.45, 0.9, 1.4, 2.0),
+      piece(t, "nightstand", "storage", "nightstand", 3.95, 2.5, 0.45, 0.4),
+      piece(t, "dining-table", "table", "dining", 0.4, 3.2, 1.2, 0.8),
+      piece(t, "chair-1", "chair", "dining", 0.5, 4.0, 0.45, 0.45),
+      piece(t, "chair-2", "chair", "dining", 1.05, 4.0, 0.45, 0.45),
+      piece(t, "counter", "kitchen", "counter", 1.7, 4.38, 1.2, 0.62),
+      piece(t, "fridge", "kitchen", "fridge", 2.9, 4.32, 0.68, 0.68),
+      piece(t, "plant-1", "plant", "palm", 0.15, 0.15, 0.6, 0.6),
+    ],
+    structures: [
+      r.window("window-left", { x: 0, y: 1.4, width: 1.4 }),
+      r.window("window-tv", { x: 5.15, y: 0, width: 1.2 }),
+      r.door("door-inner", { x: 4.8, y: 3, width: 0.9 }, "right"),
+      r.light("light-living", 2.3, 1.5, "ceiling"),
+      r.light("light-dining", 1.0, 3.6, "pendant"),
+      r.light("light-kitchen-1", 2.0, 4.6, "spot", 3000),
+      r.light("light-kitchen-2", 2.9, 4.6, "spot", 3000),
+    ],
+  });
+}
+
 export const ROOM_TEMPLATES: RoomTemplate[] = [
-  {
-    id: "tv55",
-    nameKey: "roomMap:templates.tv55.name",
-    descKey: "roomMap:templates.tv55.desc",
-    config: (t) => makeTemplate({
-      tvAnchor: { x: 1.75, y: 0.2, width: 1.2, height: 0.08 },
-      usbStrips: [
-        { stripId: "usb-tv", startX: 1.85, startY: 0.15, endX: 2.85, endY: 0.15, ledCount: 60 },
-      ],
-      furniture: [
-        { id: "sofa-1", type: "sofa", x: 1.5, y: 2.8, width: 2.0, height: 0.8, label: t("roomMap:furniture.templateLabel.sofa") },
-      ],
-    }),
-  },
-  {
-    id: "ldesk",
-    nameKey: "roomMap:templates.ldesk.name",
-    descKey: "roomMap:templates.ldesk.desc",
-    config: (t) => makeTemplate({
-      dimensions: { widthMeters: 3, depthMeters: 3, heightMeters: 2.5 },
-      tvAnchor: { x: 0.6, y: 0.1, width: 0.7, height: 0.05 },
-      usbStrips: [
-        { stripId: "usb-desk", startX: 0.65, startY: 0.08, endX: 1.25, endY: 0.08, ledCount: 30 },
-      ],
-      furniture: [
-        { id: "desk-main", type: "table", x: 0.3, y: 0.0, width: 1.4, height: 0.7, label: t("roomMap:furniture.templateLabel.desk") },
-        { id: "desk-side", type: "table", x: 0.0, y: 0.0, width: 0.3, height: 1.2, label: t("roomMap:furniture.templateLabel.side") },
-        { id: "chair-1", type: "chair", x: 0.7, y: 0.9, width: 0.5, height: 0.5, label: t("roomMap:furniture.templateLabel.chair") },
-      ],
-    }),
-  },
-  {
-    id: "fullroom",
-    nameKey: "roomMap:templates.fullroom.name",
-    descKey: "roomMap:templates.fullroom.desc",
-    config: (t) => makeTemplate({
-      dimensions: { widthMeters: 5, depthMeters: 4, heightMeters: 2.5 },
-      tvAnchor: { x: 1.75, y: 0.2, width: 1.5, height: 0.08 },
-      usbStrips: [
-        { stripId: "usb-tv", startX: 1.85, startY: 0.15, endX: 3.15, endY: 0.15, ledCount: 90 },
-      ],
-      // The rug first, so the plan draws it under the pieces standing on it.
-      furniture: [
-        { id: "rug-1", type: "rug", x: 1.3, y: 1.3, width: 2.4, height: 1.9, label: t("roomMap:furniture.type.rug") },
-        { id: "sofa-1", type: "sofa", x: 1.5, y: 2.5, width: 2.0, height: 0.9, label: t("roomMap:furniture.templateLabel.sofa") },
-        { id: "table-1", type: "table", x: 2.0, y: 1.6, width: 1.0, height: 0.6, label: t("roomMap:furniture.templateLabel.coffeeTable") },
-        { id: "chair-1", type: "chair", x: 0.3, y: 2.5, width: 0.7, height: 0.7, label: t("roomMap:furniture.templateLabel.armchair") },
-        { id: "plant-1", type: "plant", x: 4.3, y: 0.25, width: 0.5, height: 0.5, label: t("roomMap:furniture.type.plant") },
-      ],
-    }),
-  },
-  {
-    id: "showroom",
-    nameKey: "roomMap:templates.showroom.name",
-    descKey: "roomMap:templates.showroom.desc",
-    config: showroom,
-  },
-  {
-    id: "empty",
-    nameKey: "roomMap:templates.empty.name",
-    descKey: "roomMap:templates.empty.desc",
-    config: () => DEFAULT_ROOM_MAP,
-  },
+  { id: "tv55", nameKey: "roomMap:templates.tv55.name", descKey: "roomMap:templates.tv55.desc", config: livingRoom },
+  { id: "ldesk", nameKey: "roomMap:templates.ldesk.name", descKey: "roomMap:templates.ldesk.desc", config: deskSetup },
+  { id: "fullroom", nameKey: "roomMap:templates.fullroom.name", descKey: "roomMap:templates.fullroom.desc", config: fullRoom },
+  { id: "gaming", nameKey: "roomMap:templates.gaming.name", descKey: "roomMap:templates.gaming.desc", config: gamingCorner },
+  { id: "bedroom", nameKey: "roomMap:templates.bedroom.name", descKey: "roomMap:templates.bedroom.desc", config: bedroom },
+  { id: "studio", nameKey: "roomMap:templates.studio.name", descKey: "roomMap:templates.studio.desc", config: studio },
+  { id: "showroom", nameKey: "roomMap:templates.showroom.name", descKey: "roomMap:templates.showroom.desc", config: showroom },
+  { id: "empty", nameKey: "roomMap:templates.empty.name", descKey: "roomMap:templates.empty.desc", config: () => DEFAULT_ROOM_MAP },
 ];

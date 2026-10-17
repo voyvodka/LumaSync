@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { FURNITURE_CATALOGUE, type FurnitureType, type RoomMapConfig } from "@/shared/contracts/roomMap";
 
+import { ROOM_TEMPLATES } from "../../model/roomTemplates";
 import { TemplateSelector } from "../TemplateSelector";
 
 vi.mock("react-i18next", () => ({
@@ -15,13 +16,13 @@ describe("TemplateSelector", () => {
     render(<TemplateSelector onSelect={onSelect} />);
 
     const cards = screen.getAllByRole("button");
-    expect(cards).toHaveLength(5);
+    expect(cards).toHaveLength(ROOM_TEMPLATES.length);
     for (const card of cards) expect(card.querySelector("svg")).not.toBeNull();
     expect(screen.queryByText(/📺|🖥|🏠|✏️/u)).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "roomMap:templates.fullroom.name" }));
     const picked = onSelect.mock.calls[0]?.[0];
-    expect(picked?.furniture.map((f) => f.type)).toEqual(["rug", "sofa", "table", "chair", "plant"]);
+    expect(picked?.furniture.map((f) => f.type)).toEqual(["rug", "storage", "storage", "table", "sofa", "chair", "table", "plant", "plant"]);
     expect(picked?.tvAnchor).toBeDefined();
   });
 

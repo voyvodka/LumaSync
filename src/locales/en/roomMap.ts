@@ -196,14 +196,6 @@ export default {
       white: "White",
       black: "Black",
     },
-    templateLabel: {
-      sofa: "Sofa",
-      desk: "Desk",
-      side: "Side",
-      chair: "Chair",
-      coffeeTable: "Coffee table",
-      armchair: "Armchair",
-    },
   },
   structure: {
     kind: {
@@ -468,20 +460,34 @@ export default {
     },
   },
   templates: {
+    facts: "{{w}} × {{d}} m",
+    factsScreen: "{{w}} × {{d}} m · {{inch}}″",
     applied: "{{name}} laid out. Undo brings your room back.",
     title: "Choose a template",
     subtitle: "Optional: put your TV and lights where they really are, so Hue lights follow the picture. Start from a layout or a blank room.",
     tv55: {
       name: "TV setup (55\")",
-      desc: "TV, LED strip, and sofa in a living room",
+      desc: "A living room: TV on its unit, sofa, coffee table and rug",
     },
     ldesk: {
       name: "L-desk setup",
-      desc: "Monitor on an L-shaped desk with side extension",
+      desc: "A study: monitor on an L-shaped desk, a bookshelf and an armchair",
     },
     fullroom: {
       name: "Full room",
-      desc: "TV, sofa, coffee table, and armchair",
+      desc: "A large living room: 65\" TV, corner sofa, armchair and two windows",
+    },
+    gaming: {
+      name: "Gaming corner",
+      desc: "Ultrawide monitor on a desk, a gaming chair and a beanbag",
+    },
+    bedroom: {
+      name: "Bedroom",
+      desc: "Bed facing a wall-mounted TV, nightstands and a wardrobe",
+    },
+    studio: {
+      name: "Studio flat",
+      desc: "An L-shaped flat: living space, bed, dining table and kitchen",
     },
     showroom: {
       name: "Showroom",

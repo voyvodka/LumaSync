@@ -60,12 +60,12 @@ describe("TemplatesPopover", () => {
     fireEvent.keyDown(card("tv55"), { key: "ArrowRight" });
     expect(card("ldesk")).toHaveFocus();
     wait(PREVIEW_INTENT_MS);
-    expect(onPreview).toHaveBeenLastCalledWith(expect.objectContaining({ dimensions: expect.objectContaining({ widthMeters: 3 }) }));
+    expect(onPreview).toHaveBeenLastCalledWith(expect.objectContaining({ dimensions: expect.objectContaining({ widthMeters: 3.2 }) }));
     onPreview.mockClear();
     fireEvent.keyDown(card("ldesk"), { key: "ArrowRight" });
     fireEvent.click(card("fullroom"));
     wait(PREVIEW_INTENT_MS * 2);
-    expect(onApply).toHaveBeenCalledWith(expect.objectContaining({ dimensions: expect.objectContaining({ widthMeters: 5 }) }), "roomMap:templates.fullroom.name");
+    expect(onApply).toHaveBeenCalledWith(expect.objectContaining({ dimensions: expect.objectContaining({ widthMeters: 5.5 }) }), "roomMap:templates.fullroom.name");
     expect(onPreview).not.toHaveBeenCalled();
   });
 

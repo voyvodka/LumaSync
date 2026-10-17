@@ -62,6 +62,11 @@
     font-weight: 600;
     color: var(--lm-ink);
   }
+  .facts {
+    font-size: 10.5px;
+    color: var(--lm-ink-dim);
+    font-variant-numeric: tabular-nums;
+  }
   .desc {
     font-size: 10px;
     line-height: 1.35;

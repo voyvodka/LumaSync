@@ -272,7 +272,7 @@ describe("RoomDock", () => {
       fireEvent.click(await screen.findByRole("button", { name: "roomMap:settings.templates" }));
       await drawer();
       fireEvent.click(screen.getByTestId("template-fullroom"));
-      expect(spies.onApply).toHaveBeenCalledWith(expect.objectContaining({ dimensions: expect.objectContaining({ widthMeters: 5 }) }));
+      expect(spies.onApply).toHaveBeenCalledWith(expect.objectContaining({ dimensions: expect.objectContaining({ widthMeters: 5.5 }) }));
       expect(spies.onFocusEditor).toHaveBeenCalled();
       expect(screen.getByText('roomMap:templates.applied {"name":"roomMap:templates.fullroom.name"}')).toBeInTheDocument();
     });

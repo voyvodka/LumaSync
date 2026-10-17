@@ -5,6 +5,7 @@ import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { Popover } from "@/shared/ui/Popover/Popover";
 
 import { ROOM_TEMPLATES } from "../../model/roomTemplates";
+import { templateFacts } from "../../model/templateFacts";
 import { usePaletteKeys } from "../../state/usePaletteKeys";
 import { RoomPreview } from "../RoomPreview";
 import styles from "./TemplatesPopover.module.css";
@@ -22,8 +23,15 @@ export interface TemplatesPopoverProps {
 }
 
 export function TemplatesPopover({ open, onClose, anchorRef, id, onPreview, onApply }: TemplatesPopoverProps) {
-  const { t } = useTranslation();
-  const templates = useMemo(() => ROOM_TEMPLATES.map((template) => ({ ...template, built: template.config(t) })), [t]);
+  const { t, i18n } = useTranslation();
+  const language = i18n?.language;
+  const templates = useMemo(
+    () => ROOM_TEMPLATES.map((template) => {
+      const built = template.config(t);
+      return { ...template, built, facts: templateFacts(built, t, language) };
+    }),
+    [t, language],
+  );
   const { tileProps } = usePaletteKeys([templates.map((template) => template.id)]);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const intent = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -98,6 +106,7 @@ export function TemplatesPopover({ open, onClose, anchorRef, id, onPreview, onAp
                 <RoomPreview config={template.built} />
               </span>
               <span className={styles.name}>{t(template.nameKey)}</span>
+              <span className={styles.facts}>{template.facts}</span>
               <span id={`${id}-${template.id}`} hidden>
                 {t(template.descKey)}
               </span>

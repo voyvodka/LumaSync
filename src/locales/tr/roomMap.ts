@@ -199,14 +199,6 @@ const roomMap: Catalogue<typeof enRoomMap> = {
       white: "Beyaz",
       black: "Siyah",
     },
-    templateLabel: {
-      sofa: "Kanepe",
-      desk: "Masa",
-      side: "Yan",
-      chair: "Sandalye",
-      coffeeTable: "Sehpa",
-      armchair: "Tekli Koltuk",
-    },
   },
   structure: {
     kind: {
@@ -470,20 +462,34 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     },
   },
   templates: {
+    facts: "{{w}} × {{d}} m",
+    factsScreen: "{{w}} × {{d}} m · {{inch}}″",
     applied: "{{name}} yerleştirildi. Geri al odanı geri getirir.",
     title: "Şablon seç",
     subtitle: "İsteğe bağlı: TV'ni ve ışıklarını gerçek yerlerine koy, Hue ışıkları görüntüyü takip etsin. Hazır bir düzenle ya da boş bir odayla başla.",
     tv55: {
       name: "TV kurulumu (55\")",
-      desc: "Oturma odasında TV, LED şerit ve koltuk",
+      desc: "Oturma odası: ünitesinde TV, kanepe, sehpa ve halı",
     },
     ldesk: {
       name: "L-masa kurulumu",
-      desc: "L şeklinde masada monitör ve yan uzantı",
+      desc: "Çalışma odası: L masada monitör, kitaplık ve tekli koltuk",
     },
     fullroom: {
       name: "Tam oda",
-      desc: "TV, koltuk, sehpa ve tekli koltuk",
+      desc: "Geniş salon: 65\" TV, köşe kanepe, tekli koltuk ve iki pencere",
+    },
+    gaming: {
+      name: "Oyun köşesi",
+      desc: "Masada ultra geniş monitör, oyuncu koltuğu ve armut koltuk",
+    },
+    bedroom: {
+      name: "Yatak odası",
+      desc: "Duvardaki TV'ye bakan yatak, komodinler ve gardırop",
+    },
+    studio: {
+      name: "Stüdyo daire",
+      desc: "L biçimli daire: oturma alanı, yatak, yemek masası ve mutfak",
     },
     showroom: {
       name: "Vitrin",

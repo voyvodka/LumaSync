@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { ROOM_TEMPLATES } from "../model/roomTemplates";
+import { templateFacts } from "../model/templateFacts";
 import { RoomPreview } from "./RoomPreview";
 import styles from "./TemplateSelector.module.css";
 
@@ -9,7 +10,7 @@ interface TemplateSelectorProps {
 }
 
 export function TemplateSelector({ onSelect }: TemplateSelectorProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   return (
     <div className={styles.page} data-room-page="">
@@ -31,6 +32,7 @@ export function TemplateSelector({ onSelect }: TemplateSelectorProps) {
                   <RoomPreview config={config} />
                 </span>
                 <span className={styles.name}>{t(tmpl.nameKey)}</span>
+                <span className={styles.facts}>{templateFacts(config, t, i18n?.language)}</span>
                 <span className={styles.desc}>{t(tmpl.descKey)}</span>
               </button>
             );
