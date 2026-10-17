@@ -360,9 +360,10 @@ on the strip itself. A test pattern or preview scene that ends restores the mode
 it, so its stop asks for the join too. Like the boot resume, the join saves nothing.
 
 The main window no longer awaits the restore: it can wait seconds on a Hue start, and the tray
-labels, onboarding and prompts waited with it. Only the USB reconciler and the Hue auto-add
-(below) still wait (`lightingRestored`), because they write a selection from the one they read and
-the restore is what sets it.
+labels, onboarding and prompts waited with it. Only the USB reconciler, the Hue auto-add (below)
+and a WLED device connected on Devices still wait (`lightingRestored`), because they write a
+selection from the one they read and the restore is what sets it. The WLED connect is held until
+then rather than dropped, since nothing else would add it later.
 
 **The Hue test lease**, ported from the frontend's: `origin: "leaseHue"` with targets naming Hue brings
 the stream up for a test run and remembers whether it opened it; any other targets hand it back —

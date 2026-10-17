@@ -392,6 +392,7 @@ function Shell() {
     calibration: savedCalibration,
     localSink,
     bootstrapDone,
+    lightingRestored,
   };
   // Fresh closures are fine: the provider hands the sections stable wrappers.
   const lightingControlActions = {

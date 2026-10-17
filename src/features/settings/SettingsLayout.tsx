@@ -1,4 +1,4 @@
-import { memo, useEffect, useCallback, Suspense, type ReactNode } from "react";
+import { memo, useEffect, useCallback, useRef, Suspense, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { normalizeOutputTargets } from "@/shared/contracts/mode";
 import { SECTION_IDS, SECTION_ORDER, type SectionId, type UIMode } from "@/shared/contracts/shell";
@@ -110,6 +110,7 @@ const LightsPanel = memo(function LightsPanel() {
 const selectDeviceCategoryRequest = (state: NavigationState) => state.deviceCategoryRequest;
 const selectLedSetup = (state: NavigationState) => state.ledSetup;
 const selectHueActive = (status: HueShellStatus) => status.configured && status.streaming;
+const selectLightingRestored = (state: LightingControlState) => state.lightingRestored;
 
 const DevicesPanel = memo(function DevicesPanel() {
   const categoryRequest = useNavigationState(selectDeviceCategoryRequest);
@@ -118,11 +119,22 @@ const DevicesPanel = memo(function DevicesPanel() {
   const { goToSection, openLedSetup, closeLedSetup } = useNavigationActions();
   const { stopHueOutput, changeOutputTargets } = useLightingActions();
   const readLighting = useLightingControlReader();
+  const lightingRestored = useLightingControlState(selectLightingRestored);
+  const wledChoicePending = useRef(false);
   // Connecting a WLED device is the "use it" intent, as pairing a strip is; `usb` names either.
-  const chooseConnectedWled = useCallback(() => {
+  const addUsb = useCallback(() => {
     const selected = readLighting().outputTargets;
     if (!selected.includes("usb")) changeOutputTargets(normalizeOutputTargets([...selected, "usb"]));
   }, [readLighting, changeOutputTargets]);
+  const chooseConnectedWled = useCallback(() => {
+    if (readLighting().lightingRestored) addUsb();
+    else wledChoicePending.current = true;
+  }, [readLighting, addUsb]);
+  useEffect(() => {
+    if (!lightingRestored || !wledChoicePending.current) return;
+    wledChoicePending.current = false;
+    addUsb();
+  }, [lightingRestored, addUsb]);
   const openRoomMap = useCallback(() => void goToSection(SECTION_IDS.ROOM_MAP), [goToSection]);
   const ledSetup = useNavigationState(selectLedSetup);
   const closeLedSetupNow = useLedSetupCloser();

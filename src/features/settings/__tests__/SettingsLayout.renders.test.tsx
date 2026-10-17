@@ -162,6 +162,21 @@ describe("a WLED device the user connects on Devices", () => {
 
     expect(shell.lightingActions.changeOutputTargets).not.toHaveBeenCalled();
   });
+
+  it("waits for the launch restore, whose selection it adds to", async () => {
+    const shell = renderWithShellStores(<SettingsLayout />, {
+      navigation: { uiMode: "full", activeSection: SECTION_IDS.DEVICES },
+      lighting: { outputTargets: [], lightingRestored: false },
+    });
+
+    fireEvent.click(await screen.findByTestId("devices-wled-connected"));
+    expect(shell.lightingActions.changeOutputTargets).not.toHaveBeenCalled();
+
+    act(() => shell.setLighting({ outputTargets: ["hue"], lightingRestored: true }));
+
+    expect(shell.lightingActions.changeOutputTargets).toHaveBeenCalledOnce();
+    expect(shell.lightingActions.changeOutputTargets).toHaveBeenCalledWith(normalizeOutputTargets(["hue", "usb"]));
+  });
 });
 
 describe("SettingsLayout render boundaries", () => {
