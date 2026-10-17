@@ -15,6 +15,10 @@ use tauri::{
 
 use crate::commands::main_thread::on_main;
 
+/// What `list_displays` answers in a test: `MockRuntime` panics on the monitor list.
+#[cfg(test)]
+pub(crate) struct TestDisplays(pub(crate) Vec<DisplayInfoPayload>);
+
 /// Metadata for one enumerated display, used to size and position the
 /// calibration and LED-twin overlay windows.
 #[derive(Clone, Serialize)]
@@ -624,6 +628,10 @@ fn logical_origin(x: i32, y: i32, scale_factor: f64) -> (i32, i32) {
 
 #[tauri::command]
 pub fn list_displays<R: Runtime>(app: AppHandle<R>) -> Result<Vec<DisplayInfoPayload>, String> {
+    #[cfg(test)]
+    if let Some(displays) = app.try_state::<TestDisplays>() {
+        return Ok(displays.0.clone());
+    }
     let monitors = app
         .available_monitors()
         .map_err(|error| format!("DISPLAY_LIST_FAILED: {error}"))?;
