@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -297,17 +297,17 @@ describe("making and editing a scene", () => {
     seed([movie]);
     const { onApply } = renderPage(RED);
     await editFromLibrary("m");
-    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    // Waited for, not slept on: a fixed 20 ms lost the race to the opening apply on a loaded runner.
+    await waitFor(() => expect(onApply).toHaveBeenLastCalledWith(toModeConfig(movie)));
     expect(getPreference("lightingIntensityPreset")).toBe("subtle");
     setLight(blue(0.3));
 
-    await act(async () => {
-      fireEvent.click(screen.getByTestId("scene-edit-cancel"));
-      await new Promise((resolve) => setTimeout(resolve, 20));
+    await act(async () => fireEvent.click(screen.getByTestId("scene-edit-cancel")));
+    await waitFor(() => {
+      expect(onApply).toHaveBeenLastCalledWith(RED);
+      expect(getPreference("lightingIntensityPreset")).toBe("moderate");
     });
     await frame();
-    expect(onApply).toHaveBeenLastCalledWith(RED);
-    expect(getPreference("lightingIntensityPreset")).toBe("moderate");
     expect(getScenes()).toEqual([movie]);
     expect(bar()).not.toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Movie" })).toHaveFocus();
@@ -461,14 +461,13 @@ describe("making and editing a scene", () => {
     seed([movie]);
     const { onApply } = renderPage(RED);
     await editFromLibrary("m");
-    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    await waitFor(() => expect(onApply).toHaveBeenLastCalledWith(toModeConfig(movie)));
     disk.saveFails = true;
-    await act(async () => {
-      fireEvent.click(screen.getByTestId("scene-edit-cancel"));
-      await new Promise((resolve) => setTimeout(resolve, 20));
+    await act(async () => fireEvent.click(screen.getByTestId("scene-edit-cancel")));
+    await waitFor(() => {
+      expect(onApply).toHaveBeenLastCalledWith(RED);
+      expect(screen.getByText("lights:scenes.restoreFailed")).toBeInTheDocument();
     });
-    expect(onApply).toHaveBeenLastCalledWith(RED);
-    expect(screen.getByText("lights:scenes.restoreFailed")).toBeInTheDocument();
   });
 
   it("does not turn the lights back on when Cancel comes after they were turned off", async () => {
