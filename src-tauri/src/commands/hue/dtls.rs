@@ -10,19 +10,16 @@ use std::time::{Duration, Instant};
 /// Hue Entertainment DTLS port.
 pub(super) const HUE_DTLS_PORT: u16 = 2100;
 
-/// Hard wall-clock deadline (in seconds) for the DTLS handshake attempt. The
-/// handshake runs on a dedicated OS thread that the caller abandons after this
-/// limit, whatever the socket is doing.
+/// The caller abandons its dedicated thread after this, whatever the socket is
+/// doing. It covers the entertainment activation PUT and the handshake together.
 pub(crate) const DTLS_CONNECT_TIMEOUT_SECS: u64 = 8;
 
-/// The socket's read timeout is OpenSSL's only retransmit clock: rust-openssl's
-/// BIO drops the timer hint OpenSSL sets, so a lost flight was resent only when
-/// a read timed out. At 5 s that put a lost first ClientHello 5 s behind every
-/// stream start; under OpenSSL's 1 s first retransmit it is resent on schedule.
+/// OpenSSL's only retransmit clock: rust-openssl's BIO drops the timer hint
+/// OpenSSL sets. See docs/architecture/hue.md.
 const HANDSHAKE_READ_TIMEOUT: Duration = Duration::from_millis(200);
 
-/// Inside `DTLS_CONNECT_TIMEOUT_SECS`, so a bridge that never answers fails here
-/// with a code rather than being abandoned mid-handshake.
+/// Under the abandon, so a silent bridge usually fails with a code; a slow
+/// activation PUT, which shares that budget, can still leave it to the abandon.
 const HANDSHAKE_DEADLINE: Duration = Duration::from_secs(7);
 
 /// Thin wrapper around `UdpSocket` that implements `Read` + `Write` so that
