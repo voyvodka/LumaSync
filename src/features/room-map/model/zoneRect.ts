@@ -20,7 +20,6 @@ export const ZONE_SCALE_MIN = 0.05;
 
 type Footprint = Pick<HueZone, "centerX" | "centerY" | "scaleX" | "scaleY">;
 
-/** A cube's floor: its centre on the plan and its one scale. */
 export interface CubeFootprint {
   centerX: number;
   centerY: number;

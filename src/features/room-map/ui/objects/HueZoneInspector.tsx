@@ -59,7 +59,6 @@ export function HueZoneInspector({
   const depthM = Math.max(0, roomDepthM);
   const heightM = Math.max(0, roomHeightM);
   const sized = widthM > 0 && depthM > 0 && heightM > 0;
-  // One scale on all three axes: a share of each side of the room, in the room's proportions.
   const scale = Math.abs(Number.isFinite(zone.scaleX) ? zone.scaleX : ZONE_SCALE_MIN);
   // Grown about its centre, so the far side stops at the nearest wall, floor or ceiling: Rust
   // refuses `|center| + scale > 1`.

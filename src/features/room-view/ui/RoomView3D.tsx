@@ -699,7 +699,6 @@ function openRoomView(
       },
       { signal: listening.signal },
     );
-    // A zone rises the same way, its cube kept between the floor and the ceiling.
     const raiseZone = (z: NonNullable<typeof zoneDrag>, ray: Ray) => {
       if (!builtConfig) return false;
       const { widthMeters, depthMeters, heightMeters } = builtConfig.dimensions;
