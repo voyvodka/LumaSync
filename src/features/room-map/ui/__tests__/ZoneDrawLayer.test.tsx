@@ -22,12 +22,13 @@ function setup(panMode = false) {
 }
 
 describe("ZoneDrawLayer", () => {
-  it("draws the dragged rectangle in metres", () => {
+  it("draws a cube in the room's proportions, in metres", () => {
     const { layer, onDraw } = setup();
     fireEvent.pointerDown(layer, { button: 0, clientX: 100, clientY: 100, pointerId: 1 });
     fireEvent.pointerMove(layer, { clientX: 250, clientY: 300, pointerId: 1 });
     fireEvent.pointerUp(layer, { clientX: 300, clientY: 300, pointerId: 1 });
-    expect(onDraw).toHaveBeenCalledWith({ x0: 1, y0: 1, x1: 3, y1: 3 });
+    // 2 m of 5 and 2 m of 4: the depth's half the room sets the cube, 2.5 × 2 m.
+    expect(onDraw).toHaveBeenCalledWith({ x0: 1, y0: 1, x1: 3.5, y1: 3 });
   });
 
   it("drops the default size on a click", () => {

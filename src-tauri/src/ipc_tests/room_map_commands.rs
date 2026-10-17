@@ -72,6 +72,36 @@ fn a_refused_write_returns_the_zones_it_was_given() {
     assert_eq!(response["zones"][0]["id"], json!("z1"));
 }
 
+/// A zone is a cube in the bridge's space: one scale on all three axes, and
+/// inside the cube in height too.
+#[test]
+fn a_zone_that_is_not_a_cube_is_a_coded_refusal() {
+    let app = app();
+    let webview = main_webview(&app);
+
+    let mut tall = zone("z1");
+    tall["scaleZ"] = json!(1.0);
+    let mut floating = zone("z2");
+    floating["centerZ"] = json!(0.8);
+
+    for (draft, code) in [
+        (tall, "HUE_ZONE_OVERSIZED"),
+        (floating, "HUE_ZONE_CHANNEL_OUT_OF_BOUNDS"),
+    ] {
+        let response = invoke(
+            &webview,
+            "create_hue_zone",
+            json!({ "request": { "zone": draft, "existingZones": [] } }),
+        )
+        .expect("create_hue_zone must resolve, never reject");
+        assert_eq!(status_code(&response), code);
+        assert!(response["zones"]
+            .as_array()
+            .expect("zones array")
+            .is_empty());
+    }
+}
+
 #[test]
 fn updating_a_zone_that_is_not_there_is_a_coded_refusal() {
     let app = app();

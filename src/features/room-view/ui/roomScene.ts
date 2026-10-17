@@ -168,7 +168,7 @@ export interface RoomScene {
   /** Outlines the Hue zones being edited, or none; true when that changed. */
   markZones(marks: ZoneMarks | null): boolean;
   /** A zone carried or resized, as its whole box on the plan rectangle; null sets it down. */
-  holdZone(zoneId: string, rect: ZoneRect | null): boolean;
+  holdZone(zoneId: string, rect: ZoneRect | null, centerZ?: number): boolean;
   /** Turns what faces the camera (the selection's ring, a zone's name) to it; call before each draw. */
   faceCamera(cameraQuaternion: Quaternion, camera?: Camera): void;
   /** `null` keeps each lamp's own colour; a palette gives lamp i stop i mod n. */

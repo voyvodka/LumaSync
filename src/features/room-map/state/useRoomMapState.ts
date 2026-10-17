@@ -4,6 +4,7 @@ import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 import { parseCommandError } from "@/shared/contracts/status";
 import { mergeEditorSave } from "../model/roomMapMerge";
+import { cubeZones } from "../model/zoneCube";
 import { applyRoomTemplate } from "../model/roomTemplate";
 import {
   GESTURE_COALESCE_MS,
@@ -90,7 +91,8 @@ export function useRoomMapState(): UseRoomMapStateReturn {
             delete loaded.backgroundOffsetY;
             delete loaded.backgroundScale;
           }
-          dispatch({ type: "hydrate", config: loaded });
+          // A file an older build wrote after the 11 → 12 step can hold zones that are not cubes.
+          dispatch({ type: "hydrate", config: cubeZones(loaded) });
           // The stored map as it is, not the converted copy, so the conversion reaches the file.
           writtenRef.current = stored.roomMap;
         }

@@ -8,6 +8,7 @@ import {
 import type { HueChannelPlacement, RoomMapConfig, UsbStripPlacement } from "@/shared/contracts/roomMap";
 
 import { detachHueChannel } from "./hueChannelPosition";
+import { cubeZones } from "./zoneCube";
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -137,7 +138,8 @@ export function reconcileRoomSwitch(
     ? { ...target.tvAnchor, backlightStripId: stripIdInCurrent.get(target.tvAnchor.backlightStripId) ?? target.tvAnchor.backlightStripId }
     : target.tvAnchor;
 
-  return { ...target, tvAnchor, usbStrips: [...carried, ...drawn], hueChannels, zones };
+  // A kept room an older build wrote can hold zones that are not cubes.
+  return cubeZones({ ...target, tvAnchor, usbStrips: [...carried, ...drawn], hueChannels, zones });
 }
 
 export interface RoomLayoutsWrite {

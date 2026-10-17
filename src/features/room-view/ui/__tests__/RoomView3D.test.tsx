@@ -729,9 +729,10 @@ describe("RoomView3D", () => {
   });
 
   describe("a Hue zone", () => {
-    // Centred and 3 × 2 m in a 6 × 4 m room: x 1.5–4.5, y 1–3 on the plan. A size no other test
-    // opens, so the camera kept for the session from one of them is not reused.
-    const zone: HueZone = { id: "a", name: "Sofa", entertainmentAreaId: "x", centerX: 0, centerY: 0, centerZ: 0, scaleX: 0.5, scaleY: 0.5, scaleZ: 1, channelIndices: [] };
+    // The cube of scale 0.5 at the middle of a 6 × 4 × 2.5 m room: x 1.5–4.5, y 1–3 on the plan,
+    // 0.625–1.875 m high. A size no other test opens, so the camera kept for the session from one
+    // of them is not reused.
+    const zone: HueZone = { id: "a", name: "Sofa", entertainmentAreaId: "x", centerX: 0, centerY: 0, centerZ: 0, scaleX: 0.5, scaleY: 0.5, scaleZ: 0.5, channelIndices: [] };
     const config: RoomMapConfig = { ...DEFAULT_ROOM_MAP, dimensions: { widthMeters: 6, depthMeters: 4, heightMeters: 2.5 }, zones: [zone] };
     const HELD: ZoneMarks = { active: "a", held: "a", others: [] };
 
@@ -739,21 +740,21 @@ describe("RoomView3D", () => {
       vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 400, 400));
       const onPick = vi.fn<(id: string | null) => void>();
       const onPickZone = vi.fn<(zoneId: string) => void>();
-      const onChangeZone = vi.fn<(zoneId: string, rect: ZoneRect, resized: boolean) => boolean>(() => true);
+      const onChangeZone = vi.fn<(zoneId: string, rect: ZoneRect, resized: boolean, centerZ: number) => boolean>(() => true);
       render(<RoomView3D config={config} label="Room" zones={zones} onPick={onPick} onPickZone={onPickZone} onChangeZone={onChangeZone} onFail={() => {}} />);
       await act(async () => {
         await vi.advanceTimersByTimeAsync(100);
       });
       const canvas = gl.renderers[0]?.domElement as HTMLCanvasElement;
       const camera = gl.orbits[0]!.object as unknown as Camera;
-      const at = (x: number, y: number) => {
+      const at = (x: number, y: number, height = 0) => {
         // The fake renderer never draws, so nothing else brings the camera's matrices up to date.
         camera.updateMatrixWorld();
-        const p = new Vector3(x - 3, 0, y - 2).project(camera);
+        const p = new Vector3(x - 3, height, y - 2).project(camera);
         return { x: ((p.x + 1) / 2) * 400, y: ((1 - p.y) / 2) * 400 };
       };
-      const press = (type: string, p: { x: number; y: number }) =>
-        canvas.dispatchEvent(new PointerEvent(type, { clientX: p.x, clientY: p.y, button: 0, pointerId: 1, bubbles: true }));
+      const press = (type: string, p: { x: number; y: number }, shiftKey = false) =>
+        canvas.dispatchEvent(new PointerEvent(type, { clientX: p.x, clientY: p.y, button: 0, pointerId: 1, bubbles: true, shiftKey }));
       return { onPick, onPickZone, onChangeZone, at, press };
     };
 
@@ -782,8 +783,31 @@ describe("RoomView3D", () => {
       const [, rect, resized] = onChangeZone.mock.calls[0]!;
       expect(resized).toBe(true);
       expect([rect.x0, rect.y0]).toEqual([1.5, 1]);
-      expect(rect.x1).toBeCloseTo(5);
+      // A cube keeps the room's 6 : 4: the deeper pull sets the size.
+      expect(rect.x1).toBeCloseTo(5.25);
       expect(rect.y1).toBeCloseTo(3.5);
+    });
+
+    it("rises with ⇧ from where it was gripped, its floor left where it is", async () => {
+      const { onChangeZone, at, press } = await open(HELD);
+      press("pointerdown", at(3, 2));
+      press("pointermove", at(3, 2, 0.5), true);
+      press("pointermove", at(3, 2, 1), true);
+      press("pointerup", at(3, 2, 1), true);
+      const [, rect, resized, centerZ] = onChangeZone.mock.calls[0]!;
+      expect(resized).toBe(false);
+      expect([rect.x0, rect.y0, rect.x1, rect.y1]).toEqual([1.5, 1, 4.5, 3]);
+      // Half a metre up: its centre from 1.25 m to 1.75 m of 2.5 m.
+      expect(centerZ).toBeCloseTo(0.4);
+    });
+
+    it("stops rising where its top meets the ceiling", async () => {
+      const { onChangeZone, at, press } = await open(HELD);
+      press("pointerdown", at(3, 2));
+      press("pointermove", at(3, 2, 0.5), true);
+      press("pointermove", at(3, 2, 3), true);
+      press("pointerup", at(3, 2, 3), true);
+      expect(onChangeZone.mock.calls[0]![3]).toBeCloseTo(0.5);
     });
 
     it("goes back where it was on Esc, writing nothing", async () => {

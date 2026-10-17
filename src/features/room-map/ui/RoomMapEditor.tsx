@@ -430,15 +430,15 @@ export function RoomMapEditor({
     },
     [select, selectHueZone, focusEditor],
   );
-  // Carried, only its middle is written: its size stays as stored, not re-read from a rectangle clamped to the room.
+  // Carried or raised, only its middle is written: its size stays as stored, not re-read from a rectangle clamped to the room.
   const handleRoomZoneChange = useCallback(
-    (zoneId: string, rect: ZoneRect, resized: boolean) => {
+    (zoneId: string, rect: ZoneRect, resized: boolean, centerZ: number) => {
       if (resized) {
-        handleHueZoneResize(zoneId, rectToZone(rect, widthMeters, depthMeters));
+        handleHueZoneResize(zoneId, { ...rectToZone(rect, widthMeters, depthMeters), centerZ });
         return true;
       }
       const centre = planMetresToHue((rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2, widthMeters, depthMeters);
-      handleHueZoneCenterChange(zoneId, centre.x, centre.y);
+      handleHueZoneCenterChange(zoneId, centre.x, centre.y, false, centerZ);
       return true;
     },
     [handleHueZoneResize, handleHueZoneCenterChange, widthMeters, depthMeters],
@@ -1171,7 +1171,7 @@ export function RoomMapEditor({
           </RoomMapCanvas>
         )}
         {!inRoom && <PlanDropGhost ref={planGhostRef} />}
-        <CarryHint hint={inRoom ? (preview ? null : carryHint(docConfig, docSelectedId, { hueAreaId })) : drawingZone ? "draw" : null} />
+        <CarryHint hint={inRoom ? (preview ? null : roomZones?.held ? "rise" : carryHint(docConfig, docSelectedId, { hueAreaId })) : drawingZone ? "draw" : null} />
         {hoveredName && (
           <HoverChip
             chipRef={hover.chipRef}

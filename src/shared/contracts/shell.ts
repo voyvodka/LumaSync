@@ -202,8 +202,9 @@ export const SECTION_ORDER: SectionId[] = [
  *  `8 → 9` drops the old LED preview's keys: `ledPreviewPopupVisible`,
  *  `ledTwinEnabledTest`, `lastLedTestPattern` and `ledPreviewHintShown`.
  *  `9 → 10` drops `roomMapVersion`, which every room-map writer bumped and none read.
- *  `10 → 11` makes every zone span floor to ceiling, its bound lights' heights kept. */
-export const SHELL_STATE_SCHEMA_VERSION = 11 as const;
+ *  `10 → 11` makes every zone span floor to ceiling, its bound lights' heights kept.
+ *  `11 → 12` makes every zone a cube in the Hue space, its bound lights kept where they are. */
+export const SHELL_STATE_SCHEMA_VERSION = 12 as const;
 
 /** Shape of shell state persisted to `shell-state.json` */
 export interface ShellState {

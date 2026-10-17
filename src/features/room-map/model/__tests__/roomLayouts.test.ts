@@ -24,7 +24,7 @@ const zone = (id: string, channelIndices: number[], patch: Partial<HueZone> = {}
   centerZ: 0,
   scaleX: 0.5,
   scaleY: 0.5,
-  scaleZ: 1,
+  scaleZ: 0.5,
   channelIndices,
   borderColor: "#fff",
   ...patch,
@@ -107,6 +107,12 @@ describe("reconcileRoomSwitch", () => {
     expect(loose.zoneRelativePosition).toBeUndefined();
     // Where the zone had it: its right edge.
     expect(loose.x).toBeCloseTo(0.7);
+  });
+
+  it("makes a kept room's zone a cube when an older build wrote it otherwise", () => {
+    const target = room({ zones: [zone("z-old", [], { scaleX: 0.3, scaleY: 0.6, scaleZ: 1 })] });
+    const [cubed] = reconcileRoomSwitch(room({}), target, newStripId).zones;
+    expect([cubed!.scaleX, cubed!.scaleY, cubed!.scaleZ]).toEqual([0.6, 0.6, 0.6]);
   });
 
   it("keeps the plugged-in strip's identity and takes the other room's placement of its port", () => {

@@ -14,6 +14,7 @@ import { render, fireEvent, cleanup } from "@testing-library/react";
 import { HueChannelOverlay, pinnedZoneEdges } from "../HueChannelOverlay";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 import type { SnapResult } from "../../model/snapGeometry";
+import type { CubeFootprint } from "../../model/zoneRect";
 
 beforeEach(() => {
   cleanup();
@@ -480,7 +481,7 @@ describe("HueChannelOverlay — keyboard", () => {
 describe("HueChannelOverlay — zone grips", () => {
   // 5×4 m at 100 px a metre: the zone is x 1.75–3.25 m, y 1.4–2.6 m.
   function renderGrips(zone: HueZone = ZONE) {
-    const onHueZoneResize = vi.fn<(zoneId: string, footprint: Pick<HueZone, "centerX" | "centerY" | "scaleX" | "scaleY">) => void>();
+    const onHueZoneResize = vi.fn<(zoneId: string, footprint: CubeFootprint) => void>();
     const view = render(
       <HueChannelOverlay
         channels={[CHANNEL_IN_ZONE]}
@@ -511,8 +512,9 @@ describe("HueChannelOverlay — zone grips", () => {
     const lightLeft = parseFloat(light.style.left);
     fireEvent.pointerDown(se, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
     fireEvent.pointerMove(se, { clientX: 150, clientY: 60, pointerId: 1 });
+    // A cube keeps the room's proportions: 3 m wide in a 5 × 4 m room is 2.4 m deep.
     expect(parseFloat(box.style.width)).toBeCloseTo(300);
-    expect(parseFloat(box.style.height)).toBeCloseTo(180);
+    expect(parseFloat(box.style.height)).toBeCloseTo(240);
     // The light keeps its place relative to the zone, which grew right from its west wall.
     expect(parseFloat(light.style.left)).toBeCloseTo(175 + ((lightLeft - 175) / 150) * 300);
     expect(onHueZoneResize).not.toHaveBeenCalled();
@@ -520,17 +522,16 @@ describe("HueChannelOverlay — zone grips", () => {
     expect(onHueZoneResize).toHaveBeenCalledTimes(1);
     const [id, footprint] = onHueZoneResize.mock.calls[0]!;
     expect(id).toBe("zone-1");
-    expect(footprint.scaleX).toBeCloseTo(0.6);
-    expect(footprint.scaleY).toBeCloseTo(0.45);
+    expect(footprint.scale).toBeCloseTo(0.6);
     expect(footprint.centerX).toBeCloseTo(0.3);
-    expect(footprint.centerY).toBeCloseTo(-0.15);
+    expect(footprint.centerY).toBeCloseTo(-0.3);
   });
 
   it("drops a side's middle grip when the side is too short to hold three", () => {
-    // 0.6 m wide, 1.2 m deep: 60 px and 120 px on screen.
-    renderGrips({ ...ZONE, scaleX: 0.12, scaleY: 0.3 });
+    // 0.75 m wide, 0.6 m deep: 75 px and 60 px on screen.
+    renderGrips({ ...ZONE, scaleX: 0.15, scaleY: 0.15, scaleZ: 0.15 });
     const handles = Array.from(document.querySelectorAll<HTMLElement>("[data-zone-handle]")).map((el) => el.dataset.zoneHandle);
-    expect(handles.sort()).toEqual(["e", "ne", "nw", "se", "sw", "w"]);
+    expect(handles.sort()).toEqual(["n", "ne", "nw", "s", "se", "sw"]);
   });
 
   it("puts everything back on Escape and writes nothing", () => {

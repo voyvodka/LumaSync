@@ -317,6 +317,9 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     decorDriveInfo: "Seçtiğin Hue ışığı bu lambanın yerini, yüksekliğini ve modelini alır ve artık onu LumaSync kontrol eder. Ev lambası kalkar; Geri Al ile geri gelir.",
     decorHeightLabel: "Işık yüksekliği, zeminden tavana",
     hueHeightZoneLimit: "{{name}} bölgesiyle sınırlı ({{min}}–{{max}} m). Bu aralığın dışına koymak için ışığı bölgeden çıkar.",
+    zoneSizeLabel: "Bölge boyutu, odanın payı",
+    zoneSizeReadout: "{{width}} × {{depth}} × {{height}} m",
+    zoneHeightLabel: "Bölge merkezinin zeminden yüksekliği",
     zoneChannelCount_one: "{{count}} ışık",
     zoneChannelCount_other: "{{count}} ışık",
     widthLabel: "Genişlik",
@@ -426,7 +429,6 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     rise: "dikey",
     letGo: "bırak",
     draw: "Sürükleyerek bölge çiz",
-    square: "kare",
     cancel: "vazgeç",
   },
   shortcuts: {

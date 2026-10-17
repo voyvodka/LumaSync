@@ -2,13 +2,11 @@ import { useEffect, useRef } from "react";
 
 import type { HueZone } from "@/shared/contracts/roomMap";
 
-import { rectToZone, resizeZoneRect, ZONE_HANDLES, type ZoneHandle, zoneRect } from "../model/zoneRect";
+import { type CubeFootprint, rectToZone, resizeZoneRect, ZONE_HANDLES, type ZoneHandle, zoneRect } from "../model/zoneRect";
 import { pastSlop } from "./objects/dragIntent";
 import styles from "./ZoneResizeHandles.module.css";
 
-type Footprint = Pick<HueZone, "centerX" | "centerY" | "scaleX" | "scaleY">;
-
-/** Pointer only: the dock's width and depth fields are the keyboard's way. */
+/** Pointer only: the dock's size field is the keyboard's way. */
 export function ZoneResizeHandles({
   zone,
   widthM,
@@ -24,7 +22,7 @@ export function ZoneResizeHandles({
   pxPerMeter: number;
   zoom: number;
   panMode: boolean;
-  onResize: (zoneId: string, footprint: Footprint) => void;
+  onResize: (zoneId: string, footprint: CubeFootprint) => void;
 }) {
   // An undo or a refusal can take the zone away mid-drag; its window listener must not outlive it.
   const live = useRef<(() => void) | null>(null);
@@ -75,7 +73,7 @@ export function ZoneResizeHandles({
       if (!moved && !pastSlop(e.clientX, e.clientY, mv.clientX, mv.clientY)) return;
       moved = true;
       const scale = ppm * zoom;
-      next = resizeZoneRect(start, handle, (mv.clientX - e.clientX) / scale, (mv.clientY - e.clientY) / scale, widthM, depthM, mv.shiftKey);
+      next = resizeZoneRect(start, handle, (mv.clientX - e.clientX) / scale, (mv.clientY - e.clientY) / scale, widthM, depthM);
       paint();
     };
     const stop = () => {

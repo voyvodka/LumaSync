@@ -6,7 +6,7 @@ import type { HueZone } from "@/shared/contracts/roomMap";
 import { buildZoneBoxes } from "../zoneBoxes";
 
 const dims = { widthMeters: 5, depthMeters: 4, heightMeters: 2.5 };
-const zone = (id: string): HueZone => ({ id, name: `Zone ${id}`, entertainmentAreaId: "x", centerX: 0, centerY: 0, centerZ: 0, scaleX: 0.5, scaleY: 0.5, scaleZ: 1, channelIndices: [] });
+const zone = (id: string): HueZone => ({ id, name: `Zone ${id}`, entertainmentAreaId: "x", centerX: 0, centerY: 0, centerZ: 0, scaleX: 0.5, scaleY: 0.5, scaleZ: 0.5, channelIndices: [] });
 
 const parts = (boxes: ReturnType<typeof buildZoneBoxes>, i: number) => {
   const one = boxes.group.children[i]!;
@@ -99,16 +99,26 @@ describe("buildZoneBoxes", () => {
     boxes.mark({ active: "a", held: "a", others: [] });
     const { one } = parts(boxes, 0);
     const [grips, ghost] = boxes.group.children.slice(1);
-    expect(boxes.hold("a", { x0: 0, y0: 0, x1: 1, y1: 2 })).toBe(true);
+    expect(boxes.hold("a", { x0: 0, y0: 0, x1: 2.5, y1: 2 })).toBe(true);
     expect([one.visible, grips!.visible, ghost!.visible]).toEqual([false, false, true]);
-    // Its real height, the room's 2.5 m, not the 0.45 m wall it rests as.
-    expect(ghost!.scale.toArray()).toEqual([1, 2.5, 2]);
-    expect([ghost!.position.x, ghost!.position.z]).toEqual([-2, -1]);
+    // Its real height, half the room's 2.5 m as it is half its width, not the 0.45 m wall it rests as.
+    expect(ghost!.scale.toArray()).toEqual([2.5, 1.25, 2]);
+    expect(ghost!.position.toArray()).toEqual([-1.25, 1.25, -1]);
+    boxes.hold("a", { x0: 0, y0: 0, x1: 2.5, y1: 2 }, 0.5);
+    expect(ghost!.position.y).toBeCloseTo(1.875);
     boxes.mark({ active: "a", held: "a", others: [] });
     expect(one.visible).toBe(false);
     expect(boxes.hold("a", null)).toBe(true);
     expect([one.visible, grips!.visible, ghost!.visible]).toEqual([true, true, false]);
     expect(boxes.hold("a", null)).toBe(false);
+  });
+
+  it("rests as a low wall rising from the cube's bottom, its footprint on the floor under it", () => {
+    const boxes = buildZoneBoxes([{ ...zone("a"), centerZ: 0.5 }], dims);
+    boxes.mark({ active: "a", held: null, others: [] });
+    const { wall, posts, foot } = parts(boxes, 0);
+    expect([wall.position.y, posts.position.y]).toEqual([1.25, 1.25]);
+    expect(foot.position.y).toBeLessThan(0.01);
   });
 
   it("is outlined in the zone's colour", () => {

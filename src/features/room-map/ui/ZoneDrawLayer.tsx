@@ -69,14 +69,14 @@ export function ZoneDrawLayer({
         if (!p) return;
         if (!p.moved && Math.hypot(e.clientX - p.clientX, e.clientY - p.clientY) < CLICK_SLOP_PX) return;
         p.moved = true;
-        paint(drawnZoneRect(p, metresAt(e), widthM, depthM, e.shiftKey));
+        paint(drawnZoneRect(p, metresAt(e), widthM, depthM));
       }}
       onPointerUp={(e) => {
         const p = press.current;
         press.current = null;
         if (!p) return;
         paint(null);
-        onDraw(p.moved ? drawnZoneRect(p, metresAt(e), widthM, depthM, e.shiftKey) : clickedZoneRect(p, widthM, depthM));
+        onDraw(p.moved ? drawnZoneRect(p, metresAt(e), widthM, depthM) : clickedZoneRect(p, widthM, depthM));
       }}
       onPointerCancel={() => {
         press.current = null;

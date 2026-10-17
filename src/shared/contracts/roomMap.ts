@@ -736,15 +736,18 @@ export interface RoomGeometry {
 
 /**
  * Hue Entertainment Area zone descriptor. A `HueZone` represents a named
- * 3D-positioned subset of an entertainment area's channels — the user
- * authors the zone as a physical bounding box (center + per-axis scale)
- * and channels reference the zone via `HueChannelPlacement.zoneId`. The
- * runtime sampler resolves world-space coordinates as
- * `world = center + scale * zoneRelativePosition`.
+ * 3D-positioned subset of an entertainment area's channels, and channels
+ * reference the zone via `HueChannelPlacement.zoneId`. The runtime sampler
+ * resolves world-space coordinates as `world = center + scale * zoneRelativePosition`,
+ * so a bound light moves and grows with its zone.
  *
  * Coordinate system: same Hue native space as `HueChannelPlacement` —
- * `centerX/Y/Z` and `scaleX/Y/Z` are in `[-1, 1]`. The bridge per-area
- * channel cap (10) applies to `channelIndices`.
+ * `centerX/Y/Z` in `[-1, 1]`. A zone is a cube in that space: `scaleX`,
+ * `scaleY` and `scaleZ` are one value in `[0.05, 1]`, and `|center| + scale <= 1`
+ * on every axis (Rust refuses anything else). The room map stretches each axis
+ * to its own side, so the cube draws in the room's proportions. The bridge
+ * stores no zone; only the resolved channel positions reach it. The bridge
+ * per-area channel cap (10) applies to `channelIndices`.
  *
  * `borderColor` is a UI hint for the dashed bounds box and channel ring
  * tint; the runtime sampler never reads it.
@@ -764,11 +767,11 @@ export interface HueZone {
   centerY: number;
   /** Zone center Z in Hue native space ([-1, 1]). */
   centerZ: number;
-  /** Per-axis zone-to-world scale. `1.0` ⇒ zone covers full Hue space. */
+  /** Zone-to-world scale, the same on all three axes. `1.0` ⇒ zone covers full Hue space. */
   scaleX: number;
-  /** Per-axis zone-to-world scale. */
+  /** Equal to `scaleX`. */
   scaleY: number;
-  /** Per-axis zone-to-world scale. */
+  /** Equal to `scaleX`. */
   scaleZ: number;
   /**
    * Entertainment-area channel indices (0-based, bounded by the bridge's
@@ -1019,11 +1022,9 @@ export const HUE_ZONE_STATUS_CODES = {
    */
   HUE_ZONE_CHANNEL_NOT_IN_AREA: "HUE_ZONE_CHANNEL_NOT_IN_AREA",
   /**
-   * Zone scale exceeds the room or undershoots the slider floor (per-axis
-   * `[0.05, 1.0]` clamp). The previous uniform
-   * aspect-ratio lock was dropped, zones are authored as physical 1:1
-   * metric squares, so a non-square room deliberately writes asymmetric
-   * `scaleX` / `scaleY`.
+   * Zone scale exceeds the room, undershoots the floor (`[0.05, 1.0]`), is
+   * not finite, or is not the same on all three axes: a zone is a cube in
+   * the Hue space.
    */
   HUE_ZONE_OVERSIZED: "HUE_ZONE_OVERSIZED",
 } as const;

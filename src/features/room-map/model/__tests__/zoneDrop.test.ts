@@ -33,6 +33,8 @@ describe("zoneDrop", () => {
 
   it("leaves a light outside every zone, already in one, or of another area", () => {
     expect(zoneDrop({ channelIndex: 1, x: 0.9, y: 0, z: 0 }, [zone("z", 0, 0.3)])).toBeNull();
+    // Over its floor but above its cube: joining would cut the light's height to the cube's top.
+    expect(zoneDrop({ channelIndex: 1, x: 0, y: 0, z: 0.9 }, [zone("z", 0, 0.3)])).toBeNull();
     expect(zoneDrop({ channelIndex: 1, x: 0, y: 0, z: 0, zoneId: "other" }, [zone("z", 0, 0.3)])).toBeNull();
     expect(zoneDrop({ channelIndex: 1, x: 0, y: 0, z: 0, entertainmentAreaId: "b" }, [zone("z", 0, 0.3)])).toBeNull();
   });

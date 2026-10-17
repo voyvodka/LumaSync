@@ -112,10 +112,10 @@ const LIVING_ZONE: HueZone = {
   entertainmentAreaId: "area-living",
   centerX: 0,
   centerY: 0.2,
-  centerZ: 0,
+  centerZ: 0.2,
   scaleX: 0.8,
-  scaleY: 0.6,
-  scaleZ: 1,
+  scaleY: 0.8,
+  scaleZ: 0.8,
   channelIndices: [0, 1, 2],
 };
 

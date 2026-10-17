@@ -138,6 +138,7 @@ export function DockInspector({
           channels={channels}
           roomWidthM={config.dimensions.widthMeters}
           roomDepthM={config.dimensions.depthMeters}
+          roomHeightM={config.dimensions.heightMeters}
           onUpdate={(patch) => actions.onUpdateHueZone(zone.id, patch)}
           onRename={(name) => actions.onRenameHueZone(zone.id, name)}
           onAssignChannel={actions.onAssignChannelToZone}

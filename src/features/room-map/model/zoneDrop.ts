@@ -1,14 +1,20 @@
 import type { HueChannelPlacement, HueZone, ZoneRelativePosition } from "@/shared/contracts/roomMap";
 import { clamp } from "@/shared/lib/math";
 
-/** Where it lands in the zone, so it joins at the spot it was dropped on; the smallest zone wins. */
+/** Where it lands in the zone, so it joins at the spot it was dropped on; the smallest zone wins.
+ *  Only a zone whose cube holds it at its height takes it: joining one that does not would cut its height. */
 export function zoneDrop(channel: HueChannelPlacement, zones: readonly HueZone[]): { zoneId: string; at: ZoneRelativePosition } | null {
   if (channel.zoneId) return null;
   const area = channel.entertainmentAreaId;
   let zone: HueZone | null = null;
   for (const z of zones) {
     if (area && z.entertainmentAreaId !== area) continue;
-    if (Math.abs(channel.x - z.centerX) > Math.abs(z.scaleX) || Math.abs(channel.y - z.centerY) > Math.abs(z.scaleY)) continue;
+    if (
+      Math.abs(channel.x - z.centerX) > Math.abs(z.scaleX) ||
+      Math.abs(channel.y - z.centerY) > Math.abs(z.scaleY) ||
+      Math.abs(channel.z - z.centerZ) > Math.abs(z.scaleZ)
+    )
+      continue;
     if (!zone || Math.abs(z.scaleX * z.scaleY) < Math.abs(zone.scaleX * zone.scaleY)) zone = z;
   }
   if (!zone) return null;

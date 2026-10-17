@@ -12,6 +12,8 @@ import { isHueZoneApplied, replaceHueChannel } from "@/shared/contracts/roomMap"
 import { detachHueChannel } from "../model/hueChannelPosition";
 import { findScopedHueChannel } from "../model/hueChannelScope";
 import { zoneToken } from "../model/zoneColor";
+import { withCubeScale } from "../model/zoneCube";
+import type { CubeFootprint } from "../model/zoneRect";
 import {
   assignChannelToHueZone,
   createHueZone,
@@ -38,18 +40,21 @@ export interface UseRoomMapHueZonesReturn {
   /** Code of the last refused mutation, until dismissed. `null` while nothing is refused. */
   hueZoneRejection: HueZoneStatusCode | null;
   dismissHueZoneRejection: () => void;
-  /** Without `footprint`, half the room each way at its middle. */
-  handleAddHueZone: (footprint?: Pick<HueZone, "centerX" | "centerY" | "scaleX" | "scaleY">) => void;
+  /** Without `footprint`, the cube of scale 0.5 at the room's middle. */
+  handleAddHueZone: (footprint?: CubeFootprint) => void;
   handleDeleteHueZone: (zoneId: string) => void;
   handleRenameHueZone: (zoneId: string, name: string) => void;
   /** Without `dropped`, the stored light lands at the zone's middle. */
   handleAssignChannelToZone: (channelIndex: number, targetZoneId: string | null, dropped?: DroppedLight) => void;
-  /** `held`: a key's run of steps, one undo step and one save. */
-  handleHueZoneCenterChange: (zoneId: string, centerX: number, centerY: number, held?: boolean) => void;
+  /** `held`: a key's run of steps, one undo step and one save. Without `centerZ`, its height stays. */
+  handleHueZoneCenterChange: (zoneId: string, centerX: number, centerY: number, held?: boolean, centerZ?: number) => void;
   handleHueZoneUpdate: (zoneId: string, patch: Partial<HueZone>) => void;
-  /** One undo step per release: unlike a field's stream, two resizes a beat apart must not merge. */
-  handleHueZoneResize: (zoneId: string, footprint: Pick<HueZone, "centerX" | "centerY" | "scaleX" | "scaleY">) => void;
+  /** One undo step per release: unlike a field's stream, two resizes a beat apart must not merge.
+   *  Without `centerZ`, its height stays. */
+  handleHueZoneResize: (zoneId: string, footprint: CubeFootprint & { centerZ?: number }) => void;
 }
+
+const SHAPE_KEYS = ["centerX", "centerY", "centerZ", "scaleX", "scaleY", "scaleZ"] as const;
 
 export interface DroppedLight {
   channel: HueChannelPlacement;
@@ -102,11 +107,11 @@ export function useRoomMapHueZones({
     [adopt],
   );
 
-  const handleAddHueZone = useCallback((footprint?: Pick<HueZone, "centerX" | "centerY" | "scaleX" | "scaleY">) => {
+  const handleAddHueZone = useCallback((footprint?: CubeFootprint) => {
     if (!hueAreaId) return;
     const id = `hue-zone-${crypto.randomUUID()}`;
     const name = t("roomMap:hueZones.defaultName", { N: String(hueZones.length + 1) });
-    const newZone: HueZone = {
+    const draft: HueZone = {
       id,
       name,
       entertainmentAreaId: hueAreaId,
@@ -115,12 +120,11 @@ export function useRoomMapHueZones({
       centerZ: 0,
       scaleX: 0.5,
       scaleY: 0.5,
-      // Floor to ceiling: a zone is a patch of floor, and a light in it may hang or stand anywhere.
-      scaleZ: 1,
+      scaleZ: 0.5,
       channelIndices: [],
       borderColor: zoneToken(hueZones.length),
-      ...footprint,
     };
+    const newZone = withCubeScale(draft, footprint?.scale ?? 0.5, { x: footprint?.centerX ?? 0, y: footprint?.centerY ?? 0, z: 0 });
     apply({ zones: [...config.zones, newZone] });
     selectHueZone(id);
 
@@ -236,11 +240,11 @@ export function useRoomMapHueZones({
     : null;
 
   const handleHueZoneCenterChange = useCallback(
-    (zoneId: string, centerX: number, centerY: number, held = false) => {
+    (zoneId: string, centerX: number, centerY: number, held = false, centerZ?: number) => {
       let updated: HueZone | undefined;
       const next = config.zones.map((z) => {
         if (z.id === zoneId) {
-          updated = { ...z, centerX, centerY };
+          updated = withCubeScale(z, z.scaleX, { x: centerX, y: centerY, z: centerZ ?? z.centerZ });
           return updated;
         }
         return z;
@@ -257,14 +261,16 @@ export function useRoomMapHueZones({
     [config.zones, apply, settle],
   );
 
-  // The patch passes through verbatim — do NOT mirror one axis onto the other:
-  // each scale is a fraction of its own room side. See docs/architecture/room-map.md.
+  // A patch that touches its shape is made a cube again, taking `scaleX` as the size.
   const handleHueZoneUpdate = useCallback(
     (zoneId: string, patch: Partial<HueZone>) => {
       let updated: HueZone | undefined;
       const next = config.zones.map((z) => {
         if (z.id === zoneId) {
-          updated = { ...z, ...patch };
+          const merged = { ...z, ...patch };
+          updated = SHAPE_KEYS.some((key) => key in patch)
+            ? withCubeScale(merged, merged.scaleX, { x: merged.centerX, y: merged.centerY, z: merged.centerZ })
+            : merged;
           return updated;
         }
         return z;
@@ -284,10 +290,10 @@ export function useRoomMapHueZones({
   );
 
   const handleHueZoneResize = useCallback(
-    (zoneId: string, footprint: Pick<HueZone, "centerX" | "centerY" | "scaleX" | "scaleY">) => {
+    (zoneId: string, footprint: CubeFootprint & { centerZ?: number }) => {
       const zone = config.zones.find((z) => z.id === zoneId);
       if (!zone) return;
-      const updated = { ...zone, ...footprint };
+      const updated = withCubeScale(zone, footprint.scale, { x: footprint.centerX, y: footprint.centerY, z: footprint.centerZ ?? zone.centerZ });
       apply({ zones: config.zones.map((z) => (z.id === zoneId ? updated : z)) });
       settle("update_hue_zone (resize)", updateHueZone({ zone: updated, existingZones: config.zones }), false);
     },

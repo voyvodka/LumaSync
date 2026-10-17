@@ -37,7 +37,6 @@ export function CarryHint({ hint }: { hint: Hint | null }) {
           draw: (
             <span className={styles.line}>
               <span>{t("roomMap:carryHint.draw")}</span>
-              {key("Shift", t("roomMap:carryHint.square"))}
               {key(t("roomMap:shortcuts.keys.escape"), t("roomMap:carryHint.cancel"))}
             </span>
           ),

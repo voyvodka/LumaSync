@@ -36,14 +36,12 @@ use crate::models::room_map::{HueChannelPlacement, HueZone, ZoneRelativePosition
 /// what the area itself can accept.
 pub(crate) const HUE_AREA_CHANNEL_LIMIT: usize = 10;
 
-/// Lower clamp for zone scale on the X/Y axes. Matches the Inspector
-/// slider floor — anything smaller and the zone bounds box collapses to a
-/// degenerate point, and the per-channel relative coordinates lose
-/// authoring resolution. Z is intentionally exempt (out of authoring
-/// scope until the height-axis UI lands).
+/// Lower clamp for a zone's scale. Anything smaller collapses the zone to
+/// a point and the per-channel relative coordinates lose authoring
+/// resolution. Mirrored by `ZONE_SCALE_MIN` on the frontend.
 pub(crate) const HUE_ZONE_SCALE_MIN: f64 = 0.05;
 
-/// Upper clamp for zone scale on the X/Y axes. `1.0` ⇒ zone half-axis
+/// Upper clamp for a zone's scale. `1.0` ⇒ zone half-axis
 /// covers the full Hue cube (i.e. zone is the whole room). Beyond this
 /// the bounds box would overflow the room map AND the bridge cube — both
 /// invalid. The user spec allows zone-size == room-size, but never
@@ -64,8 +62,8 @@ const STATUS_HUE_ZONE_NOT_FOUND: &str = "HUE_ZONE_NOT_FOUND";
 const STATUS_HUE_ZONE_OUT_OF_BOUNDS: &str = "HUE_ZONE_CHANNEL_OUT_OF_BOUNDS";
 const STATUS_HUE_ZONE_LIMIT_REACHED: &str = "HUE_ZONE_LIMIT_REACHED";
 const STATUS_HUE_ZONE_CHANNEL_NOT_IN_AREA: &str = "HUE_ZONE_CHANNEL_NOT_IN_AREA";
-/// Zone scale is outside `[HUE_ZONE_SCALE_MIN, HUE_ZONE_SCALE_MAX]` on
-/// at least one axis, or non-finite. Distinct from
+/// Zone scale is outside `[HUE_ZONE_SCALE_MIN, HUE_ZONE_SCALE_MAX]`,
+/// non-finite, or not one scale on all three axes. Distinct from
 /// `HUE_ZONE_CHANNEL_OUT_OF_BOUNDS` (per-channel relative drift) because
 /// the cause is a slider the user pulled past the room-equals-zone
 /// ceiling — recovery is "shrink the zone", not "drag the channel back
@@ -167,8 +165,10 @@ fn zone_center_in_bounds(zone: &HueZone) -> bool {
     in_unit_range(zone.center_x) && in_unit_range(zone.center_y) && in_unit_range(zone.center_z)
 }
 
-/// Validate a Hue zone draft: cube bounds + per-axis scale clamps +
-/// `|center| + |scale| <= 1.0` invariant.
+/// Validate a Hue zone draft: centre inside the cube, one scale on all
+/// three axes within the clamps, and `|center| + scale <= 1.0` per axis.
+/// A zone is a cube in the bridge's space; the room map draws it in the
+/// room's proportions.
 fn validate_zone_shape(zone: &HueZone) -> Result<(), CommandStatus> {
     if !zone_center_in_bounds(zone) {
         return Err(CommandStatus::new(
@@ -178,23 +178,22 @@ fn validate_zone_shape(zone: &HueZone) -> Result<(), CommandStatus> {
         ));
     }
 
-    let sx = zone.scale_x;
-    let sy = zone.scale_y;
-    if !sx.is_finite() || !sy.is_finite() {
+    let scales = [
+        ("x", zone.scale_x),
+        ("y", zone.scale_y),
+        ("z", zone.scale_z),
+    ];
+    if scales.iter().any(|(_, s)| !s.is_finite()) {
         return Err(CommandStatus::new(
             STATUS_HUE_ZONE_OVERSIZED,
             "Zone scale must be a finite number.",
             None,
         ));
     }
-    if !(HUE_ZONE_SCALE_MIN..=HUE_ZONE_SCALE_MAX).contains(&sx)
-        || !(HUE_ZONE_SCALE_MIN..=HUE_ZONE_SCALE_MAX).contains(&sy)
+    if let Some((axis, _)) = scales
+        .iter()
+        .find(|(_, s)| !(HUE_ZONE_SCALE_MIN..=HUE_ZONE_SCALE_MAX).contains(s))
     {
-        let axis = if !(HUE_ZONE_SCALE_MIN..=HUE_ZONE_SCALE_MAX).contains(&sx) {
-            "x"
-        } else {
-            "y"
-        };
         return Err(CommandStatus::new(
             STATUS_HUE_ZONE_OVERSIZED,
             &format!(
@@ -204,15 +203,25 @@ fn validate_zone_shape(zone: &HueZone) -> Result<(), CommandStatus> {
             None,
         ));
     }
+    if (zone.scale_y - zone.scale_x).abs() > HUE_ZONE_BOUNDS_TOLERANCE
+        || (zone.scale_z - zone.scale_x).abs() > HUE_ZONE_BOUNDS_TOLERANCE
+    {
+        return Err(CommandStatus::new(
+            STATUS_HUE_ZONE_OVERSIZED,
+            "Zone is not a cube; its scale must be the same on all three axes.",
+            None,
+        ));
+    }
     // Bug #50/#53 invariant — `|center| + halfScale <= 1.0` so the zone
     // bounds box never overflows the Hue cube.
-    let half_x = sx;
-    let half_y = sy;
-    let cx = zone.center_x;
-    let cy = zone.center_y;
-    if cx.abs() + half_x > 1.0 + HUE_ZONE_BOUNDS_TOLERANCE
-        || cy.abs() + half_y > 1.0 + HUE_ZONE_BOUNDS_TOLERANCE
-    {
+    let overflows = [
+        (zone.center_x, zone.scale_x),
+        (zone.center_y, zone.scale_y),
+        (zone.center_z, zone.scale_z),
+    ]
+    .iter()
+    .any(|(c, s)| c.abs() + s > 1.0 + HUE_ZONE_BOUNDS_TOLERANCE);
+    if overflows {
         return Err(CommandStatus::new(
             STATUS_HUE_ZONE_OUT_OF_BOUNDS,
             "Zone bounds escape the room cube; shrink the zone or recenter it.",
@@ -585,7 +594,7 @@ mod tests {
             center_z: 0.0,
             scale_x: 0.3,
             scale_y: 0.3,
-            scale_z: 1.0,
+            scale_z: 0.3,
             border_color: None,
             center_color: None,
         }
@@ -806,6 +815,7 @@ mod tests {
         zone.center_y = 0.0;
         zone.scale_x = 1.5;
         zone.scale_y = 1.5;
+        zone.scale_z = 1.5;
         let result = create_hue_zone(CreateHueZoneRequest {
             zone,
             existing_zones: Vec::new(),
@@ -821,6 +831,7 @@ mod tests {
         zone.center_y = 0.0;
         zone.scale_x = 1.0;
         zone.scale_y = 1.0;
+        zone.scale_z = 1.0;
         let result = create_hue_zone(CreateHueZoneRequest {
             zone,
             existing_zones: Vec::new(),
@@ -836,6 +847,7 @@ mod tests {
         zone.center_y = 0.0;
         zone.scale_x = 0.01; // below HUE_ZONE_SCALE_MIN
         zone.scale_y = 0.01;
+        zone.scale_z = 0.01;
         let result = create_hue_zone(CreateHueZoneRequest {
             zone,
             existing_zones: Vec::new(),
@@ -844,18 +856,45 @@ mod tests {
     }
 
     #[test]
-    fn create_zone_accepts_asymmetric_scale_for_physical_metric_square() {
+    fn create_zone_rejects_a_zone_that_is_not_a_cube() {
+        for (sx, sy, sz) in [(0.4, 0.5, 0.4), (0.4, 0.4, 1.0)] {
+            let mut zone = make_hue_zone("z1", "area-1", vec![]);
+            zone.center_x = 0.0;
+            zone.center_y = 0.0;
+            zone.scale_x = sx;
+            zone.scale_y = sy;
+            zone.scale_z = sz;
+            let result = create_hue_zone(CreateHueZoneRequest {
+                zone,
+                existing_zones: Vec::new(),
+            });
+            assert_eq!(result.status.code, STATUS_HUE_ZONE_OVERSIZED);
+            assert!(result.zones.is_empty());
+        }
+    }
+
+    #[test]
+    fn create_zone_rejects_a_cube_that_overflows_in_height() {
         let mut zone = make_hue_zone("z1", "area-1", vec![]);
         zone.center_x = 0.0;
         zone.center_y = 0.0;
-        zone.scale_x = 0.4;
-        zone.scale_y = 0.5;
+        zone.center_z = 0.8;
         let result = create_hue_zone(CreateHueZoneRequest {
             zone,
             existing_zones: Vec::new(),
         });
-        assert_eq!(result.status.code, STATUS_HUE_ZONE_CREATED);
-        assert_eq!(result.zones.len(), 1);
+        assert_eq!(result.status.code, STATUS_HUE_ZONE_OUT_OF_BOUNDS);
+    }
+
+    #[test]
+    fn create_zone_rejects_a_non_finite_height_scale() {
+        let mut zone = make_hue_zone("z1", "area-1", vec![]);
+        zone.scale_z = f64::INFINITY;
+        let result = create_hue_zone(CreateHueZoneRequest {
+            zone,
+            existing_zones: Vec::new(),
+        });
+        assert_eq!(result.status.code, STATUS_HUE_ZONE_OVERSIZED);
     }
 
     #[test]
@@ -879,6 +918,7 @@ mod tests {
         zone.center_y = 0.0;
         zone.scale_x = 0.5;
         zone.scale_y = 0.5;
+        zone.scale_z = 0.5;
         let result = create_hue_zone(CreateHueZoneRequest {
             zone,
             existing_zones: Vec::new(),
@@ -904,9 +944,11 @@ mod tests {
         existing.center_y = 0.0;
         existing.scale_x = 0.5;
         existing.scale_y = 0.5;
+        existing.scale_z = 0.5;
         let mut updated = existing.clone();
         updated.scale_x = 1.2;
         updated.scale_y = 1.2;
+        updated.scale_z = 1.2;
         let result = update_hue_zone(UpdateHueZoneRequest {
             zone: updated,
             existing_zones: vec![existing.clone()],

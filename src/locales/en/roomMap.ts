@@ -314,6 +314,9 @@ export default {
     decorDriveInfo: "The Hue light you pick takes this lamp's place, height and model, and LumaSync drives it from then on. The house light goes; undo brings it back.",
     decorHeightLabel: "Light height, floor to ceiling",
     hueHeightZoneLimit: "Limited by zone {{name}} ({{min}}–{{max}} m). Move the light out of the zone to place it outside that range.",
+    zoneSizeLabel: "Zone size, share of the room",
+    zoneSizeReadout: "{{width}} × {{depth}} × {{height}} m",
+    zoneHeightLabel: "Zone centre height above the floor",
     zoneChannelCount_one: "{{count}} light",
     zoneChannelCount_other: "{{count}} lights",
     widthLabel: "Width",
@@ -423,7 +426,6 @@ export default {
     rise: "up and down",
     letGo: "let go",
     draw: "Drag to draw a zone",
-    square: "square",
     cancel: "cancel",
   },
   shortcuts: {

@@ -6,6 +6,7 @@ import { clamp } from "@/shared/lib/math";
 import { hueChannelObjectId } from "../model/objectId";
 import { findBoundZone, hueToMetres, hueToPlanMetres, planMetresToHue, resolveHueChannelWorld } from "../model/hueChannelPosition";
 import type { SnapResult } from "../model/snapGeometry";
+import type { CubeFootprint } from "../model/zoneRect";
 import { hueChannelDotText, hueChannelName } from "../model/hueChannelLabel";
 import { fanOutStacked } from "../model/stackFan";
 import { markDragging, pastSlop, useEscapeCancels } from "./objects/dragIntent";
@@ -49,7 +50,7 @@ interface HueChannelOverlayProps {
   onSnapDragMove?: (id: string, x: number, y: number, w: number, h: number) => SnapResult;
   onSnapDragEnd?: () => void;
   /** Called once when a grip on the active zone's bounds is let go. */
-  onHueZoneResize?: (zoneId: string, footprint: Pick<HueZone, "centerX" | "centerY" | "scaleX" | "scaleY">) => void;
+  onHueZoneResize?: (zoneId: string, footprint: CubeFootprint) => void;
   /**
    * When supplied, every zone in the array renders its
    * dashed bounds box on the canvas (not just the active one). Passive

@@ -1,8 +1,7 @@
 /**
- * HueZoneInspector — a zone is a rectangle: its width and depth in metres, each written as its own
- * cube scale (`width / roomWidth`, `depth / roomDepth`) and capped by the headroom Rust leaves a
- * zone near a wall. Its colour is one of the palette's six, and its lights join and leave from
- * their chips.
+ * HueZoneInspector — a zone is a cube in Hue units: one size as a share of the room, its sides in
+ * metres beside it, and its centre's height. The size is capped by the headroom Rust leaves a zone
+ * near a wall. Its colour is one of the palette's six, and its lights join and leave from their chips.
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,7 +27,7 @@ const BASE_ZONE: HueZone = {
   centerX: 0,
   centerY: 0,
   centerZ: 0,
-  // 0.5 × 5 m = 2.5 m wide, 0.5 × 4 m = 2.0 m deep.
+  // Half the room: 2.5 m wide, 2.0 m deep and 1.25 m high in a 5 × 4 × 2.5 m room.
   scaleX: 0.5,
   scaleY: 0.5,
   scaleZ: 0.5,
@@ -40,12 +39,14 @@ function renderZone({
   zone = BASE_ZONE,
   roomWidthM = 5,
   roomDepthM = 4,
+  roomHeightM = 2.5,
   zones = [zone],
   channels = [],
 }: {
   zone?: HueZone;
   roomWidthM?: number;
   roomDepthM?: number;
+  roomHeightM?: number;
   zones?: HueZone[];
   channels?: HueChannelPlacement[];
 } = {}) {
@@ -64,13 +65,14 @@ function renderZone({
       channels={channels}
       roomWidthM={roomWidthM}
       roomDepthM={roomDepthM}
+      roomHeightM={roomHeightM}
       {...handlers}
     />,
   );
   return {
     ...handlers,
-    width: screen.getByTestId("hue-zone-width-input") as HTMLInputElement,
-    depth: screen.getByTestId("hue-zone-depth-input") as HTMLInputElement,
+    size: screen.getByTestId("hue-zone-size-input") as HTMLInputElement,
+    height: screen.getByTestId("hue-zone-height-input") as HTMLInputElement,
   };
 }
 
@@ -80,56 +82,52 @@ function commit(input: HTMLInputElement, value: string) {
   fireEvent.keyDown(input, { key: "Enter" });
 }
 
-describe("HueZoneInspector — width and depth", () => {
-  it("shows each side in metres and writes it as that axis's cube scale alone", () => {
-    const { onUpdate, width, depth } = renderZone();
-    expect(width.value).toBe("2.50");
-    expect(depth.value).toBe("2.00");
-    commit(width, "3");
-    expect(onUpdate).toHaveBeenLastCalledWith({ scaleX: expect.closeTo(0.6, 5) });
-    commit(depth, "1");
-    expect(onUpdate).toHaveBeenLastCalledWith({ scaleY: expect.closeTo(0.25, 5) });
+describe("HueZoneInspector — size and height", () => {
+  it("shows its size as a share of the room with its sides in metres, and writes it to all three axes", () => {
+    const { onUpdate, size } = renderZone();
+    expect(size.value).toBe("50");
+    expect(screen.getByText('roomMap:inspector.zoneSizeReadout {"width":"2.50","depth":"2.00","height":"1.25"}')).toBeInTheDocument();
+    commit(size, "30");
+    expect(onUpdate).toHaveBeenLastCalledWith({ centerX: 0, centerY: 0, centerZ: 0, scaleX: 0.3, scaleY: 0.3, scaleZ: 0.3 });
   });
 
-  it("reaches the walls and goes no further", () => {
-    const { onUpdate, width, depth } = renderZone();
-    expect(width).toHaveAttribute("aria-valuemax", "5");
-    expect(depth).toHaveAttribute("aria-valuemax", "4");
-    commit(width, "6");
-    expect(onUpdate).not.toHaveBeenCalled();
-    commit(width, "5");
-    expect(onUpdate.mock.calls[0]![0].scaleX).toBeCloseTo(1, 5);
+  it("shows its centre's height in metres and moves it between the floor and the ceiling", () => {
+    const { onUpdate, height } = renderZone();
+    expect(height.value).toBe("1.25");
+    expect(Number(height.getAttribute("aria-valuemin"))).toBeCloseTo(0.63, 2);
+    expect(Number(height.getAttribute("aria-valuemax"))).toBeCloseTo(1.88, 2);
+    commit(height, "1.5");
+    expect(onUpdate.mock.calls[0]![0].centerZ).toBeCloseTo(0.2, 5);
   });
 
-  it("holds both sides while the room's size has not loaded, rather than dividing by it", () => {
-    const { width, depth } = renderZone({ roomWidthM: 0, roomDepthM: 0 });
-    expect(width).toBeDisabled();
-    expect(depth).toBeDisabled();
+  it("holds both fields while the room's size has not loaded, rather than dividing by it", () => {
+    const { size, height } = renderZone({ roomWidthM: 0, roomDepthM: 0, roomHeightM: 0 });
+    expect(size).toBeDisabled();
+    expect(height).toBeDisabled();
   });
 });
 
-// Rust refuses `|center| + scale > 1` (`validate_zone_shape`). Bounding a side
+// Rust refuses `|center| + scale > 1` (`validate_zone_shape`). Bounding the size
 // by the room alone let a wall-side zone grow past that, and the refusal was
 // invisible because nothing read `status.code`.
 describe("HueZoneInspector — headroom at the wall", () => {
-  const NEAR_WALL: HueZone = { ...BASE_ZONE, centerX: 0.7, centerY: 0, scaleX: 0.2, scaleY: 0.25 };
+  const NEAR_WALL: HueZone = { ...BASE_ZONE, centerX: 0.7, centerY: 0, scaleX: 0.2, scaleY: 0.2, scaleZ: 0.2 };
 
-  it("caps a side at the centre's remaining headroom, not the room's", () => {
-    // centerX 0.7 leaves scaleX ≤ 0.3 → 1.5 m of a 5 m room.
-    const { onUpdate, width } = renderZone({ zone: NEAR_WALL });
-    expect(Number(width.getAttribute("aria-valuemax"))).toBeCloseTo(1.5, 5);
-    commit(width, "1.5");
+  it("caps its size at the centre's remaining headroom, not the room's", () => {
+    // centerX 0.7 leaves a scale of at most 0.3.
+    const { onUpdate, size } = renderZone({ zone: NEAR_WALL });
+    expect(size).toHaveAttribute("aria-valuemax", "30");
+    commit(size, "30");
     const patch = onUpdate.mock.calls[0]![0];
     expect(Math.abs(NEAR_WALL.centerX) + patch.scaleX!).toBeLessThanOrEqual(1 + 1e-9);
   });
 
-  it("keeps a legacy escapee editable instead of collapsing its range", () => {
-    const { width, depth } = renderZone({ zone: { ...BASE_ZONE, centerX: 1, centerY: 1, scaleX: 0.9, scaleY: 0.9 } });
-    // Headroom is 0 on both axes; the floor keeps min ≤ max so the fields work.
-    for (const field of [width, depth]) {
-      expect(Number(field.getAttribute("aria-valuemax"))).toBeGreaterThanOrEqual(Number(field.getAttribute("aria-valuemin")));
-      expect(field).not.toBeDisabled();
-    }
+  it("reaches the whole room from its middle and goes no further", () => {
+    const { onUpdate, size } = renderZone();
+    commit(size, "120");
+    expect(onUpdate).not.toHaveBeenCalled();
+    commit(size, "100");
+    expect(onUpdate.mock.calls[0]![0].scaleZ).toBeCloseTo(1, 5);
   });
 });
 

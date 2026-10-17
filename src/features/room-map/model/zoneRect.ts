@@ -20,6 +20,13 @@ export const ZONE_SCALE_MIN = 0.05;
 
 type Footprint = Pick<HueZone, "centerX" | "centerY" | "scaleX" | "scaleY">;
 
+/** A cube's floor: its centre on the plan and its one scale. */
+export interface CubeFootprint {
+  centerX: number;
+  centerY: number;
+  scale: number;
+}
+
 export function zoneRect(zone: Footprint, widthM: number, depthM: number): ZoneRect {
   const a = hueToPlanMetres({ x: zone.centerX - Math.abs(zone.scaleX), y: zone.centerY + Math.abs(zone.scaleY) }, widthM, depthM);
   const b = hueToPlanMetres({ x: zone.centerX + Math.abs(zone.scaleX), y: zone.centerY - Math.abs(zone.scaleY) }, widthM, depthM);
@@ -30,40 +37,16 @@ export function zoneMinSize(widthM: number, depthM: number): { w: number; d: num
   return { w: ZONE_SCALE_MIN * widthM, d: ZONE_SCALE_MIN * depthM };
 }
 
-/** Clamped into the room and the Rust scale band, so the backend never refuses it. */
-export function rectToZone(rect: ZoneRect, widthM: number, depthM: number): Footprint {
-  const min = zoneMinSize(widthM, depthM);
-  const side = (a: number, b: number, size: number, least: number) => {
-    let lo = clamp(Math.min(a, b), 0, size);
-    let hi = clamp(Math.max(a, b), 0, size);
-    if (hi - lo < least) {
-      const mid = clamp((lo + hi) / 2, least / 2, size - least / 2);
-      lo = mid - least / 2;
-      hi = mid + least / 2;
-    }
-    return [lo, hi] as const;
-  };
-  const [x0, x1] = side(rect.x0, rect.x1, widthM, min.w);
-  const [y0, y1] = side(rect.y0, rect.y1, depthM, min.d);
-  const centre = planMetresToHue((x0 + x1) / 2, (y0 + y1) / 2, widthM, depthM);
-  return {
-    centerX: centre.x,
-    centerY: centre.y,
-    scaleX: clamp((x1 - x0) / widthM, ZONE_SCALE_MIN, 1),
-    scaleY: clamp((y1 - y0) / depthM, ZONE_SCALE_MIN, 1),
-  };
+/** The cube a rectangle drawn on the plan stands for: its larger side in Hue units, clamped into the
+ *  Rust scale band. `withCubeScale` keeps it inside the room. */
+export function rectToZone(rect: ZoneRect, widthM: number, depthM: number): CubeFootprint {
+  const centre = planMetresToHue((rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2, widthM, depthM);
+  const scale = Math.max(Math.abs(rect.x1 - rect.x0) / widthM, Math.abs(rect.y1 - rect.y0) / depthM);
+  return { centerX: centre.x, centerY: centre.y, scale: clamp(Number.isFinite(scale) ? scale : ZONE_SCALE_MIN, ZONE_SCALE_MIN, 1) };
 }
 
-/** `square` keeps the start's proportions, measured in metres. */
-export function resizeZoneRect(
-  start: ZoneRect,
-  handle: ZoneHandle,
-  dx: number,
-  dy: number,
-  widthM: number,
-  depthM: number,
-  square = false,
-): ZoneRect {
+/** A zone is a cube in Hue units, so on the plan it keeps the room's proportions as it grows. */
+export function resizeZoneRect(start: ZoneRect, handle: ZoneHandle, dx: number, dy: number, widthM: number, depthM: number): ZoneRect {
   const min = zoneMinSize(widthM, depthM);
   const west = handle.includes("w");
   const east = handle.includes("e");
@@ -74,9 +57,8 @@ export function resizeZoneRect(
   if (east) x1 = clamp(x1 + dx, x0 + min.w, widthM);
   if (north) y0 = clamp(y0 + dy, 0, y1 - min.d);
   if (south) y1 = clamp(y1 + dy, y0 + min.d, depthM);
-  if (!square) return { x0, y0, x1, y1 };
 
-  const ratio = (start.x1 - start.x0) / Math.max(start.y1 - start.y0, 1e-6);
+  const ratio = widthM / depthM;
   const horizontal = west || east;
   const vertical = north || south;
   let w = x1 - x0;
@@ -100,24 +82,20 @@ export function resizeZoneRect(
   return { x0: nx0, y0: ny0, x1: nx0 + w, y1: ny0 + d };
 }
 
-export function drawnZoneRect(
-  from: { x: number; y: number },
-  to: { x: number; y: number },
-  widthM: number,
-  depthM: number,
-  square = false,
-): ZoneRect {
+/** Drawn from a corner in the room's proportions: the pointer's larger reach, in Hue units, sets the cube. */
+export function drawnZoneRect(from: { x: number; y: number }, to: { x: number; y: number }, widthM: number, depthM: number): ZoneRect {
   const x = clamp(to.x, 0, widthM);
   const y = clamp(to.y, 0, depthM);
-  if (!square) return { x0: Math.min(from.x, x), y0: Math.min(from.y, y), x1: Math.max(from.x, x), y1: Math.max(from.y, y) };
-  const room = { x: x >= from.x ? widthM - from.x : from.x, y: y >= from.y ? depthM - from.y : from.y };
-  const side = Math.min(Math.max(Math.abs(x - from.x), Math.abs(y - from.y)), room.x, room.y);
-  const ex = x >= from.x ? from.x + side : from.x - side;
-  const ey = y >= from.y ? from.y + side : from.y - side;
+  const east = x >= from.x;
+  const south = y >= from.y;
+  const room = Math.min((east ? widthM - from.x : from.x) / widthM, (south ? depthM - from.y : from.y) / depthM);
+  const s = Math.min(Math.max(Math.abs(x - from.x) / widthM, Math.abs(y - from.y) / depthM), room);
+  const ex = east ? from.x + s * widthM : from.x - s * widthM;
+  const ey = south ? from.y + s * depthM : from.y - s * depthM;
   return { x0: Math.min(from.x, ex), y0: Math.min(from.y, ey), x1: Math.max(from.x, ex), y1: Math.max(from.y, ey) };
 }
 
-/** A click without a drag: half the room each way, the size Add zone always made. */
+/** A click without a drag: half the room each way, the cube of scale 0.5 Add zone makes. */
 export function clickedZoneRect(at: { x: number; y: number }, widthM: number, depthM: number): ZoneRect {
   const w = widthM / 2;
   const d = depthM / 2;

@@ -8,6 +8,7 @@
 import { describe, expect, it } from "vitest";
 
 import { HUE_CHANNEL_HEIGHT_ORIGIN, type RoomMapConfig } from "../../src/shared/contracts/roomMap";
+import { isCubeZone } from "../../src/features/room-map/model/zoneCube";
 import { ROOM_MAP_PRESETS, ROOM_MAP_PRESET_IDS } from "../roomMaps";
 
 /**
@@ -76,6 +77,16 @@ describe("room map presets", () => {
       expect(zone.centerX + zone.scaleX * x).toBeCloseTo(channel.x, 10);
       expect(zone.centerY + zone.scaleY * y).toBeCloseTo(channel.y, 10);
       expect(zone.centerZ + zone.scaleZ * z).toBeCloseTo(channel.z, 10);
+    }
+  });
+
+  it("the zone is a cube that holds its lights", () => {
+    const map = ROOM_MAP_PRESETS.zoned.build();
+    const zone = map?.zones[0];
+    expect(zone && isCubeZone(zone)).toBe(true);
+    for (const channel of map?.hueChannels ?? []) {
+      if (channel.zoneRelativePosition == null) continue;
+      for (const v of Object.values(channel.zoneRelativePosition)) expect(Math.abs(v)).toBeLessThanOrEqual(1);
     }
   });
 

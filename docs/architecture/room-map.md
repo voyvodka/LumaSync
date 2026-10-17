@@ -106,21 +106,24 @@ there that moved the sofa while turning the room was a layout change made by acc
 walls' handles, a strip's ends and corners and image layers — so picking or adding an image opens the
 plan for it once the file dialog returns one, and going back to 3D closes that card. A Hue zone is
 drawn in 3D as well (`scene/zoneBoxes.ts`): the zone being edited, or else the selected light's, as a
-low wall in its colour that fades upward over a solid outline where it meets the floor, named over its
-highest corner on screen (over the top's middle the name sat on the lamp inside), and with the zones
+low wall in its colour that rises from the cube's bottom and fades upward, over a solid outline of its
+footprint on the floor below, named over its highest corner on screen (over the top's middle the name sat on the lamp inside), and with the zones
 toggle the area's others faintly, as the plan draws them. So a zone picked or added stays in the 3D room,
 and its card stays open across a stage switch. The boxes are built with the scene and only shown or
 hidden after, so picking a zone rebuilds nothing. A drawn zone is picked in 3D under everything else:
 only where the press finds nothing but its floor (`model/zoneGesture.ts`), because its box stands round
 the furniture inside it and a nearest-hit rule gave it the sofa's clicks. It is carried from its floor
 and resized from eight grips only when it is itself the selection (`ZoneMarks.held`), not when it is
-shown for a selected light, whose drag carries the light. While held it is drawn as its whole box, to
-its real height; at rest the low wall keeps the furniture readable. One write on release, through the
-plan's own zone handlers: a live write rebuilt the room on every move. Carried, only its middle is
-written, so a zone against a wall stops there instead of shrinking. They are flagged `OVERLAY` for the glow pass, which hides them: its black stand-in
+shown for a selected light, whose drag carries the light. The grips keep the room's proportions, and
+⇧ while carrying raises or lowers it along the upright plane facing the camera, as a raised light
+rises, held between the floor and the ceiling. While held it is drawn as its whole cube; at rest the
+low wall keeps the furniture readable. One write on release, through the plan's own zone handlers: a
+live write rebuilt the room on every move. Carried or raised, only its centre is written, so a zone
+against a wall stops there instead of shrinking. They are flagged `OVERLAY` for the glow pass, which hides them: its black stand-in
 for every other mesh writes depth, and a zone's box drawn that way put out the bulbs inside it. A loose
-light let go inside a drawn zone joins it, on the plan or carried in 3D, at the spot it was put down
-(`model/zoneDrop.ts`); the smallest zone wins where they overlap. Only a drawn zone takes it — the
+light let go inside a drawn zone's cube joins it, on the plan or carried in 3D, at the spot it was put
+down (`model/zoneDrop.ts`); the smallest zone wins where they overlap. One over a zone's floor but
+above or below its cube stays loose, since joining would cut its height to the cube's. Only a drawn zone takes it — the
 one being edited, or every zone of the area with the zones toggle — since one hidden took the light
 unseen. The inspector's zone picker still assigns, at the zone's middle. The plan's own switches and keys step aside in 3D: the grid and zone-outline switches
 are hidden, ⌘0 is the camera's Whole room, the arrows with nothing selected do nothing, and the keys
@@ -153,7 +156,7 @@ model. The template cards draw their rooms with it (`RoomPreview`).
 
 **Every typed number is one field, and the inspector holds them all.** `ui/DecimalField.tsx` is
 the room map's only number input: the inspectors' position, size, height and rotation, a strip's
-LED count, a zone's width and depth and the room's size. It reads as a value at rest, applies on leaving or
+LED count, a zone's size and height and the room's size. It reads as a value at rest, applies on leaving or
 Enter, takes a comma as the decimal mark (Turkish writes one), and puts the old value back for a
 number out of range, as Esc does — the design language's rule, where the fields it replaced had
 clamped. ↑/↓ step and apply at once, so a caller that saves per commit passes a gesture key: typed
@@ -246,30 +249,36 @@ bridge position, never re-route a light.
 
 **The one-shot fit has to read the dimensions live, not the ones present at first render.** `useRoomMapState` seeds `DEFAULT_ROOM_MAP` and swaps in the stored room a commit later, and the canvas container only mounts once loading ends — so a ref captured at first render always held the 5×4 placeholder, and *every* map was framed as if it were 5×4. A larger room then opened zoomed too far in, overflowing the canvas instead of sitting centred in it. The guard against re-fitting under a user who is editing the room size is `initialFitDone`, not a stale ref; the two were conflated, and a test had pinned the stale read as intentional with the reasoning that "a dimension change arriving before the container mounts must not become the basis of the fit" — but that change *is* the room finishing loading.
 
-**A zone is a rectangle on the floor, its two sides set independently.** The Hue frame is unitless:
+**A zone is a cube in the Hue space: one scale on all three axes.** The Hue frame is unitless:
 every axis runs −1 to 1 and the room is stretched onto it per axis (width to x, depth to y, height
-to z), so a zone's `scaleX` and `scaleY` are each a fraction of their own room side, and the bridge
-never sees a zone — only the world positions resolved through it. The dock edits width and depth
-in metres; the plan draws one with a drag ("Add zone" arms the draw, a click drops half the room
-each way, Shift keeps it square) and reshapes it from eight grips on the active zone's box, which
-move the box, its centre, its name chip and every bound light in place and write the zone once on
-release (`model/zoneRect.ts`). An earlier inspector held a zone to a physical square with one
-edge field; nothing in the frame asked for that. Rust validates each axis on its own against the
-`HUE_ZONE_SCALE_MIN` / `HUE_ZONE_SCALE_MAX` band and the cube-overflow invariant
-(`src-tauri/src/commands/room_map/hue_zone.rs`). The frontend mirrors that band as a clamp; the two
-constants have to move together.
+to z). A zone's `scaleX`, `scaleY` and `scaleZ` are one value, so on the plan and in 3D it draws as
+a box in the room's proportions, the same share of each side. This is the shape the Hue app's own
+entertainment-area editor works in, and the bridge never sees a zone — only the positions resolved
+through it (`hue.md`, "Entertainment positions"). A bound light stores its place relative to the
+zone's centre, so moving or resizing the zone carries its lights with it; a dragged bound light is
+held inside its zone and leaves it only through its zone picker. Loose lights and overlapping zones
+are both allowed. The dock edits the size as a share of the room with the sides in metres beside
+it, and the centre's height; the plan draws one with a drag in the room's proportions ("Add zone"
+arms the draw, a click drops the cube of scale 0.5) and reshapes it from eight grips on the active
+zone's box, which keep the proportions and move the box, its centre, its name chip and every bound
+light in place before writing the zone once on release (`model/zoneRect.ts`). Every write goes
+through `withCubeScale` (`model/zoneCube.ts`), which clamps the scale to the band and the centre so
+`|center| + scale ≤ 1` on every axis. Rust validates the same: the `HUE_ZONE_SCALE_MIN` /
+`HUE_ZONE_SCALE_MAX` band on each axis, equal scales (`HUE_ZONE_OVERSIZED` otherwise) and the
+cube-overflow invariant on all three axes (`src-tauri/src/commands/room_map/hue_zone.rs`). The
+frontend's `ZONE_SCALE_MIN` mirrors the band; the two constants have to move together. An earlier
+build kept the two floor sides independent and spanned every zone floor to ceiling; that let one
+zone's lights sit in a box the Hue app could not draw.
 
-**A zone spans floor to ceiling, so it never limits how high a light in it sits.** Zones were
-created at `centerZ 0, scaleZ 0.5`; since a bound light's height is `centerZ + scaleZ · relative.z`,
-that held every light in a zone to the middle half of the room's height — the height field stopped
-short of floor and ceiling and "hang from the ceiling" did nothing. A zone is now made at
-`(0, 1)`, and the `10 → 11` migration rewrites each bound light's relative z to the height it
-resolved to before opening its zone, so no light moves. `(0, 1)` is a default, not an invariant: a
-v10 build still makes `0.5` zones in a v11 file, so every reader keeps the general formula.
-`scaleZ` is still the one scale Rust does not validate, because no control authors it. It cannot
-arrive bad by accident — a non-finite number serialises to `null` and fails deserialisation,
-loading drops non-finite zones, and the live path clamps. A zone-depth control has to bring a Z
-band and its frontend clamp with it, the way X and Y have them.
+**A file an older build wrote is made cubic where it is read, and no light moves.** The `11 → 12`
+migration (`cubeZonesV12.ts`, a frozen copy so later changes to the live helper cannot rewrite
+history) gives each zone the larger of its floor scales, grown to cover its bound lights' spread,
+with its centre kept where it fits and its height at the middle of its lights. Each bound light's
+relative position is then rewritten from the new cube, so it resolves where it did. The same
+`cubeZones` runs on every load and room switch, because a v11 build can still write a non-cube zone
+into a v12 file. Before v11, zones were made at `centerZ 0, scaleZ 0.5`, which held every bound
+light to the middle half of the room's height; `10 → 11` opened them floor to ceiling, keeping each
+light's height. Readers keep the general `center + scale · relative` formula on every axis.
 
 **A large zone's centre marker stops well short of the wall it is pinned against, so the pinned edge lights up.** `|center| + scale ≤ 1` means the centre can only reach `1 - scale`, and at that point the box edge is exactly on the wall — correct, but on a 5 m zone in a 9 m room the marker parks 2.5 m away from the edge holding it, and the drag reads as broken rather than finished. `pinnedZoneEdges` names the flush walls and the drag path writes them to `data-zone-pinned`; four CSS custom-property slots compose the inset shadow so a corner lights both its edges. The cue is a `box-shadow` rather than a `border-*` override because the bounds box sets `border` inline, and it is dropped in forced-colours mode, where a real border stands in. The comparison is tolerant rather than `===`: the drag compares against the bound `clamp` just returned so it would match exactly, but a centre round-tripped through the backend carries float noise and `-1 + 0.6` is not `-0.4`.
 

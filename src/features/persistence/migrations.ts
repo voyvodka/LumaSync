@@ -39,6 +39,8 @@ import { moveHueChannelToWorld } from "@/features/room-map/model/hueChannelPosit
 import { stripsFromLegacy } from "@/features/strips/model/legacyStrips";
 import type { LegacyV7StripKeys } from "@/shared/contracts/strips";
 
+import { cubeZonesV12 } from "./cubeZonesV12";
+
 // ---------------------------------------------------------------------------
 // Legacy ShellState shape — used by the v2 → v3 migration step to read the
 // retired corner fields off untyped persisted state without resurrecting
@@ -107,65 +109,89 @@ type LegacyWindowGeometry = {
  *   unchanged (idempotent — safe to call on every load).
  * - Otherwise each step (`1 → 2`, `2 → 3`, …) runs in order; later steps
  *   only run when the running version is still below their target.
+ * - `upTo` stops the chain at that version, so a step's test reads its own result.
  */
-export function migrateShellState(state: ShellState): ShellState {
+export function migrateShellState(state: ShellState, upTo: number = SHELL_STATE_SCHEMA_VERSION): ShellState {
   const currentVersion = state.schemaVersion ?? 1;
-  if (currentVersion >= SHELL_STATE_SCHEMA_VERSION) {
+  if (currentVersion >= upTo) {
     return state;
   }
 
   let next = state;
 
   // 1 → 2: fold legacy hueZones into zones:HueZone[], drop logical leftovers
-  if ((next.schemaVersion ?? 1) < 2) {
+  if ((next.schemaVersion ?? 1) < 2 && 2 <= upTo) {
     next = migrateV1ToV2(next);
   }
 
   // 2 → 3: replace corner+size geometry with mode-invariant center point
-  if ((next.schemaVersion ?? 1) < 3) {
+  if ((next.schemaVersion ?? 1) < 3 && 3 <= upTo) {
     next = migrateV2ToV3(next);
   }
 
   // 3 → 4: re-fold hueZones the Lights dock stranded after 1 → 2 had run
-  if ((next.schemaVersion ?? 1) < 4) {
+  if ((next.schemaVersion ?? 1) < 4 && 4 <= upTo) {
     next = migrateV3ToV4(next);
   }
 
   // 4 → 5: stamp each Hue channel placement with its entertainment area
-  if ((next.schemaVersion ?? 1) < 5) {
+  if ((next.schemaVersion ?? 1) < 5 && 5 <= upTo) {
     next = migrateV4ToV5(next);
   }
 
   // 5 → 6: fold the retired region overrides into channel positions
-  if ((next.schemaVersion ?? 1) < 6) {
+  if ((next.schemaVersion ?? 1) < 6 && 6 <= upTo) {
     next = migrateV5ToV6(next);
   }
 
   // 6 → 7: drop the keys nothing read
-  if ((next.schemaVersion ?? 1) < 7) {
+  if ((next.schemaVersion ?? 1) < 7 && 7 <= upTo) {
     next = migrateV6ToV7(next);
   }
 
   // 7 → 8: store the local output as strips
-  if ((next.schemaVersion ?? 1) < 8) {
+  if ((next.schemaVersion ?? 1) < 8 && 8 <= upTo) {
     next = migrateV7ToV8(next);
   }
 
   // 8 → 9: drop the old LED preview's keys
-  if ((next.schemaVersion ?? 1) < 9) {
+  if ((next.schemaVersion ?? 1) < 9 && 9 <= upTo) {
     next = migrateV8ToV9(next);
   }
 
   // 9 → 10: drop the room map counter nothing read
-  if ((next.schemaVersion ?? 1) < 10) {
+  if ((next.schemaVersion ?? 1) < 10 && 10 <= upTo) {
     next = migrateV9ToV10(next);
   }
 
   // 10 → 11: zones span floor to ceiling
-  if ((next.schemaVersion ?? 1) < 11) {
+  if ((next.schemaVersion ?? 1) < 11 && 11 <= upTo) {
     next = migrateV10ToV11(next);
   }
 
+  // 11 → 12: zones become cubes in the Hue space
+  if ((next.schemaVersion ?? 1) < 12 && 12 <= upTo) {
+    next = migrateV11ToV12(next);
+  }
+
+  return next;
+}
+
+// ---------------------------------------------------------------------------
+// 11 → 12 — a zone is a cube
+// ---------------------------------------------------------------------------
+
+/** One scale on all three axes, each bound light kept where it resolved (`cubeZonesV12`). The
+ *  kept rooms carry zones too, and a room switch copies them back into `roomMap`. */
+function migrateV11ToV12(state: ShellState): ShellState {
+  const next = { ...state, schemaVersion: 12 } as ShellState;
+  if (state.roomMap) next.roomMap = cubeZonesV12(state.roomMap);
+  if (state.roomLayouts) {
+    next.roomLayouts = {
+      ...state.roomLayouts,
+      rooms: state.roomLayouts.rooms.map((room) => (room.config ? { ...room, config: cubeZonesV12(room.config) } : room)),
+    };
+  }
   return next;
 }
 

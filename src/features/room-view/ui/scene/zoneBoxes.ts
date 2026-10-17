@@ -19,6 +19,7 @@ import {
   Vector3,
 } from "three";
 
+import { hueToMetres } from "@/features/room-map/model/hueChannelPosition";
 import { zoneHex } from "@/features/room-map/model/zoneColor";
 import type { ZoneMarks } from "@/features/room-map/model/zoneMarks";
 import type { ZoneRect } from "@/features/room-map/model/zoneRect";
@@ -32,7 +33,7 @@ import { floorBand } from "./selection";
 const LABEL_PX = 22;
 const LABEL_LIFT_PX = 12;
 const FLOOR_LIFT = 0.006;
-// A box to the ceiling, the zone's real height, read as a cage over the furniture.
+// The whole cube reads as a cage over the furniture, so at rest only a low wall rises from its bottom.
 const WALL_M = 0.45;
 /** Clear of the top bar and the carry hint under it. */
 const TOP_NDC = 0.72;
@@ -56,8 +57,9 @@ export interface ZoneBoxes {
   group: Group;
   /** True when what is shown changed. */
   mark(marks: ZoneMarks | null): boolean;
-  /** Its whole box on `rect` (plan metres) in place of its low wall while held; null sets it down. */
-  hold(zoneId: string, rect: ZoneRect | null): boolean;
+  /** Its whole cube on `rect` (plan metres) at `centerZ` (Hue units) in place of its low wall while
+   *  held; null sets it down. */
+  hold(zoneId: string, rect: ZoneRect | null, centerZ?: number): boolean;
   setPixelsPerMetre(ppm: number): void;
   orient(cameraQuaternion: Quaternion, camera?: Camera): void;
 }
@@ -162,6 +164,7 @@ export function buildZoneBoxes(zones: readonly HueZone[], dims: RoomDimensions):
     const h = Math.max(size.y, 0.01);
     const d = Math.max(size.z, 0.01);
     const wallH = Math.min(h, WALL_M);
+    const bottom = Math.max(centre.y - h / 2, 0);
     const tint = { color: colour, transparent: true, depthWrite: false, toneMapped: false, vertexColors: true };
     const wall = new Mesh(fadingWall(w, d, wallH), new MeshBasicMaterial({ ...tint, side: BackSide, opacity: WALL_OPACITY }));
     const posts = new LineSegments(cornerPosts(w, d, wallH), new LineBasicMaterial({ ...tint, opacity: POST_OPACITY }));
@@ -178,13 +181,15 @@ export function buildZoneBoxes(zones: readonly HueZone[], dims: RoomDimensions):
       new MeshBasicMaterial({ map: texture, transparent: true, depthTest: false, depthWrite: false, toneMapped: false }),
     );
     label.renderOrder = 11;
+    // Its footprint stays on the floor under the cube, so a raised zone still marks the patch below it.
+    wall.position.y = bottom;
+    posts.position.y = bottom;
     const one = new Group();
-    // On the floor, whatever height the zone spans: it marks a patch of floor.
     one.position.set(centre.x, 0, centre.z);
     one.add(wall, posts, foot, label);
     one.visible = false;
     group.add(one);
-    return { id: zone.id, one, wall, posts, foot, label, half: new Vector3(w / 2, wallH, d / 2) };
+    return { id: zone.id, one, wall, posts, foot, label, half: new Vector3(w / 2, bottom + wallH, d / 2) };
   });
 
   const grips = new Group();
@@ -249,7 +254,7 @@ export function buildZoneBoxes(zones: readonly HueZone[], dims: RoomDimensions):
   return {
     group,
     mark,
-    hold(zoneId, rect) {
+    hold(zoneId, rect, centerZ) {
       const zone = zones.find((z) => z.id === zoneId);
       const at = built.find((b) => b.id === zoneId);
       if (!rect || !zone || !at) {
@@ -263,12 +268,14 @@ export function buildZoneBoxes(zones: readonly HueZone[], dims: RoomDimensions):
       held = zoneId;
       at.one.visible = false;
       grips.visible = false;
-      const { centre, size } = zoneSceneBox(zone, dims);
       const colour = zoneHex(zone.borderColor, zones.indexOf(zone));
       ghostEdges.material.color.set(colour);
       ghostFill.material.color.set(colour);
-      ghost.scale.set(Math.max(rect.x1 - rect.x0, 0.01), Math.max(size.y, 0.01), Math.max(rect.y1 - rect.y0, 0.01));
-      ghost.position.set((rect.x0 + rect.x1) / 2 - dims.widthMeters / 2, centre.y, (rect.y0 + rect.y1) / 2 - dims.depthMeters / 2);
+      // A cube in Hue units: its height is the same share of the room's as its width is of the room's.
+      const height = ((rect.x1 - rect.x0) / dims.widthMeters) * dims.heightMeters;
+      const centreY = hueToMetres(centerZ ?? zone.centerZ, dims.heightMeters);
+      ghost.scale.set(Math.max(rect.x1 - rect.x0, 0.01), Math.max(height, 0.01), Math.max(rect.y1 - rect.y0, 0.01));
+      ghost.position.set((rect.x0 + rect.x1) / 2 - dims.widthMeters / 2, centreY, (rect.y0 + rect.y1) / 2 - dims.depthMeters / 2);
       ghost.visible = true;
       group.visible = true;
       return true;

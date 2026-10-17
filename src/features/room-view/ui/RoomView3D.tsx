@@ -1,6 +1,7 @@
 // Spike: the 3D room, measured in the real app before the room view is built for real. Draws only
 // on a change, and hands back everything — context included — on unmount. The rules it follows are
 // in docs/architecture/ui-and-shell.md, "Per-window bundles".
+import { hueToMetres } from "@/features/room-map/model/hueChannelPosition";
 import type { ZoneMarks } from "@/features/room-map/model/zoneMarks";
 import { resizeZoneRect, type ZoneHandle, type ZoneRect, zoneRect } from "@/features/room-map/model/zoneRect";
 import { type MutableRefObject, useEffect, useRef } from "react";
@@ -43,6 +44,7 @@ import { roomToScene } from "../model/roomSpace";
 import { planMorph } from "../model/templateMorph";
 import { GRIP_CURSOR, gripAt, insideRect, moveZoneRect, type PlanPoint, sameRect, sceneToPlan, zoneAtFloor, zoneGrips } from "../model/zoneGesture";
 import { isWindowVisible } from "@/features/shell/windowVisibility";
+import { clamp } from "@/shared/lib/math";
 import { prefersReducedMotion } from "@/shared/lib/motion";
 
 import { buildRoomScene, disposeScene, type RoomScene, type RoomSceneOptions } from "./roomScene";
@@ -446,7 +448,19 @@ function openRoomView(
       /** The pointer's height over the piece's centre when ⇧ went down; null while it slides. */
       grip: number | null;
     } | null = null;
-    let zoneDrag: { id: string; handle: ZoneHandle | null; start: ZoneRect; from: PlanPoint; rect: ZoneRect; moved: boolean } | null = null;
+    let zoneDrag: {
+      id: string;
+      handle: ZoneHandle | null;
+      /** Where it was picked up; `start` and `from` move on when ⇧ lets the floor slide take over again. */
+      origin: { rect: ZoneRect; centerZ: number };
+      start: ZoneRect;
+      from: PlanPoint;
+      rect: ZoneRect;
+      centerZ: number;
+      /** The pointer's height over the cube's centre when ⇧ went down; null while it slides. */
+      grip: number | null;
+      moved: boolean;
+    } | null = null;
     const ground = new Plane(new Vector3(0, 1, 0), 0);
     const onGround = new Vector3();
     const gripPoint = new Vector3();
@@ -468,9 +482,9 @@ function openRoomView(
         return { handle, x: box.left + ((gripPoint.x + 1) / 2) * box.width, y: box.top + ((1 - gripPoint.y) / 2) * box.height };
       });
       const handle = gripAt(onScreen, { x: clientX, y: clientY }, GRIP_HIT_PX);
-      if (handle) return { id: zone.id, handle, rect, from };
+      if (handle) return { id: zone.id, handle, rect, from, centerZ: zone.centerZ };
       if (!insideRect(rect, from) || pickObject(ray, room.pickables, lightPickHalf(pixelsPerMetre)) !== null) return null;
-      return { id: zone.id, handle: null, rect, from };
+      return { id: zone.id, handle: null, rect, from, centerZ: zone.centerZ };
     };
     const dropZone = (commit: boolean) => {
       const z = zoneDrag;
@@ -478,9 +492,9 @@ function openRoomView(
       zoneDrag = null;
       orbit.enabled = true;
       canvas.style.cursor = "";
-      const changed = commit && z.moved && !sameRect(z.rect, z.start);
+      const changed = commit && z.moved && (!sameRect(z.rect, z.origin.rect) || Math.abs(z.centerZ - z.origin.centerZ) > 1e-6);
       // Landed, its whole box stays where it was let go until the room is rebuilt with it there.
-      const landed = changed && onZone?.change(z.id, z.rect, z.handle !== null) === true;
+      const landed = changed && onZone?.change(z.id, z.rect, z.handle !== null, z.centerZ) === true;
       if (!landed && room?.holdZone(z.id, null)) request();
       return z.moved;
     };
@@ -548,7 +562,17 @@ function openRoomView(
         if (!room) return;
         const held = zoneUnder(event.clientX, event.clientY);
         if (held) {
-          zoneDrag = { id: held.id, handle: held.handle, start: held.rect, from: held.from, rect: held.rect, moved: false };
+          zoneDrag = {
+            id: held.id,
+            handle: held.handle,
+            origin: { rect: held.rect, centerZ: held.centerZ },
+            start: held.rect,
+            from: held.from,
+            rect: held.rect,
+            centerZ: held.centerZ,
+            grip: null,
+            moved: false,
+          };
           orbit.enabled = false;
           if (move !== 0) cancelAnimationFrame(move);
           move = 0;
@@ -628,16 +652,27 @@ function openRoomView(
         }
         if (zoneDrag && press) {
           if (!zoneDrag.moved && Math.hypot(event.clientX - press.x, event.clientY - press.y) <= CLICK_SLOP_PX) return;
-          const at = groundAt(rayAt(event.clientX, event.clientY));
-          if (!at || !builtConfig) return;
-          const dims = builtConfig.dimensions;
-          const [dx, dy] = [at.x - zoneDrag.from.x, at.y - zoneDrag.from.y];
-          zoneDrag.rect = zoneDrag.handle
-            ? resizeZoneRect(zoneDrag.start, zoneDrag.handle, dx, dy, dims.widthMeters, dims.depthMeters, event.shiftKey)
-            : moveZoneRect(zoneDrag.start, dx, dy, dims);
+          const ray = rayAt(event.clientX, event.clientY);
+          const rising = zoneDrag.handle === null && event.shiftKey;
+          if (rising) {
+            if (!raiseZone(zoneDrag, ray)) return;
+          } else {
+            const at = groundAt(ray);
+            if (!at || !builtConfig) return;
+            if (zoneDrag.grip !== null) {
+              zoneDrag.grip = null;
+              zoneDrag.start = zoneDrag.rect;
+              zoneDrag.from = at;
+            }
+            const dims = builtConfig.dimensions;
+            const [dx, dy] = [at.x - zoneDrag.from.x, at.y - zoneDrag.from.y];
+            zoneDrag.rect = zoneDrag.handle
+              ? resizeZoneRect(zoneDrag.start, zoneDrag.handle, dx, dy, dims.widthMeters, dims.depthMeters)
+              : moveZoneRect(zoneDrag.start, dx, dy, dims);
+          }
           zoneDrag.moved = true;
-          canvas.style.cursor = zoneDrag.handle ? GRIP_CURSOR[zoneDrag.handle] : "grabbing";
-          if (room?.holdZone(zoneDrag.id, zoneDrag.rect)) request();
+          canvas.style.cursor = zoneDrag.handle ? GRIP_CURSOR[zoneDrag.handle] : rising ? "ns-resize" : "grabbing";
+          if (room?.holdZone(zoneDrag.id, zoneDrag.rect, zoneDrag.centerZ)) request();
           return;
         }
         if (!carry || !press) return;
@@ -664,6 +699,21 @@ function openRoomView(
       },
       { signal: listening.signal },
     );
+    // A zone rises the same way, its cube kept between the floor and the ceiling.
+    const raiseZone = (z: NonNullable<typeof zoneDrag>, ray: Ray) => {
+      if (!builtConfig) return false;
+      const { widthMeters, depthMeters, heightMeters } = builtConfig.dimensions;
+      gripPoint.set((z.rect.x0 + z.rect.x1) / 2 - widthMeters / 2, 0, (z.rect.y0 + z.rect.y1) / 2 - depthMeters / 2);
+      upright.normal.set(camera.position.x - gripPoint.x, 0, camera.position.z - gripPoint.z);
+      if (upright.normal.lengthSq() < 1e-6) return false;
+      upright.normal.normalize();
+      upright.constant = -upright.normal.dot(gripPoint);
+      if (!ray.intersectPlane(upright, onUpright)) return false;
+      if (z.grip === null) z.grip = onUpright.y - hueToMetres(z.centerZ, heightMeters);
+      const s = (z.rect.x1 - z.rect.x0) / widthMeters;
+      z.centerZ = clamp(((onUpright.y - z.grip) / heightMeters) * 2 - 1, s - 1, 1 - s);
+      return true;
+    };
     // Up and down only, along the upright plane through the piece that faces the camera.
     const raise = (c: NonNullable<typeof carry>, ray: Ray) => {
       upright.normal.set(camera.position.x - c.ghost.position.x, 0, camera.position.z - c.ghost.position.z);
@@ -1259,10 +1309,11 @@ export type MovePiece = (
   raised?: { rise: number; centreY: number },
 ) => boolean;
 
-/** A Hue zone picked in the room, or let go carried or resized: its floor on the plan, in metres. */
+/** A Hue zone picked in the room, or let go carried, raised or resized: its floor on the plan in
+ *  metres, and its centre's height in Hue units. */
 export interface ZoneEdit {
   pick(zoneId: string): void;
-  change(zoneId: string, rect: ZoneRect, resized: boolean): boolean;
+  change(zoneId: string, rect: ZoneRect, resized: boolean, centerZ: number): boolean;
 }
 
 interface Handlers {
@@ -1410,7 +1461,7 @@ export default function RoomView3D({
       pick: (objectId) => onPickRef.current?.(objectId),
       move: (objectId, x, z, turn, riders, raised) => onMoveRef.current?.(objectId, x, z, turn, riders, raised) ?? false,
       pickZone: (zoneId) => onPickZoneRef.current?.(zoneId),
-      changeZone: (zoneId, rect, resized) => onChangeZoneRef.current?.(zoneId, rect, resized) ?? false,
+      changeZone: (zoneId, rect, resized, centerZ) => onChangeZoneRef.current?.(zoneId, rect, resized, centerZ) ?? false,
       hover: (objectId, x, y) => onHoverRef.current?.(objectId, x, y),
       drawn: () => onDrawnRef.current?.(),
     };
@@ -1425,7 +1476,7 @@ export default function RoomView3D({
           (objectId, x, z, turn, riders, raised) => handlers.move(objectId, x, z, turn, riders, raised),
           (objectId, x, y) => handlers.hover(objectId, x, y),
           () => handlers.drawn(),
-          { pick: (zoneId) => handlers.pickZone(zoneId), change: (zoneId, rect, resized) => handlers.changeZone(zoneId, rect, resized) },
+          { pick: (zoneId) => handlers.pickZone(zoneId), change: (zoneId, rect, resized, centerZ) => handlers.changeZone(zoneId, rect, resized, centerZ) },
         );
         kept = { view, handlers };
       } catch (error) {
