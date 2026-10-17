@@ -47,6 +47,7 @@ import { buildRoomScene, disposeScene, type RoomScene, type RoomSceneOptions } f
 import { type Bloom, createBloom } from "./scene/bloom";
 import { finishMaterial } from "./scene/finishes";
 import { furnitureParts } from "./scene/furniture";
+import { firstSurfaceHit } from "./scene/surfaceHit";
 import type { LiftedPiece } from "./scene/lift";
 import { PALETTE } from "./scene/palette";
 import { block, mergeParts } from "./scene/parts";
@@ -357,6 +358,9 @@ function openRoomView(
     let handling = false;
     orbit.addEventListener("start", () => {
       handling = true;
+      // A hand on the view takes it from a travel under way, which would undo the turn every frame.
+      if (move !== 0) cancelAnimationFrame(move);
+      move = 0;
     });
     orbit.addEventListener("change", () => {
       if (handling && !steering) home = null;
@@ -368,6 +372,8 @@ function openRoomView(
       if (!room || objectId === previous) return;
       const item = objectId ? room.pickables.find((p) => p.id === objectId && (p.kind === "light" || p.kind === "tv")) : undefined;
       if (!item) {
+        // A piece picked to be carried leaves the camera where it is; only a cleared pick goes back.
+        if (objectId !== null) return;
         if (home) moveCamera(home, DOLLY_MS, easeOutExpo);
         home = null;
         return;
@@ -651,7 +657,7 @@ function openRoomView(
         const rect = canvas.getBoundingClientRect();
         pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
         raycaster.setFromCamera(pointer, camera);
-        const hit = raycaster.intersectObject(room.scene, true)[0];
+        const hit = firstSurfaceHit(raycaster.intersectObject(room.scene, true));
         if (!hit) return;
         const shift = hit.point.clone().sub(orbit.target);
         moveCamera({
@@ -1296,8 +1302,12 @@ export default function RoomView3D({
     viewRef.current?.setInsets(bottomInset, topInset);
   }, [bottomInset, topInset]);
 
+  // A command is a press, not a state: the one standing when the view mounts was for the view before.
+  const cameraSeq = useRef(cameraCommand?.seq);
   useEffect(() => {
-    if (cameraCommand) viewRef.current?.camera(cameraCommand.kind);
+    if (!cameraCommand || cameraCommand.seq === cameraSeq.current) return;
+    cameraSeq.current = cameraCommand.seq;
+    viewRef.current?.camera(cameraCommand.kind);
   }, [cameraCommand]);
 
   useEffect(() => {

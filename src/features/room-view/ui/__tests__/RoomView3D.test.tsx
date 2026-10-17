@@ -452,6 +452,46 @@ describe("RoomView3D", () => {
     unmount();
   });
 
+  // A lamp then a sofa flew the camera home under a carry about to start; a turn mid-travel was undone every frame.
+  it("leaves the camera on a furniture pick, and lets a hand take it mid-travel", async () => {
+    const config = {
+      ...DEFAULT_ROOM_MAP,
+      furniture: [{ id: "sofa", type: "sofa" as const, x: 1, y: 2, width: 2, height: 0.9 }],
+      hueChannels: [{ channelIndex: 0, x: 0.8, y: 0.8, z: 0, zOrigin: "bridge" as const }],
+    };
+    const onFail = vi.fn<(error: unknown) => void>();
+    const view = (selectedId: string | null) => <RoomView3D config={config} label="Room" selectedId={selectedId} onFail={onFail} />;
+    const settle = () =>
+      act(async () => {
+        await vi.advanceTimersByTimeAsync(1500);
+      });
+    const { rerender, unmount } = render(view(null));
+    await settle();
+    const orbit = gl.orbits[gl.orbits.length - 1]! as unknown as { object: { zoom: number }; addEventListener: { mock: { calls: unknown[][] } } };
+    const fire = (type: string) => {
+      for (const [name, handler] of orbit.addEventListener.mock.calls) if (name === type) (handler as () => void)();
+    };
+    const room = orbit.object.zoom;
+    rerender(view(hueChannelObjectId(0)));
+    await settle();
+    const framed = orbit.object.zoom;
+    rerender(view("furniture-sofa"));
+    await settle();
+    expect(orbit.object.zoom).toBeCloseTo(framed);
+
+    rerender(view(null));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+    });
+    fire("start");
+    const held = orbit.object.zoom;
+    await settle();
+    fire("end");
+    expect(orbit.object.zoom).toBeCloseTo(held);
+    expect(held).not.toBeCloseTo(room);
+    unmount();
+  });
+
   it("frames the next light from the room's view after a click, and forgets it only when the room is turned", async () => {
     const config = {
       ...DEFAULT_ROOM_MAP,
@@ -493,6 +533,30 @@ describe("RoomView3D", () => {
     await settle();
     expect(orbit.object.zoom).toBeCloseTo(framed);
     unmount();
+  });
+
+  // Plan and back to 3D zoomed in once more each time: the standing command ran again on the mount.
+  it("does not replay a zoom pressed before the view came back", async () => {
+    const onFail = vi.fn<(error: unknown) => void>();
+    const command = { kind: "in" as const, seq: 1 };
+    const view = (cameraCommand?: typeof command) => (
+      <RoomView3D config={DEFAULT_ROOM_MAP} label="Room" selectedId={null} cameraCommand={cameraCommand} onFail={onFail} />
+    );
+    const settle = () =>
+      act(async () => {
+        await vi.advanceTimersByTimeAsync(1500);
+      });
+    const first = render(view());
+    await settle();
+    first.rerender(view(command));
+    await settle();
+    const camera = gl.orbits[gl.orbits.length - 1]!.object;
+    const zoomed = camera.zoom;
+    first.unmount();
+    const again = render(view(command));
+    await settle();
+    expect(gl.orbits[gl.orbits.length - 1]!.object.zoom).toBeCloseTo(zoomed);
+    again.unmount();
   });
 
   // A template looked at while a light was picked: dropping the pick took the camera back to the old room's view.
