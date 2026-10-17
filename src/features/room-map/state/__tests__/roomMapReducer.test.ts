@@ -48,6 +48,18 @@ describe("roomMapReducer — apply", () => {
     expect(run(before, moveSofa(SOFA.x))).toBe(before);
   });
 
+  it("hands an updater the map from before the gesture it joins", () => {
+    const fromBase = (at: number, dx: number): RoomMapAction => ({
+      type: "apply",
+      patch: (_cfg, base) => ({ furniture: base.furniture.map((f) => ({ ...f, x: f.x + dx })) }),
+      gesture: { key: "scrub", at },
+    });
+    const s = run(loaded(), fromBase(0, 2), fromBase(100, 3));
+    expect(s.config.furniture[0]?.x).toBe(SOFA.x + 3);
+    // Outside a gesture the base is the map it lands on.
+    expect(run(s, { type: "apply", patch: (_cfg, base) => ({ furniture: base.furniture.map((f) => ({ ...f, x: f.x + 1 })) }) }).config.furniture[0]?.x).toBe(SOFA.x + 4);
+  });
+
   it("asks for an immediate save outside a gesture", () => {
     const before = loaded();
     const s = run(before, moveSofa(2));

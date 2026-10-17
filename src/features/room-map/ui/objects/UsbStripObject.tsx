@@ -1,11 +1,12 @@
-import { memo, useId, useRef, useState } from "react";
+import { memo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { MAX_STRIP_CORNERS, type RoomCorner, resolveStripCorners, stripRunLength, translateStrip, type UsbStripPlacement } from "@/shared/contracts/roomMap";
+import { MAX_STRIP_CORNERS, type RoomCorner, resolveStripCorners, translateStrip, type UsbStripPlacement } from "@/shared/contracts/roomMap";
 import { clamp } from "@/shared/lib/math";
 import { usbStripObjectId } from "../../model/objectId";
 import { keepStripInside, type RoomBox } from "../../model/pieceGeometry";
-import { addStripCorner, pointAlongStrip, removeStripCorner } from "../../model/stripCorners";
+import { addStripCorner, removeStripCorner } from "../../model/stripCorners";
 import { markDragging, stillAClick, useEscapeCancels } from "./dragIntent";
+import type { UsbStripConnectionStatus } from "./UsbStripInspector";
 
 interface UsbStripObjectProps {
   placement: UsbStripPlacement;
@@ -20,14 +21,13 @@ interface UsbStripObjectProps {
    * `unknown` (default) ⇒ no chip rendered, so legacy maps stay clean
    *  before the parent has read the local-output registry.
    */
-  connectionStatus?: "connected" | "disconnected" | "unknown";
+  connectionStatus?: UsbStripConnectionStatus;
   /** The room's box: a drag keeps both ends inside it. */
   room?: RoomBox;
   /** Whether a double-click may bend it: the TV's backlight is drawn at the screen and stays straight. */
   bendable?: boolean;
   onSelect: (id: string) => void;
-  /** `continuous` marks the LED-count field, which writes per keystroke. */
-  onChange: (updated: UsbStripPlacement, continuous?: boolean) => void;
+  onChange: (updated: UsbStripPlacement) => void;
 }
 
 /** The whole strip, or one of its points: 0 its start, the last its end, the corners between. */
@@ -52,18 +52,15 @@ export const UsbStripObject = memo(function UsbStripObject({
   onChange,
 }: UsbStripObjectProps) {
   const { t } = useTranslation();
-  const ledCountId = useId();
 
   // The strip as drawn while a drag is under way; it is the placement at rest.
   const [local, setLocal] = useState(placement);
-  const [localLedCount, setLocalLedCount] = useState(placement.ledCount);
   const [axisSnap, setAxisSnap] = useState<{ axis: "h" | "v"; point: number } | null>(null);
 
   const prevPlacement = useRef(placement);
   if (prevPlacement.current !== placement) {
     prevPlacement.current = placement;
     setLocal(placement);
-    setLocalLedCount(placement.ledCount);
   }
 
   const corners = resolveStripCorners(local);
@@ -182,17 +179,6 @@ export const UsbStripObject = memo(function UsbStripObject({
     onChange(removeStripCorner(placement, corner));
   };
 
-  // The strip as it was when the LED count field took focus. Each keystroke refits a strip of known
-  // density, and refit from the last keystroke's strip, clearing the field to retype cut a bent strip
-  // to a centimetre and dropped every corner past it for good.
-  const typingFrom = useRef<UsbStripPlacement | null>(null);
-  const handleLedCountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = parseInt(e.target.value, 10);
-    const clamped = isNaN(val) ? 1 : clamp(val, 1, 1000);
-    setLocalLedCount(clamped);
-    onChange({ ...(typingFrom.current ?? placement), ledCount: clamped }, true);
-  };
-
   const px = points.map((p) => ({ x: p.x * pxPerMeter, y: p.y * pxPerMeter }));
   const sx = px[0]!.x;
   const sy = px[0]!.y;
@@ -203,10 +189,6 @@ export const UsbStripObject = memo(function UsbStripObject({
   // The arrow points the way the last leg runs.
   const angle = Math.atan2(ey - px[last - 1]!.y, ex - px[last - 1]!.x) * (180 / Math.PI);
 
-  // The LED count sits halfway along the run, which is on a leg even when the strip is bent.
-  const middle = pointAlongStrip(local, stripRunLength(local) / 2);
-  const midX = middle.x * pxPerMeter;
-  const midY = middle.y * pxPerMeter;
   const canBend = bendable && !placement.locked && corners.length < MAX_STRIP_CORNERS;
 
   return (
@@ -310,7 +292,9 @@ export const UsbStripObject = memo(function UsbStripObject({
           <span>
             {connectionStatus === "connected"
               ? t("roomMap:usbStrip.online")
-              : t("roomMap:usbStrip.offline")}
+              : connectionStatus === "unlinked"
+                ? t("roomMap:usbStrip.noPort")
+                : t("roomMap:usbStrip.offline")}
           </span>
         </div>
       ) : null}
@@ -389,37 +373,6 @@ export const UsbStripObject = memo(function UsbStripObject({
           />
         ))}
 
-      {/* LED count input shown when selected */}
-      {selected && (
-        <div
-          className="absolute z-30 flex items-center gap-1 rounded border border-amber-500 bg-zinc-900 px-1.5 py-0.5 shadow"
-          style={{
-            left: midX - 48,
-            top: midY - 20,
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <label htmlFor={ledCountId} className="text-[10px] text-zinc-400 whitespace-nowrap">
-            {t("roomMap:usbStrip.ledCount")}
-          </label>
-          <input
-            id={ledCountId}
-            type="number"
-            min={1}
-            max={1000}
-            value={localLedCount}
-            onChange={handleLedCountChange}
-            onFocus={() => {
-              typingFrom.current = placement;
-            }}
-            onBlur={() => {
-              typingFrom.current = null;
-            }}
-            className="w-14 rounded border border-zinc-700 bg-transparent px-1 text-[10px] text-zinc-100 focus:outline-none"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
     </>
   );
 });

@@ -104,13 +104,17 @@ export function ViewLightCard({
               <Status>
                 {connection && connection !== "unknown" && (
                   <StateWord tone={connection === "connected" ? "live" : "idle"}>
-                    {connection === "connected" ? t("roomMap:inspector.usbConnectedFallback") : t("roomMap:inspector.usbConnectionDisconnected")}
+                    {connection === "connected"
+                      ? t("roomMap:inspector.usbConnectedFallback")
+                      : connection === "unlinked"
+                        ? t("roomMap:inspector.usbNoPort")
+                        : t("roomMap:inspector.usbConnectionDisconnected")}
                   </StateWord>
                 )}
                 <Meta>
                   {[
                     light.kind === "usb" ? port : facts,
-                    level === null || connection === "disconnected"
+                    level === null || connection === "disconnected" || connection === "unlinked"
                       ? t("roomMap:view.hover.off")
                       : t("roomMap:view.hover.on", { percent: Math.round(level * 100) }),
                   ]

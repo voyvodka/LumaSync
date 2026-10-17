@@ -462,3 +462,29 @@ describe("RoomMapEditor — the room's floor and walls", () => {
     expect(saves[saves.length - 1]?.surfaces).toEqual({ floor: "marble", walls: "clay" });
   });
 });
+
+describe("RoomMapEditor — a strip's LED count scrubbed in the inspector", () => {
+  // Each step refit the strip from the last one: scrubbed under its corner and back, a bent strip came back straight.
+  it("refits every step from the strip as the scrub found it", async () => {
+    const BENT = { stripId: "s1", startX: 0.5, startY: 0.5, corners: [{ x: 1.5, y: 0.5 }], endX: 1.5, endY: 1.5, ledCount: 120, ledsPerMeter: 60 };
+    stored({ usbStrips: [BENT] });
+    await renderEditor();
+    const line = document.querySelector('[data-object-id="usb-s1"] line') as Element;
+    fireEvent.pointerDown(line, { clientX: 200, clientY: 200, pointerId: 1 });
+    fireEvent.pointerUp(line, { clientX: 200, clientY: 200, pointerId: 1 });
+    fireEvent.click(line, { detail: 1 });
+    await flush();
+
+    const box = screen.getByRole("spinbutton", { name: "roomMap:inspector.usbLedCountLabel" }).closest("label")!;
+    fireEvent.pointerDown(box, { button: 0, clientX: 400, pointerId: 2 });
+    fireEvent.pointerMove(box, { clientX: 40, pointerId: 2 });
+    fireEvent.pointerMove(box, { clientX: 400, pointerId: 2 });
+    fireEvent.pointerUp(box, { pointerId: 2 });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+    });
+
+    const saves = roomMapSaves();
+    expect(saves[saves.length - 1]!.usbStrips[0]).toMatchObject({ ledCount: 120, corners: [{ x: 1.5, y: 0.5 }], endX: 1.5, endY: 1.5 });
+  });
+});

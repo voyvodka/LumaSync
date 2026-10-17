@@ -21,12 +21,12 @@ export function useUsbStripStatus(hueReachable: boolean | undefined): UsbStripSt
   );
 
   // Graded per strip against the live port, so a controller moved to another port reads offline.
-  // A legacy strip with no `portName` keeps the any-port-active reading.
+  // A strip with no `portName` is not driven by any port, whatever is connected.
   const stripStatus = useCallback(
     (strip: UsbStripPlacement): { status: UsbStripConnectionStatus; port: string | null } => {
-      if (!usb.ready) return { status: "unknown", port: strip.portName ?? null };
-      if (strip.portName) return { status: strip.portName === usb.connectedPort ? "connected" : "disconnected", port: strip.portName };
-      return { status: usb.connectedPort ? "connected" : "disconnected", port: usb.connectedPort };
+      if (!strip.portName) return { status: "unlinked", port: null };
+      if (!usb.ready) return { status: "unknown", port: strip.portName };
+      return { status: strip.portName === usb.connectedPort ? "connected" : "disconnected", port: strip.portName };
     },
     [usb.ready, usb.connectedPort],
   );

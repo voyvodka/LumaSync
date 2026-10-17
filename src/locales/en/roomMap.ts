@@ -238,9 +238,9 @@ export default {
   imageImportError: "Image could not be added. Check the log for details.",
   imageTooLarge: "Image is larger than {{maxMb}} MB. Choose a smaller file.",
   usbStrip: {
-    ledCount: "LED count",
     online: "ONLINE",
     offline: "OFFLINE",
+    noPort: "NO PORT",
   },
   hueChannel: {
     defaultLabel: "Channel {{id}}",
@@ -361,6 +361,7 @@ export default {
     usbLedCountLabel: "LEDs",
     usbConnectedFallback: "Online",
     usbConnectionDisconnected: "Offline",
+    usbNoPort: "No port",
     usbManage: "Manage in Devices",
     usbStickToWall: "Onto the wall",
     usbAddCorner: "Add a corner",

@@ -45,7 +45,7 @@ function renderObjects(
   const written = (index: number): RoomMapConfig => {
     const patch = apply.mock.calls[index]?.[0];
     if (patch === undefined) throw new Error(`no apply #${index}`);
-    return { ...config, ...(typeof patch === "function" ? patch(config) : patch) };
+    return { ...config, ...(typeof patch === "function" ? patch(config, config) : patch) };
   };
   return { ...hook, apply, select, written };
 }

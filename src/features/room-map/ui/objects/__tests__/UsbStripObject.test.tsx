@@ -9,10 +9,8 @@
  * positioned at the start and end pixel coordinates.
  */
 import { fireEvent, render, screen } from "@testing-library/react";
-import { useState } from "react";
 import { describe, it, expect, vi } from "vitest";
 
-import { refitRetapedStrip } from "../../../model/stripFit";
 import { UsbStripObject } from "../UsbStripObject";
 import type { UsbStripPlacement } from "@/shared/contracts/roomMap";
 
@@ -73,34 +71,18 @@ describe("UsbStripObject", () => {
     expect(endHandle).toBeDefined();
   });
 
-  it("LED count input is hidden when not selected", () => {
+  // The count is set in the inspector; a field on the plan stood over the strip's own badge.
+  it("draws no LED count field on the plan, even when selected", () => {
     const { container } = render(
-      <UsbStripObject
-        placement={PLACEMENT}
-        pxPerMeter={PX_PER_METER}
-        selected={false}
-        onSelect={vi.fn()}
-        onChange={vi.fn()}
-      />,
+      <UsbStripObject placement={PLACEMENT} pxPerMeter={PX_PER_METER} selected onSelect={vi.fn()} onChange={vi.fn()} />,
     );
-    const input = container.querySelector("input[type=number]");
-    expect(input).toBeNull();
+    expect(container.querySelector("input")).toBeNull();
   });
 
-  it("LED count input is visible when selected", () => {
-    const { container } = render(
-      <UsbStripObject
-        placement={PLACEMENT}
-        pxPerMeter={PX_PER_METER}
-        selected={true}
-        onSelect={vi.fn()}
-        onChange={vi.fn()}
-      />,
-    );
-    const input = container.querySelector("input[type=number]");
-    expect(input).not.toBeNull();
-    expect((input as HTMLInputElement).value).toBe(String(PLACEMENT.ledCount));
-    expect(screen.getByLabelText("roomMap:usbStrip.ledCount")).toBe(input);
+  it("says a strip that names no port has none, rather than offline", () => {
+    render(<UsbStripObject placement={PLACEMENT} pxPerMeter={PX_PER_METER} selected={false} connectionStatus="unlinked" onSelect={vi.fn()} onChange={vi.fn()} />);
+    expect(screen.getByText("roomMap:usbStrip.noPort")).toBeTruthy();
+    expect(screen.queryByText("roomMap:usbStrip.offline")).toBeNull();
   });
 });
 
@@ -198,29 +180,6 @@ describe("UsbStripObject — corners", () => {
     const bent = renderStrip(BENT);
     fireEvent.doubleClick(bent.container.querySelector("[data-strip-corner]")!);
     expect(bent.onChange).toHaveBeenLastCalledWith(expect.objectContaining({ corners: null }));
-  });
-
-  // Clearing the field to retype refit the bent strip to one LED and dropped its corners for good.
-  it("refits each keystroke in the LED field from the strip as it was when the field took focus", () => {
-    function Live() {
-      const [placement, setPlacement] = useState<UsbStripPlacement>({ ...BENT, ledsPerMeter: 60 });
-      return (
-        <UsbStripObject
-          placement={placement}
-          pxPerMeter={PX_PER_METER}
-          selected
-          onSelect={vi.fn<(id: string) => void>()}
-          onChange={(updated) => setPlacement((before) => refitRetapedStrip(before, updated, { usbStrips: [] }))}
-        />
-      );
-    }
-    const { container } = render(<Live />);
-    const input = container.querySelector<HTMLInputElement>("input[type=number]")!;
-    fireEvent.focus(input);
-    fireEvent.change(input, { target: { value: "" } });
-    fireEvent.change(input, { target: { value: "240" } });
-    // 240 LEDs at 60 a metre is 4 m: past the corner, so the last leg grows and the corner stays.
-    expect(container.querySelector("polyline")?.getAttribute("points")?.split(" ")).toHaveLength(3);
   });
 
   it("does not bend a locked strip or the TV's backlight", () => {

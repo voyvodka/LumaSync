@@ -241,9 +241,9 @@ const roomMap: Catalogue<typeof enRoomMap> = {
   imageImportError: "Görsel eklenemedi. Ayrıntılar için günlüğe bak.",
   imageTooLarge: "Görsel {{maxMb}} MB'tan büyük. Daha küçük bir dosya seç.",
   usbStrip: {
-    ledCount: "LED sayısı",
     online: "BAĞLI",
     offline: "ÇEVRİMDIŞI",
+    noPort: "PORT YOK",
   },
   hueChannel: {
     defaultLabel: "Kanal {{id}}",
@@ -364,6 +364,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     usbLedCountLabel: "LED",
     usbConnectedFallback: "Bağlı",
     usbConnectionDisconnected: "Bağlı değil",
+    usbNoPort: "Port seçilmedi",
     usbStickToWall: "Duvara yasla",
     usbAddCorner: "Köşe ekle",
     usbStraighten: "Düzleştir",

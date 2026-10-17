@@ -12,9 +12,11 @@ export const MAX_HISTORY = 50;
  *  presses a beat apart stay two undo steps. */
 export const GESTURE_COALESCE_MS = 600;
 
+/** A function patch is also handed the map as it stood before the open gesture it joins (the
+ *  current map otherwise), for a change each step should make from where the gesture began. */
 export type RoomMapPatch =
   | Partial<RoomMapConfig>
-  | ((config: RoomMapConfig) => Partial<RoomMapConfig>);
+  | ((config: RoomMapConfig, gestureBase: RoomMapConfig) => Partial<RoomMapConfig>);
 
 export interface RoomMapSelection {
   objectId: string | null;
@@ -72,8 +74,8 @@ export function initialRoomMapState(): RoomMapState {
   };
 }
 
-function resolvePatch(patch: RoomMapPatch, config: RoomMapConfig): Partial<RoomMapConfig> {
-  return typeof patch === "function" ? patch(config) : patch;
+function resolvePatch(patch: RoomMapPatch, config: RoomMapConfig, gestureBase: RoomMapConfig = config): Partial<RoomMapConfig> {
+  return typeof patch === "function" ? patch(config, gestureBase) : patch;
 }
 
 function objectExists(config: RoomMapConfig, objectId: string): boolean {
@@ -126,7 +128,9 @@ export function roomMapReducer(state: RoomMapState, action: RoomMapAction): Room
         selection: reconcileSelection(action.config, state.selection),
       };
     case "apply": {
-      const partial = resolvePatch(action.patch, state.config);
+      const merges = action.gesture !== undefined && joinsOpenGesture(state.gesture, action.gesture);
+      const base = merges ? state.past[state.past.length - 1] : undefined;
+      const partial = resolvePatch(action.patch, state.config, base);
       const merged = action.replace ? (partial as RoomMapConfig) : { ...state.config, ...partial };
       // One place for every writer: whatever moved the screen or its bound strip, the strip ends behind it.
       const room = roomBoxOf(merged);
@@ -134,7 +138,6 @@ export function roomMapReducer(state: RoomMapState, action: RoomMapAction): Room
       const config = seated ? { ...merged, usbStrips: seated } : merged;
       // An arrow held against a wall rebuilt the array it left as it was: no undo step, no save.
       if (changesNothing(state.config, config)) return state;
-      const merges = action.gesture !== undefined && joinsOpenGesture(state.gesture, action.gesture);
       return {
         config,
         past: merges ? state.past : pushBounded(state.past, state.config),

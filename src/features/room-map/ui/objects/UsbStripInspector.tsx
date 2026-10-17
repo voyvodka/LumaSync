@@ -12,9 +12,9 @@ import { GlyphHeight } from "./fieldGlyphs";
 
 /**
  * Whether the strip's port is the one connected. `unknown` ⇒ no port snapshot has loaded yet, and
- * the slot stays empty rather than guessing.
+ * the slot stays empty rather than guessing. `unlinked` ⇒ the strip names no port.
  */
-export type UsbStripConnectionStatus = "connected" | "disconnected" | "unknown";
+export type UsbStripConnectionStatus = "connected" | "disconnected" | "unlinked" | "unknown";
 
 export function UsbStripInspector({
   strip,
@@ -76,7 +76,9 @@ export function UsbStripInspector({
               <StateWord tone={connectionStatus === "connected" ? "live" : "idle"}>
                 {connectionStatus === "connected"
                   ? t("roomMap:inspector.usbConnectedFallback")
-                  : t("roomMap:inspector.usbConnectionDisconnected")}
+                  : connectionStatus === "unlinked"
+                    ? t("roomMap:inspector.usbNoPort")
+                    : t("roomMap:inspector.usbConnectionDisconnected")}
               </StateWord>
             )}
             {port && <Meta>{port}</Meta>}

@@ -419,16 +419,13 @@ export function RoomMapEditor({
     [selectFromList, clearSelection, focusEditor],
   );
   const handleUsbStripChange = useCallback(
-    (updated: UsbStripPlacement, continuous?: boolean) => {
-      apply(
-        (cfg) => ({
-          // A new LED count on tape of a known density is a new length.
-          usbStrips: cfg.usbStrips.map((s) =>
-            s.stripId !== updated.stripId ? s : keepStripInside(refitRetapedStrip(s, updated, cfg), roomBoxOf(cfg)),
-          ),
-        }),
-        continuous ? { gesture: `usb:${updated.stripId}:ledCount` } : undefined,
-      );
+    (updated: UsbStripPlacement) => {
+      apply((cfg) => ({
+        // A new LED count on tape of a known density is a new length.
+        usbStrips: cfg.usbStrips.map((s) =>
+          s.stripId !== updated.stripId ? s : keepStripInside(refitRetapedStrip(s, updated, cfg), roomBoxOf(cfg)),
+        ),
+      }));
     },
     [apply],
   );
@@ -846,13 +843,19 @@ export function RoomMapEditor({
       );
     },
     onUpdateUsbStrip: (stripId, patch) => {
-      apply({
-        usbStrips: docConfig.usbStrips.map((s) => {
-          if (s.stripId !== stripId) return s;
-          const next = { ...s, ...patch };
-          return keepStripInside(refitRetapedStrip(s, next, docConfig), roomBoxOf(docConfig));
+      // A scrubbed LED count or density refits from the strip as the scrub found it, so passing
+      // under a corner on the way does not drop it for good.
+      const retape = "ledCount" in patch || "ledsPerMeter" in patch;
+      apply(
+        (cfg, base) => ({
+          usbStrips: cfg.usbStrips.map((s) => {
+            if (s.stripId !== stripId) return s;
+            const from = (retape && base.usbStrips.find((b) => b.stripId === stripId)) || s;
+            return keepStripInside(refitRetapedStrip(from, { ...from, ...patch }, cfg), roomBoxOf(cfg));
+          }),
         }),
-      });
+        retape ? { gesture: `usb:${stripId}:${Object.keys(patch).sort().join(",")}` } : undefined,
+      );
     },
     onUpdateImageLayer: (id, patch) => {
       // The opacity slider lands here per input event.
