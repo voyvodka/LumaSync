@@ -26,7 +26,6 @@ function makeTemplate(
   return { ...DEFAULT_ROOM_MAP, ...overrides };
 }
 
-/** A showroom piece, keyed by its model; with no name of its own it is called by that model. */
 function shown(
   type: FurnitureType,
   variant: FurnitureVariant | null,

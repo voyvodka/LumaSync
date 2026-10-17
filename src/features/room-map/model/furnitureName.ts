@@ -13,13 +13,11 @@ function isGivenName(label: string, type: FurnitureType, t: TFunction): boolean 
   return I18N_SUPPORTED_LANGUAGES.some((lng) => keys.some((key) => t(key, { lng }) === label));
 }
 
-/** The name the user gave the piece, or `null` when it goes by its type's or model's. */
 export function furnitureOwnName(item: Named, t: TFunction): string | null {
   const label = item.label?.trim();
   return label && !isGivenName(label, resolveFurnitureType(item.type), t) ? label : null;
 }
 
-/** What the piece is called in the app's language: the user's name, else its model's, else its type's. */
 export function furnitureName(item: Named, t: TFunction): string {
   const own = furnitureOwnName(item, t);
   if (own) return own;

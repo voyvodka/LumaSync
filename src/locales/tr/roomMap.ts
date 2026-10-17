@@ -364,7 +364,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     usbLedCountLabel: "LED",
     usbConnectedFallback: "Bağlı",
     usbConnectionDisconnected: "Bağlı değil",
-    usbNoPort: "Port seçilmedi",
+    usbNoPort: "Port yok",
     usbStickToWall: "Duvara yasla",
     usbAddCorner: "Köşe ekle",
     usbStraighten: "Düzleştir",

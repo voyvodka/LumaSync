@@ -56,7 +56,6 @@ describe("roomMapReducer — apply", () => {
     });
     const s = run(loaded(), fromBase(0, 2), fromBase(100, 3));
     expect(s.config.furniture[0]?.x).toBe(SOFA.x + 3);
-    // Outside a gesture the base is the map it lands on.
     expect(run(s, { type: "apply", patch: (_cfg, base) => ({ furniture: base.furniture.map((f) => ({ ...f, x: f.x + 1 })) }) }).config.furniture[0]?.x).toBe(SOFA.x + 4);
   });
 

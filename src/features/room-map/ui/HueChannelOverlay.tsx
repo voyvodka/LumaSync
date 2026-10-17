@@ -41,7 +41,6 @@ interface HueChannelOverlayProps {
    *   are kept consistent so legacy consumers still work).
    */
   activeHueZone?: HueZone | null;
-  /** Called when the user drags the zone center marker. */
   /** `held` for a key's run of steps, which is one undo step. */
   onHueZoneCenterChange?: (zoneId: string, centerX: number, centerY: number, held?: boolean) => void;
   /** The lights' colour and level while they are on, as the room view draws them; absent while off. */

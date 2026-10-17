@@ -160,9 +160,6 @@
   }
 }
 
-/* USB strip on canvas — connection status badge anchored to the start
-   handle. Signals OFFLINE without occluding LED-count input which sits
-   at the line midpoint. */
 .lm-room-usb-status-badge {
   position: absolute;
   display: inline-flex;
