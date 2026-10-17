@@ -2,8 +2,9 @@ import type { TFunction } from "i18next";
 
 import type { DisplayInfo } from "@/shared/contracts/display";
 
-// What tao reports on macOS when the display has no name of its own: the CoreGraphics id.
-const GENERATED = /^Monitor #\d+$/;
+// What tao reports when a display has no name of its own: the CoreGraphics id on macOS, the GDI
+// device path ("\\.\DISPLAY1") on Windows, where every display reads that way.
+const GENERATED = /^(Monitor #\d+|\\\\\.\\DISPLAY\d+)$/;
 
 /**
  * A display's name as a person would say it. A generated name ("Monitor #41057") becomes the main

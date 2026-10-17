@@ -28,6 +28,14 @@ describe("displayName", () => {
     expect(displayName(d, [d], t)).toBe("calibration:setup.displayMain");
   });
 
+  // Windows names every display by its GDI device path, which a person never reads.
+  it("calls a Windows device path what it is, the main display or one numbered", () => {
+    const main = display("a", String.raw`\\.\DISPLAY1`, 0, true);
+    const other = display("b", String.raw`\\.\DISPLAY2`, 1920);
+    expect(displayName(main, [main, other], t)).toBe("calibration:setup.displayMain");
+    expect(displayName(other, [main, other], t)).toBe("calibration:setup.displayN:2");
+  });
+
   it("numbers the others from 2, left to right, the main display being 1", () => {
     const main = display("a", "Monitor #1", 0, true);
     const right = display("b", "Monitor #2", 1920);
