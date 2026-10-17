@@ -89,6 +89,15 @@ describe("ROOM_OBJECT_KINDS", () => {
   });
 });
 
+describe("duplicating a strip", () => {
+  it("leaves the port with the original", () => {
+    const linked: RoomMapConfig = { ...config, usbStrips: [{ ...config.usbStrips[0]!, portName: "/dev/cu.usbserial-1" }] };
+    const copy = ROOM_OBJECT_KINDS.usb.duplicate!(linked, { kind: "usb", stripId: "s1" }, 0.3)!.patch.usbStrips![1]!;
+    expect(copy).not.toHaveProperty("portName");
+    expect(copy.startX).toBeCloseTo(0.3);
+  });
+});
+
 describe("moving the TV by key or by typed position", () => {
   // Left behind, the strip stopped counting as the screen's backlight.
   it("takes its backlight with it", () => {

@@ -135,7 +135,9 @@ export const ROOM_OBJECT_KINDS = {
     duplicate: (config, ref, offset) => {
       const src = config.usbStrips.find((s) => s.stripId === ref.stripId);
       if (!src) return null;
-      const dup = { ...translateStrip(src, offset, offset), stripId: crypto.randomUUID() };
+      // A copy is a drawn strip: one port drives one tape, and the original keeps it.
+      const { portName: _port, ...drawn } = translateStrip(src, offset, offset);
+      const dup = { ...drawn, stripId: crypto.randomUUID() };
       return { patch: { usbStrips: [...config.usbStrips, dup] }, objectId: usbStripObjectId(dup.stripId) };
     },
     // A strip moves by its start point; the end keeps the same offset from it.

@@ -482,7 +482,7 @@ export default {
     title: "Choose a template",
     subtitle: "Optional: put your TV and lights where they really are, so Hue lights follow the picture. Start from a layout or a blank room.",
     tv55: {
-      name: "TV setup (55\")",
+      name: "TV setup",
       desc: "A living room: TV on its unit, sofa, coffee table and rug",
     },
     ldesk: {
@@ -491,7 +491,7 @@ export default {
     },
     fullroom: {
       name: "Full room",
-      desc: "A large living room: 65\" TV, corner sofa, armchair and two windows",
+      desc: "A large living room: 65″ TV, corner sofa, armchair and two windows",
     },
     gaming: {
       name: "Gaming corner",

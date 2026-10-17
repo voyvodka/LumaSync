@@ -72,7 +72,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     identifyUnmatched: "Bu kanal bir Hue Bridge ışığıyla eşleşmemiş",
     blinkOffline: "Yanıp söndürmek için şeridi Cihazlar'da bağla",
     blinkNoBacklight: "Bu ekranın yanıp sönecek arka ışık şeridi yok",
-    edit: "Düzenle",
+    edit: "Haritaya yerleştir",
     selected: "{{name}} seçildi",
     hover: {
       on: "Açık · %{{percent}}",
@@ -375,8 +375,8 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     usbHeightHint: "Yükseklik, şeridin 3D odada çizildiği yerdir; boş bırakılırsa duvara yakınsa süpürgelik hizasında, değilse yerde durur.",
     usbManage: "Cihazlarda yönet",
     hueBridgeLabel: "Hue Bridge",
-    hueBridgeConnected: "Çevrim içi",
-    hueBridgeDisconnected: "Çevrim dışı",
+    hueBridgeConnected: "Bağlı",
+    hueBridgeDisconnected: "Bağlı değil",
     hueChannelUnresolved: "Eşleşmedi",
     hueChannelGhostNote: "Hue Bridge bu ışığı artık bu alanda bildirmiyor. Taşıyabilmen veya kaldırabilmen için burada tutuluyor.",
     hueLightCountLabel: "Işıklar",
@@ -484,7 +484,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     title: "Şablon seç",
     subtitle: "İsteğe bağlı: TV'ni ve ışıklarını gerçek yerlerine koy, Hue ışıkları görüntüyü takip etsin. Hazır bir düzenle ya da boş bir odayla başla.",
     tv55: {
-      name: "TV kurulumu (55\")",
+      name: "TV kurulumu",
       desc: "Oturma odası: ünitesinde TV, kanepe, sehpa ve halı",
     },
     ldesk: {
@@ -493,7 +493,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     },
     fullroom: {
       name: "Tam oda",
-      desc: "Geniş salon: 65\" TV, köşe kanepe, tekli koltuk ve iki pencere",
+      desc: "Geniş salon: 65″ TV, köşe kanepe, tekli koltuk ve iki pencere",
     },
     gaming: {
       name: "Oyun köşesi",
