@@ -139,8 +139,8 @@ function svAtPointer(
   };
 }
 
-function hueAtPointer(ring: SVGCircleElement | null, pointer: { clientX: number; clientY: number }): number {
-  const rect = (ring?.ownerSVGElement as SVGSVGElement).getBoundingClientRect();
+function hueAtPointer(ring: SVGCircleElement, pointer: { clientX: number; clientY: number }): number {
+  const rect = (ring.ownerSVGElement as SVGSVGElement).getBoundingClientRect();
   const dx = pointer.clientX - (rect.left + rect.width / 2);
   const dy = pointer.clientY - (rect.top + rect.height / 2);
   // atan2 gives -180..180 with 0° at 3 o'clock, clockwise on screen — the wedges' frame.
@@ -328,7 +328,7 @@ export function HsvColorPicker({
       const target = e.currentTarget;
       target.setPointerCapture(e.pointerId);
       setDraggingHue(true);
-      commitImmediate({ ...hsv, h: hueAtPointer(ringRef.current, e) });
+      if (ringRef.current) commitImmediate({ ...hsv, h: hueAtPointer(ringRef.current, e) });
     },
     [disabled, hsv, commitImmediate],
   );
