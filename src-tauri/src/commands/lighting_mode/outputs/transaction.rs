@@ -269,6 +269,10 @@ impl<'a, R: Runtime> Transaction<'a, R> {
                 || !usb_available(self.app)
                 || blocking(self.app, preview_owns_lights).await?
             {
+                info!(
+                    "[outputs] #{} strip join no longer due; nothing changed",
+                    self.ticket
+                );
                 return Ok(Ending::Applied);
             }
         }

@@ -397,9 +397,15 @@ pub(crate) fn join_local_sink<R: Runtime>(app: &AppHandle<R>) {
         // The newest ticket, not a new one: a choice in flight is never
         // superseded by this, and one made after it supersedes it.
         let ticket = state.outputs.latest_ticket.load(Ordering::SeqCst);
-        info!("[outputs] a strip connected while the mode ran without it; adding it");
+        info!("[outputs] a strip is bound while the mode runs without it; adding it");
         match run_ticketed(&app, ticket, TxKind::SinkJoin).await {
-            Ok(result) => info!("[outputs] strip join: {}", result.status.code),
+            Ok(result) if result.snapshot.active_targets.contains(&OutputTarget::Usb) => {
+                info!("[outputs] strip join: {}", result.status.code)
+            }
+            Ok(result) => info!(
+                "[outputs] strip join left the strip out: {}",
+                result.status.code
+            ),
             Err(error) => warn!("[outputs] strip join failed: {error}"),
         }
     });

@@ -2562,7 +2562,7 @@ fn a_choice_made_before_the_strip_connects_ends_the_wait() {
 }
 
 #[test]
-fn a_strip_that_connects_after_the_wait_starts_nothing() {
+fn a_restore_that_ended_off_stays_off_when_the_strip_connects_late() {
     let rig = restoring(json!(["usb"]));
     apply(&rig, request(LightingOrigin::Boot, None, None));
     rig.state().outputs.lapse_boot_sink_wait();
