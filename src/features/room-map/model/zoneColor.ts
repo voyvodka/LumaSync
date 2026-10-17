@@ -30,6 +30,7 @@ export const TYPE_DOT_COLOR: Record<RoomObjectKind, string> = {
   usb: "var(--lm-zone-6)", // cyan
   hue: "var(--lm-ink-dim)",
   image: "var(--lm-ink-faint)",
+  decor: "var(--lm-amber-2)",
 };
 
 /** Hex for what cannot read a CSS variable; anything unrecognised is the `index`th swatch. */

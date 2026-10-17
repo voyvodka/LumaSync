@@ -30,8 +30,9 @@ describe("TYPE_DOT_COLOR", () => {
     }
   });
 
-  it("covers all five row types", () => {
+  it("covers every row type", () => {
     expect(Object.keys(TYPE_DOT_COLOR).sort()).toEqual([
+      "decor",
       "furniture",
       "hue",
       "image",

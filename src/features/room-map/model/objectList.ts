@@ -1,8 +1,10 @@
 import type { TFunction } from "i18next";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 
+import { decorLightName, listDecorLights } from "./decorLight";
 import { furnitureName } from "./furnitureName";
 import {
+  decorLightObjectId,
   furnitureObjectId,
   hueChannelObjectId,
   imageLayerObjectId,
@@ -55,6 +57,14 @@ export function buildObjectList(
       type: "usb",
       label: t("roomMap:objectPanel.ledLabel", { count: String(s.ledCount) }),
       locked: s.locked,
+    });
+  }
+  for (const light of listDecorLights(config)) {
+    rows.push({
+      id: decorLightObjectId(light.id),
+      type: "decor",
+      label: decorLightName(light, t),
+      locked: light.locked,
     });
   }
   for (const ch of config.hueChannels) {

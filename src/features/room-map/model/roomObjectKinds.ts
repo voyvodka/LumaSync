@@ -2,6 +2,7 @@ import type { HueChannelPlacement, RoomMapConfig } from "@/shared/contracts/room
 import { findHueChannel, replaceHueChannel, translateStrip } from "@/shared/contracts/roomMap";
 
 import { moveTvWithBacklight } from "./backlight";
+import { findDecorLight, moveDecorLight, updateDecorLight } from "./decorLight";
 import { moveHueChannelToWorld, nudgeHueChannel } from "./hueChannelPosition";
 import { seatMovedLight } from "./lightSeat";
 import { findScopedHueChannel, updateScopedHueChannel } from "./hueChannelScope";
@@ -195,6 +196,29 @@ export const ROOM_OBJECT_KINDS = {
       const channel = findHueChannel(config.hueChannels, ref.channelIndex);
       if (!channel) return null;
       return { kind: "hueChannel", channel };
+    },
+  },
+  decor: {
+    exists: (config, ref) => findDecorLight(config, ref.structureId) !== null,
+    isLocked: (config, ref) => !!findDecorLight(config, ref.structureId)?.locked,
+    toggleLock: (config, ref) => {
+      const light = findDecorLight(config, ref.structureId);
+      return light ? updateDecorLight(config, ref.structureId, { locked: !light.locked }) : null;
+    },
+    // A template's own; removing one is not offered yet, and "Drive with a Hue light" replaces it.
+    remove: null,
+    duplicate: null,
+    moveTo: (config, ref, x, y) => moveDecorLight(config, ref.structureId, x, y),
+    nudge: (cfg, ref, direction) => {
+      const light = findDecorLight(cfg, ref.structureId);
+      const { dx, dy } = worldStep(direction);
+      return (light && moveDecorLight(cfg, ref.structureId, light.x + dx, light.y + dy)) ?? {};
+    },
+    rotateBy: null,
+    rename: (config, ref, label) => updateDecorLight(config, ref.structureId, { label }) ?? {},
+    inspect: (config, ref) => {
+      const light = findDecorLight(config, ref.structureId);
+      return light ? { kind: "decor", light } : null;
     },
   },
   image: {

@@ -6,6 +6,7 @@ const FURNITURE_PREFIX = "furniture-";
 const USB_PREFIX = "usb-";
 const HUE_PREFIX = "hue-";
 const IMAGE_PREFIX = "img-";
+const DECOR_PREFIX = "decor-";
 
 export const furnitureObjectId = (furnitureId: string): string =>
   `${FURNITURE_PREFIX}${furnitureId}`;
@@ -13,6 +14,7 @@ export const usbStripObjectId = (stripId: string): string => `${USB_PREFIX}${str
 export const hueChannelObjectId = (channelIndex: number): string =>
   `${HUE_PREFIX}${channelIndex}`;
 export const imageLayerObjectId = (layerId: string): string => `${IMAGE_PREFIX}${layerId}`;
+export const decorLightObjectId = (structureId: string): string => `${DECOR_PREFIX}${structureId}`;
 
 /** What identifies one object of each kind inside the room map config. */
 interface RoomObjectKeys {
@@ -21,6 +23,8 @@ interface RoomObjectKeys {
   usb: { stripId: string };
   hue: { channelIndex: number };
   image: { layerId: string };
+  // A house light the room draws and LumaSync does not drive: a `LightStructure`, by its id.
+  decor: { structureId: string };
 }
 
 export type RoomObjectKind = keyof RoomObjectKeys;
@@ -44,6 +48,9 @@ export function parseObjectId(objectId: string): RoomObjectRef | null {
   }
   if (objectId.startsWith(IMAGE_PREFIX)) {
     return { kind: "image", layerId: objectId.slice(IMAGE_PREFIX.length) };
+  }
+  if (objectId.startsWith(DECOR_PREFIX)) {
+    return { kind: "decor", structureId: objectId.slice(DECOR_PREFIX.length) };
   }
   return null;
 }

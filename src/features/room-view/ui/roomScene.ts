@@ -24,7 +24,7 @@ import {
 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
-import { furnitureObjectId, hueChannelObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "@/features/room-map/model/objectId";
+import { decorLightObjectId, furnitureObjectId, hueChannelObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "@/features/room-map/model/objectId";
 import { isBacklightStrip } from "@/features/room-map/model/backlight";
 import { ledsPerLeg, stripLegs } from "@/features/room-map/model/stripCorners";
 import { defaultStripHeight } from "@/features/room-map/model/stripWall";
@@ -310,6 +310,16 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     const point = roomToScene(light.x, light.y, light.height, dims);
     const fixture = lampFixture(light.fixture, point, surfaceUnder(point.x, point.z, point.y, surfaces), H, 0);
     sort(fixture.body);
+    const [rx, ry, rz] = fixture.glow.radii;
+    pickables.push({
+      id: decorLightObjectId(light.id),
+      kind: "light",
+      centre: fixture.glow.at,
+      half: [rx, Math.max(ry, 0.04), rz],
+      angle: 0,
+      rises: true,
+      stored: point,
+    });
     const outside = corners !== null && outsideOutline(fixture.glow.at.x + W / 2, fixture.glow.at.z + D / 2, corners);
     lamps.push({
       at: fixture.glow.at,

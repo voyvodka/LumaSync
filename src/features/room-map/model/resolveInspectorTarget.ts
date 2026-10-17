@@ -3,6 +3,7 @@ import type {
   HueChannelPlacement,
   HueZone,
   ImageLayer,
+  LightStructure,
   RoomMapConfig,
   TvAnchorPlacement,
   UsbStripPlacement,
@@ -30,6 +31,7 @@ export type InspectorTarget =
   | { kind: "usb"; strip: UsbStripPlacement }
   | { kind: "hueChannel"; channel: HueChannelPlacement }
   | { kind: "image"; layer: ImageLayer }
+  | { kind: "decor"; light: LightStructure }
   | { kind: "empty" };
 
 export function resolveInspectorTarget(

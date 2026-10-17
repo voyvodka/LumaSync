@@ -31,10 +31,12 @@ import {
 import { isEditableTarget } from "@/shared/lib/editableTarget";
 import { Callout } from "@/shared/ui/Callout/Callout";
 
+import { decorLightName, driveDecorWithHue, listDecorLights, setDecorLightHeight, updateDecorLight } from "../model/decorLight";
 import { deriveHueAreaState } from "../model/hueAreaState";
 import { hueToPlanMetres, resolveHueChannelWorld, setHueChannelWorldZ } from "../model/hueChannelPosition";
 import { moveGroup } from "../model/groupMove";
 import {
+  decorLightObjectId,
   furnitureObjectId,
   hueChannelObjectId,
   imageLayerObjectId,
@@ -59,6 +61,7 @@ import type { RoomMapDocument } from "../state/useRoomMapDocument";
 import { useRoomMapGridSettings } from "../state/useRoomMapGridSettings";
 import { useRoomMood } from "../state/useRoomMood";
 import { PlanDropGhost, type PlanDropGhostHandle } from "./drop/PlanDropGhost";
+import { DecorLightObject } from "./objects/DecorLightObject";
 import { StructurePlan } from "./objects/StructurePlan";
 import { useUsbStripStatus } from "../state/useUsbStripStatus";
 import { FootprintWalls } from "./objects/FootprintWalls";
@@ -561,6 +564,7 @@ export function RoomMapEditor({
   );
   const handleUsbStripSelect = useCallback((id: string) => pick(usbStripObjectId(id), shiftHeld.current), [pick]);
   const handleTvSelect = useCallback(() => pick(TV_ANCHOR_OBJECT_ID, shiftHeld.current), [pick]);
+  const handleDecorSelect = useCallback((objectId: string, additive: boolean) => pick(objectId, additive || shiftHeld.current), [pick]);
   const handleTvChange = useCallback(
     (updated: TvAnchorPlacement) => {
       const room = roomBoxOf(config);
@@ -876,6 +880,22 @@ export function RoomMapEditor({
         { gesture: `hue:${channelIndex}:${Object.keys(patch).sort().join(",")}` },
       );
     },
+    onUpdateDecorLight: (structureId, patch) => {
+      const next = updateDecorLight(docConfig, structureId, patch);
+      if (next) apply(next, { gesture: `decor:${structureId}:${Object.keys(patch).sort().join(",")}` });
+    },
+    onDecorLightHeightChange: (structureId, height) => {
+      const next =
+        height === undefined ? updateDecorLight(docConfig, structureId, { dropMeters: undefined }) : setDecorLightHeight(docConfig, structureId, height);
+      if (next) apply(next, { gesture: `decor-height:${structureId}` });
+    },
+    onDriveDecorWithHue: (structureId, channelIndex) => {
+      const channel = visibleHueChannels.find((ch) => ch.channelIndex === channelIndex);
+      const next = channel ? driveDecorWithHue(docConfig, structureId, channel) : null;
+      if (!next) return;
+      apply(next);
+      select(hueChannelObjectId(channelIndex));
+    },
     onHueChannelHeightChange: (channelIndex, worldZ) => {
       const target = visibleHueChannels.find((ch) => ch.channelIndex === channelIndex);
       if (!target) return;
@@ -985,6 +1005,21 @@ export function RoomMapEditor({
             />
 
             <StructurePlan config={config} pxPerMeter={pxPerMeter} />
+            {listDecorLights(config).map((light) => (
+              <DecorLightObject
+                key={light.id}
+                light={light}
+                name={decorLightName(light, t)}
+                pxPerMeter={pxPerMeter}
+                zoom={zoom}
+                roomWidth={widthMeters}
+                roomDepth={depthMeters}
+                selected={selectedId === decorLightObjectId(light.id)}
+                panMode={spaceHeld}
+                onSelect={handleDecorSelect}
+                onMove={handleUpdatePosition}
+              />
+            ))}
 
             {/* Origin crosshair marker — always centered, extends to edges */}
             <OriginMarker widthM={widthMeters} depthM={depthMeters} pxPerMeter={pxPerMeter} />

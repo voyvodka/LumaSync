@@ -8,7 +8,6 @@ import { anchorWallItem, type WallAnchor } from "../../model/roomStructures";
 /** In plan pixels, as the walls' own line: the plan scales them with the zoom. */
 const WALL_STROKE = 1.5;
 const GLASS_GAP_M = 0.07;
-const LIGHT_MARK_M = 0.14;
 const INK = "var(--lm-ink-dim)";
 
 interface Point {
@@ -81,18 +80,9 @@ function shapeOf(s: RoomStructure, config: Pick<RoomMapConfig, "dimensions" | "f
         />
       );
     }
-    case STRUCTURE_KINDS.LIGHT: {
-      // A ceiling plan's light: a ring with a cross, dashed as what is overhead is.
-      const r = px(LIGHT_MARK_M);
-      const cx = px(s.x);
-      const cy = px(s.y);
-      return (
-        <>
-          <circle cx={cx} cy={cy} r={r} fill="none" stroke={INK} strokeWidth={1} strokeDasharray="3 2" />
-          <path d={`M${cx - r * 0.7} ${cy - r * 0.7} L${cx + r * 0.7} ${cy + r * 0.7} M${cx + r * 0.7} ${cy - r * 0.7} L${cx - r * 0.7} ${cy + r * 0.7}`} stroke={INK} strokeWidth={1} />
-        </>
-      );
-    }
+    // Drawn by `DecorLightObject`, which can be picked and carried.
+    case STRUCTURE_KINDS.LIGHT:
+      return null;
     default: {
       const anchor = anchorWallItem(s, config);
       if (!anchor) return null;

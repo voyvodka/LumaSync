@@ -1,0 +1,49 @@
+@layer components {
+  /* Over the structures (13) and furniture (10): it hangs from the ceiling. Under strips and lights (20). */
+  .light {
+    position: absolute;
+    z-index: 14;
+    user-select: none;
+    touch-action: none;
+  }
+
+  /* A ceiling plan's light: dashed, as what is overhead is. */
+  .mark {
+    display: block;
+    overflow: visible;
+    fill: none;
+    stroke: var(--lm-ink-dim);
+    stroke-width: 1;
+  }
+  .mark circle { stroke-dasharray: 3 2; }
+  .light:hover .mark,
+  .light[data-selected] .mark { stroke: var(--lm-amber); stroke-width: 1.5; }
+
+  .label {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 2px);
+    max-width: 160px;
+    padding: 1px 5px;
+    overflow: hidden;
+    border-radius: 4px;
+    background: rgb(0 0 0 / 60%);
+    color: var(--lm-ink);
+    font: 600 10px/1.4 var(--lm-sans);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateX(-50%);
+    transition: opacity var(--lm-dur-quick);
+  }
+  .light:hover .label,
+  .light[data-selected] .label { opacity: 1; }
+
+  :global(:root[data-reduced-motion]) .label { transition: none; }
+
+  @media (forced-colors: active) {
+    .mark { stroke: CanvasText; }
+    .light[data-selected] .mark { stroke: Highlight; }
+  }
+}

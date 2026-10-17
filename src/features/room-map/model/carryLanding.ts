@@ -3,6 +3,7 @@ import { tvMountHeight } from "@/features/room-view/model/roomSpace";
 import { clamp } from "@/shared/lib/math";
 
 import { moveTvWithBacklight } from "./backlight";
+import { decorLightHeight, findDecorLight, setDecorLightHeight } from "./decorLight";
 import { hueToMetres, planMetresToHue, resolveHueChannelWorldZ, setHueChannelWorldZ } from "./hueChannelPosition";
 import { updateScopedHueChannel } from "./hueChannelScope";
 import { parseObjectId } from "./objectId";
@@ -66,6 +67,14 @@ export function landCarried(
         return setHueChannelWorldZ(ch, config.zones, (clamp(from + raised.rise, 0, H) / H) * 2 - 1);
       });
       return { ...moved, hueChannels };
+    }
+    case "decor": {
+      const light = findDecorLight(config, ref.structureId);
+      if (!light || light.locked) return null;
+      const moved = ROOM_OBJECT_KINDS.decor.moveTo(config, ref, cx, cy);
+      if (!moved || !raised) return moved;
+      const height = decorLightHeight(light, config.dimensions.heightMeters) + raised.rise;
+      return setDecorLightHeight({ ...config, ...moved }, ref.structureId, height);
     }
     default:
       return null;

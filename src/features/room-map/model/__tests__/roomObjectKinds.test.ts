@@ -24,7 +24,7 @@ describe("ROOM_OBJECT_KINDS", () => {
   it("has exactly one row per object kind", () => {
     const covered: Equals<keyof typeof ROOM_OBJECT_KINDS, RoomObjectKind> = true;
     expect(covered).toBe(true);
-    expect(Object.keys(ROOM_OBJECT_KINDS).sort()).toEqual(["furniture", "hue", "image", "tv", "usb"]);
+    expect(Object.keys(ROOM_OBJECT_KINDS).sort()).toEqual(["decor", "furniture", "hue", "image", "tv", "usb"]);
   });
 
   it("does not compile with a kind missing", () => {

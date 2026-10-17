@@ -647,7 +647,12 @@ Showroom fell from about 60 ms of main-thread work to about 16 ms.
   is cut. The plan draws them as a plan does: glass across the wall line, a door's gap, leaf and
   dashed swing, a niche dashed behind the wall, a column solid, a beam dashed overhead, a ceiling
   light a dashed ring with a cross. A ceiling light (`kind: "light"`, `DECOR_LIGHT_FIXTURES`) is
-  one of the house's, not a Hue light: never streamed, no channel, no pick. In 3D it is a Hue
+  one of the house's, not a Hue light: never streamed and no channel. It is an object of its own
+  (`decor-<id>`, `model/decorLight.ts`): picked and carried in Edit, on the plan and in 3D, as a Hue
+  light is, with a card for where it is, how it hangs (`dropMeters`) and its fixture. The card's
+  "Drive with a Hue light" moves the chosen channel onto it — position, height and fixture through
+  the channel's own helpers, out of a zone the lamp is not in — and removes it, in one patch, so one
+  undo puts both back. It has no delete or duplicate: a template lays it out. In 3D it is a Hue
   lamp's fixture glowing in its own white (`kelvin`, 2700 K by default) at a fixed level whatever
   the mode — Off darkens what LumaSync drives, not the house's lights — and it takes glow only,
   after the Hue lamps: no real light (the six are the Hue lights'), and it leaves the room's rig

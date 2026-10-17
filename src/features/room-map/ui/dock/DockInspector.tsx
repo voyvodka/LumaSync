@@ -1,6 +1,7 @@
 import type {
   FurniturePlacement,
   HueChannelPlacement,
+  DecorLightFixture,
   HueZone,
   ImageLayer,
   RoomMapConfig,
@@ -13,7 +14,7 @@ import type { LampFamily } from "@/features/room-view/model/lampFamily";
 import { setPreference, usePreference } from "@/features/persistence/preferences";
 
 import { hueChannelZRange, hueToPlanMetres, resolveHueChannelWorld, resolveHueChannelWorldZ } from "../../model/hueChannelPosition";
-import { furnitureObjectId, hueChannelObjectId, imageLayerObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "../../model/objectId";
+import { decorLightObjectId, furnitureObjectId, hueChannelObjectId, imageLayerObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "../../model/objectId";
 import type { InspectorTarget } from "../../model/resolveInspectorTarget";
 import { outsideOutline } from "../../model/roomFootprint";
 import { autoHueFacing } from "../../model/hueFacing";
@@ -22,6 +23,7 @@ import { isBacklightStrip } from "../../model/backlight";
 import { addStripCorner } from "../../model/stripCorners";
 import { stripFitOffer } from "../../model/stripFit";
 import { defaultStripHeight, stickStripToWall } from "../../model/stripWall";
+import { DecorLightInspector } from "../objects/DecorLightInspector";
 import { FurnitureInspector } from "../objects/FurnitureInspector";
 import { HueChannelInspector } from "../objects/HueChannelInspector";
 import { HueZoneInspector } from "../objects/HueZoneInspector";
@@ -39,6 +41,10 @@ export interface InspectorActions {
   onMoveObject: (objectId: string, x: number, y: number) => void;
   onHueChannelHeightChange: (channelIndex: number, worldZ: number) => void;
   onUpdateHueChannel: (channelIndex: number, patch: Pick<HueChannelPlacement, "facing" | "fixture">, worldZ?: number) => void;
+  onUpdateDecorLight: (structureId: string, patch: { fixture: DecorLightFixture }) => void;
+  /** Metres; `undefined` hangs it where its fixture hangs. */
+  onDecorLightHeightChange: (structureId: string, height: number | undefined) => void;
+  onDriveDecorWithHue: (structureId: string, channelIndex: number) => void;
   onRename: (objectId: string, label: string) => void;
   onToggleLock: (objectId: string) => void;
   onDuplicate: (objectId: string) => void;
@@ -95,6 +101,8 @@ export function inspectorKey(target: Exclude<InspectorTarget, { kind: "empty" }>
       return `hueChannel:${target.channel.channelIndex}`;
     case "image":
       return `image:${target.layer.id}`;
+    case "decor":
+      return `decor:${target.light.id}`;
   }
 }
 
@@ -243,6 +251,27 @@ export function DockInspector({
           seat={seatUnder(ch, config)}
           onUpdate={(patch, worldZ) => actions.onUpdateHueChannel(ch.channelIndex, patch, worldZ)}
           onAssignZone={(zoneId) => actions.onAssignChannelToZone(ch.channelIndex, zoneId)}
+          onRename={(label) => actions.onRename(id, label)}
+          onToggleLock={() => actions.onToggleLock(id)}
+          onClose={onClose}
+        />
+      );
+    }
+    case "decor": {
+      const light = target.light;
+      const id = decorLightObjectId(light.id);
+      return (
+        <DecorLightInspector
+          key={key}
+          light={light}
+          roomWidthMeters={config.dimensions.widthMeters}
+          roomDepthMeters={config.dimensions.depthMeters}
+          roomHeightMeters={config.dimensions.heightMeters}
+          channels={channels}
+          onMove={(x, y) => actions.onMoveObject(id, x, y)}
+          onHeightChange={(height) => actions.onDecorLightHeightChange(light.id, height)}
+          onUpdate={(patch) => actions.onUpdateDecorLight(light.id, patch)}
+          onDriveWithHue={(channelIndex) => actions.onDriveDecorWithHue(light.id, channelIndex)}
           onRename={(label) => actions.onRename(id, label)}
           onToggleLock={() => actions.onToggleLock(id)}
           onClose={onClose}

@@ -331,6 +331,15 @@ describe("buildRoomScene — picking and the selection mark", () => {
     disposeScene(room.scene);
   });
 
+  it("offers the house's own lights to a click too, stored where they hang", () => {
+    const lit = { ...furnished, structures: [{ id: "lamp", kind: "light" as const, x: 2, y: 2, fixture: "pendant" as const }] };
+    const room = buildRoomScene(lit, OPTIONS);
+    const lamp = room.pickables.find((p) => p.id === "decor-lamp");
+    expect(lamp).toMatchObject({ kind: "light", rises: true });
+    expect(lamp?.stored?.x).toBeCloseTo(2 - lit.dimensions.widthMeters / 2);
+    disposeScene(room.scene);
+  });
+
   // A Play bar's glow sits off its mount: a carry landed at the glow walked it 2 cm a time.
   it("says where a one-sided lamp is stored, apart from the glow it is picked by", () => {
     const bar = [{ channelIndex: 0, x: 0.2, y: 0, z: 0.3, zOrigin: "bridge" as const }];

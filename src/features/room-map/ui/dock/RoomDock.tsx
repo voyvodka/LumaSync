@@ -8,6 +8,7 @@ import { cx } from "@/shared/lib/cx";
 import { ConfirmPopover } from "@/shared/ui/ConfirmPopover/ConfirmPopover";
 import { IconButton } from "@/shared/ui/IconButton/IconButton";
 
+import { decorLightName } from "../../model/decorLight";
 import { furnitureName } from "../../model/furnitureName";
 import { hueChannelName } from "../../model/hueChannelLabel";
 import type { LibraryDrop } from "../../model/libraryDrop";
@@ -88,6 +89,8 @@ function describe(target: Exclude<InspectorTarget, { kind: "empty" }>, t: TFunct
       return say(t("roomMap:inspector.typeHue"), hueChannelName(target.channel, t));
     case "image":
       return say(t("roomMap:inspector.typeImage"), target.layer.label);
+    case "decor":
+      return say(t("roomMap:inspector.typeDecor"), decorLightName(target.light, t));
     case "hueZone":
       return say(t("roomMap:inspector.typeHueZone"), target.zone.name);
   }

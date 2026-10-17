@@ -5,7 +5,7 @@
 import { BoxGeometry, BufferAttribute, type BufferGeometry, Color, CylinderGeometry, Matrix4 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
-import { hangHeight } from "@/features/room-map/model/hueHang";
+import { decorLightHeight } from "@/features/room-map/model/decorLight";
 import { anchorWallItem } from "@/features/room-map/model/roomStructures";
 import {
   type BeamStructure,
@@ -162,6 +162,7 @@ function doorParts(p: Placed, item: DoorStructure, standing: number, paint: Wall
 }
 
 export interface DecorLight {
+  id: string;
   x: number;
   y: number;
   fixture: DecorLightFixture;
@@ -175,8 +176,7 @@ export function decorLights(config: RoomMapConfig, ceiling: number): DecorLight[
   for (const s of resolveRoomStructures(config)) {
     if (s.kind !== STRUCTURE_KINDS.LIGHT) continue;
     const { r, g, b } = kelvinToRgb(s.kelvin ?? DECOR_LIGHT_KELVIN);
-    const height = s.dropMeters !== undefined ? Math.max(ceiling - s.dropMeters, 0.3) : (hangHeight(s.fixture, ceiling) ?? ceiling);
-    out.push({ x: s.x, y: s.y, fixture: s.fixture, height, colour: (r << 16) | (g << 8) | b });
+    out.push({ id: s.id, x: s.x, y: s.y, fixture: s.fixture, height: decorLightHeight(s, ceiling), colour: (r << 16) | (g << 8) | b });
   }
   return out;
 }

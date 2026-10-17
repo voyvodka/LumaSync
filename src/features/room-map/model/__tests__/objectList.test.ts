@@ -25,7 +25,7 @@ describe("buildObjectList", () => {
     expect(buildObjectList(configWith({}), t)).toEqual([]);
   });
 
-  it("orders rows images → tv → furniture → usb → hue", () => {
+  it("orders rows images → tv → furniture → usb → house lights → hue", () => {
     const rows = buildObjectList(
       configWith({
         imageLayers: [{ id: "i1", path: "/tmp/plan.png", label: "Plan", offsetX: 0, offsetY: 0, scale: 1 }],
@@ -33,11 +33,13 @@ describe("buildObjectList", () => {
         furniture: [{ id: "f1", type: "sofa", x: 0, y: 0, width: 1, height: 1 }],
         usbStrips: [{ stripId: "s1", startX: 0, startY: 0, endX: 1, endY: 0, ledCount: 60 }],
         hueChannels: [{ channelIndex: 0, x: 0, y: 0, z: 0 }],
+        structures: [{ id: "l1", kind: "light", x: 1, y: 1, fixture: "spot" }],
       }),
       t,
     );
 
-    expect(rows.map((r) => r.type)).toEqual(["image", "tv", "furniture", "usb", "hue"]);
+    expect(rows.map((r) => r.type)).toEqual(["image", "tv", "furniture", "usb", "decor", "hue"]);
+    expect(rows.find((r) => r.type === "decor")?.id).toBe("decor-l1");
   });
 
   it("prefixes each id by kind, and leaves the TV anchor unprefixed", () => {

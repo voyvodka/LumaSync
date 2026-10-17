@@ -29,6 +29,14 @@ describe("landCarried", () => {
     expect(patch?.usbStrips?.find((s) => s.stripId === "s1")).toEqual(base.usbStrips[0]);
   });
 
+  it("puts a house light down at the plan point, and raises it by the rise from where it was drawn", () => {
+    const lit = { ...base, structures: [{ id: "lamp", kind: "light" as const, x: 1, y: 1, fixture: "ceiling" as const }] };
+    expect(landCarried(lit, "decor-lamp", 2, 3, 0, ctx)?.structures?.[0]).toMatchObject({ x: 2, y: 3 });
+    // A ceiling light hangs at 2.5 m; let go 0.5 m lower, it is stored 0.5 m below the ceiling.
+    expect(landCarried(lit, "decor-lamp", 2, 3, 0, ctx, { rise: -0.5, centreY: 1.9 })?.structures?.[0]).toMatchObject({ x: 2, y: 3, dropMeters: 0.5 });
+    expect(landCarried({ ...lit, structures: [{ ...lit.structures[0]!, locked: true }] }, "decor-lamp", 2, 3, 0, ctx)).toBeNull();
+  });
+
   it("puts a Hue light down at the plan point in the bridge's cube", () => {
     const ch = landCarried(base, "hue-0", 0, 0, 0, ctx)?.hueChannels?.[0];
     // The room's top-left corner is the cube's left wall and TV wall.
