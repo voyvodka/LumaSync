@@ -13,6 +13,8 @@ use tauri::{
     WebviewWindowBuilder,
 };
 
+use crate::commands::main_thread::on_main;
+
 /// Metadata for one enumerated display, used to size and position the
 /// calibration and LED-twin overlay windows.
 #[derive(Clone, Serialize)]
@@ -680,8 +682,35 @@ pub fn list_displays<R: Runtime>(app: AppHandle<R>) -> Result<Vec<DisplayInfoPay
 
 /// Open (or move) the calibration overlay onto the requested display,
 /// closing any previously open overlay first.
+///
+/// Async only to hand the open to the main thread as one step (`main_thread`):
+/// a webview built from a sync command never finishes on Windows.
 #[tauri::command]
-pub fn open_display_overlay<R: Runtime>(
+pub async fn open_display_overlay<R: Runtime>(
+    app: AppHandle<R>,
+    display_id: String,
+    preview: Option<OverlayPreviewPayload>,
+) -> Result<DisplayOverlayCommandResult, String> {
+    match on_main(&app, move |app| {
+        open_display_overlay_now(
+            app.clone(),
+            app.state::<OverlayState>(),
+            display_id,
+            preview,
+        )
+    })
+    .await
+    {
+        Ok(opened) => opened,
+        Err(reason) => Ok(overlay_error_result(
+            "OVERLAY_OPEN_FAILED",
+            "Could not open display overlay.",
+            &reason,
+        )),
+    }
+}
+
+pub(crate) fn open_display_overlay_now<R: Runtime>(
     app: AppHandle<R>,
     overlay_state: State<'_, OverlayState>,
     display_id: String,

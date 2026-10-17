@@ -24,6 +24,7 @@ mod commands {
     pub mod led_sink;
     pub mod lighting_mode;
     pub mod local_outputs;
+    pub mod main_thread;
     pub mod notifications;
     pub mod platform;
     pub mod preview;

@@ -29,6 +29,7 @@ use crate::commands::lighting_mode::preview_scene::{
     SceneLighting, SceneRestore,
 };
 use crate::commands::lighting_mode::LightingRuntimeState;
+use crate::commands::main_thread::on_main;
 use crate::commands::status::CommandStatus;
 use crate::events::PREVIEW_LATENCY_EVENT;
 
@@ -71,25 +72,6 @@ pub struct SetPreviewSceneBrightnessPayload {
 #[serde(rename_all = "camelCase")]
 pub struct SetPreviewSceneBlackBordersPayload {
     pub enabled: bool,
-}
-
-/// `f` on the main thread, where windows are built, awaited. `Err` says why
-/// it never ran.
-async fn on_main<R, T, F>(app: &AppHandle<R>, f: F) -> Result<T, String>
-where
-    R: Runtime,
-    T: Send + 'static,
-    F: FnOnce(&AppHandle<R>) -> T + Send + 'static,
-{
-    let (sender, receiver) = tokio::sync::oneshot::channel();
-    let handle = app.clone();
-    app.run_on_main_thread(move || {
-        let _ = sender.send(f(&handle));
-    })
-    .map_err(|error| format!("the main thread did not take the scene window: {error}"))?;
-    receiver
-        .await
-        .map_err(|error| format!("the scene window build did not answer: {error}"))
 }
 
 /// The capture filter waits for ScreenCaptureKit, so off the async workers.

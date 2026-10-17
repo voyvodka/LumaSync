@@ -23,6 +23,7 @@ use super::windows::{
     next_popup_label, next_twin_label, reuse_on_display, reuse_popup,
 };
 use crate::commands::calibration::{list_displays, DisplayInfoPayload};
+use crate::commands::main_thread::on_main;
 use crate::commands::shell_state;
 use crate::commands::status::CommandStatus;
 use crate::events::PREVIEW_SESSION_EVENT;
@@ -715,8 +716,26 @@ fn undo_open<R: Runtime>(app: &AppHandle<R>, return_to: Option<i32>, main_hidden
 
 /// Open the session: the twin over the captured display, the popup, and the
 /// main window out of the way. Already open ⇒ the popup comes back.
+///
+/// Async only to hand the open to the main thread as one step (`main_thread`):
+/// built from a sync command, the twin never finished on Windows.
 #[tauri::command]
-pub fn open_preview<R: Runtime>(
+pub async fn open_preview<R: Runtime>(app: AppHandle<R>) -> Result<PreviewSessionResult, String> {
+    match on_main(&app, |app| {
+        open_preview_now(app.clone(), app.state::<PreviewSessionState>())
+    })
+    .await
+    {
+        Ok(opened) => opened,
+        Err(reason) => Ok(failure(
+            PREVIEW_OPEN_FAILED,
+            "The main thread did not run the open.",
+            reason,
+        )),
+    }
+}
+
+fn open_preview_now<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, PreviewSessionState>,
 ) -> Result<PreviewSessionResult, String> {
@@ -1212,7 +1231,7 @@ mod tests {
         let state = app.state::<PreviewSessionState>();
         state.lock().unwrap().opening = true;
 
-        let second = open_preview(app.handle().clone(), state).unwrap();
+        let second = open_preview_now(app.handle().clone(), state).unwrap();
 
         assert_eq!(second.status.code, PREVIEW_ALREADY_OPEN);
         assert!(app
