@@ -7,7 +7,8 @@
 //! The lock is never held across a window call: a destroy can deliver the
 //! window's `Destroyed` event before it returns, and that event runs
 //! `end_session` again. On Windows a window build pumps messages, so a second
-//! `open_preview` can arrive mid-build; the `opening` flag turns it away.
+//! `open_preview` can arrive mid-build; the `opening` flag turns it away. An
+//! `end_session` arriving then is left to the open, which ends once it lands.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -177,6 +178,7 @@ impl OpenSession {
 struct Inner {
     open: Option<OpenSession>,
     opening: bool,
+    close_requested: bool,
     /// The last session's twin and popup, hidden for the next one to reuse.
     idle: Option<IdleWindows>,
     /// The last scene's window, hidden for the next scene to reuse.
@@ -404,12 +406,22 @@ impl PreviewSessionState {
         Ok(Some(open.wire()))
     }
 
-    fn commit(&self, open: OpenSession) -> Result<PreviewSession, String> {
+    /// Also answers whether an end arrived while it opened.
+    fn commit(&self, open: OpenSession) -> Result<(PreviewSession, bool), String> {
         let wire = open.wire();
         let mut inner = self.lock()?;
         inner.open = Some(open);
         inner.opening = false;
-        Ok(wire)
+        Ok((wire, std::mem::take(&mut inner.close_requested)))
+    }
+
+    /// `true` when an open is in flight: the end is left to it.
+    fn defer_end_to_open(&self) -> Result<bool, String> {
+        let mut inner = self.lock()?;
+        if inner.opening {
+            inner.close_requested = true;
+        }
+        Ok(inner.opening)
     }
 
     /// Another app came to the front while the session is open. Answers the
@@ -516,6 +528,7 @@ impl Drop for OpeningGuard<'_> {
     fn drop(&mut self) {
         if let Ok(mut inner) = self.0.inner.lock() {
             inner.opening = false;
+            inner.close_requested = false;
         }
     }
 }
@@ -826,28 +839,42 @@ fn open_preview_now<R: Runtime>(
         }
     };
 
-    let committed = state.commit(OpenSession {
-        display_id: display.id,
-        twin_label: twin_label.clone(),
-        popup_label: popup_label.clone(),
-        popup_hidden: false,
-        twin_hidden: false,
-        main_hidden_by_session,
-        return_to,
-        floating,
-        scene_label: None,
-        scene: None,
-    });
-    match committed {
-        Ok(session) => {
-            exclusion::session_opened(&app);
+    land_open(
+        &app,
+        &state,
+        OpenSession {
+            display_id: display.id,
+            twin_label,
+            popup_label,
+            popup_hidden: false,
+            twin_hidden: false,
+            main_hidden_by_session,
+            return_to,
+            floating,
+            scene_label: None,
+            scene: None,
+        },
+    )
+}
+
+fn land_open<R: Runtime>(
+    app: &AppHandle<R>,
+    state: &PreviewSessionState,
+    open: OpenSession,
+) -> Result<PreviewSessionResult, String> {
+    let (twin_label, popup_label) = (open.twin_label.clone(), open.popup_label.clone());
+    let (return_to, main_hidden) = (open.return_to, open.main_hidden_by_session);
+    match state.commit(open) {
+        Ok((_, true)) => end_session(app),
+        Ok((session, false)) => {
+            exclusion::session_opened(app);
             Ok(answer(session, PREVIEW_OPENED, "Preview opened."))
         }
         Err(error) => {
             let mut failures = Vec::new();
-            destroy(&app, &twin_label, &mut failures);
-            destroy(&app, &popup_label, &mut failures);
-            undo_open(&app, return_to, main_hidden_by_session);
+            destroy(app, &twin_label, &mut failures);
+            destroy(app, &popup_label, &mut failures);
+            undo_open(app, return_to, main_hidden);
             Err(error)
         }
     }
@@ -856,6 +883,15 @@ fn open_preview_now<R: Runtime>(
 /// End the session from wherever it is. Safe to call again: a second call
 /// finds nothing open, and still clears any preview window left behind.
 pub fn end_session<R: Runtime>(app: &AppHandle<R>) -> Result<PreviewSessionResult, String> {
+    if let Some(state) = app.try_state::<PreviewSessionState>() {
+        if state.defer_end_to_open()? {
+            return Ok(answer(
+                PreviewSession::Closed,
+                PREVIEW_CLOSED,
+                "The preview closes as its open finishes.",
+            ));
+        }
+    }
     let open = match app.try_state::<PreviewSessionState>() {
         Some(state) => state.take()?,
         None => None,
@@ -1238,6 +1274,50 @@ mod tests {
             .webview_windows()
             .keys()
             .all(|label| !is_preview_window(label)));
+    }
+
+    /// The Windows build pump can run the tray's Close Overlays mid-build: a
+    /// sweep then destroyed the twin the open went on to record.
+    #[test]
+    fn an_end_arriving_mid_open_is_left_to_the_open() {
+        let app = tauri::test::mock_app();
+        app.manage(PreviewSessionState::default());
+        for label in ["led-twin-overlay-8", "led-control-popup-8"] {
+            tauri::WebviewWindowBuilder::new(&app, label, Default::default())
+                .build()
+                .expect("the open's window");
+        }
+        let state = app.state::<PreviewSessionState>();
+        state.lock().unwrap().opening = true;
+
+        let ended = end_session(app.handle()).unwrap();
+
+        assert_eq!(ended.status.code, PREVIEW_CLOSED);
+        assert!(state.lock().unwrap().close_requested, "nothing swept yet");
+
+        let landed = land_open(
+            app.handle(),
+            &state,
+            OpenSession {
+                display_id: "a".into(),
+                twin_label: "led-twin-overlay-8".into(),
+                popup_label: "led-control-popup-8".into(),
+                popup_hidden: false,
+                twin_hidden: false,
+                main_hidden_by_session: false,
+                return_to: None,
+                floating: false,
+                scene_label: None,
+                scene: None,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(landed.status.code, PREVIEW_CLOSED);
+        assert!(state.lock().unwrap().open.is_none());
+        assert!(!state.lock().unwrap().close_requested);
+        let idle = state.take_idle().expect("the landed pair is kept");
+        assert_eq!(idle.twin_label, "led-twin-overlay-8");
     }
 
     /// Closing hands focus to the app the user went to last, and only the
