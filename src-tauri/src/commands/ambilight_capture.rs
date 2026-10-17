@@ -358,7 +358,7 @@ mod platform {
         CaptureControl, GraphicsCaptureApiError, GraphicsCaptureApiHandler,
     };
     use windows_capture::frame::Frame;
-    use windows_capture::graphics_capture_api::InternalCaptureControl;
+    use windows_capture::graphics_capture_api::{GraphicsCaptureApi, InternalCaptureControl};
     use windows_capture::monitor::Monitor;
     use windows_capture::settings::{
         ColorFormat, CursorCaptureSettings, DirtyRegionSettings, DrawBorderSettings,
@@ -453,19 +453,37 @@ mod platform {
         // the frame budget while being by far the largest thing in it. On a
         // 144 Hz display this is roughly a sevenfold reduction in readback for
         // byte-identical output.
-        let settings = Settings::new(
-            monitor,
-            CursorCaptureSettings::Default,
-            DrawBorderSettings::Default,
-            SecondaryWindowSettings::Default,
-            MinimumUpdateIntervalSettings::Custom(interval),
-            DirtyRegionSettings::Default,
-            ColorFormat::Rgba8,
-            Arc::clone(&latest_frame),
-        );
+        let start = |border| {
+            WindowsLiveCaptureHandler::start_free_threaded(Settings::new(
+                monitor,
+                CursorCaptureSettings::Default,
+                border,
+                SecondaryWindowSettings::Default,
+                MinimumUpdateIntervalSettings::Custom(interval),
+                DirtyRegionSettings::Default,
+                ColorFormat::Rgba8,
+                Arc::clone(&latest_frame),
+            ))
+        };
 
-        let capture_control =
-            WindowsLiveCaptureHandler::start_free_threaded(settings).map_err(map_start_error)?;
+        // WGC's default draws a yellow frame round the captured display for as long as Ambilight
+        // runs. Builds without the switch refuse any other setting, and one that has it may still
+        // refuse to drop the frame, so either way the capture runs with the frame rather than not.
+        let borderless = GraphicsCaptureApi::is_border_settings_supported().unwrap_or(false);
+        let capture_control = if borderless {
+            match start(DrawBorderSettings::WithoutBorder) {
+                Err(GraphicsCaptureApiError::GraphicsCaptureApiError(error)) => {
+                    log::warn!(
+                        "[ambilight-capture/windows] borderless capture refused ({error}); capturing with the frame"
+                    );
+                    start(DrawBorderSettings::Default)
+                }
+                started => started,
+            }
+        } else {
+            start(DrawBorderSettings::Default)
+        }
+        .map_err(map_start_error)?;
 
         Ok(Box::new(WindowsLiveFrameSource {
             latest_frame,
