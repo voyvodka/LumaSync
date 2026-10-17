@@ -12,6 +12,7 @@ import type {
 } from "@/shared/contracts/roomMap";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 
+import type { HueSpot } from "./hueSpots";
 import { STRUCTURE_NAME_KEYS } from "./roomStructures";
 
 export interface RoomTemplate {
@@ -19,6 +20,7 @@ export interface RoomTemplate {
   nameKey: TranslationKey;
   descKey: TranslationKey;
   config: (t: TFunction) => RoomMapConfig;
+  hueSpots?: readonly HueSpot[];
 }
 
 function makeTemplate(
@@ -320,12 +322,12 @@ function studio(t: TFunction): RoomMapConfig {
 }
 
 export const ROOM_TEMPLATES: RoomTemplate[] = [
-  { id: "tv55", nameKey: "roomMap:templates.tv55.name", descKey: "roomMap:templates.tv55.desc", config: livingRoom },
-  { id: "ldesk", nameKey: "roomMap:templates.ldesk.name", descKey: "roomMap:templates.ldesk.desc", config: deskSetup },
-  { id: "fullroom", nameKey: "roomMap:templates.fullroom.name", descKey: "roomMap:templates.fullroom.desc", config: fullRoom },
-  { id: "gaming", nameKey: "roomMap:templates.gaming.name", descKey: "roomMap:templates.gaming.desc", config: gamingCorner },
-  { id: "bedroom", nameKey: "roomMap:templates.bedroom.name", descKey: "roomMap:templates.bedroom.desc", config: bedroom },
-  { id: "studio", nameKey: "roomMap:templates.studio.name", descKey: "roomMap:templates.studio.desc", config: studio },
+  { id: "tv55", nameKey: "roomMap:templates.tv55.name", descKey: "roomMap:templates.tv55.desc", config: livingRoom, hueSpots: [{ x: 1.45, y: 0.2, heightMeters: 0.75 }, { x: 2.95, y: 0.2, heightMeters: 0.75 }, { x: 0.75, y: 3.5, heightMeters: 1.2 }, { x: 3.55, y: 3.5, heightMeters: 1.2 }, { x: 2.2, y: 1.9, heightMeters: 2.5 }] },
+  { id: "ldesk", nameKey: "roomMap:templates.ldesk.name", descKey: "roomMap:templates.ldesk.desc", config: deskSetup, hueSpots: [{ x: 0.85, y: 0.15, heightMeters: 0.95 }, { x: 1.75, y: 0.15, heightMeters: 0.95 }, { x: 2.55, y: 2.8, heightMeters: 1.5 }, { x: 1.6, y: 1.5, heightMeters: 2.4 }] },
+  { id: "fullroom", nameKey: "roomMap:templates.fullroom.name", descKey: "roomMap:templates.fullroom.desc", config: fullRoom, hueSpots: [{ x: 1.85, y: 0.25, heightMeters: 0.8 }, { x: 3.65, y: 0.25, heightMeters: 0.8 }, { x: 1.2, y: 4.4, heightMeters: 1.2 }, { x: 4.3, y: 4.4, heightMeters: 1.2 }, { x: 2.75, y: 2.3, heightMeters: 2.6 }] },
+  { id: "gaming", nameKey: "roomMap:templates.gaming.name", descKey: "roomMap:templates.gaming.desc", config: gamingCorner, hueSpots: [{ x: 1.2, y: 0.15, heightMeters: 1.0 }, { x: 2.4, y: 0.15, heightMeters: 1.0 }, { x: 0.5, y: 0.2, heightMeters: 1.8 }, { x: 3.3, y: 2.9, heightMeters: 0.4 }] },
+  { id: "bedroom", nameKey: "roomMap:templates.bedroom.name", descKey: "roomMap:templates.bedroom.desc", config: bedroom, hueSpots: [{ x: 1.3, y: 0.3, heightMeters: 1.0 }, { x: 2.7, y: 0.3, heightMeters: 1.0 }, { x: 0.92, y: 3.7, heightMeters: 0.7 }, { x: 3.07, y: 3.7, heightMeters: 0.7 }, { x: 2.0, y: 1.6, heightMeters: 2.5 }] },
+  { id: "studio", nameKey: "roomMap:templates.studio.name", descKey: "roomMap:templates.studio.desc", config: studio, hueSpots: [{ x: 1.5, y: 0.25, heightMeters: 0.8 }, { x: 3.1, y: 0.25, heightMeters: 0.8 }, { x: 1.0, y: 2.6, heightMeters: 1.2 }, { x: 3.45, y: 2.7, heightMeters: 1.2 }, { x: 1.0, y: 3.6, heightMeters: 1.9 }] },
   { id: "showroom", nameKey: "roomMap:templates.showroom.name", descKey: "roomMap:templates.showroom.desc", config: showroom },
   { id: "empty", nameKey: "roomMap:templates.empty.name", descKey: "roomMap:templates.empty.desc", config: () => DEFAULT_ROOM_MAP },
 ];

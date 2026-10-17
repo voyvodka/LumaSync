@@ -41,10 +41,18 @@ function onAWall(p: RoomCorner, outline: RoomCorner[]): boolean {
   });
 }
 
-describe.each(ROOM_TEMPLATES.filter((template) => template.id !== "empty").map((template) => [template.id, template.config(t)] as const))(
+describe.each(ROOM_TEMPLATES.filter((template) => template.id !== "empty").map((template) => [template.id, template.config(t), template.hueSpots ?? []] as const))(
   "the %s template",
-  (_id, config) => {
+  (_id, config, spots) => {
     const outline = resolveRoomFootprint(config);
+
+    it("suggests Hue spots inside the room and under its ceiling", () => {
+      for (const spot of spots) {
+        expect(inside(spot, outline), JSON.stringify(spot)).toBe(true);
+        expect(spot.heightMeters).toBeGreaterThan(0);
+        expect(spot.heightMeters).toBeLessThanOrEqual(config.dimensions.heightMeters);
+      }
+    });
 
     it("stands every piece, the screen and the strips inside its walls", () => {
       for (const f of config.furniture) expect(boxInside(f.x, f.y, f.width, f.height, outline), f.id).toBe(true);
