@@ -245,6 +245,27 @@ describe("RoomView3D", () => {
       unmount();
     });
 
+    it("frees the room it replaced only once the new one is drawn", async () => {
+      const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 800, 600));
+      const { rerender, unmount, view } = await open();
+      const old = builds.scene!;
+      const disposed = vi.fn<() => void>();
+      old.traverse((node) => {
+        const material = (node as Mesh).material;
+        if (material && !Array.isArray(material)) material.addEventListener("dispose", disposed);
+      });
+      rerender(view(room(1.4, 2.4)));
+      expect(builds.count).toBe(1);
+      expect(disposed).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(50);
+      });
+      expect(disposed).toHaveBeenCalled();
+      unmount();
+      rect.mockRestore();
+    });
+
     it("stretches the screen in place while its size steps, and builds the latest once they rest", async () => {
       const furnished = room(1);
       const tv = (width: number) => ({ ...furnished, tvAnchor: { x: 1.5, y: 0, width, height: 0.08 } });

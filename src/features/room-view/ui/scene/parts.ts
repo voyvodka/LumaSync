@@ -1,7 +1,7 @@
 import {
   BoxGeometry,
   BufferAttribute,
-  type BufferGeometry,
+  BufferGeometry,
   Color,
   CylinderGeometry,
   LatheGeometry,
@@ -28,6 +28,23 @@ export interface Part {
 /** Below this a size is floored, so a squeezed model degrades instead of failing to build. */
 const MIN_SIZE = 0.004;
 
+// Every edit rebuilds the room, and generating its rounded boxes was half of each rebuild; a copy is cheap.
+const ROUNDED_KEPT = 512;
+const rounded = new Map<string, BufferGeometry>();
+function roundedBox(w: number, h: number, d: number, r: number): BufferGeometry {
+  const key = `${w}|${h}|${d}|${r}`;
+  let template = rounded.get(key);
+  if (template) {
+    rounded.delete(key);
+  } else {
+    // Plain, since `clone` runs the constructor: a RoundedBoxGeometry would generate a default box first.
+    template = new BufferGeometry().copy(new RoundedBoxGeometry(w, h, d, 2, r));
+    if (rounded.size >= ROUNDED_KEPT) rounded.delete(rounded.keys().next().value!);
+  }
+  rounded.set(key, template);
+  return template.clone();
+}
+
 /** A box standing on `y`, centred on `x`/`z`, its edges rounded by up to `radius`. */
 export function block(
   w: number,
@@ -44,7 +61,7 @@ export function block(
   const sd = Math.max(d, MIN_SIZE);
   // RoundedBoxGeometry folds over itself once the radius reaches half the smallest side.
   const r = Math.min(radius, sw / 2, sh / 2, sd / 2) * 0.98;
-  const geometry = r > MIN_SIZE / 2 ? new RoundedBoxGeometry(sw, sh, sd, 2, r) : new BoxGeometry(sw, sh, sd);
+  const geometry = r > MIN_SIZE / 2 ? roundedBox(sw, sh, sd, r) : new BoxGeometry(sw, sh, sd);
   geometry.translate(x, y + sh / 2, z);
   return { geometry, color };
 }

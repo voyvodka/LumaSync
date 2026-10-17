@@ -433,6 +433,12 @@ in the room builds a waiting one first, and a landed carry builds at once, so a 
 piece already lifted. A Hue light, or a strip behind the TV, has nothing to lift and builds as any
 other edit does: at once, or at the rest when a build was under 200 ms ago.
 
+Such a build was dearer than it needed to be. Freeing the old scene before the new one drew released
+its programs, so each step compiled them again on the main thread (about 30 ms in Chrome, more in
+WebKit); the old scene is now freed after the next draw. Generating the rounded boxes was half of
+`buildRoomScene`; `block` copies a kept template instead. A height step on a Hue light in the
+Showroom fell from about 60 ms of main-thread work to about 16 ms.
+
 ## Gotchas
 
 - **Several writers store `roomMap`, and every one of them goes through `shellStore.update`.** The editor, the USB roster (a strip on a connect), LED Setup's count sync and the Devices channel map all write it. The editor used to save the whole config from its reducer — loaded once, saved again on unmount, never listening — so a strip the roster added or a count LED Setup synced while it was open was taken away by its next save; only `SettingsLayout` mounting one section at a time kept that from happening. Now the editor keeps a baseline (the map as it last loaded or saved it) and writes only what changed since, through `mergeEditorSave` (`model/roomMapMerge.ts`): top-level fields by reference, and `usbStrips` and `hueChannels` record by record — keyed by `stripId` and by area plus `channelIndex` — because the other writers write those two. What the editor added or changed wins, what it deleted goes, everything else stays as stored. A record the editor changed takes only the fields it changed, so a `portName` the roster stamped or an `ledCount` LED Setup synced on the same strip stays. The first baseline is the stored map before the legacy-background conversion, so that conversion reaches the file. Saves run one after another, the first at once so the unmount flush is under way before the editor goes, and each reads the baseline when it runs rather than when it was asked for: a save queued behind one that failed then writes the whole map, where it once wrote only its own change and lost the failed one's. Two writers changing the same field of the same record is still last-writer-wins. `verify:shell-contracts` fails on a `shellStore.save` or `saveShellState` that names `roomMap` or `hueBridgeSyncedPositions`. `roomMapVersion` was retired at schema 10 — everyone bumped it, nobody read it.

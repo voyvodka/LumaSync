@@ -195,6 +195,13 @@ function openRoomView(
   let bloom: Bloom | null = null;
   let closed = false;
   let room: RoomScene | null = null;
+  // Disposed after the next draw: freed first, their programs were released and the new scene compiled
+  // them again on the main thread, about 30 ms on every edit.
+  const replaced: RoomScene["scene"][] = [];
+  const disposeReplaced = () => {
+    for (const scene of replaced) disposeScene(scene);
+    replaced.length = 0;
+  };
   let frame = 0;
   let observer: ResizeObserver | null = null;
   let controls: OrbitControls | null = null;
@@ -215,6 +222,7 @@ function openRoomView(
     observer?.disconnect();
     if (frame !== 0) cancelAnimationFrame(frame);
     controls?.dispose();
+    disposeReplaced();
     if (room) disposeScene(room.scene);
     bloom?.dispose();
     renderer.dispose();
@@ -287,6 +295,7 @@ function openRoomView(
       room.faceCamera(camera.quaternion, camera);
       if (bloom) bloom.render(room.scene, camera);
       else renderer.render(room.scene, camera);
+      disposeReplaced();
       const now = performance.now();
       if (timings.firstFrameMs === 0) {
         timings.firstFrameAt = now;
@@ -814,7 +823,7 @@ function openRoomView(
             leaving.push(lifted);
           }
         }
-        disposeScene(room.scene);
+        replaced.push(room.scene);
       }
       room = buildRoomScene(config, { shadows, lambert: options.lambert ?? false, coldKey: options.coldKey, lampFamilies });
       // Only on opening, or when the room is resized: an edit (a piece carried, a light moved)
