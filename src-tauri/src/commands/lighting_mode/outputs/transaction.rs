@@ -12,6 +12,9 @@ pub(super) enum TxKind {
     /// The boot restore's resume once the strip or WLED panel it found
     /// missing connects.
     BootSinkRetry,
+    /// A strip or WLED panel bound while the mode ran without the `usb` its
+    /// selection names: the mode takes it in. Changes no intent and saves nothing.
+    SinkJoin,
     /// `previous` is the selection before the strip went away.
     UsbUnplug {
         previous: OutputTargets,
@@ -265,6 +268,16 @@ impl<'a, R: Runtime> Transaction<'a, R> {
             }
             let running = blocking(self.app, read_running).await?;
             return self.reconcile_refresh(&intent, &running).await;
+        }
+        if self.kind == TxKind::SinkJoin {
+            // Asked again in the turn: what ran before it may have answered the join.
+            let running = blocking(self.app, read_running).await?;
+            if !sink_join_due(&intent, running.kind, &running_targets(&running))
+                || !usb_available(self.app)
+                || blocking(self.app, preview_owns_lights).await?
+            {
+                return Ok(Ending::Applied);
+            }
         }
         self.publish_phase(if intent.kind == LightingModeKind::Off {
             LightingPhase::Stopping

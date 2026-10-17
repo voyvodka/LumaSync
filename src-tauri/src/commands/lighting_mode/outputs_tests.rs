@@ -2564,6 +2564,43 @@ fn a_strip_that_connects_after_the_wait_starts_nothing() {
     assert!(mode_events(&rig).is_empty(), "{:?}", events(&rig));
 }
 
+/// Past the wait, the mode running on Hue kept `usb` selected and drove
+/// nothing on it: the toggle showed the strip on while it stayed dark.
+#[test]
+fn a_strip_that_connects_after_the_wait_joins_the_mode_running_without_it() {
+    let rig = restoring(json!(["usb", "hue"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+
+    strip_connects(&rig);
+
+    wait_until("the strip never joined", || {
+        let snapshot = rig.state().snapshot.read();
+        snapshot.active_targets == vec![Usb, Hue] && snapshot.phase == LightingPhase::Idle
+    });
+    assert_eq!(
+        events(&rig).iter().filter(|e| *e == "hue:start").count(),
+        1,
+        "the stream is kept, not restarted: {:?}",
+        events(&rig)
+    );
+    assert!(rig.written_keys().is_empty(), "a join saves nothing");
+}
+
+#[test]
+fn a_strip_the_user_deselected_does_not_join() {
+    let rig = restoring(json!(["usb", "hue"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    apply(&rig, user(None, Some(&[Hue])));
+    let before = mode_events(&rig).len();
+
+    strip_connects(&rig);
+
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(mode_events(&rig).len(), before, "{:?}", events(&rig));
+    assert_eq!(rig.state().snapshot.read().active_targets, vec![Hue]);
+}
+
 // ---------------------------------------------------------------------------
 // The saved Hue area moves the stream
 // ---------------------------------------------------------------------------

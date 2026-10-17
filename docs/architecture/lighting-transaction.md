@@ -335,9 +335,23 @@ waits for one (`wait_for_local_sink`): the first serial connect or WLED bind wit
 (`BOOT_SINK_WAIT_WINDOW`, `note_local_sink_connected` from `connect_serial_port` and
 `connect_wled_sink`) runs one `BootSinkRetry` transaction that resumes the mode on the strip, or adds
 the strip beside the Hue it runs on. Like the boot restore it saves nothing. Any request that says
-what should run — a choice, an unplug, a newer launch — ends the wait, and a connect after the
-window starts nothing. A strip that connected while the restore was still running is caught when
-the wait is set up. When the Hue wait is also pending, the strip resume leaves Hue to it.
+what should run — a choice, an unplug, a newer launch — ends the wait. A strip that connected while
+the restore was still running is caught when the wait is set up. When the Hue wait is also pending,
+the strip resume leaves Hue to it.
+
+**A strip that connects later** joins a mode that is running without it. Past the wait, a mode
+running on Hue with `usb` still selected drove nothing on the strip that bound minutes later, while
+the Lights toggle showed it on. Now any bind outside the wait (`join_local_sink`) checks the same
+thing `sink_join_due` names — a mode runs, it is the one the intent asks for, the selection names
+`usb`, and `usb` is not driven — and runs one `SinkJoin` transaction that re-plans onto the
+selection, keeping the Hue stream up. A mode that is Off stays Off: that is the user's to pick, and
+a light coming on by itself minutes after launch would be the surprise. The join takes the newest
+ticket as it stands, as the settings refresh does, instead of issuing one: it never supersedes a
+choice in flight, and a choice made after it supersedes it. Since a ticket it shares with a choice
+does not stop it from running first, it asks `sink_join_due` again in its turn and does nothing if
+what ran before it already answered the join (or a preview owns the strip). A choice still on its
+way, whose kind differs from what runs, is left to run on the strip itself. Like the boot resume it
+saves nothing.
 
 The main window no longer awaits the restore: it can wait seconds on a Hue start, and the tray
 labels, onboarding and prompts waited with it. Only the USB reconciler and the Hue auto-add
