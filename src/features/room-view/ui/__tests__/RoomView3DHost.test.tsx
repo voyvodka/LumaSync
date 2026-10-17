@@ -57,13 +57,10 @@ const waitLine = () => screen.getByRole("status", { hidden: true });
 
 describe("RoomView3DHost", () => {
   it("holds the map's loading line over the night until the room's first frame is drawn", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
     await mounted();
-    act(() => vi.advanceTimersByTime(250));
     expect(waitLine()).toHaveAttribute("data-shown");
 
     act(() => windowState.drawn?.());
-    act(() => vi.advanceTimersByTime(600));
     expect(waitLine()).not.toHaveAttribute("data-shown");
   });
 

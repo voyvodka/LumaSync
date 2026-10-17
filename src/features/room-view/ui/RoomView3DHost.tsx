@@ -2,7 +2,7 @@ import { type CSSProperties, lazy, type MutableRefObject, Suspense, useCallback,
 import { useTranslation } from "react-i18next";
 
 import { useWindowPresence, type WindowPresence } from "@/features/shell/windowVisibility";
-import { useHeldFlag, useLateFlag } from "@/shared/lib/useHeldFlag";
+import { useLateFlag } from "@/shared/lib/useHeldFlag";
 import type { ZoneMarks } from "@/features/room-map/model/zoneMarks";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 
@@ -84,7 +84,9 @@ export function RoomView3DHost(props: {
   }, []);
   // The first open carries on from the map's own loading line, so a delay would blink it.
   const [firstOpen] = useState(() => !drawnOnce);
-  const waiting = useHeldFlag(useLateFlag(kept && !drawn, firstOpen ? 0 : WAIT_SHOWN_AFTER_MS));
+  // Not held for a minimum: the room drawn under it is the answer, so the line goes as it comes in.
+  const late = useLateFlag(kept && !drawn, WAIT_SHOWN_AFTER_MS);
+  const waiting = kept && !drawn && (firstOpen || late);
   if (!RoomView3D || !kept) return null;
   return (
     <div className={styles.stage} data-testid="room-view-3d" style={skyStyle(props.mood ?? roomMood(null))}>

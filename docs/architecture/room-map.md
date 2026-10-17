@@ -51,7 +51,8 @@ measured, while the stage showed an empty night. `Bloom.compile` compiles both p
 before the view counts as ready; the first frame then took 40 ms. The stage keeps the map's
 loading line up until that frame is drawn (`onDrawn`), carrying on from the map's own on a first
 open and held back 200 ms on a rebuild so a quick one never shows it; a parked view is adopted
-already drawn and shows none. Three.js starts loading while the map is still read
+already drawn and shows none. It is not held for the busy minimum (`useHeldFlag`): that kept it over
+a room already drawn. Three.js starts loading while the map is still read
 (`preloadRoomView3D`).
 
 So the room holds still across View | Edit, and only the chrome arrives: the
