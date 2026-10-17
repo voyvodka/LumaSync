@@ -168,7 +168,7 @@ describe("useRoomMapState — saving", () => {
     const { result } = renderHook(() => useRoomMapState());
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    act(() => result.current.reset());
+    act(() => result.current.apply({ furniture: [{ id: "bed", type: "bed", x: 0, y: 0, width: 1.6, height: 2 }] }));
 
     await waitFor(() => expect(result.current.error).toContain("disk full"));
     expect(consoleError).toHaveBeenCalledWith(

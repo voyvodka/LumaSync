@@ -176,3 +176,16 @@ describe("computeSnap", () => {
     expect(result.guides).toContainEqual({ axis: "x", position: 3 });
   });
 });
+
+describe("computeSnap — both axes", () => {
+  // A closer x match found on a later piece wiped the y guide an earlier one had drawn.
+  it("draws a guide for each axis it snaps on, from different pieces", () => {
+    const dragging = { id: "d", x: 0.02, y: 5.03, w: 1, h: 1 };
+    const level = { id: "a", x: 9, y: 5, w: 1, h: 1 };
+    const above = { id: "b", x: 0, y: 0, w: 1, h: 1 };
+    const result = computeSnap(dragging, [level, above], 0.1);
+    expect(result.snapX).not.toBeNull();
+    expect(result.snapY).not.toBeNull();
+    expect(new Set(result.guides.map((g) => g.axis))).toEqual(new Set(["x", "y"]));
+  });
+});

@@ -70,7 +70,8 @@ export function computeSnap(
   others: ObjectRect[],
   threshold: number,
 ): SnapResult {
-  const guides: SnapGuide[] = [];
+  const xGuides: SnapGuide[] = [];
+  const yGuides: SnapGuide[] = [];
   let snapX: number | null = null;
   let snapY: number | null = null;
   let bestDx = threshold;
@@ -101,10 +102,10 @@ export function computeSnap(
       if (diff < bestDx) {
         bestDx = diff;
         snapX = dragging.x + (otherVal - dragVal);
-        guides.length = 0; // reset — we found a closer match
-        guides.push({ axis: "x", position: otherVal });
+        xGuides.length = 0;
+        xGuides.push({ axis: "x", position: otherVal });
       } else if (diff === bestDx && snapX !== null) {
-        guides.push({ axis: "x", position: otherVal });
+        xGuides.push({ axis: "x", position: otherVal });
       }
     }
 
@@ -122,13 +123,10 @@ export function computeSnap(
       if (diff < bestDy) {
         bestDy = diff;
         snapY = dragging.y + (otherVal - dragVal);
-        // Only reset Y guides
-        const xGuides = guides.filter((g) => g.axis === "x");
-        guides.length = 0;
-        guides.push(...xGuides);
-        guides.push({ axis: "y", position: otherVal });
+        yGuides.length = 0;
+        yGuides.push({ axis: "y", position: otherVal });
       } else if (diff === bestDy && snapY !== null) {
-        guides.push({ axis: "y", position: otherVal });
+        yGuides.push({ axis: "y", position: otherVal });
       }
     }
   }
@@ -136,5 +134,5 @@ export function computeSnap(
   if (bestDx >= threshold) snapX = null;
   if (bestDy >= threshold) snapY = null;
 
-  return { snapX, snapY, guides };
+  return { snapX, snapY, guides: [...xGuides, ...yGuides] };
 }

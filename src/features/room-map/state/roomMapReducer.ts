@@ -106,6 +106,14 @@ function joinsOpenGesture(
   return next.continued === true || next.at - open.at <= GESTURE_COALESCE_MS;
 }
 
+function changesNothing(from: RoomMapConfig, to: RoomMapConfig): boolean {
+  const keys = new Set([...Object.keys(from), ...Object.keys(to)]) as Set<keyof RoomMapConfig>;
+  for (const key of keys) {
+    if (from[key] !== to[key] && JSON.stringify(from[key]) !== JSON.stringify(to[key])) return false;
+  }
+  return true;
+}
+
 export function roomMapReducer(state: RoomMapState, action: RoomMapAction): RoomMapState {
   switch (action.type) {
     case "hydrate":
@@ -124,6 +132,8 @@ export function roomMapReducer(state: RoomMapState, action: RoomMapAction): Room
       const room = roomBoxOf(merged);
       const seated = seatBacklight(merged, (s) => keepStripInside(s, room));
       const config = seated ? { ...merged, usbStrips: seated } : merged;
+      // An arrow held against a wall rebuilt the array it left as it was: no undo step, no save.
+      if (changesNothing(state.config, config)) return state;
       const merges = action.gesture !== undefined && joinsOpenGesture(state.gesture, action.gesture);
       return {
         config,

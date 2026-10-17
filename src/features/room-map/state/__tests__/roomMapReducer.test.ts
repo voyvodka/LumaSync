@@ -42,6 +42,12 @@ describe("roomMapReducer — apply", () => {
     expect(s.config.furniture[0]?.x).toBe(3);
   });
 
+  // An arrow held against a wall left an undo step that did nothing, and a save.
+  it("takes an edit that changes nothing as no edit at all", () => {
+    const before = loaded();
+    expect(run(before, moveSofa(SOFA.x))).toBe(before);
+  });
+
   it("asks for an immediate save outside a gesture", () => {
     const before = loaded();
     const s = run(before, moveSofa(2));
