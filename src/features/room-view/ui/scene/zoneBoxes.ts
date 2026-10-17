@@ -55,7 +55,6 @@ const HELD_FILL_OPACITY = 0.07;
 // A zone flush with a wall drew its side in the wall's own plane, and the two fought for the pixel.
 const WALL_GAP = 0.01;
 
-/** Centre and size along one axis, held `WALL_GAP` inside the room's walls. */
 function offWalls(centre: number, size: number, room: number): [number, number] {
   const lo = Math.max(centre - size / 2, -room / 2 + WALL_GAP);
   const hi = Math.min(centre + size / 2, room / 2 - WALL_GAP);

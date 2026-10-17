@@ -101,8 +101,7 @@ describe("buildZoneBoxes", () => {
     const [grips, ghost] = boxes.group.children.slice(1);
     expect(boxes.hold("a", { x0: 0, y0: 0, x1: 2.5, y1: 2 })).toBe(true);
     expect([one.visible, grips!.visible, ghost!.visible]).toEqual([false, false, true]);
-    // Its real height, half the room's 2.5 m as it is half its width, not the 0.45 m wall it rests as.
-    // Against two walls, its sides stand a centimetre off them rather than in their plane.
+    // Half the room's 2.5 m high as it is half its width, and a centimetre off the two walls it touches.
     const [gw, gh, gd] = ghost!.scale.toArray();
     expect([gw, gh, gd].map((v) => Number(v.toFixed(3)))).toEqual([2.49, 1.25, 1.99]);
     expect(ghost!.position.toArray().map((v) => Number(v.toFixed(3)))).toEqual([-1.245, 1.25, -0.995]);
