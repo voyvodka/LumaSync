@@ -94,6 +94,23 @@ describe("Scenario 11 — boot restores the persisted UI mode", () => {
     expect(position).toMatchObject({ x: 510, y: 216 });
   });
 
+  it("a compact round trip brings an odd-sized full window back to the pixel it left", async () => {
+    // A .5 centre rounded up both ways, so each trip moved the window one pixel right and down.
+    innerSizeMock.mockResolvedValue({ width: 1151, height: 753 });
+    outerPositionMock.mockResolvedValue({ x: 400, y: 150 });
+    setupPersistedState(makePersistedState({ uiMode: "full" }));
+    await resizeToMode("compact", { animate: false });
+
+    const compactAt = setPositionMock.mock.calls[setPositionMock.mock.calls.length - 1][0] as { x: number; y: number };
+    innerSizeMock.mockResolvedValue({ width: 320, height: 480 });
+    outerPositionMock.mockResolvedValue({ x: compactAt.x, y: compactAt.y });
+    setupPersistedState(makePersistedState({ uiMode: "compact", lastFullSize: { width: 1151, height: 753 } }));
+    await resizeToMode("full", { animate: false });
+
+    const fullAt = setPositionMock.mock.calls[setPositionMock.mock.calls.length - 1][0] as { x: number; y: number };
+    expect(fullAt).toMatchObject({ x: 400, y: 150 });
+  });
+
   it("re-entering full does not overwrite the remembered full size", async () => {
     // The capture branch is guarded on *leaving* full. Boot calls this while
     // already in full, so a smaller live window must not become the memory.

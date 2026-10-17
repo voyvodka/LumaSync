@@ -242,11 +242,12 @@ export async function resizeToMode(
   const { width: targetWidth, height: targetHeight } = fitSizeToWorkArea(requested, workArea);
 
   // Anchor target around the current window center so the window grows/shrinks
-  // in place instead of teleporting to monitor center.
-  const centerX = fromX + fromWidth / 2;
-  const centerY = fromY + fromHeight / 2;
-  let targetX = Math.round(centerX - targetWidth / 2);
-  let targetY = Math.round(centerY - targetHeight / 2);
+  // in place instead of teleporting to monitor center. Both halves floor: rounding a .5 centre
+  // moved an odd-sized window a pixel per compact round trip.
+  const centerX = fromX + Math.floor(fromWidth / 2);
+  const centerY = fromY + Math.floor(fromHeight / 2);
+  let targetX = centerX - Math.floor(targetWidth / 2);
+  let targetY = centerY - Math.floor(targetHeight / 2);
 
   // Clamp the target rect inside the nearest monitor (logical px). The
   // monitor helpers operate on physical px, so convert through scaleFactor.
