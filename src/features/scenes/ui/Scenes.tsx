@@ -280,6 +280,7 @@ export function Scenes({ mode, disabled, busy = false, onApply }: ScenesProps) {
         id={libraryId}
         label={t("lights:scenes.manage")}
         role="dialog"
+        childScrolls
       >
         <SceneLibrary
           scenes={scenes}

@@ -19,6 +19,9 @@
     overflow-y: auto;
     overscroll-behavior: contain;
   }
+  /* Still a shrinking flex item, so a popover capped by the room left squeezes the child, which
+     scrolls on its own. */
+  .childScrolls { overflow: visible; }
 
   /* Rises out of its anchor and settles back into it: the notch points at the anchor and is also
      where the scale grows from, so the popover reads as coming out of the control that opened it. */

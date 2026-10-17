@@ -79,7 +79,7 @@ export function ObjectsPopover({ open, onClose, anchorRef, id, config, zones, se
   );
 
   return (
-    <Popover open={open} onClose={onClose} anchorRef={anchorRef} side="above" width={288} id={id} label={t("roomMap:dock.objects")} role="dialog">
+    <Popover open={open} onClose={onClose} anchorRef={anchorRef} side="above" width={288} id={id} label={t("roomMap:dock.objects")} role="dialog" childScrolls>
       <div ref={listRef} className={styles.list} onKeyDown={onKeyDown}>
         {rows.length === 0 && zones.length === 0 ? (
           <p className={styles.empty}>{t("roomMap:objectPanel.empty")}</p>

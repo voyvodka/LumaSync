@@ -108,6 +108,25 @@ describe("Popover", () => {
     vi.unstubAllGlobals();
   });
 
+  // A child that scrolls itself and reaches over the padding was scrolled again by the popover:
+  // a second bar on Windows, where scrollbars take room.
+  it("leaves the scrolling to a child that scrolls itself", () => {
+    const anchor = createRef<HTMLButtonElement>();
+    const ui = (childScrolls: boolean) => (
+      <>
+        <button ref={anchor} type="button">anchor</button>
+        <Popover open onClose={() => {}} anchorRef={anchor} role="dialog" label="list" childScrolls={childScrolls}>
+          <span>row</span>
+        </Popover>
+      </>
+    );
+    const { rerender } = render(ui(false));
+    expect(screen.getByText("row").parentElement!.className).not.toMatch(/childScrolls/);
+
+    rerender(ui(true));
+    expect(screen.getByText("row").parentElement!.className).toMatch(/childScrolls/);
+  });
+
   // Room settings gains its shape rows after it opens; placed only once, it ran off the window.
   it("places itself again when its content grows", () => {
     let fire: () => void = () => {};

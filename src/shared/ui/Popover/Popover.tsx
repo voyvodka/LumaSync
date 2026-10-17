@@ -27,6 +27,12 @@ interface PopoverProps {
   id?: string;
   label?: string;
   role?: "dialog" | "listbox";
+  /**
+   * The child is the scroller, reaching over the popover's padding so its scrollbar runs along the
+   * border. The popover's own scroll box then stands down: kept, it scrolled the child's reach as a
+   * second bar on Windows, where scrollbars take room.
+   */
+  childScrolls?: boolean;
   children: ReactNode;
 }
 
@@ -43,7 +49,7 @@ const NestContext = createContext<PopoverNest | null>(null);
  * closes it; Esc hands focus back to the anchor. It rises in and settles out:
  * a closed popover stays mounted for its short exit before it goes.
  */
-export function Popover({ open, onClose, anchorRef, side = "above", width = 240, id, label, role, children }: PopoverProps) {
+export function Popover({ open, onClose, anchorRef, side = "above", width = 240, id, label, role, childScrolls = false, children }: PopoverProps) {
   const ref = useRef<HTMLDivElement | null>(null);
   const parent = useContext(NestContext);
   const nested = useRef(new Set<HTMLElement>());
@@ -208,7 +214,7 @@ export function Popover({ open, onClose, anchorRef, side = "above", width = 240,
       }}
     >
       {/* The scroller is inside, so a capped popover keeps its notch: overflow would clip it. */}
-      <div className={styles.content}>
+      <div className={cx(styles.content, childScrolls && styles.childScrolls)}>
         <NestContext.Provider value={nest}>{children}</NestContext.Provider>
       </div>
     </div>,
