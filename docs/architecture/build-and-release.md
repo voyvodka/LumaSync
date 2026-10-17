@@ -146,9 +146,16 @@ only exposes it to every later step.
 - **`cargo audit`** (in `ci.yml` and `release.yml`) owns Rust advisories, and
   `src-tauri/.cargo/audit.toml` ignores nothing. An ignore added there carries its justification
   in that file, is re-checked every release, and goes the moment the parent bumps. The allowed
-  *warnings* it prints — unmaintained `unic-*` via `urlpattern`, `proc-macro-error`, unsound `glib`
-  0.18 — arrive through Tauri's own tree, mostly its Linux GTK3 stack. They are not actionable
-  here and are not to be pinned around.
+  *warnings* it prints — unmaintained `proc-macro-error` and `zbus_names` / `zvariant*` (via
+  `notify-rust` and `keyring`'s Secret Service store), unsound `glib` 0.18 — arrive through Tauri's
+  own tree and its plugins, mostly the Linux GTK3 and D-Bus stacks. They are not actionable here
+  and are not to be pinned around.
+- **The updater is built without its `zip` feature**, which is how `zip` (RUSTSEC-2026-0368,
+  patched only in 9.x while every updater release pins `zip ^4`) left the tree instead of entering
+  the ignore list. The feature only unpacks v1-style `.zip` / `.tar.gz` wrappers on Windows and
+  Linux; `createUpdaterArtifacts: true` publishes the bare `-setup.exe`, `.msi` and `.AppImage`,
+  and the macOS `.app.tar.gz` path uses `flate2`/`tar` unconditionally. Turning the feature back
+  on, or switching to `"v1Compatible"` artefacts, breaks Windows and Linux updates.
 - **`dependency-review`** gates each PR's *changed* dependencies: it fails on a high-severity
   advisory, and its licence allow-list is the union of `deny.toml`'s and the npm scan's, so it
   refuses nothing the full-tree scan accepts. Copyleft (GPL, LGPL, AGPL, EUPL, SSPL) is refused by
