@@ -36,7 +36,7 @@ export function CodedNote({ failure, testId }: { failure: CodedFailure; testId?:
       <InfoTip label={t("device:strip.codeTip")}>
         {t(card.bodyKey)}
         {card.detailsKey ? ` ${t(card.detailsKey)}` : null}
-        {card.details ? <span className={styles.detail}> {card.details}</span> : null}{" "}
+        {card.details ? <span className={styles.detail} data-selectable> {card.details}</span> : null}{" "}
         <span className={styles.code} data-testid="strip-fault-code">
           {t("device:strip.codeLabel")} <code>{failure.code}</code>
         </span>
@@ -54,7 +54,7 @@ export function WledCodedNote({ status, prefix, testId }: { status: CodedFailure
       {prefix ? `${prefix} ` : null}
       {key ? t(key) : status.message}{" "}
       <InfoTip label={t("device:strip.codeTip")}>
-        {status.details ? <span className={styles.detail}>{status.details} </span> : null}
+        {status.details ? <span className={styles.detail} data-selectable>{status.details} </span> : null}
         <span className={styles.code} data-testid="strip-fault-code">
           {t("device:strip.codeLabel")} <code>{status.code}</code>
         </span>

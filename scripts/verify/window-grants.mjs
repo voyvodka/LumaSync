@@ -23,13 +23,14 @@
 
 import { readFileSync, statSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { createReport } from "./lib/report.mjs";
 import { stripComments, walkFiles } from "./lib/source.mjs";
 
 const walk = (dir) => walkFiles(dir, (name) => /\.tsx?$/.test(name), ["__tests__"]);
 
-const ROOT = new URL("../..", import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const SRC = join(ROOT, "src");
 
 const report = createReport();

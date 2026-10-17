@@ -13,6 +13,8 @@ export function previewOpenFailure(result: PreviewSessionResult): PreviewOpenFai
   switch (result.status.code) {
     case PREVIEW_STATUS.OPENED:
     case PREVIEW_STATUS.ALREADY_OPEN:
+    // A close that lands mid-open is left to the open, which answers with it.
+    case PREVIEW_STATUS.CLOSED:
       return null;
     default:
       console.error(

@@ -29,12 +29,13 @@
  */
 
 import { readFileSync } from "node:fs";
-import { dirname, join, extname, resolve } from "node:path";
+import { dirname, join, extname, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { createReport } from "./lib/report.mjs";
 import { stripComments, walkFiles } from "./lib/source.mjs";
 
-const ROOT = new URL("../..", import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const STYLESHEET = join(ROOT, "src/styles.css");
 const SCANNED = ["src", "mock"];
 const EXTENSIONS = [".ts", ".tsx", ".css"];
@@ -164,7 +165,7 @@ const hexBaseline = Number(
 const HEX = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b/g;
 let hexCount = 0;
 for (const file of walk(join(ROOT, "src"))) {
-  if (file.includes("/__tests__/") || file === TOKENS_FILE) continue;
+  if (file.includes(`${sep}__tests__${sep}`) || file === TOKENS_FILE) continue;
   hexCount += (stripComments(readFileSync(file, "utf-8")).match(HEX) ?? []).length;
 }
 if (!Number.isFinite(hexBaseline)) {

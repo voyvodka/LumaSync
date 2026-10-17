@@ -85,7 +85,15 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
   return (
     <div
       data-tauri-drag-region
-      onMouseDown={handleDragRegionPress}
+      onMouseDown={(event) => {
+        // Compact is not maximizable, but tao ignores that flag on Linux and Tauri's script would
+        // still zoom the window on a double-click, with no zoom button left to undo it.
+        if (uiMode === "compact" && event.detail >= 2) {
+          event.stopPropagation();
+          return;
+        }
+        handleDragRegionPress(event);
+      }}
       className={`${styles.bar} fixed top-0 right-0 left-0 z-40 flex items-center select-none`}
       style={{
         height: `${TITLE_BAR_HEIGHT_PX}px`,
@@ -151,6 +159,7 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
             {/* small breathing room between toggle and native-replacement controls */}
             <span aria-hidden className="inline-block" style={{ width: "8px" }} />
             <WindowControls
+              canMaximize={uiMode === "full"}
               isMaximized={isMaximized}
               onMinimize={() => void minimizeCurrentWindow()}
               onToggleMaximize={() => void toggleMaximizeCurrentWindow()}
@@ -253,6 +262,8 @@ function SectionTabs({
 // ────────────────────────────────────────────────────────────────
 
 interface WindowControlsProps {
+  /** Compact cannot be zoomed (`applyModeLimits`), and 320 px has no room for a dead button. */
+  canMaximize: boolean;
   isMaximized: boolean;
   onMinimize: () => void;
   onToggleMaximize: () => void;
@@ -260,6 +271,7 @@ interface WindowControlsProps {
 }
 
 function WindowControls({
+  canMaximize,
   isMaximized,
   onMinimize,
   onToggleMaximize,
@@ -271,12 +283,14 @@ function WindowControls({
       <CtrlButton onClick={onMinimize} aria={t("shell:titleBar.minimize")}>
         <MinimizeIcon />
       </CtrlButton>
-      <CtrlButton
-        onClick={onToggleMaximize}
-        aria={isMaximized ? t("shell:titleBar.restore") : t("shell:titleBar.maximize")}
-      >
-        {isMaximized ? <RestoreIcon /> : <MaximizeIcon />}
-      </CtrlButton>
+      {canMaximize && (
+        <CtrlButton
+          onClick={onToggleMaximize}
+          aria={isMaximized ? t("shell:titleBar.restore") : t("shell:titleBar.maximize")}
+        >
+          {isMaximized ? <RestoreIcon /> : <MaximizeIcon />}
+        </CtrlButton>
+      )}
       <CtrlButton onClick={onClose} aria={t("shell:titleBar.close")} danger>
         <CloseIcon />
       </CtrlButton>

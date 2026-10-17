@@ -22,10 +22,11 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { loadEnv } from "vite";
 
-const ROOT = new URL("../..", import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 /** kB as Vite reports them (1000 bytes). One file for the budgets, which `vite.config.ts` reads
  *  too, so Vite's own warning cannot drift from the gate. Lazy chunks with a budget of their own

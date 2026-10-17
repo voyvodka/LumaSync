@@ -138,7 +138,14 @@ impl LedSink for WledUdpSink {
         if self.socket.is_some() {
             return Ok(());
         }
-        let socket = UdpSocket::bind("0.0.0.0:0")
+        // A loopback target (only tests have one; discovery refuses it) binds loopback too: an
+        // all-interfaces bind asks Windows' firewall about every freshly hashed test binary.
+        let local = if self.ip.is_loopback() {
+            Ipv4Addr::LOCALHOST
+        } else {
+            Ipv4Addr::UNSPECIFIED
+        };
+        let socket = UdpSocket::bind(SocketAddrV4::new(local, 0))
             .map_err(|e| format!("WLED_SOCKET_BIND_FAILED: could not bind UDP socket -- {e}"))?;
         let endpoint = SocketAddrV4::new(self.ip, self.port);
         self.socket = Some(socket);
@@ -624,6 +631,17 @@ mod tests {
         assert!(
             err.starts_with("WLED_SINK_NOT_STARTED"),
             "error code must be WLED_SINK_NOT_STARTED, got: {err}"
+        );
+    }
+
+    #[test]
+    fn wled_sink_to_loopback_binds_loopback() {
+        let mut sink = WledUdpSink::new(Ipv4Addr::LOCALHOST, 4048, 10, WledProtocol::Ddp);
+        sink.start().expect("start must succeed");
+        let local = sink.socket.as_ref().unwrap().local_addr().unwrap();
+        assert!(
+            local.ip().is_loopback(),
+            "an all-interfaces bind prompts the Windows firewall per test binary, got {local}"
         );
     }
 

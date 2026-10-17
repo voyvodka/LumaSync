@@ -16,12 +16,13 @@
 
 import { spawnSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
-import { join, extname } from "node:path";
+import { join, extname, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { createReport } from "./lib/report.mjs";
 import { stripComments, walkFiles as walk } from "./lib/source.mjs";
 
-const ROOT = new URL("../..", import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const CHECK_DIST = process.argv.includes("--dist");
 
 const report = createReport();
@@ -93,7 +94,7 @@ const marker = sentinel();
     rel.includes("/__tests__/") || /\.test\.tsx?$/.test(rel) || rel.startsWith("src/test/");
   const referencing = walk(join(ROOT, "src"))
     .filter((f) => [".ts", ".tsx", ".js", ".jsx"].includes(extname(f)))
-    .map((f) => ({ file: f, rel: f.replace(ROOT, "") }))
+    .map((f) => ({ file: f, rel: f.replace(ROOT, "").split(sep).join("/") }))
     .filter(({ rel }) => !DECLARED_IN.has(rel) && !isTest(rel))
     .filter(({ file }) => /\bsimulate_hue_fault\b|\bHUE_DEBUG_COMMANDS\b/.test(stripComments(readFileSync(file, "utf-8"))))
     .map(({ rel }) => rel);

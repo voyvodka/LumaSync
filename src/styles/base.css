@@ -21,6 +21,19 @@ body {
   color: var(--lm-ink);
 }
 
+/* The chrome is controls, not a document, so it does not select. A field is set to `text`
+   outright: WebKit has not always resolved `auto` to selectable under a `none` ancestor. Text worth
+   copying opts back in: a code or an error's stack as itself, anything else with `data-selectable`. */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+:where(input, textarea, [contenteditable]:not([contenteditable="false"]), code, pre, [data-selectable]) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 /* Tailwind 4's preflight leaves buttons on the default cursor. Every control
    shows the pointer and a disabled one shows not-allowed; `:where` keeps the
    specificity at zero, so a component's own cursor (grab, progress) wins. */

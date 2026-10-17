@@ -121,9 +121,8 @@ pub(crate) fn build_hue_sender(
     if has_client_key {
         match blocking_client_for_key(&resolved_username) {
             Ok(client) => {
-                // Spawn DTLS attempt on a dedicated OS thread with a hard deadline.
-                // DTLS handshake can block indefinitely if the bridge ignores UDP:2100 —
-                // the socket-level read timeout is not honored by OpenSSL's retransmit loop.
+                // A dedicated thread under a hard deadline: nothing the handshake waits on
+                // holds the caller past it.
                 let (tx_result, rx_result) = std::sync::mpsc::channel();
                 let client_clone = client.clone();
                 let bridge_ip_t = request.bridge_ip.clone();

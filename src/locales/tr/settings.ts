@@ -74,13 +74,13 @@ const settings: Catalogue<typeof enSettings> = {
     },
   },
   startupTray: {
-    launchAtLogin: "Oturum açılınca başlat",
-    readError: "LumaSync'in girişte başlayıp başlamadığı okunamadı",
-    writeError: "Girişte başlatma değiştirilemedi — tekrar dene",
+    launchAtLogin: "Bilgisayar açılınca başlat",
+    readError: "LumaSync'in bilgisayar açılınca başlayıp başlamadığı okunamadı",
+    writeError: "Açılışta başlatma değiştirilemedi — tekrar dene",
   },
   launchLights: {
     label: "LumaSync açılınca",
-    hint: "LumaSync başladığında, girişte başlama dahil, ışıkların ne yapacağı.",
+    hint: "LumaSync başladığında, bilgisayar açılınca başlaması dahil, ışıkların ne yapacağı.",
     resume: "Son mod",
     off: "Işıklar kapalı",
   },

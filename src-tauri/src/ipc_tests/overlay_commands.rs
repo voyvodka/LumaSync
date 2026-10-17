@@ -1,10 +1,10 @@
 //! Calibration overlay + Hue channel write-back over IPC.
 //!
-//! `open_display_overlay` and `list_displays` are not here: both reach
-//! `MockRuntime::available_monitors`, which is `unimplemented!()`. What is
-//! reachable is every path that answers before a monitor is needed — the
-//! no-overlay-open arms, and the two input guards on the Hue write-back, which
-//! return before the request is built.
+//! `list_displays` reaches `MockRuntime::available_monitors`, which is
+//! `unimplemented!()`, so `open_display_overlay` runs here on `TestDisplays`.
+//! Otherwise what is reachable is every path that answers before a monitor is
+//! needed — the no-overlay-open arms, and the two input guards on the Hue
+//! write-back, which return before the request is built.
 //!
 //! There is no "a valid input gets through" counterpart: past those guards the
 //! command builds a real blocking HTTP request and falls back to the OS keychain
@@ -17,6 +17,7 @@ use tauri::test::MockRuntime;
 use tauri::App;
 
 use super::{invoke, main_webview, mock_app};
+use crate::commands::calibration::{DisplayInfoPayload, TestDisplays};
 
 fn app() -> App<MockRuntime> {
     mock_app(tauri::generate_handler![
@@ -24,6 +25,37 @@ fn app() -> App<MockRuntime> {
         crate::commands::calibration::update_display_overlay_preview,
         crate::commands::room_map::save_load::update_hue_channel_positions
     ])
+}
+
+/// The open runs on the main thread behind the async command; its own answer
+/// has to come back through that hand-off, not the wrapper's failure.
+#[test]
+fn an_overlay_opens_through_the_main_thread_hand_off() {
+    use tauri::Manager;
+
+    let app = mock_app(tauri::generate_handler![
+        crate::commands::calibration::open_display_overlay
+    ]);
+    app.manage(TestDisplays(vec![DisplayInfoPayload {
+        id: "display-1".into(),
+        label: "Display 1".into(),
+        width: 1920,
+        height: 1080,
+        x: 0,
+        y: 0,
+        scale_factor: 1.0,
+        is_primary: true,
+    }]));
+    let webview = main_webview(&app);
+
+    let response = invoke(
+        &webview,
+        "open_display_overlay",
+        json!({ "displayId": "display-1" }),
+    )
+    .expect("open_display_overlay must resolve, never reject");
+
+    assert_eq!(response["code"], json!("OVERLAY_OPENED"));
 }
 
 /// Close is reached from unmount and from a display switch, neither of which

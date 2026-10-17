@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Manager, Runtime};
 
-use crate::commands::calibration::{list_displays, open_display_overlay, OverlayState};
+use crate::commands::calibration::{list_displays, open_display_overlay_now, OverlayState};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(250);
 const MAX_WAIT: Duration = Duration::from_secs(180);
@@ -112,13 +112,14 @@ fn open_and_report<R: Runtime>(app: &AppHandle<R>, close_trigger: PathBuf) {
         return;
     };
 
-    let result = match open_display_overlay(app.clone(), overlay_state, display_id.clone(), None) {
-        Ok(result) => result,
-        Err(error) => {
-            log::error!("[smoke-overlay] open failed: {error}");
-            return;
-        }
-    };
+    let result =
+        match open_display_overlay_now(app.clone(), overlay_state, display_id.clone(), None) {
+            Ok(result) => result,
+            Err(error) => {
+                log::error!("[smoke-overlay] open failed: {error}");
+                return;
+            }
+        };
     if !result.ok {
         log::error!(
             "[smoke-overlay] open failed: {} {}",

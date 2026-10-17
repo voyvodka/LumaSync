@@ -18,6 +18,7 @@ import {
   centerMock,
   innerSizeMock,
   isMaximizedMock,
+  isMinimizedMock,
   makePersistedState,
   MONITOR_1080P,
   outerPositionMock,
@@ -150,6 +151,30 @@ describe("a zoomed window", () => {
     await persistWindowState();
 
     expect(backend.patches()).toHaveLength(0);
+  });
+});
+
+describe("a minimized window", () => {
+  it("records nothing: Windows reports its frame at (-32000, -32000)", async () => {
+    isMinimizedMock.mockResolvedValue(true);
+    outerPositionMock.mockResolvedValue({ x: -32000, y: -32000 });
+    outerSizeMock.mockResolvedValue({ width: 160, height: 28 });
+    setupPersistedState(makePersistedState({ uiMode: "full", windowCenterX: 700, windowCenterY: 400 }));
+
+    await persistWindowState();
+
+    expect(backend.patches()).toHaveLength(0);
+  });
+
+  it("a centre one recorded earlier is no saved place: the window keeps the OS's", async () => {
+    setupPersistedState(makePersistedState({ windowCenterX: -31920, windowCenterY: -31986 }));
+    outerPositionMock.mockResolvedValue({ x: 800, y: 300 });
+    outerSizeMock.mockResolvedValue({ width: 320, height: 480 });
+
+    await restoreWindowState();
+
+    expect(setPositionMock).not.toHaveBeenCalled();
+    expect(availableMonitorsMock).toHaveBeenCalled();
   });
 });
 

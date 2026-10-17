@@ -283,7 +283,7 @@ function Available({
         </p>
       </div>
       {groups.length > 0 && (
-        <div ref={notesRef} className={styles.notes} data-more={more || undefined} onScroll={checkMore}>
+        <div ref={notesRef} className={styles.notes} data-more={more || undefined} onScroll={checkMore} data-selectable>
           {groups.map((group) => (
             <section key={group.kind ?? "other"} className={styles.group}>
               {group.kind && <h3 className={styles.groupTitle}>{t(NOTE_HEADING[group.kind])}</h3>}
@@ -397,7 +397,7 @@ function Disclosure({ label, children }: { label: string; children: ReactNode })
       </button>
       <div id={id} className={styles.fold} inert={!open}>
         <div className={styles.foldInner}>
-          <p>{children}</p>
+          <p data-selectable>{children}</p>
         </div>
       </div>
     </div>
