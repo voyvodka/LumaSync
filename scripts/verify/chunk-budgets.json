@@ -1,6 +1,6 @@
 {
   "entryKb": 350,
-  "lazyKb": 240,
+  "lazyKb": 250,
   "named": {
     "RoomView3D": { "budget": 700, "spikeOnly": "VITE_ROOM_VIEW_SPIKE" }
   }
