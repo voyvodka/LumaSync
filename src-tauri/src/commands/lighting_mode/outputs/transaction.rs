@@ -262,8 +262,10 @@ impl<'a, R: Runtime> Transaction<'a, R> {
         }
         if self.kind == TxKind::SinkJoin {
             // Asked again in the turn: what ran before it may have answered the join.
+            // A choice still to save shares this ticket and gets its own turn to answer.
             let running = blocking(self.app, read_running).await?;
-            if !sink_join_due(&intent, running.kind, &running_targets(&running))
+            if intent.persist_mode
+                || !sink_join_due(&intent, running.kind, &running_targets(&running))
                 || !usb_available(self.app)
                 || blocking(self.app, preview_owns_lights).await?
             {
