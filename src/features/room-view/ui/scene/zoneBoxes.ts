@@ -52,6 +52,15 @@ const GRIP_INNER_PX = 7;
 const GRIP_RIM = 0xffb020;
 const GRIP_FILL = 0x0e0e14;
 const HELD_FILL_OPACITY = 0.07;
+// A zone flush with a wall drew its side in the wall's own plane, and the two fought for the pixel.
+const WALL_GAP = 0.01;
+
+/** Centre and size along one axis, held `WALL_GAP` inside the room's walls. */
+function offWalls(centre: number, size: number, room: number): [number, number] {
+  const lo = Math.max(centre - size / 2, -room / 2 + WALL_GAP);
+  const hi = Math.min(centre + size / 2, room / 2 - WALL_GAP);
+  return [(lo + hi) / 2, Math.max(hi - lo, 0.01)];
+}
 
 export interface ZoneBoxes {
   group: Group;
@@ -160,9 +169,9 @@ export function buildZoneBoxes(zones: readonly HueZone[], dims: RoomDimensions):
   const built = zones.map((zone, i) => {
     const colour = zoneHex(zone.borderColor, i);
     const { centre, size } = zoneSceneBox(zone, dims);
-    const w = Math.max(size.x, 0.01);
+    const [x, w] = offWalls(centre.x, size.x, dims.widthMeters);
+    const [z, d] = offWalls(centre.z, size.z, dims.depthMeters);
     const h = Math.max(size.y, 0.01);
-    const d = Math.max(size.z, 0.01);
     const wallH = Math.min(h, WALL_M);
     const bottom = Math.max(centre.y - h / 2, 0);
     const tint = { color: colour, transparent: true, depthWrite: false, toneMapped: false, vertexColors: true };
@@ -185,7 +194,7 @@ export function buildZoneBoxes(zones: readonly HueZone[], dims: RoomDimensions):
     wall.position.y = bottom;
     posts.position.y = bottom;
     const one = new Group();
-    one.position.set(centre.x, 0, centre.z);
+    one.position.set(x, 0, z);
     one.add(wall, posts, foot, label);
     one.visible = false;
     group.add(one);
@@ -274,8 +283,10 @@ export function buildZoneBoxes(zones: readonly HueZone[], dims: RoomDimensions):
       // A cube in Hue units: its height is the same share of the room's as its width is of the room's.
       const height = ((rect.x1 - rect.x0) / dims.widthMeters) * dims.heightMeters;
       const centreY = hueToMetres(centerZ ?? zone.centerZ, dims.heightMeters);
-      ghost.scale.set(Math.max(rect.x1 - rect.x0, 0.01), Math.max(height, 0.01), Math.max(rect.y1 - rect.y0, 0.01));
-      ghost.position.set((rect.x0 + rect.x1) / 2 - dims.widthMeters / 2, centreY, (rect.y0 + rect.y1) / 2 - dims.depthMeters / 2);
+      const [x, w] = offWalls((rect.x0 + rect.x1) / 2 - dims.widthMeters / 2, rect.x1 - rect.x0, dims.widthMeters);
+      const [z, d] = offWalls((rect.y0 + rect.y1) / 2 - dims.depthMeters / 2, rect.y1 - rect.y0, dims.depthMeters);
+      ghost.scale.set(w, Math.max(height, 0.01), d);
+      ghost.position.set(x, centreY, z);
       ghost.visible = true;
       group.visible = true;
       return true;
