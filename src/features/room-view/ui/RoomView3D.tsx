@@ -1204,7 +1204,6 @@ function park(view: RoomView, handlers: Handlers) {
   parked = { view, handlers, timer };
 }
 
-/** Whether a view put away moments ago is waiting, compiled, for the next one to adopt. */
 export function parkedViewReady(): boolean {
   return parked?.view.ready() ?? false;
 }

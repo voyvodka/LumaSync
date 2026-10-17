@@ -119,10 +119,8 @@ export function createBloom(renderer: WebGLRenderer, multisample: boolean): Bloo
       composer.render();
     },
     async compile(scene, camera) {
-      // three keys a program on its render target and the shadow switch, so both passes draw the
-      // room with programs a compile for the canvas never builds; uncompiled, the first frame built
-      // them all at once. `compileAsync` picks the programs before it returns, so the state is put
-      // back before the wait.
+      // three keys programs on the render target and the shadow switch, so a canvas compile builds
+      // none these passes draw. `compileAsync` picks them before it returns: restore before the wait.
       const target = renderer.getRenderTarget();
       const shadowsWere = renderer.shadowMap.enabled;
       const pending: Promise<unknown>[] = [];

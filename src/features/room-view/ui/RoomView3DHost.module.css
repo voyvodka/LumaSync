@@ -17,7 +17,6 @@
     .stage { background: Canvas; }
   }
 
-  /* The map's loading line, held over the night until the room's first frame is drawn. */
   .waiting {
     position: absolute;
     inset: 0;

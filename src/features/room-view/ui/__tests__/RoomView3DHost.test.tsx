@@ -68,7 +68,7 @@ describe("RoomView3DHost", () => {
   });
 
   it("never shows the wait for a parked room adopted already drawn", async () => {
-    // The module is loaded by the test before, as a face switch finds it.
+    (await mounted()).unmount();
     windowState.parkedReady = true;
     vi.useFakeTimers({ shouldAdvanceTime: true });
     await mounted();
