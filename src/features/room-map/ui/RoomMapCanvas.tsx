@@ -11,6 +11,9 @@ import { pastSlop } from "./objects/dragIntent";
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "../state/useRoomMapViewport";
 import { readRoomMapImage } from "../roomMapFilesApi";
 
+// The floating toolbars end 40 px down; the guides are whole again 32 px below them.
+const TOOLBAR_FADE_PX = 72;
+
 type ResizeCorner = "nw" | "ne" | "sw" | "se";
 
 /** `continuous` marks a write from a control that fires per input event — the
@@ -644,6 +647,22 @@ export function RoomMapCanvas({
             {gridLines}
           </svg>
         )}
+
+        {/* Over the grid (1) and the origin's crosshair (5), under every piece: their lines running
+            between the floating toolbars read as drawn over them. Held to the viewport's top edge. */}
+        <div
+          aria-hidden="true"
+          data-testid="room-map-toolbar-fade"
+          className="pointer-events-none absolute"
+          style={{
+            zIndex: 6,
+            left: visMinXm * pxPerMeter,
+            top: visMinYm * pxPerMeter,
+            width: canvasSize.w / zoom,
+            height: TOOLBAR_FADE_PX / zoom,
+            background: "linear-gradient(var(--lm-bg) 55%, transparent)",
+          }}
+        />
 
         {/* Above the furniture (10), under strips and lights (20): a piece pushed against a wall
             or into the cut is drawn behind it, as a plan draws walls. */}
