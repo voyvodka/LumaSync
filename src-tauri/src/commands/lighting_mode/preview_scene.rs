@@ -16,7 +16,7 @@ use super::led_test_pattern::{
     restore_mode_after_test,
 };
 use super::live::retune_ambilight_live;
-use super::outputs::{ambilight_payload_for, power_off_left_wled_blocking};
+use super::outputs::{ambilight_payload_for, join_local_sink, power_off_left_wled_blocking};
 use super::preview::build_twin_sink;
 use super::runtime::LightingRuntimeState;
 use super::snapshot::{OutputTarget, OutputTargets};
@@ -270,6 +270,7 @@ fn restore_interrupted<R: Runtime>(
             }
         }
     }
+    join_local_sink(app);
     Ok(outcome)
 }
 

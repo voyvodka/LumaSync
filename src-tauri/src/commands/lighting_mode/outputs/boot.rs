@@ -377,15 +377,18 @@ pub fn note_local_sink_connected<R: Runtime>(app: &AppHandle<R>) {
     });
 }
 
-/// Off stays Off. See docs/architecture/lighting-transaction.md ("A strip that connects later").
-fn join_local_sink<R: Runtime>(app: &AppHandle<R>) {
+/// Also called when a test pattern or preview scene gives the lights back: its
+/// restore runs the mode on what ran before it. Off stays Off. See
+/// docs/architecture/lighting-transaction.md ("A strip that connects later").
+pub(crate) fn join_local_sink<R: Runtime>(app: &AppHandle<R>) {
     let state = app.state::<LightingRuntimeState>();
     let snapshot = state.snapshot.read();
     if !sink_join_due(
         &state.outputs.intent(),
         snapshot.mode.kind,
         &snapshot.active_targets,
-    ) {
+    ) || !usb_available(app)
+    {
         return;
     }
     let app = app.clone();

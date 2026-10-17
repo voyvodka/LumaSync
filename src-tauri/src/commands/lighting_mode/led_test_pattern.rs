@@ -11,7 +11,7 @@ use super::config::{
     AmbilightPayload, LightingModeCommandResult, LightingModeConfig, LightingModeKind,
 };
 use super::hydrate::{hydrate_mode_payload, maybe_hydrate_led_calibration};
-use super::outputs::restore_payload_for;
+use super::outputs::{join_local_sink, restore_payload_for};
 use super::preview::build_twin_sink;
 use super::runtime::LightingRuntimeState;
 use super::snapshot;
@@ -460,6 +460,7 @@ fn stop_led_test_pattern_blocking<R: Runtime>(
         )?;
     }
     accept_retunes_after_restore(app, stored.generation);
+    join_local_sink(app);
 
     Ok(LedTestPatternResult {
         active: result.active,
