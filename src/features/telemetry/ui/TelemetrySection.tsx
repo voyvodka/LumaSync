@@ -177,7 +177,7 @@ export function TelemetrySection({ open, localOutputConnected, hueActive = false
   const renderRow = (row: Row) => (
     <div key={row.id} className={styles.item} data-testid={`telemetry-${row.id}`}>
       <dt>{row.label}</dt>
-      <dd className={row.tone && styles[row.tone]} title={row.title}>
+      <dd className={row.tone && styles[row.tone]} title={row.title} data-selectable>
         {row.value}
       </dd>
     </div>

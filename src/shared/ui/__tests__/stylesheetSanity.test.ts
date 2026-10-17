@@ -51,6 +51,21 @@ describe("stylesheet sanity", () => {
     expect(body).not.toMatch(/linear-gradient|radial-gradient/);
   });
 
+  it("keeps fields and copied text selectable under a chrome that is not", () => {
+    const base = stripComments(readFileSync(join(SRC, "styles", "base.css"), "utf8"));
+    expect(base).toMatch(/\nbody \{\s*-webkit-user-select: none;\s*user-select: none;\s*\}/);
+    const optIn = /:where\(((?:[^()]|\([^()]*\))*)\) \{\s*-webkit-user-select: text;\s*user-select: text;/.exec(base);
+    expect(optIn).not.toBeNull();
+    for (const selector of ["input", "textarea", "[contenteditable]", "code", "pre", "[data-selectable]"]) {
+      expect(optIn![1]).toContain(selector);
+    }
+    // The opt-in has no specificity, so a field's own `none` would win over it.
+    const fieldsOff = cssFiles
+      .filter(({ css }) => /\b(input|textarea)\b[^{}]*\{[^}]*user-select:\s*none/.test(css))
+      .map(({ file }) => relative(SRC, file).split(sep).join("/"));
+    expect(fieldsOff).toEqual([]);
+  });
+
   it("keeps the twin overlay root transparent", () => {
     // The twin is a see-through window over the desktop; any paint here is a
     // full-screen opaque frame.

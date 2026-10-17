@@ -21,6 +21,21 @@ body {
   color: var(--lm-ink);
 }
 
+/* The chrome is controls, not a document: a drag or a double-click across a row, a chip or a
+   label highlighted it, as it never does in a native app. A field is set to `text` outright rather
+   than left to `auto`, which WebKit has not always resolved to selectable under a `none` ancestor;
+   text worth copying opts back in: a code or an error's stack as itself, an address or an error
+   line with `data-selectable`. */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+:where(input, textarea, [contenteditable]:not([contenteditable="false"]), code, pre, [data-selectable]) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 /* Tailwind 4's preflight leaves buttons on the default cursor. Every control
    shows the pointer and a disabled one shows not-allowed; `:where` keeps the
    specificity at zero, so a component's own cursor (grab, progress) wins. */
