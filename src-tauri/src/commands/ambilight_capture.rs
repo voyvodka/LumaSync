@@ -358,7 +358,9 @@ mod platform {
         CaptureControl, GraphicsCaptureApiError, GraphicsCaptureApiHandler,
     };
     use windows_capture::frame::Frame;
-    use windows_capture::graphics_capture_api::{GraphicsCaptureApi, InternalCaptureControl};
+    use windows_capture::graphics_capture_api::{
+        Error as CaptureApiError, GraphicsCaptureApi, InternalCaptureControl,
+    };
     use windows_capture::monitor::Monitor;
     use windows_capture::settings::{
         ColorFormat, CursorCaptureSettings, DirtyRegionSettings, DrawBorderSettings,
@@ -466,22 +468,23 @@ mod platform {
             ))
         };
 
-        // WGC's default draws a yellow frame round the captured display for as long as Ambilight
-        // runs. Builds without the switch refuse any other setting, and one that has it may still
-        // refuse to drop the frame, so either way the capture runs with the frame rather than not.
-        let borderless = GraphicsCaptureApi::is_border_settings_supported().unwrap_or(false);
-        let capture_control = if borderless {
-            match start(DrawBorderSettings::WithoutBorder) {
-                Err(GraphicsCaptureApiError::GraphicsCaptureApiError(error)) => {
-                    log::warn!(
-                        "[ambilight-capture/windows] borderless capture refused ({error}); capturing with the frame"
-                    );
-                    start(DrawBorderSettings::Default)
-                }
-                started => started,
-            }
+        // A build denying the Borderless access windows-capture never requests keeps the frame
+        // without an error. See docs/architecture/capture-and-pipeline.md.
+        let border = if GraphicsCaptureApi::is_border_settings_supported().unwrap_or(false) {
+            DrawBorderSettings::WithoutBorder
         } else {
-            start(DrawBorderSettings::Default)
+            DrawBorderSettings::Default
+        };
+        let capture_control = match start(border) {
+            Err(GraphicsCaptureApiError::GraphicsCaptureApiError(
+                CaptureApiError::BorderConfigUnsupported,
+            )) => {
+                log::warn!(
+                    "[ambilight-capture/windows] this build cannot drop the capture frame; capturing with it"
+                );
+                start(DrawBorderSettings::Default)
+            }
+            started => started,
         }
         .map_err(map_start_error)?;
 
