@@ -26,8 +26,7 @@ fn downscaled_dimensions(width: u32, height: u32, stride: usize) -> (u32, u32) {
     )
 }
 
-/// Whether a downscaling frame's size differs from the last one logged, recording it. The capture
-/// callback runs at display rate, so the line is due once per source size, not once per frame.
+/// Once per source size, not per frame: the capture callback runs at display rate.
 #[cfg(any(target_os = "windows", test))]
 fn downscale_log_due(
     last: &mut Option<(u32, u32)>,

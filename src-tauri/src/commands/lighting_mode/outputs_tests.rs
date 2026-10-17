@@ -2564,8 +2564,6 @@ fn a_strip_that_connects_after_the_wait_starts_nothing() {
     assert!(mode_events(&rig).is_empty(), "{:?}", events(&rig));
 }
 
-/// Past the wait, the mode running on Hue kept `usb` selected and drove
-/// nothing on it: the toggle showed the strip on while it stayed dark.
 #[test]
 fn a_strip_that_connects_after_the_wait_joins_the_mode_running_without_it() {
     let rig = restoring(json!(["usb", "hue"]));

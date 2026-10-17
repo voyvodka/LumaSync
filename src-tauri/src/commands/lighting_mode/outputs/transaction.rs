@@ -12,8 +12,7 @@ pub(super) enum TxKind {
     /// The boot restore's resume once the strip or WLED panel it found
     /// missing connects.
     BootSinkRetry,
-    /// A strip or WLED panel bound while the mode ran without the `usb` its
-    /// selection names: the mode takes it in. Changes no intent and saves nothing.
+    /// A strip or WLED panel bound while the mode ran without the `usb` it selects. Saves nothing.
     SinkJoin,
     /// `previous` is the selection before the strip went away.
     UsbUnplug {

@@ -377,9 +377,7 @@ pub fn note_local_sink_connected<R: Runtime>(app: &AppHandle<R>) {
     });
 }
 
-/// A mode runs without the `usb` its selection names, so a strip or panel that
-/// binds now joins it. Off stays Off. See docs/architecture/lighting-transaction.md
-/// ("A strip that connects later").
+/// Off stays Off. See docs/architecture/lighting-transaction.md ("A strip that connects later").
 fn join_local_sink<R: Runtime>(app: &AppHandle<R>) {
     let state = app.state::<LightingRuntimeState>();
     let snapshot = state.snapshot.read();
@@ -404,9 +402,7 @@ fn join_local_sink<R: Runtime>(app: &AppHandle<R>) {
     });
 }
 
-/// The running mode is the one the intent asks for, its selection names `usb`,
-/// and `usb` is not among what it drives. A mode choice still on its way is
-/// left to run on the strip itself.
+/// A choice still on its way, with a kind other than what runs, takes the strip itself.
 pub(super) fn sink_join_due(
     intent: &LightingIntent,
     running: LightingModeKind,

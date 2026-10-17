@@ -139,7 +139,6 @@ function svAtPointer(
   };
 }
 
-/** Hue under the pointer, in degrees. */
 function hueAtPointer(ring: SVGCircleElement | null, pointer: { clientX: number; clientY: number }): number {
   const rect = (ring?.ownerSVGElement as SVGSVGElement).getBoundingClientRect();
   const dx = pointer.clientX - (rect.left + rect.width / 2);
@@ -329,7 +328,6 @@ export function HsvColorPicker({
       const target = e.currentTarget;
       target.setPointerCapture(e.pointerId);
       setDraggingHue(true);
-      // A tap on the ring picks its hue, as a tap on the square does.
       commitImmediate({ ...hsv, h: hueAtPointer(ringRef.current, e) });
     },
     [disabled, hsv, commitImmediate],

@@ -141,7 +141,6 @@ const DOWNLOADING = (progress: number) => ({
 });
 
 describe("a WLED device the user connects on Devices", () => {
-  // Pairing a strip adds `usb` by itself; a WLED device connected by hand did not, so its toggle stayed off.
   it("adds the local output to the selection", async () => {
     const shell = renderWithShellStores(<SettingsLayout />, {
       navigation: { uiMode: "full", activeSection: SECTION_IDS.DEVICES },
