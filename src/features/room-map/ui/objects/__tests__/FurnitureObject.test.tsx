@@ -195,3 +195,21 @@ describe("FurnitureObject", () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ x: 1.5, y: 1.7 }));
   });
 });
+
+describe("FurnitureObject — a resize let go", () => {
+  it("puts the piece back on Escape mid-resize and writes nothing", () => {
+    const onChange = vi.fn<(placement: FurniturePlacement) => void>();
+    const { ui, layer } = withLayer(<FurnitureObject {...BASE_PROPS} selected onChange={onChange} />);
+    const view = render(ui);
+    const piece = view.container.querySelector<HTMLElement>("[data-furniture-id=sofa-1]")!;
+    const handle = layer.querySelector<HTMLElement>("[data-testid=frame-handle-e]")!;
+    const before = piece.style.width;
+    fireEvent.pointerDown(handle, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
+    fireEvent.pointerMove(handle, { clientX: 80, clientY: 0, pointerId: 1 });
+    expect(piece.style.width).not.toBe(before);
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+    expect(piece.style.width).toBe(before);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});

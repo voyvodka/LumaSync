@@ -1,11 +1,11 @@
-import { type PointerEvent as ReactPointerEvent, useRef } from "react";
+import { type PointerEvent as ReactPointerEvent, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
 import { cx } from "@/shared/lib/cx";
 
 import styles from "./SelectionFrame.module.css";
-import { pastSlop } from "./dragIntent";
+import { pastSlop, useEscapeCancels } from "./dragIntent";
 import { useSelectionLayer } from "./selectionLayer";
 
 /** A side or corner of the frame: which way its handle grows the piece, in the piece's own axes. */
@@ -57,6 +57,8 @@ interface SelectionFrameProps {
   onRotateStart: () => void;
   onRotateMove: (rotation: number) => void;
   onRotateEnd: () => void;
+  /** Esc, a cancelled pointer or the frame going away mid-gesture: the piece goes back as it was. */
+  onCancel: () => void;
 }
 
 /**
@@ -79,11 +81,22 @@ export function SelectionFrame({
   onRotateStart,
   onRotateMove,
   onRotateEnd,
+  onCancel,
 }: SelectionFrameProps) {
   const { t } = useTranslation();
   const layer = useSelectionLayer();
   const frameRef = useRef<HTMLDivElement | null>(null);
   const press = useRef<{ kind: "resize" | "rotate"; handle?: FrameHandle; x: number; y: number; moved: boolean } | null>(null);
+  const cancelRef = useRef(onCancel);
+  cancelRef.current = onCancel;
+  const cancel = () => {
+    if (!press.current) return;
+    press.current = null;
+    cancelRef.current();
+  };
+  useEscapeCancels(() => press.current !== null, cancel);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs once, on unmount, through the refs.
+  useEffect(() => () => cancel(), []);
   if (!layer) return null;
 
   const begin = (event: ReactPointerEvent<HTMLElement>, kind: "resize" | "rotate", handle?: FrameHandle) => {
@@ -150,7 +163,7 @@ export function SelectionFrame({
               onPointerDown={(event) => begin(event, "rotate")}
               onPointerMove={move}
               onPointerUp={end}
-              onPointerCancel={end}
+              onPointerCancel={cancel}
               onLostPointerCapture={end}
             >
               <svg viewBox="0 0 12 12" aria-hidden="true">
@@ -166,7 +179,7 @@ export function SelectionFrame({
                 onPointerDown={(event) => begin(event, "resize", handle)}
                 onPointerMove={move}
                 onPointerUp={end}
-                onPointerCancel={end}
+                onPointerCancel={cancel}
                 onLostPointerCapture={end}
               />
             ))}

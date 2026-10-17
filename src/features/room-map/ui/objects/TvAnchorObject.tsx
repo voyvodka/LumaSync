@@ -225,6 +225,14 @@ export const TvAnchorObject = memo(function TvAnchorObject({
     setLocalH(newH);
   };
 
+  const handleResizeDragCancel = () => {
+    resizeRef.current.active = false;
+    setLocalX(placement.x);
+    setLocalY(placement.y);
+    setLocalW(placement.width);
+    setLocalH(placement.height);
+  };
+
   const handleResizeDragEnd = () => {
     resizeRef.current.active = false;
     onChange({
@@ -270,24 +278,28 @@ export const TvAnchorObject = memo(function TvAnchorObject({
             onDragStart={(e) => handleResizeDragStart(e)}
             onDragMove={(dx, dy) => handleResizeDragMove(dx, dy, "nw")}
             onDragEnd={handleResizeDragEnd}
+            onDragCancel={handleResizeDragCancel}
           />
           <ResizeHandle
             corner="ne"
             onDragStart={(e) => handleResizeDragStart(e)}
             onDragMove={(dx, dy) => handleResizeDragMove(dx, dy, "ne")}
             onDragEnd={handleResizeDragEnd}
+            onDragCancel={handleResizeDragCancel}
           />
           <ResizeHandle
             corner="sw"
             onDragStart={(e) => handleResizeDragStart(e)}
             onDragMove={(dx, dy) => handleResizeDragMove(dx, dy, "sw")}
             onDragEnd={handleResizeDragEnd}
+            onDragCancel={handleResizeDragCancel}
           />
           <ResizeHandle
             corner="se"
             onDragStart={(e) => handleResizeDragStart(e)}
             onDragMove={(dx, dy) => handleResizeDragMove(dx, dy, "se")}
             onDragEnd={handleResizeDragEnd}
+            onDragCancel={handleResizeDragCancel}
           />
         </>
       )}

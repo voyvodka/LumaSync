@@ -7,7 +7,7 @@ import { clamp } from "@/shared/lib/math";
 import { prefersReducedMotion } from "@/shared/lib/motion";
 import { imageLayerObjectId } from "../model/objectId";
 import { CLICK_SLOP_PX } from "../model/snapGeometry";
-import { pastSlop } from "./objects/dragIntent";
+import { pastSlop, useEscapeCancels } from "./objects/dragIntent";
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "../state/useRoomMapViewport";
 import { readRoomMapImage } from "../roomMapFilesApi";
 
@@ -173,11 +173,25 @@ const ImageLayerView = memo(function ImageLayerView({
   const handleResizePointerUp = useCallback(() => {
     if (!resizeRef.current.active) return;
     resizeRef.current.active = false;
+    if (!movedRef.current) return;
     onTransformChange?.(layer.id, localOx, localOy, layer.scale, localSx, localSy);
   }, [layer.id, layer.scale, localOx, localOy, localSx, localSy, onTransformChange]);
 
+  const cancelGesture = () => {
+    if (!dragRef.current.active && !resizeRef.current.active) return;
+    dragRef.current.active = false;
+    resizeRef.current.active = false;
+    setLocalOx(layer.offsetX);
+    setLocalOy(layer.offsetY);
+    setLocalSx(layer.scaleX ?? layer.scale);
+    setLocalSy(layer.scaleY ?? layer.scale);
+  };
+  useEscapeCancels(() => dragRef.current.active || resizeRef.current.active, cancelGesture);
+
   const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (!canDrag) return;
+    // Two fingers sliding are the canvas's pan; only a pinch or a mouse wheel's notch scales the image.
+    const notch = e.deltaMode !== 0 || (e.deltaX === 0 && Math.abs(e.deltaY) >= 50 && Number.isInteger(e.deltaY));
+    if (!canDrag || !(e.ctrlKey || notch)) return;
     e.stopPropagation();
     const factor = e.deltaY > 0 ? 0.95 : 1.05;
     if (aspectLocked) {
@@ -241,6 +255,7 @@ const ImageLayerView = memo(function ImageLayerView({
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerCancel={cancelGesture}
         onWheel={handleWheel}
       />
       {/* Resize corner handles — same style as Furniture/TV ResizeHandle.
@@ -254,6 +269,7 @@ const ImageLayerView = memo(function ImageLayerView({
           onPointerDown={(e) => handleResizePointerDown(key, e)}
           onPointerMove={handleResizePointerMove}
           onPointerUp={handleResizePointerUp}
+          onPointerCancel={cancelGesture}
         >
           <span
             className="pointer-events-none absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-ink bg-bg"

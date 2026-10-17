@@ -234,6 +234,7 @@ export const FurnitureObject = memo(function FurnitureObject({
           onRotateStart={() => {}}
           onRotateMove={handleRotateMove}
           onRotateEnd={handleRotateEnd}
+          onCancel={() => setLocal({ x: placement.x, y: placement.y, w: placement.width, h: placement.height, r: placement.rotation ?? 0 })}
         />
       ) : null}
     </>
