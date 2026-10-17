@@ -151,3 +151,12 @@ export function nudgeHueChannel(
   const world = resolveHueChannelWorld(channel, zones);
   return moveHueChannelToWorld(channel, zones, world.x + dx, world.y + dy);
 }
+
+/** Out of its zone, standing where the zone had it. */
+export function detachHueChannel(channel: HueChannelPlacement, zones: readonly HueZone[]): HueChannelPlacement {
+  if (!channel.zoneId) return channel;
+  const world = resolveHueChannelWorld(channel, zones);
+  const z = resolveHueChannelWorldZ(channel, zones);
+  const { zoneId: _zone, zoneRelativePosition: _rel, ...rest } = channel;
+  return { ...rest, x: world.x, y: world.y, z };
+}

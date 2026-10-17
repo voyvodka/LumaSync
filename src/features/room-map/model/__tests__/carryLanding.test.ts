@@ -51,6 +51,19 @@ describe("landCarried", () => {
     expect(landCarried(known, "hue-0", 0, 0, 0, ctx, { rise: 9, centreY: 0 })?.hueChannels?.[0]?.z).toBe(1);
   });
 
+  it("raises the viewed area's light alone, not another area's of the same number", () => {
+    const two = {
+      ...base,
+      hueChannels: [
+        { channelIndex: 0, x: 0, y: 0, z: 0, zOrigin: "bridge" as const, entertainmentAreaId: "b" },
+        { channelIndex: 0, x: 0, y: 0, z: 0, zOrigin: "bridge" as const, entertainmentAreaId: "a" },
+      ],
+    };
+    const lifted = landCarried(two, "hue-0", 0, 0, 0, { hueAreaId: "a" }, { rise: 0.5, centreY: 0 })?.hueChannels;
+    expect(lifted?.[0]).toEqual(two.hueChannels[0]);
+    expect(lifted?.[1]?.z).toBeCloseTo(0.4);
+  });
+
   it("keeps a zone-bound light's rise inside its zone", () => {
     const zone = { id: "z1", name: "Z", entertainmentAreaId: "a", centerX: 0, centerY: 0, centerZ: 0, scaleX: 1, scaleY: 1, scaleZ: 0.2, channelIndices: [0] };
     const bound: RoomMapConfig = {

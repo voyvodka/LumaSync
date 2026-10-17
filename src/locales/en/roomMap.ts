@@ -1,5 +1,6 @@
 export default {
   loading: "Loading room map…",
+  loadError: "The room map could not be read. Nothing was changed.",
   toolbar: {
     undo: "Undo",
     redo: "Redo",

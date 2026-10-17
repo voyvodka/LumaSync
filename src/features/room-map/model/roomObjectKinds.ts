@@ -1,6 +1,7 @@
 import type { HueChannelPlacement, RoomMapConfig } from "@/shared/contracts/roomMap";
 import { findHueChannel, replaceHueChannel, translateStrip } from "@/shared/contracts/roomMap";
 
+import { moveTvWithBacklight } from "./backlight";
 import { moveHueChannelToWorld, nudgeHueChannel } from "./hueChannelPosition";
 import { seatMovedLight } from "./lightSeat";
 import { findScopedHueChannel, updateScopedHueChannel } from "./hueChannelScope";
@@ -46,6 +47,15 @@ export interface RoomObjectAdapter<K extends RoomObjectKind> {
   inspect: (config: RoomMapConfig, ref: RoomObjectRef<K>) => InspectorTarget | null;
 }
 
+/** The TV at (`x`, `y`) inside the walls, its backlight carried as a drag carries it. */
+function tvMovedTo(config: RoomMapConfig, x: number, y: number): Patch {
+  const tv = config.tvAnchor!;
+  const room = roomBoxOf(config);
+  const tvAnchor = keepPlacedInside({ ...tv, x, y }, room);
+  const usbStrips = moveTvWithBacklight(config.usbStrips, tv, tvAnchor, (s) => keepStripInside(s, room));
+  return usbStrips ? { tvAnchor, usbStrips } : { tvAnchor };
+}
+
 const worldStep = ({ x, y, coarse }: NudgeDirection) => {
   const metres = coarse ? 1.0 : 0.1;
   return { dx: x * metres, dy: y * metres };
@@ -66,13 +76,10 @@ export const ROOM_OBJECT_KINDS = {
       config.tvAnchor ? { tvAnchor: { ...config.tvAnchor, locked: !config.tvAnchor.locked } } : null,
     remove: () => ({ tvAnchor: undefined }),
     duplicate: null,
-    moveTo: (config, _ref, x, y) =>
-      config.tvAnchor ? { tvAnchor: keepPlacedInside({ ...config.tvAnchor, x, y }, roomBoxOf(config)) } : null,
+    moveTo: (config, _ref, x, y) => (config.tvAnchor ? tvMovedTo(config, x, y) : null),
     nudge: (cfg, _ref, direction) => {
       const { dx, dy } = worldStep(direction);
-      return cfg.tvAnchor
-        ? { tvAnchor: keepPlacedInside({ ...cfg.tvAnchor, x: cfg.tvAnchor.x + dx, y: cfg.tvAnchor.y + dy }, roomBoxOf(cfg)) }
-        : {};
+      return cfg.tvAnchor ? tvMovedTo(cfg, cfg.tvAnchor.x + dx, cfg.tvAnchor.y + dy) : {};
     },
     rotateBy: null,
     rename: null,

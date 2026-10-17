@@ -677,10 +677,12 @@ export function RoomMapEditor({
   const shiftedContents = useCallback(
     (from: typeof config, dxM: number, dyM: number, to: Pick<typeof config, "dimensions" | "footprint">): Partial<typeof config> => {
       const patch: Partial<typeof config> = {};
-      if (from.tvAnchor) patch.tvAnchor = { ...from.tvAnchor, x: from.tvAnchor.x + dxM, y: from.tvAnchor.y + dyM };
-      if (from.furniture.length > 0) patch.furniture = from.furniture.map((f) => ({ ...f, x: f.x + dxM, y: f.y + dyM }));
+      // A wall pulled in past a piece pushes it along; Rust refuses a TV outside the room.
+      const room = roomBoxOf(to);
+      if (from.tvAnchor) patch.tvAnchor = keepPlacedInside({ ...from.tvAnchor, x: from.tvAnchor.x + dxM, y: from.tvAnchor.y + dyM }, room);
+      if (from.furniture.length > 0) patch.furniture = from.furniture.map((f) => keepPlacedInside({ ...f, x: f.x + dxM, y: f.y + dyM }, room));
       if (from.usbStrips.length > 0) {
-        patch.usbStrips = from.usbStrips.map((s) => translateStrip(s, dxM, dyM));
+        patch.usbStrips = from.usbStrips.map((s) => keepStripInside(translateStrip(s, dxM, dyM), room));
       }
       if (from.imageLayers.length > 0) {
         patch.imageLayers = from.imageLayers.map((l) => ({ ...l, offsetX: l.offsetX + dxM * pxPerMeter, offsetY: l.offsetY + dyM * pxPerMeter }));

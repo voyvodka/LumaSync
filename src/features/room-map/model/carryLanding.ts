@@ -4,6 +4,7 @@ import { clamp } from "@/shared/lib/math";
 
 import { moveTvWithBacklight } from "./backlight";
 import { hueToMetres, planMetresToHue, resolveHueChannelWorldZ, setHueChannelWorldZ } from "./hueChannelPosition";
+import { updateScopedHueChannel } from "./hueChannelScope";
 import { parseObjectId } from "./objectId";
 import { keepStripInside, landCarriedPiece, roomBoxOf } from "./pieceGeometry";
 import { ROOM_OBJECT_KINDS, type RoomObjectContext } from "./roomObjectKinds";
@@ -59,8 +60,7 @@ export function landCarried(
       const moved = ROOM_OBJECT_KINDS.hue.moveTo(config, ref, clamp(p.x, -1, 1), clamp(p.y, -1, 1), ctx);
       if (!moved?.hueChannels || !raised) return moved;
       const H = config.dimensions.heightMeters;
-      const hueChannels = moved.hueChannels.map((ch) => {
-        if (ch.channelIndex !== ref.channelIndex) return ch;
+      const hueChannels = updateScopedHueChannel(moved.hueChannels, ctx.hueAreaId, ref.channelIndex, (ch) => {
         // Drawn at the TV's height until its own is known, so that is where the rise starts from.
         const from = ch.zOrigin ? hueToMetres(resolveHueChannelWorldZ(ch, config.zones), H) : tvMountHeight(config.tvAnchor, config.dimensions);
         return setHueChannelWorldZ(ch, config.zones, (clamp(from + raised.rise, 0, H) / H) * 2 - 1);

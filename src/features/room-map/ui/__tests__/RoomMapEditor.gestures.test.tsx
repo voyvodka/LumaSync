@@ -423,6 +423,30 @@ describe("RoomMapEditor — several pieces at once", () => {
 });
 
 describe("RoomMapEditor — the room's floor and walls", () => {
+  // Rust refuses a TV whose centre lies outside the room, and room-aware sampling went quiet.
+  it("pushes the TV, pieces and strips back inside when the room is made narrower", async () => {
+    stored({
+      dimensions: { widthMeters: 6, depthMeters: 4, heightMeters: 2.6 },
+      tvAnchor: { x: 4.8, y: 0, width: 1.2, height: 0.1 },
+      furniture: [{ ...SOFA, x: 5 }],
+      usbStrips: [{ stripId: "s1", startX: 5, startY: 3, endX: 6, endY: 3, ledCount: 60 }],
+    });
+    await renderEditor();
+    fireEvent.click(screen.getByTestId("dock-room"));
+    await flush();
+    const width = screen.getByTestId("room-width");
+    fireEvent.focus(width);
+    fireEvent.change(width, { target: { value: "4" } });
+    fireEvent.keyDown(width, { key: "Enter" });
+    await flush();
+    const saves = roomMapSaves();
+    const last = saves[saves.length - 1]!;
+    expect(last.dimensions.widthMeters).toBe(4);
+    expect(last.tvAnchor!.x + last.tvAnchor!.width).toBeLessThanOrEqual(4);
+    expect(last.furniture[0]!.x + last.furniture[0]!.width).toBeLessThanOrEqual(4);
+    expect(Math.max(last.usbStrips[0]!.startX, last.usbStrips[0]!.endX)).toBeLessThanOrEqual(4);
+  });
+
   // A newer build's floor must survive this build picking a wall colour.
   it("writes the surface picked over what is stored, keeping a floor it does not know", async () => {
     stored({ furniture: [SOFA], surfaces: { floor: "marble", walls: "sage" } as unknown as RoomMapConfig["surfaces"] });

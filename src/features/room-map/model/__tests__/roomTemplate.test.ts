@@ -119,6 +119,20 @@ describe("applyRoomTemplate", () => {
     ]);
   });
 
+  it("binds the template's screen to the connected strip that took its backlight's place", () => {
+    const bound = map({ ...TV_TEMPLATE, tvAnchor: { ...TV_TEMPLATE.tvAnchor!, backlightStripId: "usb-tv" } });
+    const next = applyRoomTemplate(map({ usbStrips: [strip({ stripId: "usb-conn", portName: PORT })] }), bound);
+    expect(next.tvAnchor?.backlightStripId).toBe("usb-conn");
+  });
+
+  it("brings a second controller's strip inside a smaller template's walls", () => {
+    const first = strip({ stripId: "usb-1", portName: PORT });
+    const far = strip({ stripId: "usb-2", portName: "/dev/cu.usbserial-9", startX: 6, endX: 8 });
+    const small = map({ ...TV_TEMPLATE, dimensions: { widthMeters: 4, depthMeters: 3, heightMeters: 2.5 } });
+    const kept = applyRoomTemplate(map({ usbStrips: [first, far] }), small).usbStrips[1]!;
+    expect(Math.max(kept.startX, kept.endX)).toBeLessThanOrEqual(4);
+  });
+
   it("keeps connected strips under the empty template", () => {
     const connected = strip({ portName: PORT });
     expect(applyRoomTemplate(map({ usbStrips: [connected] }), DEFAULT_ROOM_MAP).usbStrips).toEqual([connected]);

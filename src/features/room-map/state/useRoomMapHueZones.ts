@@ -9,6 +9,7 @@ import type {
   ZoneRelativePosition,
 } from "@/shared/contracts/roomMap";
 import { isHueZoneApplied, replaceHueChannel } from "@/shared/contracts/roomMap";
+import { detachHueChannel } from "../model/hueChannelPosition";
 import { findScopedHueChannel } from "../model/hueChannelScope";
 import { zoneToken } from "../model/zoneColor";
 import {
@@ -129,12 +130,7 @@ export function useRoomMapHueZones({
   const handleDeleteHueZone = useCallback(
     (zoneId: string) => {
       const nextZones = config.zones.filter((z) => z.id !== zoneId);
-      // Detach channels that pointed at this zone — they fall back to legacy absolute placement.
-      const nextChannels = config.hueChannels.map((ch) =>
-        ch.zoneId === zoneId
-          ? { ...ch, zoneId: undefined, zoneRelativePosition: undefined }
-          : ch,
-      );
+      const nextChannels = config.hueChannels.map((ch) => (ch.zoneId === zoneId ? detachHueChannel(ch, config.zones) : ch));
       apply({ zones: nextZones, hueChannels: nextChannels });
 
       settle(
@@ -199,7 +195,7 @@ export function useRoomMapHueZones({
         config.hueChannels,
         targetZoneId
           ? { ...channel, zoneId: targetZoneId, zoneRelativePosition: at }
-          : { ...channel, zoneId: undefined, zoneRelativePosition: undefined },
+          : detachHueChannel(channel, config.zones),
       );
       // Keep Hue zones' `channelIndices` in sync — remove from old zone,
       // add to new zone (idempotent). Only Hue zones live in

@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
@@ -124,6 +124,36 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 // The pre-image contract
 // ---------------------------------------------------------------------------
+
+describe("useRoomMapHueZones — a light let out of its zone", () => {
+  // The zone moved since the light joined it: its absolute pair is where the light stood back then.
+  const moved = { ...ZONE_A, centerX: 0.5, centerY: -0.5 };
+  const bound: HueChannelPlacement = {
+    ...CHANNEL_0,
+    entertainmentAreaId: "area-1",
+    x: -0.9,
+    y: 0.9,
+    zoneId: "zone-a",
+    zoneRelativePosition: { x: 1, y: 0, z: 0 },
+  };
+
+  it("stays where the zone had it when the zone is deleted, or it is taken out", () => {
+    mockDelete.mockResolvedValue(applied([], []));
+    mockAssign.mockResolvedValue(applied([moved], []));
+    for (const run of [
+      (r: ReturnType<typeof renderZones>["result"]) => r.current.handleDeleteHueZone("zone-a"),
+      (r: ReturnType<typeof renderZones>["result"]) => r.current.handleAssignChannelToZone(0, null),
+    ]) {
+      const { result, apply } = renderZones({ zones: [{ ...moved, channelIndices: [0] }], hueChannels: [bound] });
+      act(() => run(result));
+      const light = apply.mock.calls[0][0].hueChannels[0];
+      expect(light.zoneId).toBeUndefined();
+      expect(light.x).toBeCloseTo(0.8);
+      expect(light.y).toBeCloseTo(-0.5);
+      cleanup();
+    }
+  });
+});
 
 describe("useRoomMapHueZones — a zone centre stepped by key", () => {
   it("is one gesture for the run, and a drag's drop is its own step", () => {

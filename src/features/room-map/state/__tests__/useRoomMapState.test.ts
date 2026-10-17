@@ -72,17 +72,22 @@ describe("useRoomMapState — load", () => {
     expect(mockSave).not.toHaveBeenCalled();
   });
 
-  it("logs and reports a failed load", async () => {
+  it("logs and reports a failed load, and reads the map again on a reload", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-    mockLoad.mockRejectedValue(new Error("store unavailable"));
+    mockLoad.mockRejectedValueOnce(new Error("store unavailable"));
     const { result } = renderHook(() => useRoomMapState());
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.error).toContain("store unavailable");
+    expect(result.current.loadFailed).toBe(true);
     expect(result.current.config).toEqual(DEFAULT_ROOM_MAP);
     expect(consoleError).toHaveBeenCalledWith(
       expect.stringContaining("[LumaSync] Room map load failed: store unavailable"),
     );
     consoleError.mockRestore();
+
+    mockLoad.mockResolvedValueOnce({ roomMap: { ...DEFAULT_ROOM_MAP, dimensions: { widthMeters: 7, depthMeters: 4, heightMeters: 2.6 } } });
+    act(() => result.current.reload());
+    await waitFor(() => expect(result.current.config.dimensions.widthMeters).toBe(7));
+    expect(result.current.loadFailed).toBe(false);
   });
 });
 

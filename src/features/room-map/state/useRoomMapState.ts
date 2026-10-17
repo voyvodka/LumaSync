@@ -40,6 +40,9 @@ export interface UseRoomMapStateReturn {
   canRedo: boolean;
   loading: boolean;
   error: string | null;
+  /** The stored map could not be read: nothing may be written over it until a reload reads it. */
+  loadFailed: boolean;
+  reload: () => void;
   /** Writes the map as it is now again, after a save failed. */
   retrySave: () => void;
 }
@@ -51,6 +54,8 @@ export function useRoomMapState(): UseRoomMapStateReturn {
   const [state, dispatch] = useReducer(roomMapReducer, undefined, initialRoomMapState);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadTry, setLoadTry] = useState(0);
   // The map as the editor last loaded or wrote it: a save writes only what changed since, so a
   // strip, LED count or channel another writer stored meanwhile survives (`mergeEditorSave`).
   // Read when a save runs, not when it is asked for: a save queued behind one that fails must
@@ -58,6 +63,7 @@ export function useRoomMapState(): UseRoomMapStateReturn {
   const writtenRef = useRef<RoomMapConfig | null>(DEFAULT_ROOM_MAP);
   const savingRef = useRef<Promise<void> | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a reload is the trigger.
   useEffect(() => {
     let cancelled = false;
     shellStore
@@ -94,12 +100,18 @@ export function useRoomMapState(): UseRoomMapStateReturn {
         if (cancelled) return;
         const reason = parseCommandError(err).message;
         console.error(`[LumaSync] Room map load failed: ${reason}`);
-        setError(reason);
+        setLoadFailed(true);
         setLoading(false);
       });
     return () => {
       cancelled = true;
     };
+  }, [loadTry]);
+
+  const reload = useCallback(() => {
+    setLoadFailed(false);
+    setLoading(true);
+    setLoadTry((n) => n + 1);
   }, []);
 
   const persist = useCallback((next: RoomMapConfig) => {
@@ -221,6 +233,8 @@ export function useRoomMapState(): UseRoomMapStateReturn {
     canRedo: state.future.length > 0,
     loading,
     error,
+    loadFailed,
+    reload,
     retrySave,
   };
 }

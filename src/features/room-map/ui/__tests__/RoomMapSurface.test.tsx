@@ -16,12 +16,12 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn<() => Promise<null>>().mockResolvedValue(null),
 }));
 
-const store = vi.hoisted(() => ({ state: {} as Record<string, unknown> }));
+const store = vi.hoisted(() => ({ state: {} as Record<string, unknown>, failLoad: false }));
 
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     onSaved: () => () => {},
-    load: () => Promise.resolve(store.state),
+    load: () => (store.failLoad ? Promise.reject(new Error("unreadable")) : Promise.resolve(store.state)),
     update: async (fn: (current: Record<string, unknown>) => Record<string, unknown> | null) => {
       const partial = fn(store.state);
       if (partial !== null) store.state = { ...store.state, ...partial };
@@ -108,6 +108,7 @@ beforeEach(() => {
 
 afterEach(() => {
   __resetRoomViewFailure();
+  store.failLoad = false;
   vi.restoreAllMocks();
 });
 
@@ -180,6 +181,20 @@ describe("RoomMapSurface — faces", () => {
     expect(screen.getByTestId("plan")).toBeInTheDocument();
     expect(screen.queryByRole("radiogroup")).toBeNull();
     expect(screen.queryByTestId("room-view-3d")).toBeNull();
+  });
+
+  it("offers no templates over a map it could not read, and reads it again on a retry", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    stored({});
+    store.failLoad = true;
+    await renderSurface();
+    expect(screen.queryByTestId("templates")).toBeNull();
+    expect(screen.getByText("roomMap:loadError")).toBeInTheDocument();
+    store.failLoad = false;
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "roomMap:persistRetry" }));
+    });
+    expect(screen.getByTestId("templates")).toBeInTheDocument();
   });
 
   it("opens an empty map with no history on the templates, before either face", async () => {

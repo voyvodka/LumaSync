@@ -3,6 +3,7 @@ import type enRoomMap from "@/locales/en/roomMap";
 
 const roomMap: Catalogue<typeof enRoomMap> = {
   loading: "Oda haritası yükleniyor…",
+  loadError: "Oda haritası okunamadı. Hiçbir şey değişmedi.",
   toolbar: {
     undo: "Geri Al",
     redo: "Yinele",

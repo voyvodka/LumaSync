@@ -89,6 +89,19 @@ describe("ROOM_OBJECT_KINDS", () => {
   });
 });
 
+describe("moving the TV by key or by typed position", () => {
+  // Left behind, the strip stopped counting as the screen's backlight.
+  it("takes its backlight with it", () => {
+    const behind = { stripId: "bl", startX: 1, startY: 1.15, endX: 2, endY: 1.15, ledCount: 40 };
+    const withBacklight: RoomMapConfig = { ...config, usbStrips: [...config.usbStrips, behind] };
+    const tv = { kind: "tv" } as const;
+    const nudged = ROOM_OBJECT_KINDS.tv.nudge(withBacklight, tv, { x: 1, y: 0, coarse: true });
+    expect(nudged.usbStrips?.[1]).toMatchObject({ startX: 2, endX: 3 });
+    expect(nudged.usbStrips?.[0]).toBe(config.usbStrips[0]);
+    expect(ROOM_OBJECT_KINDS.tv.moveTo(withBacklight, tv, 1.5, 1)?.usbStrips?.[1]).toMatchObject({ startX: 1.5 });
+  });
+});
+
 describe("removing the bound backlight strip", () => {
   it("takes the screen's binding with it, and leaves another strip's alone", () => {
     const config: RoomMapConfig = {

@@ -5,9 +5,9 @@ import {
   type StoredRoomLayout,
   type StoredRoomLayouts,
 } from "@/shared/contracts/roomLayouts";
-import type { HueChannelPlacement, HueZone, RoomMapConfig, UsbStripPlacement } from "@/shared/contracts/roomMap";
+import type { HueChannelPlacement, RoomMapConfig, UsbStripPlacement } from "@/shared/contracts/roomMap";
 
-import { resolveHueChannelWorld, resolveHueChannelWorldZ } from "./hueChannelPosition";
+import { detachHueChannel } from "./hueChannelPosition";
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -68,15 +68,6 @@ function placedAs(channel: HueChannelPlacement, placed: HueChannelPlacement): Hu
   return next;
 }
 
-/** Bound to a zone the other room does not have: kept where it stands, unbound. */
-function unbound(channel: HueChannelPlacement, zones: readonly HueZone[]): HueChannelPlacement {
-  if (!channel.zoneId) return channel;
-  const world = resolveHueChannelWorld(channel, zones);
-  const z = resolveHueChannelWorldZ(channel, zones);
-  const { zoneId: _zone, zoneRelativePosition: _rel, ...rest } = channel;
-  return { ...rest, x: world.x, y: world.y, z };
-}
-
 /**
  * The room the lights move into: `target`'s layout over what the devices and the bridge own now.
  * - **Hue lights** are the current set (the bridge sync and the Hue page own which there are), each
@@ -98,7 +89,7 @@ export function reconcileRoomSwitch(
   const indexInCurrent = new Map<string, number>();
   const hueChannels = (current.hueChannels ?? []).map((channel) => {
     const placed = matchHueChannel(channel, targetChannels);
-    if (!placed) return unbound(channel, currentZones);
+    if (!placed) return detachHueChannel(channel, currentZones);
     indexInCurrent.set(`${placed.entertainmentAreaId ?? ""}:${placed.channelIndex}`, channel.channelIndex);
     return placedAs(channel, placed);
   });

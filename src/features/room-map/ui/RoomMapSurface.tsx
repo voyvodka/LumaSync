@@ -6,6 +6,7 @@ import { ROOM_VIEW_3D_AVAILABLE } from "@/features/room-view/ui/RoomView3DHost";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { cx } from "@/shared/lib/cx";
+import { Callout } from "@/shared/ui/Callout/Callout";
 import { Segmented } from "@/shared/ui/Segmented/Segmented";
 
 import { roomAwareStatus } from "../model/roomAware";
@@ -105,6 +106,17 @@ export function RoomMapSurface({
     return (
       <div className="flex h-full items-center justify-center">
         <span className="text-sm text-ink-faint">{t("roomMap:loading")}</span>
+      </div>
+    );
+  }
+
+  // A map that could not be read is not an empty one: a template or an edit would write over it.
+  if (doc.loadFailed) {
+    return (
+      <div className="flex h-full items-center justify-center p-6">
+        <Callout tone="error" action={{ label: t("roomMap:persistRetry"), onClick: doc.reload }}>
+          {t("roomMap:loadError")}
+        </Callout>
       </div>
     );
   }
