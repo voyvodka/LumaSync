@@ -38,6 +38,8 @@ export function TemplatesPopover({ open, onClose, anchorRef, id, onPreview, onAp
   const [previewed, setPreviewed] = useState<string | null>(null);
   // Opening is not a change: the focus the drawer lands on shows nothing until it moves.
   const landing = useRef(false);
+  // Moves, not enters: a card opening under a still pointer, where Templates… was pressed, was entered.
+  const hovered = useRef<string | null>(null);
   const want = (id: string | null, template: RoomMapConfig | null) => {
     if (intent.current !== null) clearTimeout(intent.current);
     // The pointer leaves the cards as they animate out: a preview from then would outlive the drawer.
@@ -49,6 +51,7 @@ export function TemplatesPopover({ open, onClose, anchorRef, id, onPreview, onAp
     }, PREVIEW_INTENT_MS);
   };
   useEffect(() => {
+    hovered.current = null;
     if (open) {
       landing.current = true;
       gridRef.current?.querySelector<HTMLElement>('[tabindex="0"]')?.focus({ preventScroll: true });
@@ -72,7 +75,10 @@ export function TemplatesPopover({ open, onClose, anchorRef, id, onPreview, onAp
         ref={gridRef}
         className={styles.grid}
         data-testid="templates-cards"
-        onPointerLeave={() => want(null, null)}
+        onPointerLeave={() => {
+          hovered.current = null;
+          want(null, null);
+        }}
         onBlur={(event) => {
           const next = event.relatedTarget as Node | null;
           if (!open || (next && (gridRef.current?.contains(next) || anchorRef.current?.contains(next)))) return;
@@ -91,7 +97,11 @@ export function TemplatesPopover({ open, onClose, anchorRef, id, onPreview, onAp
                 keys.onFocus();
                 if (!landing.current) want(template.id, template.built);
               }}
-              onPointerEnter={() => want(template.id, template.built)}
+              onPointerMove={() => {
+                if (hovered.current === template.id) return;
+                hovered.current = template.id;
+                want(template.id, template.built);
+              }}
               className={styles.card}
               data-previewing={previewed === template.id || undefined}
               aria-describedby={`${id}-${template.id}`}

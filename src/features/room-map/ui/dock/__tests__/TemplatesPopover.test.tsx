@@ -37,9 +37,9 @@ describe("TemplatesPopover", () => {
   it("shows the template the pointer rests on, not every one it crosses, and the room again once it leaves", () => {
     const onPreview = vi.fn<(template: RoomMapConfig | null) => void>();
     render(<Harness onPreview={onPreview} onApply={vi.fn<Apply>()} />);
-    fireEvent.pointerEnter(card("tv55"));
+    fireEvent.pointerMove(card("tv55"));
     wait(PREVIEW_INTENT_MS / 2);
-    fireEvent.pointerEnter(card("showroom"));
+    fireEvent.pointerMove(card("showroom"));
     wait(PREVIEW_INTENT_MS);
     expect(onPreview).toHaveBeenCalledOnce();
     expect(onPreview.mock.calls[0]![0]!.dimensions.widthMeters).toBe(12.5);
@@ -48,6 +48,14 @@ describe("TemplatesPopover", () => {
     fireEvent.pointerLeave(screen.getByTestId("templates-cards"));
     wait(PREVIEW_INTENT_MS);
     expect(onPreview).toHaveBeenLastCalledWith(null);
+  });
+
+  it("shows nothing for a card that opened under a still pointer", () => {
+    const onPreview = vi.fn<(template: RoomMapConfig | null) => void>();
+    render(<Harness onPreview={onPreview} onApply={vi.fn<Apply>()} />);
+    fireEvent.pointerEnter(card("tv55"));
+    wait(PREVIEW_INTENT_MS * 2);
+    expect(onPreview).not.toHaveBeenCalled();
   });
 
   it("changes nothing on opening, previews from the keys, and applies the pressed template without a late preview", () => {
@@ -90,7 +98,7 @@ describe("TemplatesPopover", () => {
     const onPreview = vi.fn<(template: RoomMapConfig | null) => void>();
     const onApply = vi.fn<Apply>();
     const { rerender } = render(<Harness onPreview={onPreview} onApply={onApply} />);
-    fireEvent.pointerEnter(card("tv55"));
+    fireEvent.pointerMove(card("tv55"));
     rerender(<Harness onPreview={onPreview} onApply={onApply} open={false} />);
     fireEvent.pointerLeave(screen.getByTestId("templates-cards"));
     wait(PREVIEW_INTENT_MS * 2);
