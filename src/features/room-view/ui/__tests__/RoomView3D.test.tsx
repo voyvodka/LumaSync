@@ -59,7 +59,13 @@ vi.mock("three/addons/controls/OrbitControls.js", async () => {
   };
 });
 
-const builds = vi.hoisted(() => ({ count: 0, last: null as unknown, scene: null as Object3D | null, throwNext: false }));
+const builds = vi.hoisted(() => ({
+  count: 0,
+  last: null as unknown,
+  scene: null as Object3D | null,
+  moods: [] as Array<readonly number[] | undefined>,
+  throwNext: false,
+}));
 vi.mock("../roomScene", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../roomScene")>();
   return {
@@ -73,6 +79,11 @@ vi.mock("../roomScene", async (importOriginal) => {
       }
       const built = actual.buildRoomScene(...args);
       builds.scene = built.scene;
+      const setMood = built.setMood.bind(built);
+      built.setMood = (...mood: Parameters<typeof built.setMood>) => {
+        builds.moods.push(mood[2]);
+        return setMood(...mood);
+      };
       return built;
     },
   };
@@ -532,6 +543,32 @@ describe("RoomView3D", () => {
     rerender(view(null));
     await settle();
     expect(orbit.object.zoom).toBeCloseTo(framed);
+    unmount();
+  });
+
+  // Solid to an effect: the lamps took the effect's colours at once while the light eased in.
+  it("eases each lamp's colour into an effect's palette", async () => {
+    const onFail = vi.fn<(error: unknown) => void>();
+    const solid = { level: 1, ambient: 1, strip: 1, daylight: 0.3, brightness: 1, lamp: 0xff0000, sky: { top: 0, mid: 0 } };
+    const effect = { ...solid, lamp: 0x008080, palette: [0x00ff00, 0x0000ff] };
+    const view = (mood: typeof solid) => <RoomView3D config={DEFAULT_ROOM_MAP} label="Room" mood={mood} onFail={onFail} />;
+    const { rerender, unmount } = render(view(solid));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    builds.moods.length = 0;
+    rerender(view(effect));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(450);
+    });
+    const midway = builds.moods[builds.moods.length - 1];
+    expect(midway).toHaveLength(2);
+    expect(midway![0]).not.toBe(0x00ff00);
+    expect(midway![0]).not.toBe(0xff0000);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(builds.moods[builds.moods.length - 1]).toEqual([0x00ff00, 0x0000ff]);
     unmount();
   });
 

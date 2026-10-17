@@ -303,7 +303,8 @@ function openRoomView(
     const moodNow = { colour: new Color(LAMP_COLOURS[0]), level: 1, ambient: 1, strip: 1, daylight: DUSK_AT };
     let moodFrame = 0;
     let moodTarget: RoomMood | null = null;
-    const paintMood = () => room?.setMood(moodNow.colour.getHex(), moodNow, moodTarget?.palette);
+    let paletteNow: readonly number[] | undefined;
+    const paintMood = () => room?.setMood(moodNow.colour.getHex(), moodNow, paletteNow);
     orbit.addEventListener("change", () => {
       request();
       if (shownRoom) {
@@ -465,14 +466,16 @@ function openRoomView(
       },
       { signal: listening.signal, capture: true },
     );
+    // Ahead of the editor's own R, which turned the stored piece too and so rebuilt the room under the carry.
     window.addEventListener(
       "keydown",
       (event) => {
         if (!carry || (event.key !== "r" && event.key !== "R")) return;
         event.preventDefault();
+        event.stopPropagation();
         turnCarry(event.shiftKey ? -15 : 15);
       },
-      { signal: listening.signal },
+      { signal: listening.signal, capture: true },
     );
     canvas.addEventListener(
       "pointerdown",
@@ -529,9 +532,12 @@ function openRoomView(
           grip: null,
         };
         orbit.enabled = false;
+        if (move !== 0) cancelAnimationFrame(move);
+        move = 0;
         canvas.setPointerCapture(event.pointerId);
       },
-      { signal: listening.signal },
+      // Before OrbitControls' own: a carry it had begun turning for jumped the room once Esc let it go.
+      { signal: listening.signal, capture: true },
     );
     canvas.addEventListener(
       "pointermove",
@@ -1023,7 +1029,23 @@ function openRoomView(
         const colour0 = moodNow.colour.clone();
         const from = { ...moodNow };
         const colour1 = new Color(mood.lamp);
-        if (colour0.equals(colour1) && LEVELS.every((key) => from[key] === mood[key])) {
+        const palette0 = paletteNow;
+        const palette1 = mood.palette;
+        // Each lamp eases from its own colour to its next one: the palette swapped at once while the rest eased.
+        const stops = Math.max(palette0?.length ?? 0, palette1?.length ?? 0);
+        const paletteAt = (k: number) => {
+          if (stops === 0) return undefined;
+          const a = new Color();
+          const b = new Color();
+          return Array.from({ length: stops }, (_, i) =>
+            a
+              .setHex(palette0?.[i % palette0.length] ?? colour0.getHex())
+              .lerp(b.setHex(palette1?.[i % palette1.length] ?? colour1.getHex()), k)
+              .getHex(),
+          );
+        };
+        if (colour0.equals(colour1) && LEVELS.every((key) => from[key] === mood[key]) && (palette0 ?? []).join() === (palette1 ?? []).join()) {
+          paletteNow = palette1;
           paintMood();
           request();
           return;
@@ -1031,6 +1053,7 @@ function openRoomView(
         const end = () => {
           moodNow.colour.copy(colour1);
           for (const key of LEVELS) moodNow[key] = mood[key];
+          paletteNow = palette1;
           paintMood();
           request();
         };
@@ -1049,6 +1072,7 @@ function openRoomView(
           const k = easeInOut(t);
           moodNow.colour.lerpColors(colour0, colour1, k);
           for (const key of LEVELS) moodNow[key] = from[key] + (mood[key] - from[key]) * k;
+          paletteNow = paletteAt(k);
           paintMood();
           request();
           moodFrame = requestAnimationFrame(step);

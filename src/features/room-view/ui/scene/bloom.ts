@@ -3,10 +3,12 @@
 import {
   type Camera,
   HalfFloatType,
+  type Line,
   type Material,
   Mesh,
   MeshBasicMaterial,
   type Object3D,
+  type Points,
   type Scene,
   ShaderMaterial,
   Vector2,
@@ -22,6 +24,12 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 export const BLOOM_LAYER = 1;
 /** `userData` flag: hidden from the glow pass, whose black stand-in writes depth over the bulbs. */
 export const OVERLAY = "overlay";
+
+/** Left out of the glow pass rather than drawn black: overlays, points and every kind of line, the
+ *  plumb's dashed `Line` included, which a check for `LineSegments` alone let glow. */
+export function glowPassHides(object: Object3D): boolean {
+  return Boolean(object.userData[OVERLAY]) || (object as Points).isPoints === true || (object as Line).isLine === true;
+}
 
 const STRENGTH = 1.4;
 const RADIUS = 0.35;
@@ -74,15 +82,12 @@ export function createBloom(renderer: WebGLRenderer, multisample: boolean): Bloo
   const darken = (scene: Scene) => {
     scene.traverse((object) => {
       if (object.layers.isEnabled(BLOOM_LAYER) || !object.visible) return;
-      if (object.userData[OVERLAY]) {
+      if (glowPassHides(object)) {
         hidden.push(object);
         object.visible = false;
       } else if (object instanceof Mesh) {
         kept.set(object, object.material);
         object.material = black;
-      } else if (object.type === "Points" || object.type === "LineSegments") {
-        hidden.push(object);
-        object.visible = false;
       }
     });
   };
