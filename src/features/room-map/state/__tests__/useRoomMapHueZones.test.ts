@@ -398,6 +398,15 @@ describe("useRoomMapHueZones — drawn and resized zones", () => {
     expect(zone.centerZ).toBeCloseTo(1 - zone.scaleZ);
   });
 
+  it("resizes from the bottom, its top coming down to it", async () => {
+    mockUpdate.mockResolvedValue(applied([ZONE_A]));
+    const { result } = renderZonesWithStore({ zones: [{ ...ZONE_A, scaleX: 0.5, scaleY: 0.5, scaleZ: 0.5 }] });
+    await waitFor(() => expect(result.current.store.loading).toBe(false));
+
+    act(() => result.current.zones.handleHueZoneResize("zone-a", { centerX: 0, centerY: 0, scale: 0.3 }));
+    expect(result.current.store.config.zones[0]!.centerZ).toBeCloseTo(-0.2);
+  });
+
   it("writes each resize as its own undo step", async () => {
     mockUpdate.mockResolvedValue(applied([ZONE_A]));
     const { result } = renderZonesWithStore({ zones: [ZONE_A] });

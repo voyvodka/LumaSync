@@ -3,7 +3,8 @@
 // in docs/architecture/ui-and-shell.md, "Per-window bundles".
 import { hueToMetres } from "@/features/room-map/model/hueChannelPosition";
 import type { ZoneMarks } from "@/features/room-map/model/zoneMarks";
-import { resizeZoneRect, type ZoneHandle, type ZoneRect, zoneRect } from "@/features/room-map/model/zoneRect";
+import { bottomKeptCenterZ } from "@/features/room-map/model/zoneCube";
+import { rectToZone, resizeZoneRect, type ZoneHandle, type ZoneRect, zoneRect } from "@/features/room-map/model/zoneRect";
 import { type MutableRefObject, useEffect, useRef } from "react";
 import {
   BoxGeometry,
@@ -666,9 +667,13 @@ function openRoomView(
             }
             const dims = builtConfig.dimensions;
             const [dx, dy] = [at.x - zoneDrag.from.x, at.y - zoneDrag.from.y];
-            zoneDrag.rect = zoneDrag.handle
-              ? resizeZoneRect(zoneDrag.start, zoneDrag.handle, dx, dy, dims.widthMeters, dims.depthMeters)
-              : moveZoneRect(zoneDrag.start, dx, dy, dims);
+            if (zoneDrag.handle) {
+              zoneDrag.rect = resizeZoneRect(zoneDrag.start, zoneDrag.handle, dx, dy, dims.widthMeters, dims.depthMeters);
+              const size = (r: ZoneRect) => rectToZone(r, dims.widthMeters, dims.depthMeters).scale;
+              zoneDrag.centerZ = bottomKeptCenterZ({ centerZ: zoneDrag.origin.centerZ, scaleX: size(zoneDrag.origin.rect) }, size(zoneDrag.rect));
+            } else {
+              zoneDrag.rect = moveZoneRect(zoneDrag.start, dx, dy, dims);
+            }
           }
           zoneDrag.moved = true;
           canvas.style.cursor = zoneDrag.handle ? GRIP_CURSOR[zoneDrag.handle] : rising ? "ns-resize" : "grabbing";

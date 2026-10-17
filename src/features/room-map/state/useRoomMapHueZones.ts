@@ -12,7 +12,7 @@ import { isHueZoneApplied, replaceHueChannel } from "@/shared/contracts/roomMap"
 import { detachHueChannel } from "../model/hueChannelPosition";
 import { findScopedHueChannel } from "../model/hueChannelScope";
 import { zoneToken } from "../model/zoneColor";
-import { withCubeScale } from "../model/zoneCube";
+import { bottomKeptCenterZ, withCubeScale } from "../model/zoneCube";
 import type { CubeFootprint } from "../model/zoneRect";
 import {
   assignChannelToHueZone,
@@ -50,7 +50,7 @@ export interface UseRoomMapHueZonesReturn {
   handleHueZoneCenterChange: (zoneId: string, centerX: number, centerY: number, held?: boolean, centerZ?: number) => void;
   handleHueZoneUpdate: (zoneId: string, patch: Partial<HueZone>) => void;
   /** One undo step per release: unlike a field's stream, two resizes a beat apart must not merge.
-   *  Without `centerZ`, its height stays. */
+   *  Without `centerZ`, its bottom stays. */
   handleHueZoneResize: (zoneId: string, footprint: CubeFootprint & { centerZ?: number }) => void;
 }
 
@@ -293,7 +293,8 @@ export function useRoomMapHueZones({
     (zoneId: string, footprint: CubeFootprint & { centerZ?: number }) => {
       const zone = config.zones.find((z) => z.id === zoneId);
       if (!zone) return;
-      const updated = withCubeScale(zone, footprint.scale, { x: footprint.centerX, y: footprint.centerY, z: footprint.centerZ ?? zone.centerZ });
+      const z = footprint.centerZ ?? bottomKeptCenterZ(zone, footprint.scale);
+      const updated = withCubeScale(zone, footprint.scale, { x: footprint.centerX, y: footprint.centerY, z });
       apply({ zones: config.zones.map((z) => (z.id === zoneId ? updated : z)) });
       settle("update_hue_zone (resize)", updateHueZone({ zone: updated, existingZones: config.zones }), false);
     },

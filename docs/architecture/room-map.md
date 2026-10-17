@@ -114,7 +114,8 @@ hidden after, so picking a zone rebuilds nothing. A drawn zone is picked in 3D u
 only where the press finds nothing but its floor (`model/zoneGesture.ts`), because its box stands round
 the furniture inside it and a nearest-hit rule gave it the sofa's clicks. It is carried from its floor
 and resized from eight grips only when it is itself the selection (`ZoneMarks.held`), not when it is
-shown for a selected light, whose drag carries the light. The grips keep the room's proportions, and
+shown for a selected light, whose drag carries the light. The grips keep the room's proportions and,
+sitting on the floor, the cube's bottom: it grows or shrinks from there rather than about its centre, and
 ⇧ while carrying raises or lowers it along the upright plane facing the camera, as a raised light
 rises, held between the floor and the ceiling. While held it is drawn as its whole cube; at rest the
 low wall keeps the furniture readable. One write on release, through the plan's own zone handlers: a
@@ -260,7 +261,7 @@ held inside its zone and leaves it only through its zone picker. Loose lights an
 are both allowed. The dock edits the size as a share of the room with the sides in metres beside
 it, and the centre's height; the plan draws one with a drag in the room's proportions ("Add zone"
 arms the draw, a click drops the cube of scale 0.5) and reshapes it from eight grips on the active
-zone's box, which keep the proportions and move the box, its centre, its name chip and every bound
+zone's box, which keep the proportions and the cube's bottom (`bottomKeptCenterZ`) and move the box, its centre, its name chip and every bound
 light in place before writing the zone once on release (`model/zoneRect.ts`). Every write goes
 through `withCubeScale` (`model/zoneCube.ts`), which clamps the scale to the band and the centre so
 `|center| + scale ≤ 1` on every axis. Rust validates the same: the `HUE_ZONE_SCALE_MIN` /

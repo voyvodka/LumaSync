@@ -786,6 +786,8 @@ describe("RoomView3D", () => {
       // A cube keeps the room's 6 : 4: the deeper pull sets the size.
       expect(rect.x1).toBeCloseTo(5.25);
       expect(rect.y1).toBeCloseTo(3.5);
+      // Its bottom stays at -0.5 as it grows to 0.625, so the top rises instead.
+      expect(onChangeZone.mock.calls[0]![3]).toBeCloseTo(0.125);
     });
 
     it("rises with ⇧ from where it was gripped, its floor left where it is", async () => {

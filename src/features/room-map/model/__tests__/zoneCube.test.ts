@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 
 import { resolveHueChannelWorld, resolveHueChannelWorldZ } from "../hueChannelPosition";
-import { cubeZones, isCubeZone, withCubeScale } from "../zoneCube";
+import { bottomKeptCenterZ, cubeZones, isCubeZone, withCubeScale } from "../zoneCube";
 
 const zone = (patch: Partial<HueZone> = {}): HueZone => ({
   id: "z",
@@ -77,5 +77,11 @@ describe("zoneCube", () => {
     const z = withCubeScale(zone({ centerX: 0.9 }), 0.01);
     expect([z.scaleX, z.scaleY, z.scaleZ]).toEqual([0.05, 0.05, 0.05]);
     expect(withCubeScale(zone({ centerX: 0.9 }), 0.5).centerX).toBe(0.5);
+  });
+
+  it("keeps the bottom as the size changes, until the top meets the ceiling", () => {
+    const zone = { centerZ: -0.5, scaleX: 0.3 };
+    expect(bottomKeptCenterZ(zone, 0.5)).toBeCloseTo(-0.3);
+    expect(bottomKeptCenterZ({ centerZ: 0.5, scaleX: 0.3 }, 0.6)).toBeCloseTo(0.4);
   });
 });
