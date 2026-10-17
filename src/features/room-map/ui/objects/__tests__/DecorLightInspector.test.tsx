@@ -21,18 +21,19 @@ function renderInspector(light: LightStructure = pendant, channels: HueChannelPl
     onToggleLock: vi.fn<() => void>(),
     onClose: vi.fn<() => void>(),
   };
-  render(<DecorLightInspector light={light} roomWidthMeters={5} roomDepthMeters={4} roomHeightMeters={2.5} channels={channels} {...handlers} />);
+  render(<DecorLightInspector light={light} name="Pendant" roomWidthMeters={5} roomDepthMeters={4} roomHeightMeters={2.5} channels={channels} {...handlers} />);
   return handlers;
 }
 
-const drivePicker = () => screen.getByRole("button", { name: /roomMap:inspector\.decorDriveLabel: / });
+const drivePicker = () => screen.getByRole("button", { name: "roomMap:inspector.decorDriveAction" });
 
 describe("DecorLightInspector", () => {
   it("hands the Hue light picked to drive the lamp", () => {
     vi.useFakeTimers();
     const { onDriveWithHue } = renderInspector();
     fireEvent.click(drivePicker());
-    fireEvent.click(screen.getAllByRole("option")[1]!);
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+    fireEvent.click(screen.getAllByRole("option")[0]!);
     act(() => {
       vi.advanceTimersByTime(200);
     });
@@ -42,8 +43,8 @@ describe("DecorLightInspector", () => {
 
   it("offers no locked Hue light, and says so when none is free", () => {
     renderInspector(pendant, [{ channelIndex: 2, x: 0, y: 0, z: 0, locked: true }]);
-    expect(drivePicker()).toBeDisabled();
-    expect(drivePicker()).toHaveAccessibleName("roomMap:inspector.decorDriveLabel: roomMap:inspector.decorDriveNone");
+    expect(screen.queryByRole("button", { name: "roomMap:inspector.decorDriveAction" })).toBeNull();
+    expect(screen.getByText("roomMap:inspector.decorDriveNone")).toBeInTheDocument();
   });
 
   it("offers to hang it back where its fixture hangs only once it has a drop of its own", () => {

@@ -10,6 +10,7 @@ import { TYPE_DOT_COLOR } from "../../model/zoneColor";
 import { usePaletteKeys } from "../../state/usePaletteKeys";
 import { HueAreaNote, type PaletteHueArea } from "../dock/HueAreaNote";
 import { Disc } from "../dock/InspectorParts";
+import { DecorGlyph } from "../objects/DecorGlyph";
 import styles from "./ViewLightRow.module.css";
 import { useViewLightLabel } from "./viewLightLabel";
 
@@ -34,12 +35,13 @@ export interface ViewLightRowProps {
 export function ViewLightRow({ lights, hue: hueArea, lit = null, onSelect }: ViewLightRowProps) {
   const { t } = useTranslation();
   const hue = lights.filter((light) => light.kind === "hue");
-  const rest = lights.filter((light) => light.kind !== "hue");
-  const { tileProps } = usePaletteKeys([hue.map((light) => light.id), rest.map((light) => light.id)]);
+  const decor = lights.filter((light) => light.kind === "decor");
+  const rest = lights.filter((light) => light.kind === "usb" || light.kind === "tv");
+  const { tileProps } = usePaletteKeys([[...hue, ...decor].map((light) => light.id), rest.map((light) => light.id)]);
   const stripRef = useRef<HTMLDivElement | null>(null);
   const noteRef = useRef<HTMLSpanElement | null>(null);
   const areaMissing = hueArea !== null && hueArea.state.kind !== "ready";
-  const more = useSideScroll(stripRef, hue.map((light) => light.id).join(","), undefined);
+  const more = useSideScroll(stripRef, [...hue, ...decor].map((light) => light.id).join(","), undefined);
 
   return (
     <div className={styles.page} role="toolbar" aria-label={t("roomMap:view.lights.label")} data-testid="view-lights">
@@ -50,15 +52,21 @@ export function ViewLightRow({ lights, hue: hueArea, lit = null, onSelect }: Vie
           // Said only to someone with Hue: without a bridge there is no area to be empty.
           <span className={styles.hint}>{t("roomMap:view.lights.noHue")}</span>
         ) : (
-          hue.map((light) => (
-            <Chip
-              key={light.id}
-              light={light}
-              lit={light.ghost ? null : lit}
-              {...tileProps(light.id)}
-              onClick={(event) => onSelect(light.id, event)}
-            />
-          ))
+          <>
+            {hue.map((light) => (
+              <Chip
+                key={light.id}
+                light={light}
+                lit={light.ghost ? null : lit}
+                {...tileProps(light.id)}
+                onClick={(event) => onSelect(light.id, event)}
+              />
+            ))}
+            {decor.length > 0 && <span className={styles.sep} aria-hidden="true" />}
+            {decor.map((light) => (
+              <Chip key={light.id} light={light} {...tileProps(light.id)} onClick={(event) => onSelect(light.id, event)} />
+            ))}
+          </>
         )}
       </div>
       <div className={styles.row}>
@@ -86,7 +94,7 @@ function Chip({
   return (
     <button
       type="button"
-      className={cx(styles.chip, light.ghost && styles.ghost)}
+      className={cx(styles.chip, light.ghost && styles.ghost, light.kind === "decor" && styles.decor)}
       data-lit={lit ? "" : undefined}
       style={lit ? ({ "--chip-glow": lit.colour, "--chip-level": lit.brightness } as CSSProperties) : undefined}
       aria-label={label}
@@ -103,7 +111,11 @@ function Chip({
       onKeyDown={roving.onKeyDown}
     >
       <span className={styles.mark} aria-hidden="true">
-        {light.kind === "hue" ? (
+        {light.kind === "decor" ? (
+          <span style={{ color: "var(--lm-ink-dim)", display: "grid" }}>
+            <DecorGlyph />
+          </span>
+        ) : light.kind === "hue" ? (
           // Filled with the colour its lamp glows in the room, so the chip and the lamp read as one.
           <Disc ghost={light.ghost} fill={lit?.fill ?? lit?.colour ?? light.glow ?? undefined} />
         ) : (

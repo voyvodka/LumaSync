@@ -3,22 +3,22 @@ import { useTranslation } from "react-i18next";
 import { DECOR_LIGHT_FIXTURES, type DecorLightFixture, type HueChannelPlacement, type LightStructure } from "@/shared/contracts/roomMap";
 import { InfoTip } from "@/shared/ui/InfoTip/InfoTip";
 
-import { DECOR_LOWEST_M, decorLightHeight, decorLightName } from "../../model/decorLight";
-import { hueChannelName } from "../../model/hueChannelLabel";
+import { DECOR_LOWEST_M, decorLightHeight } from "../../model/decorLight";
 import { hangHeight } from "../../model/hueHang";
-import { TYPE_DOT_COLOR } from "../../model/zoneColor";
 import { DecimalField } from "../DecimalField";
+import { DecorDrivePicker } from "../dock/DecorDrivePicker";
 import { DockPicker } from "../dock/DockPicker";
 import { DockSlider } from "../dock/DockSlider";
-import { Actions, Disc, FieldRow, InspectorRows, Mark, Meta, NameField, RowLink, Status } from "../dock/InspectorParts";
+import { Actions, FieldRow, InspectorRows, Mark, Meta, NameField, RowLink, Status } from "../dock/InspectorParts";
 import { FAMILY_KEY } from "../view/viewLightLabel";
+import { DecorGlyph } from "./DecorGlyph";
 import { GlyphHeight } from "./fieldGlyphs";
 
-const CHOOSE = "choose";
 const FIXTURES = Object.values(DECOR_LIGHT_FIXTURES);
 
 export function DecorLightInspector({
   light,
+  name,
   roomWidthMeters,
   roomDepthMeters,
   roomHeightMeters,
@@ -32,6 +32,8 @@ export function DecorLightInspector({
   onClose,
 }: {
   light: LightStructure;
+  /** What it is called when it has no name of its own: its fixture, numbered among its likes. */
+  name: string;
   roomWidthMeters: number;
   roomDepthMeters: number;
   roomHeightMeters: number;
@@ -49,20 +51,22 @@ export function DecorLightInspector({
   const locked = !!light.locked;
   const height = decorLightHeight(light, roomHeightMeters);
   const hangsAt = hangHeight(light.fixture, roomHeightMeters);
-  const free = channels.filter((ch) => !ch.locked);
   const metres = (m: number) => m.toFixed(2);
+  const hung = light.dropMeters === undefined || (hangsAt !== null && Math.abs(hangsAt - height) <= 0.005);
 
   return (
     <InspectorRows
       first={
         <>
           <Mark>
-            <Disc fill={TYPE_DOT_COLOR.decor} />
+            <span style={{ color: "var(--lm-ink-dim)", display: "grid" }}>
+              <DecorGlyph />
+            </span>
           </Mark>
           <NameField
             first
             value={light.label}
-            fallback={decorLightName({ fixture: light.fixture }, t)}
+            fallback={name}
             label={t("roomMap:inspector.furnitureNameLabel")}
             disabled={locked}
             onCommit={onRename}
@@ -70,17 +74,7 @@ export function DecorLightInspector({
           <Status>
             <Meta>{t("roomMap:inspector.decorNotDriven")}</Meta>
           </Status>
-          <DockPicker<string>
-            label={t("roomMap:inspector.decorDriveLabel")}
-            value={CHOOSE}
-            width={176}
-            disabled={locked || free.length === 0}
-            options={[
-              { value: CHOOSE, label: free.length === 0 ? t("roomMap:inspector.decorDriveNone") : t("roomMap:inspector.decorDriveLabel") },
-              ...free.map((ch) => ({ value: String(ch.channelIndex), label: hueChannelName(ch, t) })),
-            ]}
-            onChange={(next) => onDriveWithHue(Number(next))}
-          />
+          {!locked && <DecorDrivePicker channels={channels} onDrive={onDriveWithHue} />}
           <InfoTip label={t("common:hintFor", { label: t("roomMap:inspector.decorDriveLabel") })}>{t("roomMap:inspector.decorDriveInfo")}</InfoTip>
           <Actions locked={locked} onToggleLock={onToggleLock} onClose={onClose} />
         </>
@@ -118,10 +112,14 @@ export function DecorLightInspector({
             value={height}
             disabled={locked}
             onChange={onHeightChange}
+            ariaValueText={t("roomMap:inspector.hueHeightReadout", { metres: metres(height) })}
             readout={t("roomMap:inspector.hueHeightReadout", { metres: metres(height) })}
           />
-          {light.dropMeters !== undefined && hangsAt !== null && Math.abs(hangsAt - height) > 0.005 && !locked && (
-            <RowLink onClick={() => onHeightChange(undefined)}>{t("roomMap:inspector.hueHang")}</RowLink>
+          {hangsAt !== null && !locked && (
+            // Its room is kept while it is hung, so the slider does not narrow under a drag that unhangs it.
+            <span style={hung ? { visibility: "hidden" } : undefined} inert={hung}>
+              <RowLink onClick={() => onHeightChange(undefined)}>{t("roomMap:inspector.hueHang")}</RowLink>
+            </span>
           )}
           <FieldRow>
             <DockPicker<DecorLightFixture>

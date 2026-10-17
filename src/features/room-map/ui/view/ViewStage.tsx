@@ -7,7 +7,8 @@ import { RoomView3DHost } from "@/features/room-view/ui/RoomView3DHost";
 import { hexCss } from "@/features/room-view/model/roomMood";
 
 import { deriveHueAreaState } from "../../model/hueAreaState";
-import { parseObjectId } from "../../model/objectId";
+import { driveDecorWithHue } from "../../model/decorLight";
+import { hueChannelObjectId, parseObjectId } from "../../model/objectId";
 import type { RoomAwareStatus } from "../../model/roomAware";
 import { buildViewLights, resolveViewSelection } from "../../model/viewLights";
 import { useHoverChip } from "../../state/useHoverChip";
@@ -94,12 +95,13 @@ export function ViewStage({
   const handlePick = useCallback(
     (objectId: string | null) => {
       const ref = objectId ? parseObjectId(objectId) : null;
-      if (objectId && ref && (ref.kind === "hue" || ref.kind === "tv" || ref.kind === "usb")) selectLight(objectId);
+      const decor = ref?.kind === "decor" && lights.some((light) => light.id === objectId);
+      if (objectId && ref && (ref.kind === "hue" || decor || ref.kind === "tv" || ref.kind === "usb")) selectLight(objectId);
       else if (objectId === null && (viewSelectedId !== null || selectedId !== null)) select(null);
       // OrbitControls takes the press, so the root is focused here for Esc to reach it.
       focusStage();
     },
-    [select, selectLight, viewSelectedId, selectedId, focusStage],
+    [select, selectLight, viewSelectedId, selectedId, focusStage, lights],
   );
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -128,7 +130,7 @@ export function ViewStage({
           chipRef={chipRef}
           name={hovered.name}
           lit={mood.level > 0}
-          level={mood.brightness}
+          level={hovered.kind === "decor" ? undefined : mood.brightness}
         />
       )}
       <RoomViewDock
@@ -157,11 +159,20 @@ export function ViewStage({
         canIdentify={hueBridgeConfigured && hueBridgeIp !== null}
         hueStreaming={hueStreaming}
         lit={lit}
+        channels={doc.visibleHueChannels}
         onSelect={selectLight}
         onBack={() => select(null)}
         onEdit={(id) => {
           selectLight(id);
           onEdit();
+        }}
+        onDrive={(id, channelIndex) => {
+          const ref = parseObjectId(id);
+          const channel = doc.visibleHueChannels.find((ch) => ch.channelIndex === channelIndex);
+          const next = ref?.kind === "decor" && channel ? driveDecorWithHue(doc.config, ref.structureId, channel) : null;
+          if (!next) return;
+          doc.apply(next);
+          selectLight(hueChannelObjectId(channelIndex));
         }}
         onFocusStage={focusStage}
       />

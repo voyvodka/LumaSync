@@ -149,9 +149,28 @@ export function Status({ children }: { children: ReactNode }) {
 }
 
 /** A quiet text action in a row. */
-export function RowLink({ children, onClick }: { children: ReactNode; onClick: () => void }) {
+export function RowLink({
+  children,
+  onClick,
+  ref,
+  menu,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  ref?: Ref<HTMLButtonElement>;
+  /** It opens a list: whether that list is open, and its id while it is. */
+  menu?: { open: boolean; id: string };
+}) {
   return (
-    <button type="button" className={styles.link} onClick={onClick}>
+    <button
+      ref={ref}
+      type="button"
+      className={styles.link}
+      aria-haspopup={menu ? "listbox" : undefined}
+      aria-expanded={menu?.open}
+      aria-controls={menu?.open ? menu.id : undefined}
+      onClick={onClick}
+    >
       {children}
     </button>
   );

@@ -309,6 +309,7 @@ export default {
     typeDecor: "House light",
     decorNotDriven: "Not driven by LumaSync",
     decorDriveLabel: "Drive with a Hue light",
+    decorDriveAction: "Drive with a Hue light…",
     decorDriveNone: "No free Hue light",
     decorDriveInfo: "The Hue light you pick takes this lamp's place, height and model, and LumaSync drives it from then on. The house light goes; undo brings it back.",
     decorHeightLabel: "Light height, floor to ceiling",

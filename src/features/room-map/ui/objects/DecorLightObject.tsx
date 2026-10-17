@@ -8,8 +8,9 @@ import styles from "./DecorLightObject.module.css";
 import { markDragging, stillAClick, useEscapeCancels } from "./dragIntent";
 
 const MARK_M = 0.14;
-/** Around the mark, so a small one at a low zoom is still a target. */
+// On screen, whatever the zoom: the plan scales this element with it.
 const HIT_PAD_PX = 6;
+const HIT_MIN_PX = 32;
 
 export const DecorLightObject = memo(function DecorLightObject({
   light,
@@ -65,7 +66,7 @@ export const DecorLightObject = memo(function DecorLightObject({
 
   const at = carried ?? light;
   const r = MARK_M * pxPerMeter;
-  const half = r + HIT_PAD_PX;
+  const half = Math.max(r + HIT_PAD_PX / zoom, HIT_MIN_PX / 2 / zoom);
   const arm = r * 0.7;
   return (
     <div

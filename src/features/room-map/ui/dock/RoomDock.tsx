@@ -8,7 +8,7 @@ import { cx } from "@/shared/lib/cx";
 import { ConfirmPopover } from "@/shared/ui/ConfirmPopover/ConfirmPopover";
 import { IconButton } from "@/shared/ui/IconButton/IconButton";
 
-import { decorLightName } from "../../model/decorLight";
+import { decorLightNames } from "../../model/decorLight";
 import { furnitureName } from "../../model/furnitureName";
 import { hueChannelName } from "../../model/hueChannelLabel";
 import type { LibraryDrop } from "../../model/libraryDrop";
@@ -76,7 +76,7 @@ export interface RoomDockProps {
 type Pending = "first" | "root";
 
 /** The selection in a sentence, for the polite announcement a canvas selection makes. */
-function describe(target: Exclude<InspectorTarget, { kind: "empty" }>, t: TFunction): string {
+function describe(target: Exclude<InspectorTarget, { kind: "empty" }>, config: RoomMapConfig, t: TFunction): string {
   const say = (type: string, name: string) => t("roomMap:dock.selected", { type, name });
   switch (target.kind) {
     case "tv":
@@ -90,7 +90,7 @@ function describe(target: Exclude<InspectorTarget, { kind: "empty" }>, t: TFunct
     case "image":
       return say(t("roomMap:inspector.typeImage"), target.layer.label);
     case "decor":
-      return say(t("roomMap:inspector.typeDecor"), decorLightName(target.light, t));
+      return say(t("roomMap:inspector.typeDecor"), decorLightNames(config, t).get(target.light.id) ?? target.light.id);
     case "hueZone":
       return say(t("roomMap:inspector.typeHueZone"), target.zone.name);
   }
@@ -203,7 +203,7 @@ export function RoomDock(props: RoomDockProps) {
       const lost = !focused || focused === document.body || !focused.isConnected || focused.closest("[inert]") !== null;
       if (lost && focusInDock.current) onFocusEditor();
     }
-    setAnnouncement(announcing.current ?? (asked === null && target.kind !== "empty" ? describe(target, t) : ""));
+    setAnnouncement(announcing.current ?? (asked === null && target.kind !== "empty" ? describe(target, config, t) : ""));
   }, [key]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {

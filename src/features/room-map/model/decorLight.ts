@@ -34,6 +34,19 @@ export function decorLightName(light: Pick<LightStructure, "label" | "fixture">,
   return light.label || t(NAME_KEY[light.fixture]);
 }
 
+// A template hangs three spots: unnamed, they read "Spot", "Spot 2", "Spot 3" rather than three alike.
+export function decorLightNames(config: Pick<RoomMapConfig, "structures">, t: TFunction): Map<string, string> {
+  const names = new Map<string, string>();
+  const seen = new Map<string, number>();
+  for (const light of listDecorLights(config)) {
+    const name = decorLightName(light, t);
+    const count = (seen.get(name) ?? 0) + 1;
+    seen.set(name, count);
+    names.set(light.id, count === 1 ? name : `${name} ${count}`);
+  }
+  return names;
+}
+
 export const DECOR_LOWEST_M = 0.3;
 
 export function findDecorLight(config: Pick<RoomMapConfig, "structures">, structureId: string): LightStructure | null {

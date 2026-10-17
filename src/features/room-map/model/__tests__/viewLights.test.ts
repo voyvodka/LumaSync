@@ -86,6 +86,21 @@ describe("buildViewLights", () => {
   });
 });
 
+describe("buildViewLights — house lights", () => {
+  const withLamp = { ...config, structures: [{ id: "dining", kind: "light", x: 1, y: 1, fixture: "pendant" }] } as RoomMapConfig;
+
+  it("lists them after the Hue lights, to be driven by one", () => {
+    expect(buildViewLights(sources({ config: withLamp }), t).map((l) => l.id)).toEqual(["hue-0", "hue-1", "hue-2", "decor-dining", "usb-s1", "tv"]);
+  });
+
+  it("lists none, and shows none as selected, with no Hue light in the area", () => {
+    const bare = { ...withLamp, hueChannels: [] };
+    expect(buildViewLights(sources({ config: bare }), t).some((l) => l.kind === "decor")).toBe(false);
+    expect(resolveViewSelection(withLamp, "decor-dining")).toBe("decor-dining");
+    expect(resolveViewSelection(bare, "decor-dining")).toBeNull();
+  });
+});
+
 describe("resolveViewSelection", () => {
   it("shows a light, a strip or the screen as selected", () => {
     expect(resolveViewSelection(config, "hue-0")).toBe("hue-0");

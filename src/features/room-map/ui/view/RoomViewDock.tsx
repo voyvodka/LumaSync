@@ -2,7 +2,7 @@ import { type KeyboardEvent, type MouseEvent, useEffect, useLayoutEffect, useRef
 import { useTranslation } from "react-i18next";
 
 import { HUE_IDENTIFY_STATUS } from "@/shared/contracts/hue";
-import type { TvAnchorPlacement, UsbStripPlacement } from "@/shared/contracts/roomMap";
+import type { HueChannelPlacement, TvAnchorPlacement, UsbStripPlacement } from "@/shared/contracts/roomMap";
 
 import { isBacklightStrip } from "../../model/backlight";
 import type { ViewLight } from "../../model/viewLights";
@@ -34,9 +34,12 @@ export interface RoomViewDockProps {
   /** Hue is streaming: the bridge will not blink a light, so the card says so before the press. */
   hueStreaming?: boolean;
   lit?: LitLamps | null;
+  /** The shown area's Hue lights, one of which can take a house light's place. */
+  channels?: readonly HueChannelPlacement[];
   onSelect: (id: string) => void;
   onBack: () => void;
   onEdit: (id: string) => void;
+  onDrive?: (id: string, channelIndex: number) => void;
   /** Hands the keys back to the room. */
   onFocusStage: () => void;
 }
@@ -61,9 +64,11 @@ export function RoomViewDock({
   level,
   hueStreaming = false,
   lit = null,
+  channels = [],
   onSelect,
   onBack,
   onEdit,
+  onDrive,
   onFocusStage,
 }: RoomViewDockProps) {
   const { t } = useTranslation();
@@ -159,7 +164,9 @@ export function RoomViewDock({
                   : null,
           onIdentify: () => identify.identify(light.id, light.lightIds),
         }
-      : {
+      : light.kind === "decor"
+        ? { canIdentify: false, identifying: false, identifyFailure: null, identifyUnavailable: null, onIdentify: () => {} }
+        : {
           connection: stripNow?.status,
           canIdentify: stripNow?.status === "connected",
           identifying: blink.busyId === light.id,
@@ -191,6 +198,17 @@ export function RoomViewDock({
           {...card(selected)}
           onBack={(event) => back(event.detail === 0)}
           onEdit={() => onEdit(selected.id)}
+          drive={
+            selected.kind === "decor" && onDrive
+              ? {
+                  channels,
+                  onDrive: (channelIndex) => {
+                    pending.current = "first";
+                    onDrive(selected.id, channelIndex);
+                  },
+                }
+              : undefined
+          }
         />
       ) : (
         <ViewLightRow lights={lights} hue={hue} lit={lit} onSelect={select} />

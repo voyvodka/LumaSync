@@ -31,6 +31,7 @@ export function useViewLightFacts(): (light: ViewLight) => string {
     (light: ViewLight) => {
       if (light.kind === "tv") return t("roomMap:view.tvBacklight");
       if (light.kind === "usb") return t("roomMap:view.strip");
+      if (light.kind === "decor") return t("roomMap:inspector.decorNotDriven");
       const parts = [
         light.zone?.name,
         light.family ? t(FAMILY_KEY[light.family]) : undefined,

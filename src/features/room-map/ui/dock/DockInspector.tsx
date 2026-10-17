@@ -12,7 +12,9 @@ import { fitStripLength, MAX_STRIP_CORNERS, resolveRoomFootprint, resolveStripCo
 import { autoScreenKind, classifyFurniture } from "@/features/room-view/model/furnitureModel";
 import type { LampFamily } from "@/features/room-view/model/lampFamily";
 import { setPreference, usePreference } from "@/features/persistence/preferences";
+import { useTranslation } from "react-i18next";
 
+import { decorLightNames } from "../../model/decorLight";
 import { hueChannelZRange, hueToPlanMetres, resolveHueChannelWorld, resolveHueChannelWorldZ } from "../../model/hueChannelPosition";
 import { decorLightObjectId, furnitureObjectId, hueChannelObjectId, imageLayerObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "../../model/objectId";
 import type { InspectorTarget } from "../../model/resolveInspectorTarget";
@@ -123,6 +125,7 @@ export function DockInspector({
 }: DockInspectorProps) {
   const key = inspectorKey(target);
   const screenUnit = usePreference("roomMapScreenUnit");
+  const { t } = useTranslation();
   switch (target.kind) {
     case "hueZone": {
       const zone = target.zone;
@@ -264,6 +267,7 @@ export function DockInspector({
         <DecorLightInspector
           key={key}
           light={light}
+          name={decorLightNames(config, t).get(light.id) ?? light.id}
           roomWidthMeters={config.dimensions.widthMeters}
           roomDepthMeters={config.dimensions.depthMeters}
           roomHeightMeters={config.dimensions.heightMeters}

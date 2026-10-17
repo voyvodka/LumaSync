@@ -1,7 +1,7 @@
 import type { TFunction } from "i18next";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 
-import { decorLightName, listDecorLights } from "./decorLight";
+import { decorLightNames, listDecorLights } from "./decorLight";
 import { furnitureName } from "./furnitureName";
 import {
   decorLightObjectId,
@@ -59,11 +59,12 @@ export function buildObjectList(
       locked: s.locked,
     });
   }
+  const decorNames = decorLightNames(config, t);
   for (const light of listDecorLights(config)) {
     rows.push({
       id: decorLightObjectId(light.id),
       type: "decor",
-      label: decorLightName(light, t),
+      label: decorNames.get(light.id)!,
       locked: light.locked,
     });
   }

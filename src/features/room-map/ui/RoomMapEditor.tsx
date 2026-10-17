@@ -31,7 +31,7 @@ import {
 import { isEditableTarget } from "@/shared/lib/editableTarget";
 import { Callout } from "@/shared/ui/Callout/Callout";
 
-import { decorLightName, driveDecorWithHue, listDecorLights, setDecorLightHeight, updateDecorLight } from "../model/decorLight";
+import { decorLightNames, driveDecorWithHue, listDecorLights, setDecorLightHeight, updateDecorLight } from "../model/decorLight";
 import { deriveHueAreaState } from "../model/hueAreaState";
 import { hueToPlanMetres, resolveHueChannelWorld, setHueChannelWorldZ } from "../model/hueChannelPosition";
 import { moveGroup } from "../model/groupMove";
@@ -382,6 +382,7 @@ export function RoomMapEditor({
   const { widthMeters, depthMeters } = config.dimensions;
   // One object per size, so the memoised TV and strips do not redraw on every editor render.
   const roomBox = useMemo(() => ({ width: widthMeters, depth: depthMeters }), [widthMeters, depthMeters]);
+  const decorNames = useMemo(() => decorLightNames(config, t), [config, t]);
 
   const pxPerMeter = ROOM_MAP_PX_PER_METER;
   const gridStepM = widthMeters < 4 ? 0.5 : 1.0;
@@ -1009,7 +1010,7 @@ export function RoomMapEditor({
               <DecorLightObject
                 key={light.id}
                 light={light}
-                name={decorLightName(light, t)}
+                name={decorNames.get(light.id) ?? light.id}
                 pxPerMeter={pxPerMeter}
                 zoom={zoom}
                 roomWidth={widthMeters}

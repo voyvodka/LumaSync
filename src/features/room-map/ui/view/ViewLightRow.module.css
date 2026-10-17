@@ -90,6 +90,16 @@
     text-overflow: ellipsis;
   }
 
+  /* Between the Hue lights and the house's own, which LumaSync does not drive. */
+  .sep {
+    flex: 0 0 auto;
+    width: 1px;
+    height: 16px;
+    margin: 0 6px;
+    background: var(--lm-line);
+  }
+  .decor .name { color: var(--lm-ink-faint); }
+
   .hint {
     flex: 1 1 0;
     min-width: 0;
@@ -105,6 +115,7 @@
 
   @media (forced-colors: active) {
     .scroll[data-more] { mask-image: none; }
+    .sep { background: CanvasText; }
     .chip:focus-visible { outline: 2px solid Highlight; }
     .chip[data-lit] { box-shadow: none; border: 1px solid CanvasText; }
     .chip[data-lit]::after { background: CanvasText; box-shadow: none; }

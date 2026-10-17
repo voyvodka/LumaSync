@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { DEFAULT_ROOM_MAP, type HueChannelPlacement, type RoomMapConfig, type RoomStructure } from "@/shared/contracts/roomMap";
 
-import { decorLightHeight, driveDecorWithHue, findDecorLight, moveDecorLight, setDecorLightHeight, updateDecorLight } from "../decorLight";
+import { decorLightHeight, decorLightNames, driveDecorWithHue, findDecorLight, moveDecorLight, setDecorLightHeight, updateDecorLight } from "../decorLight";
 import { PENDANT_DROP_M } from "../hueHang";
 import { resolveHueChannelWorld, resolveHueChannelWorldZ } from "../hueChannelPosition";
 
@@ -26,6 +26,12 @@ describe("decor lights", () => {
     const newer = { id: "sky", kind: "skylight", x: 2, y: 2 };
     const patch = updateDecorLight(config([newer, { ...pendant, glow: "soft" }]), "dining", { label: "Table" });
     expect(patch?.structures).toEqual([newer, { ...pendant, glow: "soft", label: "Table" }]);
+  });
+
+  it("numbers lights that would share a name, and leaves a name of its own alone", () => {
+    const spot = (id: string, label?: string) => ({ id, kind: "light", x: 1, y: 1, fixture: "spot", ...(label && { label }) });
+    const t = ((key: string) => (key.endsWith("spot") ? "Spot" : key)) as never;
+    expect([...decorLightNames(config([spot("a"), spot("b", "Desk"), spot("c"), spot("d")]), t).values()]).toEqual(["Spot", "Desk", "Spot 2", "Spot 3"]);
   });
 
   it("finds only a light, and edits nothing for an id that is not one", () => {

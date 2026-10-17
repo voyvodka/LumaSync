@@ -6,13 +6,18 @@ import { IconButton } from "@/shared/ui/IconButton/IconButton";
 import { IconLed, IconTv } from "@/shared/ui/icons";
 import { StateWord } from "@/shared/ui/StateWord/StateWord";
 
+import type { HueChannelPlacement } from "@/shared/contracts/roomMap";
+import { InfoTip } from "@/shared/ui/InfoTip/InfoTip";
+
 import type { ViewLight } from "../../model/viewLights";
 import { TYPE_DOT_COLOR } from "../../model/zoneColor";
 import type { UsbStripConnectionStatus } from "../objects/UsbStripInspector";
+import { DecorDrivePicker } from "../dock/DecorDrivePicker";
 import { IconBack, IconIdentify } from "../dock/dockIcons";
 import { Disc, InspectorRows, Mark, Meta, Note, RowLink, Status } from "../dock/InspectorParts";
+import { DecorGlyph } from "../objects/DecorGlyph";
 import styles from "./ViewLightCard.module.css";
-import { useViewLightFacts } from "./viewLightLabel";
+import { FAMILY_KEY, useViewLightFacts } from "./viewLightLabel";
 
 export interface ViewLightCardProps {
   light: ViewLight;
@@ -31,6 +36,8 @@ export interface ViewLightCardProps {
   onBack: (event: MouseEvent<HTMLButtonElement>) => void;
   onIdentify: () => void;
   onEdit: () => void;
+  /** A house light's only action in View: the shown area's Hue lights, one of which takes its place. */
+  drive?: { channels: readonly HueChannelPlacement[]; onDrive: (channelIndex: number) => void };
 }
 
 /** One light, opened from the row or from the room: what it is, a way to find it in the room, and
@@ -48,9 +55,11 @@ export function ViewLightCard({
   onBack,
   onIdentify,
   onEdit,
+  drive,
 }: ViewLightCardProps) {
   const { t } = useTranslation();
   const facts = useViewLightFacts()(light);
+  const decor = light.kind === "decor";
 
   return (
     <InspectorRows
@@ -65,7 +74,11 @@ export function ViewLightCard({
             onClick={onBack}
           />
           <Mark>
-            {light.kind === "hue" ? (
+            {decor ? (
+              <span style={{ color: "var(--lm-ink-dim)", display: "grid" }}>
+                <DecorGlyph />
+              </span>
+            ) : light.kind === "hue" ? (
               <Disc ghost={light.ghost} />
             ) : (
               <span style={{ color: light.kind === "tv" ? TYPE_DOT_COLOR.tv : TYPE_DOT_COLOR.usb, display: "grid" }}>
@@ -76,17 +89,26 @@ export function ViewLightCard({
           <span className={styles.name} title={light.name} data-testid="view-card-name">
             {light.name}
           </span>
-          <IconButton
-            className={cx(styles.action, identifying && styles.busy)}
-            label={identifying ? t("hue:channelMap.identifying") : t("roomMap:view.identify")}
-            title={canIdentify ? (identifying ? t("hue:channelMap.identifying") : t("roomMap:view.identifyHint")) : (identifyUnavailable ?? undefined)}
-            icon={<IconIdentify />}
-            aria-busy={identifying || undefined}
-            aria-disabled={!canIdentify || undefined}
-            data-testid="view-card-identify"
-            onClick={canIdentify && !identifying ? onIdentify : undefined}
-          />
-          <RowLink onClick={onEdit}>{t("roomMap:view.edit")}</RowLink>
+          {decor ? (
+            <>
+              {drive && <DecorDrivePicker channels={drive.channels} onDrive={drive.onDrive} />}
+              <InfoTip label={t("common:hintFor", { label: t("roomMap:inspector.decorDriveLabel") })}>{t("roomMap:inspector.decorDriveInfo")}</InfoTip>
+            </>
+          ) : (
+            <>
+              <IconButton
+                className={cx(styles.action, identifying && styles.busy)}
+                label={identifying ? t("hue:channelMap.identifying") : t("roomMap:view.identify")}
+                title={canIdentify ? (identifying ? t("hue:channelMap.identifying") : t("roomMap:view.identifyHint")) : (identifyUnavailable ?? undefined)}
+                icon={<IconIdentify />}
+                aria-busy={identifying || undefined}
+                aria-disabled={!canIdentify || undefined}
+                data-testid="view-card-identify"
+                onClick={canIdentify && !identifying ? onIdentify : undefined}
+              />
+              <RowLink onClick={onEdit}>{t("roomMap:view.edit")}</RowLink>
+            </>
+          )}
         </>
       }
       second={
@@ -114,7 +136,8 @@ export function ViewLightCard({
                 <Meta>
                   {[
                     light.kind === "usb" ? port : facts,
-                    level === null || connection === "disconnected" || connection === "unlinked"
+                    decor && light.family ? t(FAMILY_KEY[light.family]) : null,
+                    decor ? null : level === null || connection === "disconnected" || connection === "unlinked"
                       ? t("roomMap:view.hover.off")
                       : t("roomMap:view.hover.on", { percent: Math.round(level * 100) }),
                   ]

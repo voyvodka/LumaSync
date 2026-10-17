@@ -262,6 +262,55 @@ describe("RoomViewDock", () => {
   });
 });
 
+describe("RoomViewDock — a house light", () => {
+  const PENDANT = light({ id: "decor-dining", kind: "decor", name: "Pendant", family: "pendant" });
+  const WITH_DECOR = [LIGHTS[0]!, PENDANT, ...LIGHTS.slice(2)];
+  const dock = (selected: ViewLight | null, onDrive = vi.fn<(id: string, channelIndex: number) => void>()) => {
+    render(
+      <RoomViewDock
+        lights={WITH_DECOR}
+        hue={null}
+        selected={selected}
+        strips={STRIPS}
+        tv={TV}
+        stripStatus={() => ({ status: "connected", port: "COM3" })}
+        hueBridgeStatus="connected"
+        identify={identify()}
+        blink={stripBlink()}
+        level={0.8}
+        canIdentify
+        channels={[{ channelIndex: 2, x: 0, y: 0, z: 0 }]}
+        onSelect={vi.fn<(id: string) => void>()}
+        onBack={vi.fn<() => void>()}
+        onEdit={vi.fn<(id: string) => void>()}
+        onDrive={onDrive}
+        onFocusStage={vi.fn<() => void>()}
+      />,
+    );
+    return onDrive;
+  };
+
+  it("sits in the Hue row after the Hue lights, as not driven", () => {
+    dock(null);
+    expect(chip("decor-dining").parentElement).toBe(chip("hue-0").parentElement);
+    expect(chip("decor-dining").getAttribute("aria-label")).toContain("roomMap:inspector.decorNotDriven");
+  });
+
+  it("offers only a Hue light to take its place, and hands the pick on", () => {
+    vi.useFakeTimers();
+    const onDrive = dock(PENDANT);
+    expect(screen.queryByText("roomMap:view.edit")).toBeNull();
+    expect(screen.queryByRole("button", { name: /identify/i })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "roomMap:inspector.decorDriveAction" }));
+    fireEvent.click(screen.getAllByRole("option")[0]!);
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    vi.useRealTimers();
+    expect(onDrive).toHaveBeenCalledWith("decor-dining", 2);
+  });
+});
+
 describe("ViewLightRow — an effect's colours", () => {
   it("fills a lit light's disc with the palette, not their grey mean", () => {
     const fill = "conic-gradient(#ff0000, #0000ff, #ff0000)";

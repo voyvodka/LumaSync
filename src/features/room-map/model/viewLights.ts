@@ -1,5 +1,5 @@
-// The lights the room's View face lists and can select: the shown area's Hue channels, the USB
-// strips and the screen. Pure, so the dock and its tests read the same list.
+// The lights the room's View face lists and can select: the shown area's Hue channels, the house's
+// own lights while there is a Hue light to drive one with, the USB strips and the screen. Pure, so the dock and its tests read the same list.
 import type { TFunction } from "i18next";
 
 import { lampColourCss } from "@/features/room-view/model/lampColours";
@@ -7,21 +7,22 @@ import type { LampFamily } from "@/features/room-view/model/lampFamily";
 import type { HueAreaChannelInfo } from "@/shared/contracts/hue";
 import { type HueChannelPlacement, type HueZone, type RoomMapConfig, resolveHueFixture } from "@/shared/contracts/roomMap";
 
+import { decorLightNames, listDecorLights } from "./decorLight";
 import { hueChannelName } from "./hueChannelLabel";
-import { hueChannelObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "./objectId";
+import { decorLightObjectId, hueChannelObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "./objectId";
 import { resolveInspectorTarget } from "./resolveInspectorTarget";
 import { getZoneColor } from "./zoneColor";
 
-export type ViewLightKind = "hue" | "usb" | "tv";
+export type ViewLightKind = "hue" | "decor" | "usb" | "tv";
 
 export interface ViewLight {
-  /** The room map's object id (`hue-3`, `usb-<id>`, `tv`). */
+  /** The room map's object id (`hue-3`, `decor-<id>`, `usb-<id>`, `tv`). */
   id: string;
   kind: ViewLightKind;
   name: string;
   /** Hue only: the zone the channel is bound to. */
   zone: { name: string; colour: string } | null;
-  /** Hue only, and only once the bridge has said what the fixture is — never guessed. */
+  /** Hue, once the bridge has said what the fixture is — never guessed; a house light's own. */
   family: LampFamily | null;
   /** Hue only: how many lights the channel drives; null when not known. */
   lightCount: number | null;
@@ -66,10 +67,25 @@ function hueLight(channel: HueChannelPlacement, sources: ViewLightSources, t: TF
   };
 }
 
-/** Hue channels by index, then the strips, then the screen. */
+/** Hue channels by index, the house's lights, then the strips, then the screen. */
 export function buildViewLights(sources: ViewLightSources, t: TFunction): ViewLight[] {
   const { config } = sources;
   const hue = [...config.hueChannels].sort((a, b) => a.channelIndex - b.channelIndex).map((c) => hueLight(c, sources, t));
+  const names = decorLightNames(config, t);
+  // Listed only to be driven by a Hue light: with none in the area they offer nothing.
+  const decor = config.hueChannels.length === 0 ? [] : listDecorLights(config).map<ViewLight>((light) => ({
+    id: decorLightObjectId(light.id),
+    kind: "decor",
+    name: names.get(light.id) ?? light.id,
+    zone: null,
+    family: light.fixture,
+    lightCount: null,
+    lightIds: [],
+    ghost: false,
+    unmatched: false,
+    stripId: null,
+    glow: null,
+  }));
   const usb = config.usbStrips.map<ViewLight>((strip) => ({
     id: usbStripObjectId(strip.stripId),
     kind: "usb",
@@ -100,12 +116,13 @@ export function buildViewLights(sources: ViewLightSources, t: TFunction): ViewLi
         },
       ]
     : [];
-  return [...hue, ...usb, ...tv];
+  return [...hue, ...decor, ...usb, ...tv];
 }
 
 /** What View shows as selected. A piece of furniture or an image chosen in Edit is not a light:
  *  View shows nothing for it, and leaves the stored selection alone for the way back. */
 export function resolveViewSelection(config: RoomMapConfig, selectedId: string | null): string | null {
   const target = resolveInspectorTarget(config, selectedId, null);
-  return target.kind === "hueChannel" || target.kind === "usb" || target.kind === "tv" ? selectedId : null;
+  const decor = target.kind === "decor" && config.hueChannels.length > 0;
+  return target.kind === "hueChannel" || decor || target.kind === "usb" || target.kind === "tv" ? selectedId : null;
 }
