@@ -1,15 +1,6 @@
 // Where a room's structures stand. A window, door or niche stores only a point and a width; the wall
 // it is set in is read here, at draw time, so a reshaped room keeps it on a wall.
-import { type RoomCorner, type RoomMapConfig, resolveRoomFootprint, STRUCTURE_KINDS, type StructureKind, type WallStructure } from "@/shared/contracts/roomMap";
-
-export const STRUCTURE_NAME_KEYS = {
-  column: "roomMap:structure.kind.column",
-  beam: "roomMap:structure.kind.beam",
-  window: "roomMap:structure.kind.window",
-  door: "roomMap:structure.kind.door",
-  niche: "roomMap:structure.kind.niche",
-  light: "roomMap:structure.kind.light",
-} as const satisfies Record<StructureKind, string>;
+import { type RoomCorner, type RoomMapConfig, resolveRoomFootprint, STRUCTURE_KINDS, type WallStructure } from "@/shared/contracts/roomMap";
 
 export interface WallAnchor {
   /** The outline's edge, corner `edge` to the next. */

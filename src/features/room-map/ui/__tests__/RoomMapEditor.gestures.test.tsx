@@ -60,7 +60,7 @@ class StubResizeObserver {
   disconnect() {}
 }
 
-const SOFA = { id: "sofa", type: "sofa" as const, x: 1, y: 2, width: 1, height: 1, label: "Sofa" };
+const SOFA = { id: "sofa", type: "sofa" as const, x: 1, y: 2, width: 1, height: 1, label: "Couch" };
 
 function stored(roomMap: Partial<RoomMapConfig>, extra: Record<string, unknown> = {}) {
   store.state = {
@@ -86,9 +86,9 @@ async function flush() {
 /** The sofa on the canvas, not its name in the dock. */
 function canvasSofa(): HTMLElement {
   const label = screen
-    .getAllByText("Sofa")
+    .getAllByText("Couch")
     .find((el) => el.parentElement?.hasAttribute("data-furniture-id"));
-  if (!label?.parentElement) throw new Error("sofa is not on the canvas");
+  if (!label?.parentElement) throw new Error("couch is not on the canvas");
   return label.parentElement;
 }
 
@@ -465,26 +465,35 @@ describe("RoomMapEditor — the room's floor and walls", () => {
 
 describe("RoomMapEditor — a strip's LED count scrubbed in the inspector", () => {
   // Each step refit the strip from the last one: scrubbed under its corner and back, a bent strip came back straight.
-  it("refits every step from the strip as the scrub found it", async () => {
+  it("refits every step from the strip as the scrub found it, a pause included, as one undo step", async () => {
     const BENT = { stripId: "s1", startX: 0.5, startY: 0.5, corners: [{ x: 1.5, y: 0.5 }], endX: 1.5, endY: 1.5, ledCount: 120, ledsPerMeter: 60 };
     stored({ usbStrips: [BENT] });
-    await renderEditor();
+    const { root } = await renderEditor();
     const line = document.querySelector('[data-object-id="usb-s1"] line') as Element;
     fireEvent.pointerDown(line, { clientX: 200, clientY: 200, pointerId: 1 });
     fireEvent.pointerUp(line, { clientX: 200, clientY: 200, pointerId: 1 });
     fireEvent.click(line, { detail: 1 });
     await flush();
+    const corners = () => document.querySelector('[data-object-id="usb-s1"] polyline')?.getAttribute("points")?.split(" ").length;
+    const wait = (ms: number) => act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, ms));
+    });
 
     const box = screen.getByRole("spinbutton", { name: "roomMap:inspector.usbLedCountLabel" }).closest("label")!;
     fireEvent.pointerDown(box, { button: 0, clientX: 400, pointerId: 2 });
     fireEvent.pointerMove(box, { clientX: 40, pointerId: 2 });
-    fireEvent.pointerMove(box, { clientX: 400, pointerId: 2 });
+    expect(corners()).toBe(2);
+    // Longer than a gesture's quiet window, with the pointer still down.
+    await wait(700);
+    fireEvent.pointerMove(box, { clientX: 320, pointerId: 2 });
     fireEvent.pointerUp(box, { pointerId: 2 });
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 700));
-    });
+    await wait(700);
+    let saves = roomMapSaves();
+    expect(saves[saves.length - 1]!.usbStrips[0]).toMatchObject({ ledCount: 100, corners: [{ x: 1.5, y: 0.5 }] });
 
-    const saves = roomMapSaves();
-    expect(saves[saves.length - 1]!.usbStrips[0]).toMatchObject({ ledCount: 120, corners: [{ x: 1.5, y: 0.5 }], endX: 1.5, endY: 1.5 });
+    fireEvent.keyDown(root, { key: "z", code: "KeyZ", metaKey: true });
+    await wait(700);
+    saves = roomMapSaves();
+    expect(saves[saves.length - 1]!.usbStrips[0]).toMatchObject({ ledCount: 120, endX: 1.5, endY: 1.5 });
   });
 });

@@ -842,7 +842,7 @@ export function RoomMapEditor({
         { gesture: `furniture:${id}:${Object.keys(patch).sort().join(",")}` },
       );
     },
-    onUpdateUsbStrip: (stripId, patch) => {
+    onUpdateUsbStrip: (stripId, patch, held) => {
       // A scrubbed LED count or density refits from the strip as the scrub found it, so passing
       // under a corner on the way does not drop it for good.
       const retape = "ledCount" in patch || "ledsPerMeter" in patch;
@@ -854,7 +854,7 @@ export function RoomMapEditor({
             return keepStripInside(refitRetapedStrip(from, { ...from, ...patch }, cfg), roomBoxOf(cfg));
           }),
         }),
-        retape ? { gesture: `usb:${stripId}:${Object.keys(patch).sort().join(",")}` } : undefined,
+        { gesture: `usb:${stripId}:${Object.keys(patch).sort().join(",")}`, continued: held },
       );
     },
     onUpdateImageLayer: (id, patch) => {

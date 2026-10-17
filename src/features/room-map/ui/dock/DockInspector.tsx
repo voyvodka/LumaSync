@@ -33,7 +33,7 @@ import { type UsbStripConnectionStatus, UsbStripInspector } from "../objects/Usb
 export interface InspectorActions {
   onUpdateTvAnchor: (patch: Partial<TvAnchorPlacement>) => void;
   onUpdateFurniture: (id: string, patch: Partial<FurniturePlacement>) => void;
-  onUpdateUsbStrip: (stripId: string, patch: Partial<UsbStripPlacement>) => void;
+  onUpdateUsbStrip: (stripId: string, patch: Partial<UsbStripPlacement>, held?: boolean) => void;
   onUpdateImageLayer: (id: string, patch: Partial<ImageLayer>) => void;
   /** A typed position, in the kind's own units: a strip by its start point, a Hue channel in the cube. */
   onMoveObject: (objectId: string, x: number, y: number) => void;
@@ -191,7 +191,7 @@ export function DockInspector({
           strip={strip}
           connectionStatus={status}
           port={port}
-          onUpdate={(patch) => actions.onUpdateUsbStrip(strip.stripId, patch)}
+          onUpdate={(patch, held) => actions.onUpdateUsbStrip(strip.stripId, patch, held)}
           onMove={(x, y) => actions.onMoveObject(id, x, y)}
           onToggleLock={() => actions.onToggleLock(id)}
           onDuplicate={() => actions.onDuplicate(id)}

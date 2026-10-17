@@ -29,7 +29,7 @@ const zone: HueZone = {
 const config: RoomMapConfig = {
   ...DEFAULT_ROOM_MAP,
   tvAnchor: { x: 1, y: 0.2, width: 1, height: 0.1 },
-  furniture: [{ id: "sofa", type: "sofa", x: 1, y: 2, width: 2, height: 0.9, label: "Sofa", locked: true }],
+  furniture: [{ id: "sofa", type: "sofa", x: 1, y: 2, width: 2, height: 0.9, label: "Couch", locked: true }],
   hueChannels: [
     { channelIndex: 0, channelId: 0, x: 0, y: 0, z: 0, label: "Floor lamp" },
     { channelIndex: 1, channelId: 1, x: 0, y: 0, z: 0, label: "Shelf", zoneId: "z1" },
@@ -72,7 +72,7 @@ describe("ObjectsPopover", () => {
       .map((row) => row.getAttribute("aria-label") ?? row.textContent);
     expect(names).toEqual([
       "roomMap:objectPanel.tvLabel",
-      "Sofa",
+      "Couch",
       'Couch, roomMap:inspector.zoneChannelCount {"count":1}',
       "Shelf",
       "Floor lamp",
@@ -82,7 +82,7 @@ describe("ObjectsPopover", () => {
 
   it("selects a row's object, or a zone from its header", () => {
     render(<Harness />);
-    fireEvent.click(list().getByRole("button", { name: "Sofa" }));
+    fireEvent.click(list().getByRole("button", { name: "Couch" }));
     expect(select).toHaveBeenLastCalledWith("furniture-sofa", expect.anything());
     fireEvent.click(list().getByRole("button", { name: /^Couch, / }));
     expect(selectZone).toHaveBeenLastCalledWith("z1", expect.anything());

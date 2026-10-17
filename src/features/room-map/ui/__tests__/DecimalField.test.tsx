@@ -44,20 +44,20 @@ describe("DecimalField — typing", () => {
     const { onCommit, input } = renderRequired();
     type(input, "2,5");
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(onCommit).toHaveBeenLastCalledWith(2.5);
+    expect(onCommit).toHaveBeenLastCalledWith(2.5, false);
 
     cleanup();
     const second = renderRequired();
     type(second.input, "3");
     fireEvent.blur(second.input);
-    expect(second.onCommit).toHaveBeenLastCalledWith(3);
+    expect(second.onCommit).toHaveBeenLastCalledWith(3, false);
   });
 
   it("stores the number as it reads", () => {
     const { onCommit, input } = renderRequired();
     type(input, "1.234");
     fireEvent.blur(input);
-    expect(onCommit).toHaveBeenLastCalledWith(1.23);
+    expect(onCommit).toHaveBeenLastCalledWith(1.23, false);
   });
 
   it("puts the value back on Escape", () => {
@@ -116,15 +116,15 @@ describe("DecimalField — arrow keys", () => {
     const { onCommit, input } = renderRequired({ step: 0.1 });
     fireEvent.focus(input);
     fireEvent.keyDown(input, { key: "ArrowUp" });
-    expect(onCommit).toHaveBeenLastCalledWith(1.3);
+    expect(onCommit).toHaveBeenLastCalledWith(1.3, false);
     fireEvent.keyDown(input, { key: "ArrowDown", shiftKey: true });
-    expect(onCommit).toHaveBeenLastCalledWith(0.3);
+    expect(onCommit).toHaveBeenLastCalledWith(0.3, false);
     expect(input.value).toBe("0.30");
 
     cleanup();
     const top = renderRequired({ value: 4.95, step: 0.1 });
     fireEvent.keyDown(top.input, { key: "ArrowUp" });
-    expect(top.onCommit).toHaveBeenLastCalledWith(5);
+    expect(top.onCommit).toHaveBeenLastCalledWith(5, false);
   });
 
   it("wraps through a normaliser, so a rotation steps from 359 to 0", () => {
@@ -143,10 +143,10 @@ describe("DecimalField — arrow keys", () => {
     );
     const input = screen.getByRole("spinbutton") as HTMLInputElement;
     fireEvent.keyDown(input, { key: "ArrowUp" });
-    expect(onCommit).toHaveBeenLastCalledWith(0);
+    expect(onCommit).toHaveBeenLastCalledWith(0, false);
     type(input, "-90");
     fireEvent.blur(input);
-    expect(onCommit).toHaveBeenLastCalledWith(270);
+    expect(onCommit).toHaveBeenLastCalledWith(270, false);
   });
 });
 
@@ -163,7 +163,7 @@ describe("DecimalField — an optional value", () => {
     const set = renderOptional(1.1);
     type(set.input, "");
     fireEvent.blur(set.input);
-    expect(set.onCommit).toHaveBeenLastCalledWith(undefined);
+    expect(set.onCommit).toHaveBeenLastCalledWith(undefined, false);
 
     cleanup();
     const unset = renderOptional(undefined);
@@ -176,7 +176,7 @@ describe("DecimalField — an optional value", () => {
   it("steps from the default it shows when nothing is set", () => {
     const { onCommit, input } = renderOptional(undefined);
     fireEvent.keyDown(input, { key: "ArrowUp" });
-    expect(onCommit).toHaveBeenLastCalledWith(0.8);
+    expect(onCommit).toHaveBeenLastCalledWith(0.8, false);
   });
 });
 
@@ -210,9 +210,9 @@ describe("DecimalField — a drag across it", () => {
     const box = input.closest("label")!;
     fireEvent.pointerDown(box, { button: 0, clientX: 100, pointerId: 1 });
     fireEvent.pointerMove(box, { clientX: 112, pointerId: 1 });
-    expect(onCommit).toHaveBeenLastCalledWith(1.5);
+    expect(onCommit).toHaveBeenLastCalledWith(1.5, true);
     fireEvent.pointerMove(box, { clientX: 104, shiftKey: true, pointerId: 1 });
-    expect(onCommit).toHaveBeenLastCalledWith(2.2);
+    expect(onCommit).toHaveBeenLastCalledWith(2.2, true);
     fireEvent.pointerUp(box, { pointerId: 1 });
     expect(input).not.toHaveFocus();
   });

@@ -115,9 +115,12 @@ would otherwise be built twice.
 the type's or model's name into `label`, in the language of the day, so a room laid out in English
 still read "Sofa" after a switch to Turkish. Now a piece without a name of its own is called by its
 model, else its type, at draw time (`model/furnitureName.ts`), and every reader goes through it. A
-stored label that equals one of those names in any supported language counts as no name, so maps
-saved before the change follow the language too, with no migration. The price: a user who names a
-sofa "Sofa" by hand sees it translated.
+stored label that is one of the names earlier builds stored, in English or Turkish, counts as no
+name, so maps saved before the change follow the language too, with no migration. Those names are a
+frozen list in the module, not a lookup through i18next: a window loads only its own language's
+catalogue, so an English name was unrecognisable in a Turkish window after a restart. The list is
+the same for every type, so a "Sofa" retyped into a chair reads as a chair. The price: a user who
+names a sofa "Sofa" by hand sees it translated.
 
 **The plan draws a piece the way the 3D room builds it.** `objects/FurnitureGlyph.tsx` draws each
 piece from above from the same `FurnitureModel` the room reads (`useFurnitureModels`, which keeps a

@@ -34,7 +34,8 @@ interface CommonProps {
 interface RequiredValue extends CommonProps {
   optional?: false;
   value: number;
-  onCommit: (next: number) => void;
+  /** `held` while a drag across the field is under way: its steps are one change. */
+  onCommit: (next: number, held?: boolean) => void;
 }
 
 interface OptionalValue extends CommonProps {
@@ -42,7 +43,7 @@ interface OptionalValue extends CommonProps {
   optional: true;
   value: number | undefined;
   placeholder: string;
-  onCommit: (next: number | undefined) => void;
+  onCommit: (next: number | undefined, held?: boolean) => void;
 }
 
 export type DecimalFieldProps = RequiredValue | OptionalValue;
@@ -97,12 +98,12 @@ export function DecimalField(props: DecimalFieldProps) {
 
   if (!editing && draft !== format(value)) setDraft(format(value));
 
-  const commit = (next: number | undefined) => {
+  const commit = (next: number | undefined, held = false) => {
     setDraft(format(next));
     const current = value === undefined ? undefined : roundTo(value, decimals);
     if (next === current) return;
-    if (props.optional) props.onCommit(next);
-    else if (next !== undefined) props.onCommit(next);
+    if (props.optional) props.onCommit(next, held);
+    else if (next !== undefined) props.onCommit(next, held);
   };
 
   // A small "no", played on the box that stays, as LED Setup's total does.
@@ -171,7 +172,7 @@ export function DecimalField(props: DecimalFieldProps) {
     const steps = Math.round(dx / SCRUB_PX_PER_STEP);
     const raw = s.base + steps * step * (event.shiftKey ? 10 : 1);
     const folded = normalize ? normalize(raw) : raw;
-    commit(roundTo(clamp(folded, min, max), decimals));
+    commit(roundTo(clamp(folded, min, max), decimals), true);
   };
   const endScrub = () => {
     const s = scrub.current;

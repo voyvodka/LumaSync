@@ -198,16 +198,6 @@ export default {
       black: "Black",
     },
   },
-  structure: {
-    kind: {
-      column: "Column",
-      beam: "Beam",
-      window: "Window",
-      door: "Door",
-      niche: "Niche",
-      light: "Ceiling light",
-    },
-  },
   settings: {
     showGrid: "Show grid",
     gridStrokeWidth: "Grid thickness",

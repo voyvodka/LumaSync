@@ -91,7 +91,7 @@ export function FurnitureInspector({
           </Mark>
           <NameField
             first
-            value={furnitureOwnName(item, t) ?? undefined}
+            value={furnitureOwnName(item) ?? undefined}
             fallback={furnitureName({ type, variant }, t)}
             label={t("roomMap:inspector.furnitureNameLabel")}
             disabled={locked}

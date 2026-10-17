@@ -56,19 +56,19 @@ describe("UsbStripInspector", () => {
     expect(field.value).toBe("1.20");
     expect(field.placeholder).toBe("0.08");
     enter("roomMap:inspector.usbHeightLabel", "2.1");
-    expect(onUpdate).toHaveBeenLastCalledWith({ mountHeightMeters: 2.1 });
+    expect(onUpdate).toHaveBeenLastCalledWith({ mountHeightMeters: 2.1 }, false);
     enter("roomMap:inspector.usbHeightLabel", "");
-    expect(onUpdate).toHaveBeenLastCalledWith({ mountHeightMeters: null });
+    expect(onUpdate).toHaveBeenLastCalledWith({ mountHeightMeters: null }, false);
   });
 
   it("takes the tape's LEDs per metre, and clearing it forgets the density", () => {
     const { onUpdate } = renderInspector();
     enter("roomMap:inspector.usbDensityLabel", "60");
-    expect(onUpdate).toHaveBeenLastCalledWith({ ledsPerMeter: 60 });
+    expect(onUpdate).toHaveBeenLastCalledWith({ ledsPerMeter: 60 }, false);
     cleanup();
     const second = renderInspector({ ledsPerMeter: 60 });
     enter("roomMap:inspector.usbDensityLabel", "");
-    expect(second.onUpdate).toHaveBeenLastCalledWith({ ledsPerMeter: null });
+    expect(second.onUpdate).toHaveBeenLastCalledWith({ ledsPerMeter: null }, false);
   });
 
   it("offers to fit the drawn run to the length its LEDs make", () => {
@@ -99,7 +99,7 @@ describe("UsbStripInspector", () => {
   it("takes a whole LED count and puts back one out of range", () => {
     const { onUpdate } = renderInspector();
     enter("roomMap:inspector.usbLedCountLabel", "72.4");
-    expect(onUpdate).toHaveBeenLastCalledWith({ ledCount: 72 });
+    expect(onUpdate).toHaveBeenLastCalledWith({ ledCount: 72 }, false);
     enter("roomMap:inspector.usbLedCountLabel", "5000");
     expect(onUpdate).toHaveBeenCalledTimes(1);
   });

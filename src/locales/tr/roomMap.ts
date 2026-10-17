@@ -201,16 +201,6 @@ const roomMap: Catalogue<typeof enRoomMap> = {
       black: "Siyah",
     },
   },
-  structure: {
-    kind: {
-      column: "Kolon",
-      beam: "Kiriş",
-      window: "Pencere",
-      door: "Kapı",
-      niche: "Niş",
-      light: "Tavan ışığı",
-    },
-  },
   settings: {
     showGrid: "Izgarayı göster",
     gridStrokeWidth: "Izgara kalınlığı",

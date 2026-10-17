@@ -12,7 +12,7 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-const table: FurniturePlacement = { id: "t", type: "table", x: 1, y: 1, width: 1, height: 0.6, label: "Table" };
+const table: FurniturePlacement = { id: "t", type: "table", x: 1, y: 1, width: 1, height: 0.6, label: "Work table" };
 const coffee: FurnitureModel = { kind: "coffeeTable" };
 
 function renderInspector(item: FurniturePlacement = table, model: FurnitureModel = coffee, modelChoices = true) {
@@ -178,10 +178,10 @@ describe("FurnitureInspector — name and actions", () => {
 
     fireEvent.change(name, { target: { value: "Something else" } });
     fireEvent.keyDown(name, { key: "Escape" });
-    expect(name.value).toBe("Table");
+    expect(name.value).toBe("Work table");
     fireEvent.change(name, { target: { value: "   " } });
     fireEvent.blur(name);
-    expect(name.value).toBe("Table");
+    expect(name.value).toBe("Work table");
     expect(onRename).toHaveBeenCalledTimes(1);
   });
 

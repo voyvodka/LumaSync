@@ -38,7 +38,7 @@ export function UsbStripInspector({
   connectionStatus: UsbStripConnectionStatus;
   /** The port the strip is on, or the connected one for a strip that names none. */
   port: string | null;
-  onUpdate: (patch: Partial<UsbStripPlacement>) => void;
+  onUpdate: (patch: Partial<UsbStripPlacement>, held?: boolean) => void;
   /** Moves the strip by its start point; the end keeps its offset. */
   onMove: (x: number, y: number) => void;
   onToggleLock: () => void;
@@ -123,7 +123,7 @@ export function UsbStripInspector({
               max={1000}
               unit="LED"
               disabled={locked}
-              onCommit={(ledCount) => onUpdate({ ledCount })}
+              onCommit={(ledCount, held) => onUpdate({ ledCount }, held)}
             />
             <DecimalField
               optional
@@ -136,7 +136,7 @@ export function UsbStripInspector({
               max={300}
               unit="LED/m"
               disabled={locked}
-              onCommit={(ledsPerMeter) => onUpdate({ ledsPerMeter: ledsPerMeter ?? null })}
+              onCommit={(ledsPerMeter, held) => onUpdate({ ledsPerMeter: ledsPerMeter ?? null }, held)}
             />
             {height && (
               <DecimalField
@@ -149,7 +149,7 @@ export function UsbStripInspector({
                 max={height.max}
                 unit="m"
                 disabled={locked}
-                onCommit={(mountHeightMeters) => onUpdate({ mountHeightMeters: mountHeightMeters ?? null })}
+                onCommit={(mountHeightMeters, held) => onUpdate({ mountHeightMeters: mountHeightMeters ?? null }, held)}
               />
             )}
           </FieldRow>

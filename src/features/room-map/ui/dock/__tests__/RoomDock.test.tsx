@@ -18,7 +18,7 @@ const strip = (stripId: string, ledCount: number): UsbStripPlacement => ({ strip
 
 const config: RoomMapConfig = {
   ...DEFAULT_ROOM_MAP,
-  furniture: [{ id: "sofa", type: "sofa", x: 1, y: 2, width: 2, height: 0.9, label: "Sofa" }],
+  furniture: [{ id: "sofa", type: "sofa", x: 1, y: 2, width: 2, height: 0.9, label: "Couch" }],
   usbStrips: [strip("a", 60), strip("b", 144)],
 };
 
@@ -153,7 +153,7 @@ describe("RoomDock", () => {
     const select = { current: (_id: string | null) => {} };
     render(<Harness onSelectRef={select} />);
     act(() => select.current("furniture-sofa"));
-    expect(screen.getByRole("status")).toHaveTextContent('roomMap:dock.selected {"type":"roomMap:inspector.typeFurniture","name":"Sofa"}');
+    expect(screen.getByRole("status")).toHaveTextContent('roomMap:dock.selected {"type":"roomMap:inspector.typeFurniture","name":"Couch"}');
     expect(spies.onFocusEditor).not.toHaveBeenCalled();
   });
 
