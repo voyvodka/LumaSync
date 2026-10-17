@@ -73,6 +73,7 @@ export interface DevicesPageProps {
   onVisibleCategoryChange?: (category: DeviceCategory | null) => void;
   /** A bridge is paired and Hue is streaming: the bridge row's dot. */
   hueActive?: boolean;
+  onWledConnected?: () => void;
 }
 
 export function DevicesPage({
@@ -86,6 +87,7 @@ export function DevicesPage({
   categoryRequest = null,
   onVisibleCategoryChange,
   hueActive = false,
+  onWledConnected,
 }: DevicesPageProps) {
   const { t } = useTranslation();
 
@@ -97,7 +99,7 @@ export function DevicesPage({
   const { selectedAreaId } = hue;
   // The controller scans what is plugged in as it starts, and the port watcher keeps the list in step.
   const { connectedPort } = device;
-  const wled = useActiveWledSink();
+  const wled = useActiveWledSink({ onUserConnected: onWledConnected });
   const { activeWledIp } = wled;
 
   // -------------------------------------------------------------------------
