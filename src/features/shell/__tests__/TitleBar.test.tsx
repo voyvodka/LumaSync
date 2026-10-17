@@ -123,3 +123,45 @@ describe("TitleBar section tabs", () => {
     expect(onSectionChange).toHaveBeenCalledWith(SECTION_ORDER[1]);
   });
 });
+
+describe("TitleBar window controls on Windows", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // Compact cannot be zoomed, and its 320 px bar clipped the close button with all three drawn.
+  it("drops the zoom button in compact and keeps it in full", () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Windows NT 10.0)");
+    const view = render(<TitleBar uiMode="compact" onSwitchUIMode={() => {}} />);
+    expect(screen.queryByLabelText("shell:titleBar.maximize")).toBeNull();
+    expect(screen.getByLabelText("shell:titleBar.minimize")).toBeTruthy();
+    expect(screen.getByLabelText("shell:titleBar.close")).toBeTruthy();
+
+    view.rerender(
+      <TitleBar uiMode="full" onSwitchUIMode={() => {}} activeSection={SECTION_IDS.LIGHTS} onSectionChange={() => {}} />,
+    );
+    expect(screen.getByLabelText("shell:titleBar.maximize")).toBeTruthy();
+  });
+});
+
+describe("TitleBar double-click in compact", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // tao answers Linux's maximizable flag with true whatever it is set to, so the flag alone left
+  // Tauri's script zooming compact there.
+  it("never reaches Tauri's script, which would zoom the window", () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (X11; Linux x86_64)");
+    const seen: number[] = [];
+    const listener = (event: MouseEvent) => seen.push(event.detail);
+    document.addEventListener("mousedown", listener);
+    const view = render(<TitleBar uiMode="compact" onSwitchUIMode={() => {}} />);
+    const bar = view.container.querySelector<HTMLElement>("[data-tauri-drag-region]")!;
+    fireEvent.mouseDown(bar, { button: 0, detail: 1 });
+    fireEvent.mouseDown(bar, { button: 0, detail: 2 });
+    document.removeEventListener("mousedown", listener);
+
+    expect(seen).toEqual([1]);
+  });
+});

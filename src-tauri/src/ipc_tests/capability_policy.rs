@@ -59,6 +59,8 @@ const POLICY: &[(&str, [bool; 5])] = &[
     ("plugin:window|set_focus", MAIN_ONLY),
     ("plugin:window|minimize", MAIN_ONLY),
     ("plugin:window|toggle_maximize", MAIN_ONLY),
+    ("plugin:window|unmaximize", MAIN_ONLY),
+    ("plugin:window|set_maximizable", MAIN_ONLY),
     ("plugin:window|close", MAIN_ONLY),
     ("plugin:autostart|enable", MAIN_ONLY),
     ("plugin:autostart|disable", MAIN_ONLY),

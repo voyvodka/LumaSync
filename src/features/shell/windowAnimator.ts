@@ -46,11 +46,11 @@ export function noteFramedUiZoom(zoom: number): void {
 }
 
 /**
- * Apply the per-mode minimum window size (logical px). Keeps the OS-level
- * resize handles from letting the user drag the window smaller than each
- * mode's supported floor.
+ * Apply the per-mode window limits: the minimum size (logical px), which keeps
+ * the OS-level resize handles from letting the user drag the window smaller than
+ * each mode's supported floor, and whether the window may be zoomed.
  */
-export async function applyModeMinSize(
+export async function applyModeLimits(
   win: ReturnType<typeof getCurrentWindow>,
   mode: UIMode,
   workArea?: { width: number; height: number } | null,
@@ -60,6 +60,22 @@ export async function applyModeMinSize(
   // resize below it, so the window cannot be made to fit at all.
   const min = fitSizeToWorkArea(scaleSize(UI_MODE_MIN_SIZES[mode], zoom), workArea ?? null);
   await win.setMinSize(new LogicalSize(min.width, min.height));
+  // Compact is a fixed layout: zoomed, it stretched a 320 px column across the screen. This also
+  // stops the title bar's double-click, which Tauri gates on the same flag.
+  await win.setMaximizable(mode === "full");
+}
+
+/** Frames an unzoom may take to show before the rect is read anyway. */
+const UNZOOM_SETTLE_FRAMES = 30;
+
+/** Unzooms and waits until the window says so: GTK's goes through the window manager. */
+async function unzoom(win: ReturnType<typeof getCurrentWindow>): Promise<void> {
+  await win.unmaximize();
+  for (let frame = 0; frame < UNZOOM_SETTLE_FRAMES; frame++) {
+    if (!(await win.isMaximized().catch(() => false))) break;
+    await waitForFrames(1);
+  }
+  await waitForFrames(1);
 }
 
 /**
@@ -177,6 +193,17 @@ export async function resizeToMode(
 
   const partialUpdate: Partial<ShellState> = { uiMode: mode };
 
+  // The rect read below has to be the user's: a zoomed full window's is the screen's, which became
+  // the remembered full size and came back as an ordinary window over the screen's edge. macOS
+  // unzooms as an AppKit animation that ends long after `unmaximize` returns, so a read there lands
+  // mid-animation; its zoom is only a frame the resize below replaces, and the size remembered
+  // before it stays.
+  const leavingFull = currentMode === "full" && mode !== "full";
+  const zoomed = leavingFull && (await win.isMaximized().catch(() => false));
+  // Read here, not through `detectPlatform`: importing `windowDragApi` put it in every window's entry.
+  const keepRememberedSize = zoomed && /Mac/i.test(navigator.userAgent);
+  if (zoomed && !keepRememberedSize) await unzoom(win);
+
   // Read current logical rect (size + position).
   const scaleFactor = await win.scaleFactor();
   const innerPhys = await win.innerSize();
@@ -187,7 +214,7 @@ export async function resizeToMode(
   const fromY = Math.round(outerPos.y / scaleFactor);
 
   // Capture current full-mode size before leaving full mode.
-  if (currentMode === "full" && mode !== "full") {
+  if (leavingFull && !keepRememberedSize) {
     partialUpdate.lastFullSize = { width: fromWidth, height: fromHeight };
   }
   const rescalingFull = currentMode === "full" && mode === "full" && fromZoom !== zoom;
@@ -272,7 +299,7 @@ export async function resizeToMode(
   }
 
   // Re-apply the target mode's min-size so OS resize handles enforce the floor.
-  await applyModeMinSize(win, mode, workArea, zoom);
+  await applyModeLimits(win, mode, workArea, zoom);
   framedZoom = zoom;
 
   if (opts?.persist === false) return;

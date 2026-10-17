@@ -20,7 +20,7 @@ import {
 } from "@/shared/contracts/shell";
 import { markStartup } from "@/shared/lib/startupTiming";
 import { readStartHidden } from "./launchApi";
-import { applyModeMinSize, noteFramedUiZoom, resizeToMode } from "./windowAnimator";
+import { applyModeLimits, noteFramedUiZoom, resizeToMode } from "./windowAnimator";
 import { persistWindowState, restoreWindowState, schedulePersistWindowState } from "./windowGeometry";
 import { loadShellState, saveShellState } from "./windowShellState";
 
@@ -154,14 +154,14 @@ export async function initWindowLifecycle(opts?: {
         // moved it and took focus from whatever the user was doing on every reload.
         const { uiMode, uiZoom } = await loadShellState();
         const zoom = resolveUiZoom(uiZoom) / 100;
-        await applyModeMinSize(win, uiMode ?? "compact", undefined, zoom);
+        await applyModeLimits(win, uiMode ?? "compact", undefined, zoom);
         noteFramedUiZoom(zoom);
       } else {
         const state = opts?.state ?? (await loadShellState());
         const { uiMode, uiZoom } = state;
         const zoom = resolveUiZoom(uiZoom) / 100;
         // Compact's floor from frame 0; `resizeToMode` raises it on a toggle to full.
-        await applyModeMinSize(win, "compact", undefined, zoom);
+        await applyModeLimits(win, "compact", undefined, zoom);
         await restoreWindowState(state);
         // Grow to the persisted mode (and interface size) around the restored centre, via
         // the same path a manual toggle takes. Still hidden, so nothing of this is visible.

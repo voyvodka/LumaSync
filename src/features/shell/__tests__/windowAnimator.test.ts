@@ -13,13 +13,16 @@ import {
   backend,
   captureLastSavedState,
   innerSizeMock,
+  isMaximizedMock,
   makePersistedState,
   outerPositionMock,
   scaleFactorMock,
+  setMaximizableMock,
   setMinSizeMock,
   setPositionMock,
   setSizeMock,
   setupPersistedState,
+  unmaximizeMock,
   type MonitorInfo,
 } from "./support/windowTestHarness";
 
@@ -477,5 +480,69 @@ describe("a remembered full size", () => {
 
     const size = setSizeMock.mock.calls[0][0] as { width: number; height: number };
     expect(size).toMatchObject(firstRunFullSize({ width: 1920, height: 1080 }));
+  });
+});
+
+describe("zoom and the modes", () => {
+  it("compact cannot be zoomed and full can", async () => {
+    setupPersistedState(makePersistedState({ uiMode: "full" }));
+    await resizeToMode("compact", { animate: false });
+    expect(setMaximizableMock).toHaveBeenLastCalledWith(false);
+
+    await resizeToMode("full", { animate: false });
+    expect(setMaximizableMock).toHaveBeenLastCalledWith(true);
+  });
+
+  it("leaving a zoomed full window remembers the size it unzooms to, not the screen's", async () => {
+    isMaximizedMock.mockResolvedValue(true);
+    innerSizeMock.mockResolvedValue({ width: 1920, height: 1032 });
+    unmaximizeMock.mockImplementation(async () => {
+      innerSizeMock.mockResolvedValue({ width: 1000, height: 700 });
+    });
+    setupPersistedState(makePersistedState({ uiMode: "full" }));
+
+    await resizeToMode("compact", { animate: false });
+
+    expect(unmaximizeMock).toHaveBeenCalledTimes(1);
+    expect(captureLastSavedState().lastFullSize).toMatchObject({ width: 1000, height: 700 });
+  });
+
+  it("reads the size once the window reports the unzoom, not before", async () => {
+    let unzoomed = false;
+    let asked = 0;
+    isMaximizedMock.mockImplementation(async () => {
+      if (unzoomed && ++asked > 2) innerSizeMock.mockResolvedValue({ width: 1000, height: 700 });
+      return !(unzoomed && asked > 2);
+    });
+    innerSizeMock.mockResolvedValue({ width: 1920, height: 1032 });
+    unmaximizeMock.mockImplementation(async () => {
+      unzoomed = true;
+    });
+    setupPersistedState(makePersistedState({ uiMode: "full" }));
+
+    await resizeToMode("compact", { animate: false });
+
+    expect(captureLastSavedState().lastFullSize).toMatchObject({ width: 1000, height: 700 });
+  });
+
+  it("on macOS keeps the size remembered before the zoom and leaves the unzoom to the resize", async () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Macintosh)");
+    isMaximizedMock.mockResolvedValue(true);
+    innerSizeMock.mockResolvedValue({ width: 1920, height: 1032 });
+    setupPersistedState(makePersistedState({ uiMode: "full", lastFullSize: { width: 1000, height: 700 } }));
+
+    await resizeToMode("compact", { animate: false });
+
+    expect(unmaximizeMock).not.toHaveBeenCalled();
+    expect(captureLastSavedState().lastFullSize).toMatchObject({ width: 1000, height: 700 });
+  });
+
+  it("a size change in a zoomed full window leaves it zoomed", async () => {
+    isMaximizedMock.mockResolvedValue(true);
+    setupPersistedState(makePersistedState({ uiMode: "full" }));
+
+    await resizeToMode("full", { animate: false, zoom: 1.1, fromZoom: 1 });
+
+    expect(unmaximizeMock).not.toHaveBeenCalled();
   });
 });
