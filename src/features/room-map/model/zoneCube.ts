@@ -36,7 +36,7 @@ export function withCubeScale(zone: HueZone, size: number, centre: { x: number; 
   };
 }
 
-/** The centre height that keeps the cube's bottom where it is at `size`: a grip pulled at the floor resizes from the floor. */
+/** A grip pulled at the floor resizes from the floor, not about the centre. */
 export function bottomKeptCenterZ(zone: Pick<HueZone, "centerZ" | "scaleX">, size: number): number {
   const s = clamp(size, ZONE_SCALE_MIN, 1);
   return clamp(zone.centerZ - Math.abs(zone.scaleX) + s, s - 1, 1 - s);
