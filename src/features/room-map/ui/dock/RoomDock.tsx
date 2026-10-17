@@ -3,12 +3,12 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
 import type { FurnitureType, HueChannelPlacement, HueZone, RoomMapConfig, UsbStripPlacement } from "@/shared/contracts/roomMap";
-import { resolveFurnitureType } from "@/shared/contracts/roomMap";
 import type { LampFamily } from "@/features/room-view/model/lampFamily";
 import { cx } from "@/shared/lib/cx";
 import { ConfirmPopover } from "@/shared/ui/ConfirmPopover/ConfirmPopover";
 import { IconButton } from "@/shared/ui/IconButton/IconButton";
 
+import { furnitureName } from "../../model/furnitureName";
 import { hueChannelName } from "../../model/hueChannelLabel";
 import type { LibraryDrop } from "../../model/libraryDrop";
 import { type InspectorTarget, resolveInspectorTarget } from "../../model/resolveInspectorTarget";
@@ -81,7 +81,7 @@ function describe(target: Exclude<InspectorTarget, { kind: "empty" }>, t: TFunct
     case "tv":
       return t("roomMap:objectPanel.tvLabel");
     case "furniture":
-      return say(t("roomMap:inspector.typeFurniture"), target.item.label ?? t(`roomMap:furniture.type.${resolveFurnitureType(target.item.type)}`));
+      return say(t("roomMap:inspector.typeFurniture"), furnitureName(target.item, t));
     case "usb":
       return say(t("roomMap:inspector.typeUsb"), t("roomMap:objectPanel.ledLabel", { count: String(target.strip.ledCount) }));
     case "hueChannel":

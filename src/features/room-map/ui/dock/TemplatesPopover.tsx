@@ -27,7 +27,7 @@ export function TemplatesPopover({ open, onClose, anchorRef, id, onPreview, onAp
   const language = i18n?.language;
   const templates = useMemo(
     () => ROOM_TEMPLATES.map((template) => {
-      const built = template.config(t);
+      const built = template.config();
       return { ...template, built, facts: templateFacts(built, t, language) };
     }),
     [t, language],

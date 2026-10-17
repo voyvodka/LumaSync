@@ -1,10 +1,12 @@
 import { memo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { type FurnitureModel, furnitureColours } from "@/features/room-view/model/furnitureModel";
 import type { FurniturePlacement } from "@/shared/contracts/roomMap";
 import { cx } from "@/shared/lib/cx";
 import { FurnitureGlyph } from "./FurnitureGlyph";
 import styles from "./FurnitureObject.module.css";
 import { type FrameHandle, handleSigns, SelectionFrame } from "./SelectionFrame";
+import { furnitureName } from "../../model/furnitureName";
 import { furnitureObjectId } from "../../model/objectId";
 import { clampInsideRoom, resizeFromHandle, snapToStep } from "../../model/pieceGeometry";
 import { markDragging, stillAClick, useEscapeCancels } from "./dragIntent";
@@ -63,6 +65,8 @@ export const FurnitureObject = memo(function FurnitureObject({
   onGroupDragMove,
   onGroupDragEnd,
 }: FurnitureObjectProps) {
+  const { t } = useTranslation();
+  const name = furnitureName(placement, t);
   const [local, setLocal] = useState(() => ({
     x: placement.x,
     y: placement.y,
@@ -217,7 +221,7 @@ export const FurnitureObject = memo(function FurnitureObject({
         <FurnitureGlyph model={model} colours={furnitureColours(placement, model)} width={local.w} depth={local.h} />
         {selected ? null : (
           <span className={styles.label} style={{ transform: `rotate(${-local.r}deg)` }}>
-            {placement.label}
+            {name}
           </span>
         )}
       </div>
@@ -225,7 +229,7 @@ export const FurnitureObject = memo(function FurnitureObject({
         <SelectionFrame
           {...px}
           rotation={local.r}
-          label={placement.label}
+          label={name}
           editable={!placement.locked}
           zoom={zoom}
           onResizeStart={handleResizeStart}

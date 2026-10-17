@@ -1,5 +1,3 @@
-import type { TFunction } from "i18next";
-
 import type { TranslationKey } from "@/features/i18n/catalogue";
 import type {
   FurniturePlacement,
@@ -13,13 +11,12 @@ import type {
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 
 import type { HueSpot } from "./hueSpots";
-import { STRUCTURE_NAME_KEYS } from "./roomStructures";
 
 export interface RoomTemplate {
   id: string;
   nameKey: TranslationKey;
   descKey: TranslationKey;
-  config: (t: TFunction) => RoomMapConfig;
+  config: () => RoomMapConfig;
   hueSpots?: readonly HueSpot[];
 }
 
@@ -29,9 +26,8 @@ function makeTemplate(
   return { ...DEFAULT_ROOM_MAP, ...overrides };
 }
 
-/** A showroom piece, named by its model so each one can be told apart in the list. */
+/** A showroom piece, keyed by its model; with no name of its own it is called by that model. */
 function shown(
-  t: TFunction,
   type: FurnitureType,
   variant: FurnitureVariant | null,
   x: number,
@@ -48,41 +44,39 @@ function shown(
     width,
     height,
     rotation,
-    label: variant ? t(`roomMap:furniture.variant.${variant}`) : t(`roomMap:furniture.type.${type}`),
     ...(variant ? { variant } : {}),
   };
 }
 
 /** Every structure the room can be built with, on the walls and in the free end past the furniture. */
-function showroomStructures(t: TFunction): RoomStructure[] {
-  const label = (kind: RoomStructure["kind"]) => t(STRUCTURE_NAME_KEYS[kind]);
+function showroomStructures(): RoomStructure[] {
   return [
-    { id: "show-beam", kind: "beam", label: label("beam"), x1: 10, y1: 0, x2: 10, y2: 8, width: 0.25, dropMeters: 0.3 },
-    { id: "show-column-square", kind: "column", label: label("column"), x: 10.9, y: 4.6, width: 0.4, depth: 0.4 },
-    { id: "show-column-round", kind: "column", label: label("column"), x: 11.6, y: 6.6, width: 0.36, depth: 0.36, shape: "round" },
-    { id: "show-window-left", kind: "window", label: label("window"), x: 0, y: 4.0, width: 1.2, sillMeters: 0.9, heightMeters: 1.2 },
-    { id: "show-window-back", kind: "window", label: label("window"), x: 8.9, y: 8, width: 1.6, sillMeters: 0.8, heightMeters: 1.3 },
-    { id: "show-door-back", kind: "door", label: label("door"), x: 11.4, y: 8, width: 0.9, heightMeters: 2.05, hinge: "right", swing: "in" },
-    { id: "show-door-right", kind: "door", label: label("door"), x: 12.5, y: 1.6, width: 0.9, heightMeters: 2.05, hinge: "left", swing: "out" },
-    { id: "show-niche", kind: "niche", label: label("niche"), x: 12.5, y: 4.4, width: 0.8, bottomMeters: 0.5, heightMeters: 1.1, depth: 0.25 },
-    { id: "show-light-living", kind: "light", label: label("light"), x: 4.1, y: 2.2, fixture: "ceiling" },
-    { id: "show-light-dining", kind: "light", label: label("light"), x: 1.1, y: 5.05, fixture: "pendant" },
-    { id: "show-light-kitchen-1", kind: "light", label: label("light"), x: 0.7, y: 7.1, fixture: "spot", kelvin: 3000 },
-    { id: "show-light-kitchen-2", kind: "light", label: label("light"), x: 1.4, y: 7.1, fixture: "spot", kelvin: 3000 },
-    { id: "show-light-kitchen-3", kind: "light", label: label("light"), x: 2.1, y: 7.1, fixture: "spot", kelvin: 3000 },
-    { id: "show-light-bulb", kind: "light", label: label("light"), x: 11.4, y: 3.0, fixture: "bulb", kelvin: 2200 },
+    { id: "show-beam", kind: "beam", x1: 10, y1: 0, x2: 10, y2: 8, width: 0.25, dropMeters: 0.3 },
+    { id: "show-column-square", kind: "column", x: 10.9, y: 4.6, width: 0.4, depth: 0.4 },
+    { id: "show-column-round", kind: "column", x: 11.6, y: 6.6, width: 0.36, depth: 0.36, shape: "round" },
+    { id: "show-window-left", kind: "window", x: 0, y: 4.0, width: 1.2, sillMeters: 0.9, heightMeters: 1.2 },
+    { id: "show-window-back", kind: "window", x: 8.9, y: 8, width: 1.6, sillMeters: 0.8, heightMeters: 1.3 },
+    { id: "show-door-back", kind: "door", x: 11.4, y: 8, width: 0.9, heightMeters: 2.05, hinge: "right", swing: "in" },
+    { id: "show-door-right", kind: "door", x: 12.5, y: 1.6, width: 0.9, heightMeters: 2.05, hinge: "left", swing: "out" },
+    { id: "show-niche", kind: "niche", x: 12.5, y: 4.4, width: 0.8, bottomMeters: 0.5, heightMeters: 1.1, depth: 0.25 },
+    { id: "show-light-living", kind: "light", x: 4.1, y: 2.2, fixture: "ceiling" },
+    { id: "show-light-dining", kind: "light", x: 1.1, y: 5.05, fixture: "pendant" },
+    { id: "show-light-kitchen-1", kind: "light", x: 0.7, y: 7.1, fixture: "spot", kelvin: 3000 },
+    { id: "show-light-kitchen-2", kind: "light", x: 1.4, y: 7.1, fixture: "spot", kelvin: 3000 },
+    { id: "show-light-kitchen-3", kind: "light", x: 2.1, y: 7.1, fixture: "spot", kelvin: 3000 },
+    { id: "show-light-bulb", kind: "light", x: 11.4, y: 3.0, fixture: "bulb", kelvin: 2200 },
   ];
 }
 
 /** Every type and every model it takes, in rows facing the TV wall like a shop floor, and every
  *  structure past them. */
-function showroom(t: TFunction): RoomMapConfig {
-  const s = (type: FurnitureType, variant: FurnitureVariant | null, x: number, y: number, w: number, h: number) => shown(t, type, variant, x, y, w, h);
+function showroom(): RoomMapConfig {
+  const s = (type: FurnitureType, variant: FurnitureVariant | null, x: number, y: number, w: number, h: number) => shown(type, variant, x, y, w, h);
   // A piece's front is its plan top: one backed onto the TV wall is turned round to face the room.
-  const onTvWall = (type: FurnitureType, variant: FurnitureVariant, x: number, w: number, h: number) => shown(t, type, variant, x, 0, w, h, 180);
+  const onTvWall = (type: FurnitureType, variant: FurnitureVariant, x: number, w: number, h: number) => shown(type, variant, x, 0, w, h, 180);
   return makeTemplate({
     dimensions: { widthMeters: 12.5, depthMeters: 8, heightMeters: 2.7 },
-    structures: showroomStructures(t),
+    structures: showroomStructures(),
     tvAnchor: { x: 3.6, y: 0.12, width: 1.4, height: 0.08 },
     usbStrips: [
       { stripId: "usb-tv", startX: 3.7, startY: 0.1, endX: 4.9, endY: 0.1, ledCount: 60 },
@@ -124,7 +118,6 @@ function showroom(t: TFunction): RoomMapConfig {
 }
 
 function piece(
-  t: TFunction,
   id: string,
   type: FurnitureType,
   variant: FurnitureVariant | null,
@@ -134,43 +127,38 @@ function piece(
   height: number,
   rotation = 0,
 ): FurniturePlacement {
-  return { ...shown(t, type, variant, x, y, width, height, rotation), id };
+  return { ...shown(type, variant, x, y, width, height, rotation), id };
 }
 
 type WallItem = { x: number; y: number; width: number };
 
-function rooms(t: TFunction) {
-  const label = (kind: RoomStructure["kind"]) => t(STRUCTURE_NAME_KEYS[kind]);
-  return {
-    window: (id: string, at: WallItem, sillMeters = 0.9, heightMeters = 1.3): RoomStructure => ({ id, kind: "window", label: label("window"), ...at, sillMeters, heightMeters }),
-    door: (id: string, at: WallItem, hinge: "left" | "right", swing: "in" | "out" = "in"): RoomStructure => ({ id, kind: "door", label: label("door"), ...at, heightMeters: 2.05, hinge, swing }),
-    light: (id: string, x: number, y: number, fixture: "ceiling" | "pendant" | "spot" | "bulb", kelvin?: number): RoomStructure => ({
-      id,
-      kind: "light",
-      label: label("light"),
-      x,
-      y,
-      fixture,
-      ...(kelvin !== undefined ? { kelvin } : {}),
-    }),
-  };
-}
+const r = {
+  window: (id: string, at: WallItem, sillMeters = 0.9, heightMeters = 1.3): RoomStructure => ({ id, kind: "window", ...at, sillMeters, heightMeters }),
+  door: (id: string, at: WallItem, hinge: "left" | "right", swing: "in" | "out" = "in"): RoomStructure => ({ id, kind: "door", ...at, heightMeters: 2.05, hinge, swing }),
+  light: (id: string, x: number, y: number, fixture: "ceiling" | "pendant" | "spot" | "bulb", kelvin?: number): RoomStructure => ({
+    id,
+    kind: "light",
+    x,
+    y,
+    fixture,
+    ...(kelvin !== undefined ? { kelvin } : {}),
+  }),
+};
 
 // Rugs come first so the plan draws them under what stands on them; a piece backed onto the TV wall is
 // turned to face the room.
-function livingRoom(t: TFunction): RoomMapConfig {
-  const r = rooms(t);
+function livingRoom(): RoomMapConfig {
   return makeTemplate({
     dimensions: { widthMeters: 4.4, depthMeters: 3.8, heightMeters: 2.6 },
     tvAnchor: { x: 1.59, y: 0.06, width: 1.22, height: 0.08, mountHeightMeters: 1.0, screenKind: "tv", backlightStripId: "usb-tv" },
     usbStrips: [{ stripId: "usb-tv", startX: 1.64, startY: 0.05, endX: 2.76, endY: 0.05, ledCount: 60 }],
     furniture: [
-      piece(t, "rug-1", "rug", "rectangle", 1.2, 1.45, 2.0, 1.4),
-      piece(t, "tv-unit", "storage", "tvUnit", 1.2, 0, 2.0, 0.42, 180),
-      piece(t, "coffee-table", "table", "coffee", 1.7, 1.8, 1.0, 0.5),
-      piece(t, "sofa-1", "sofa", "straight", 1.1, 2.8, 2.2, 0.9),
-      piece(t, "side-table", "table", "side", 0.5, 3.1, 0.45, 0.45),
-      piece(t, "plant-1", "plant", "leafy", 3.75, 0.1, 0.55, 0.55),
+      piece("rug-1", "rug", "rectangle", 1.2, 1.45, 2.0, 1.4),
+      piece("tv-unit", "storage", "tvUnit", 1.2, 0, 2.0, 0.42, 180),
+      piece("coffee-table", "table", "coffee", 1.7, 1.8, 1.0, 0.5),
+      piece("sofa-1", "sofa", "straight", 1.1, 2.8, 2.2, 0.9),
+      piece("side-table", "table", "side", 0.5, 3.1, 0.45, 0.45),
+      piece("plant-1", "plant", "leafy", 3.75, 0.1, 0.55, 0.55),
     ],
     structures: [
       r.window("window-left", { x: 0, y: 1.6, width: 1.4 }),
@@ -180,19 +168,18 @@ function livingRoom(t: TFunction): RoomMapConfig {
   });
 }
 
-function deskSetup(t: TFunction): RoomMapConfig {
-  const r = rooms(t);
+function deskSetup(): RoomMapConfig {
   return makeTemplate({
     dimensions: { widthMeters: 3.2, depthMeters: 3.0, heightMeters: 2.5 },
     tvAnchor: { x: 0.95, y: 0.12, width: 0.71, height: 0.05, mountHeightMeters: 1.05, screenKind: "monitor", backlightStripId: "usb-desk" },
     usbStrips: [{ stripId: "usb-desk", startX: 1.0, startY: 0.1, endX: 1.61, endY: 0.1, ledCount: 30 }],
     furniture: [
-      piece(t, "desk-side", "table", "desk", 0, 0, 0.6, 1.3),
-      piece(t, "desk-main", "table", "desk", 0.6, 0, 1.4, 0.7),
-      piece(t, "chair-1", "chair", "office", 1.0, 0.85, 0.6, 0.6),
-      piece(t, "bookshelf", "storage", "bookshelf", 2.05, 2.68, 1.0, 0.32),
-      piece(t, "armchair", "chair", "armchair", 0.25, 2.0, 0.85, 0.85),
-      piece(t, "plant-1", "plant", "topiary", 2.55, 0.1, 0.5, 0.5),
+      piece("desk-side", "table", "desk", 0, 0, 0.6, 1.3),
+      piece("desk-main", "table", "desk", 0.6, 0, 1.4, 0.7),
+      piece("chair-1", "chair", "office", 1.0, 0.85, 0.6, 0.6),
+      piece("bookshelf", "storage", "bookshelf", 2.05, 2.68, 1.0, 0.32),
+      piece("armchair", "chair", "armchair", 0.25, 2.0, 0.85, 0.85),
+      piece("plant-1", "plant", "topiary", 2.55, 0.1, 0.5, 0.5),
     ],
     structures: [
       r.window("window-right", { x: 3.2, y: 1.0, width: 1.2 }),
@@ -202,22 +189,21 @@ function deskSetup(t: TFunction): RoomMapConfig {
   });
 }
 
-function fullRoom(t: TFunction): RoomMapConfig {
-  const r = rooms(t);
+function fullRoom(): RoomMapConfig {
   return makeTemplate({
     dimensions: { widthMeters: 5.5, depthMeters: 4.6, heightMeters: 2.7 },
     tvAnchor: { x: 2.03, y: 0.07, width: 1.44, height: 0.08, mountHeightMeters: 1.05, screenKind: "tv", backlightStripId: "usb-tv" },
     usbStrips: [{ stripId: "usb-tv", startX: 2.08, startY: 0.06, endX: 3.42, endY: 0.06, ledCount: 90 }],
     furniture: [
-      piece(t, "rug-1", "rug", "rectangle", 1.45, 1.4, 2.6, 2.0),
-      piece(t, "tv-unit", "storage", "tvUnit", 1.65, 0, 2.2, 0.45, 180),
-      piece(t, "bookshelf", "storage", "bookshelf", 0.2, 0, 1.0, 0.32, 180),
-      piece(t, "coffee-table", "table", "coffee", 2.2, 1.95, 1.1, 0.6),
-      piece(t, "sofa-1", "sofa", "cornerLeft", 1.4, 2.9, 2.6, 1.6),
-      piece(t, "armchair", "chair", "armchair", 0.35, 1.6, 0.85, 0.85),
-      piece(t, "side-table", "table", "side", 4.15, 3.95, 0.5, 0.5),
-      piece(t, "plant-1", "plant", "topiary", 4.85, 0.15, 0.5, 0.5),
-      piece(t, "plant-2", "plant", "palm", 4.7, 1.3, 0.7, 0.7),
+      piece("rug-1", "rug", "rectangle", 1.45, 1.4, 2.6, 2.0),
+      piece("tv-unit", "storage", "tvUnit", 1.65, 0, 2.2, 0.45, 180),
+      piece("bookshelf", "storage", "bookshelf", 0.2, 0, 1.0, 0.32, 180),
+      piece("coffee-table", "table", "coffee", 2.2, 1.95, 1.1, 0.6),
+      piece("sofa-1", "sofa", "cornerLeft", 1.4, 2.9, 2.6, 1.6),
+      piece("armchair", "chair", "armchair", 0.35, 1.6, 0.85, 0.85),
+      piece("side-table", "table", "side", 4.15, 3.95, 0.5, 0.5),
+      piece("plant-1", "plant", "topiary", 4.85, 0.15, 0.5, 0.5),
+      piece("plant-2", "plant", "palm", 4.7, 1.3, 0.7, 0.7),
     ],
     structures: [
       r.window("window-left", { x: 0, y: 3.2, width: 1.6 }),
@@ -229,20 +215,19 @@ function fullRoom(t: TFunction): RoomMapConfig {
   });
 }
 
-function gamingCorner(t: TFunction): RoomMapConfig {
-  const r = rooms(t);
+function gamingCorner(): RoomMapConfig {
   return makeTemplate({
     dimensions: { widthMeters: 3.6, depthMeters: 3.2, heightMeters: 2.5 },
     // A 34" ultrawide.
     tvAnchor: { x: 1.4, y: 0.14, width: 0.79, height: 0.06, mountHeightMeters: 1.1, screenKind: "monitor", screenAspect: "21:9", backlightStripId: "usb-desk" },
     usbStrips: [{ stripId: "usb-desk", startX: 1.44, startY: 0.12, endX: 2.15, endY: 0.12, ledCount: 45 }],
     furniture: [
-      piece(t, "rug-1", "rug", "round", 1.2, 0.55, 1.4, 1.4),
-      piece(t, "desk-main", "table", "desk", 1.0, 0, 1.6, 0.75),
-      piece(t, "chair-1", "chair", "office", 1.5, 0.9, 0.65, 0.65),
-      piece(t, "bookshelf", "storage", "bookshelf", 0.1, 0, 0.8, 0.32, 180),
-      piece(t, "beanbag", "chair", "beanbag", 2.45, 2.0, 0.9, 0.9),
-      piece(t, "plant-1", "plant", "palm", 3.0, 0.1, 0.5, 0.5),
+      piece("rug-1", "rug", "round", 1.2, 0.55, 1.4, 1.4),
+      piece("desk-main", "table", "desk", 1.0, 0, 1.6, 0.75),
+      piece("chair-1", "chair", "office", 1.5, 0.9, 0.65, 0.65),
+      piece("bookshelf", "storage", "bookshelf", 0.1, 0, 0.8, 0.32, 180),
+      piece("beanbag", "chair", "beanbag", 2.45, 2.0, 0.9, 0.9),
+      piece("plant-1", "plant", "palm", 3.0, 0.1, 0.5, 0.5),
     ],
     structures: [
       r.window("window-right", { x: 3.6, y: 1.2, width: 1.1 }),
@@ -253,21 +238,20 @@ function gamingCorner(t: TFunction): RoomMapConfig {
   });
 }
 
-function bedroom(t: TFunction): RoomMapConfig {
-  const r = rooms(t);
+function bedroom(): RoomMapConfig {
   return makeTemplate({
     dimensions: { widthMeters: 4.0, depthMeters: 3.9, heightMeters: 2.6 },
     // A 50" screen on the wall, over a dresser.
     tvAnchor: { x: 1.45, y: 0.05, width: 1.11, height: 0.06, mountHeightMeters: 1.3, screenKind: "tv", backlightStripId: "usb-tv" },
     usbStrips: [{ stripId: "usb-tv", startX: 1.5, startY: 0.04, endX: 2.51, endY: 0.04, ledCount: 60 }],
     furniture: [
-      piece(t, "rug-1", "rug", "rectangle", 0.9, 1.25, 2.2, 1.3),
-      piece(t, "dresser", "storage", "dresser", 1.4, 0, 1.2, 0.5, 180),
-      piece(t, "wardrobe", "storage", "wardrobe", 2.85, 0, 1.15, 0.6, 180),
-      piece(t, "bed-1", "bed", null, 1.2, 1.85, 1.6, 2.05),
-      piece(t, "nightstand-left", "storage", "nightstand", 0.7, 3.5, 0.45, 0.4),
-      piece(t, "nightstand-right", "storage", "nightstand", 2.85, 3.5, 0.45, 0.4),
-      piece(t, "plant-1", "plant", "leafy", 0.1, 0.1, 0.55, 0.55),
+      piece("rug-1", "rug", "rectangle", 0.9, 1.25, 2.2, 1.3),
+      piece("dresser", "storage", "dresser", 1.4, 0, 1.2, 0.5, 180),
+      piece("wardrobe", "storage", "wardrobe", 2.85, 0, 1.15, 0.6, 180),
+      piece("bed-1", "bed", null, 1.2, 1.85, 1.6, 2.05),
+      piece("nightstand-left", "storage", "nightstand", 0.7, 3.5, 0.45, 0.4),
+      piece("nightstand-right", "storage", "nightstand", 2.85, 3.5, 0.45, 0.4),
+      piece("plant-1", "plant", "leafy", 0.1, 0.1, 0.55, 0.55),
     ],
     structures: [
       r.window("window-left", { x: 0, y: 2.0, width: 1.3 }),
@@ -279,8 +263,7 @@ function bedroom(t: TFunction): RoomMapConfig {
   });
 }
 
-function studio(t: TFunction): RoomMapConfig {
-  const r = rooms(t);
+function studio(): RoomMapConfig {
   return makeTemplate({
     dimensions: { widthMeters: 6.0, depthMeters: 5.0, heightMeters: 2.7 },
     // An L: the living space and the bed along the TV wall, the kitchen down its left leg.
@@ -295,18 +278,18 @@ function studio(t: TFunction): RoomMapConfig {
     tvAnchor: { x: 1.69, y: 0.06, width: 1.22, height: 0.08, mountHeightMeters: 1.0, screenKind: "tv", backlightStripId: "usb-tv" },
     usbStrips: [{ stripId: "usb-tv", startX: 1.74, startY: 0.05, endX: 2.86, endY: 0.05, ledCount: 60 }],
     furniture: [
-      piece(t, "rug-1", "rug", "rectangle", 1.2, 0.9, 2.2, 1.4),
-      piece(t, "tv-unit", "storage", "tvUnit", 1.3, 0, 2.0, 0.42, 180),
-      piece(t, "coffee-table", "table", "coffee", 1.8, 1.25, 1.0, 0.5),
-      piece(t, "sofa-1", "sofa", "straight", 1.2, 2.0, 2.2, 0.9),
-      piece(t, "bed-1", "bed", null, 4.45, 0.9, 1.4, 2.0),
-      piece(t, "nightstand", "storage", "nightstand", 3.95, 2.5, 0.45, 0.4),
-      piece(t, "dining-table", "table", "dining", 0.4, 3.2, 1.2, 0.8),
-      piece(t, "chair-1", "chair", "dining", 0.5, 4.0, 0.45, 0.45),
-      piece(t, "chair-2", "chair", "dining", 1.05, 4.0, 0.45, 0.45),
-      piece(t, "counter", "kitchen", "counter", 1.7, 4.38, 1.2, 0.62),
-      piece(t, "fridge", "kitchen", "fridge", 2.9, 4.32, 0.68, 0.68),
-      piece(t, "plant-1", "plant", "palm", 0.15, 0.15, 0.6, 0.6),
+      piece("rug-1", "rug", "rectangle", 1.2, 0.9, 2.2, 1.4),
+      piece("tv-unit", "storage", "tvUnit", 1.3, 0, 2.0, 0.42, 180),
+      piece("coffee-table", "table", "coffee", 1.8, 1.25, 1.0, 0.5),
+      piece("sofa-1", "sofa", "straight", 1.2, 2.0, 2.2, 0.9),
+      piece("bed-1", "bed", null, 4.45, 0.9, 1.4, 2.0),
+      piece("nightstand", "storage", "nightstand", 3.95, 2.5, 0.45, 0.4),
+      piece("dining-table", "table", "dining", 0.4, 3.2, 1.2, 0.8),
+      piece("chair-1", "chair", "dining", 0.5, 4.0, 0.45, 0.45),
+      piece("chair-2", "chair", "dining", 1.05, 4.0, 0.45, 0.45),
+      piece("counter", "kitchen", "counter", 1.7, 4.38, 1.2, 0.62),
+      piece("fridge", "kitchen", "fridge", 2.9, 4.32, 0.68, 0.68),
+      piece("plant-1", "plant", "palm", 0.15, 0.15, 0.6, 0.6),
     ],
     structures: [
       r.window("window-left", { x: 0, y: 1.4, width: 1.4 }),

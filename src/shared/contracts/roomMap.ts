@@ -489,7 +489,7 @@ export function resolveFurnitureType(stored: unknown): FurnitureType {
 }
 
 /** The stored variant when the piece's type takes it, else none. */
-export function resolveFurnitureVariant(item: FurniturePlacement): FurnitureVariant | undefined {
+export function resolveFurnitureVariant(item: Pick<FurniturePlacement, "type" | "variant">): FurnitureVariant | undefined {
   const variants: readonly string[] = FURNITURE_CATALOGUE[resolveFurnitureType(item.type)].variants;
   return item.variant !== undefined && variants.includes(item.variant) ? item.variant : undefined;
 }

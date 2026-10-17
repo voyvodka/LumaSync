@@ -19,7 +19,7 @@ export function TemplateSelector({ onSelect }: TemplateSelectorProps) {
         <p className={styles.subtitle}>{t("roomMap:templates.subtitle")}</p>
         <div className={styles.grid}>
           {ROOM_TEMPLATES.map((tmpl) => {
-            const config = tmpl.config(t);
+            const config = tmpl.config();
             return (
               <button
                 key={tmpl.id}

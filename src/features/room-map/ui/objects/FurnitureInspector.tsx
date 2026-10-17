@@ -14,6 +14,7 @@ import {
 } from "@/shared/contracts/roomMap";
 import { InfoTip } from "@/shared/ui/InfoTip/InfoTip";
 
+import { furnitureName, furnitureOwnName } from "../../model/furnitureName";
 import { retypeFurniture } from "../../model/furnitureKinds";
 import { furnitureTile } from "../../model/paletteTiles";
 import { DecimalField } from "../DecimalField";
@@ -90,8 +91,8 @@ export function FurnitureInspector({
           </Mark>
           <NameField
             first
-            value={item.label}
-            fallback={typeName}
+            value={furnitureOwnName(item, t) ?? undefined}
+            fallback={furnitureName({ type, variant }, t)}
             label={t("roomMap:inspector.furnitureNameLabel")}
             disabled={locked}
             onCommit={onRename}

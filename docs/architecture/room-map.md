@@ -111,6 +111,14 @@ under the pointer when the stage changes. A second 3D stage instead of moving th
 was chosen because the editor's actions — some forty callbacks over the map, its zones and images —
 would otherwise be built twice.
 
+**A piece stores a name only when the user gives it one.** Templates and the library used to write
+the type's or model's name into `label`, in the language of the day, so a room laid out in English
+still read "Sofa" after a switch to Turkish. Now a piece without a name of its own is called by its
+model, else its type, at draw time (`model/furnitureName.ts`), and every reader goes through it. A
+stored label that equals one of those names in any supported language counts as no name, so maps
+saved before the change follow the language too, with no migration. The price: a user who names a
+sofa "Sofa" by hand sees it translated.
+
 **The plan draws a piece the way the 3D room builds it.** `objects/FurnitureGlyph.tsx` draws each
 piece from above from the same `FurnitureModel` the room reads (`useFurnitureModels`, which keeps a
 model object while the piece's reading holds, so an edit re-renders only the pieces it changed), in

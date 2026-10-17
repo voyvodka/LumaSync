@@ -5,13 +5,13 @@ import {
   type FurniturePlacement,
   type HueChannelPlacement,
   type HueZone,
-  resolveFurnitureType,
   resolveHueFacing,
   resolveHueFixture,
 } from "@/shared/contracts/roomMap";
 import { InfoTip } from "@/shared/ui/InfoTip/InfoTip";
 import { StateWord } from "@/shared/ui/StateWord/StateWord";
 
+import { furnitureName } from "../../model/furnitureName";
 import { hueChannelDotText, hueChannelIdLabel, hueChannelName } from "../../model/hueChannelLabel";
 import { hueToMetres, hueToPlanMetres, planMetresToHue } from "../../model/hueChannelPosition";
 import { HANGING_FIXTURES, hangHeight, isHung } from "../../model/hueHang";
@@ -244,7 +244,7 @@ export function HueChannelInspector({
           {seat && !HANGING_FIXTURES.has(drawnAs) && !standsOn(shownMetres, seat.top) && !locked && (
             <RowLink onClick={() => onHeightChange(metresToHue(seat.top, roomHeightMeters))}>
               {t("roomMap:inspector.hueSeatOn", {
-                name: seat.item.label ?? t(`roomMap:furniture.type.${resolveFurnitureType(seat.item.type)}`),
+                name: furnitureName(seat.item, t),
               })}
             </RowLink>
           )}

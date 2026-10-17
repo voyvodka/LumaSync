@@ -1,5 +1,7 @@
 import type { TFunction } from "i18next";
-import { type RoomMapConfig, resolveFurnitureType } from "@/shared/contracts/roomMap";
+import type { RoomMapConfig } from "@/shared/contracts/roomMap";
+
+import { furnitureName } from "./furnitureName";
 import {
   furnitureObjectId,
   hueChannelObjectId,
@@ -43,7 +45,7 @@ export function buildObjectList(
     rows.push({
       id: furnitureObjectId(f.id),
       type: "furniture",
-      label: f.label ?? t(`roomMap:furniture.type.${resolveFurnitureType(f.type)}`),
+      label: furnitureName(f, t),
       locked: f.locked,
     });
   }

@@ -1,5 +1,4 @@
 import { useCallback } from "react";
-import { useTranslation } from "react-i18next";
 import type {
   FurniturePlacement,
   RoomMapConfig,
@@ -56,7 +55,6 @@ export function useRoomMapObjects({
   selectedId,
   select,
 }: UseRoomMapObjectsArgs): UseRoomMapObjectsReturn {
-  const { t } = useTranslation();
   const { widthMeters, depthMeters } = config.dimensions;
 
   const handleAddTv = useCallback(
@@ -102,12 +100,11 @@ export function useRoomMapObjects({
         y,
         width: size.width,
         height: size.depth,
-        label: t(`roomMap:furniture.type.${type}`),
       };
       apply({ furniture: [...config.furniture, newItem] });
       select(furnitureObjectId(id));
     },
-    [widthMeters, depthMeters, config, apply, select, t],
+    [widthMeters, depthMeters, config, apply, select],
   );
 
   const handleAddUsb = useCallback(() => {
