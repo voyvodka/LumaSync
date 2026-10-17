@@ -254,6 +254,7 @@ vi.mock("@/features/room-view/ui/RoomView3DHost", () => ({
   // False here so the inspector's model choice stays as the other tests expect; a test passes
   // `view3dAvailable` itself.
   ROOM_VIEW_3D_AVAILABLE: false,
+  preloadRoomView3D: () => {},
   RoomView3DHost: ({
     config,
     onPick,

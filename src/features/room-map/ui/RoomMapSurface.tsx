@@ -1,8 +1,8 @@
-import { type CSSProperties, useCallback, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachability";
-import { ROOM_VIEW_3D_AVAILABLE } from "@/features/room-view/ui/RoomView3DHost";
+import { preloadRoomView3D, ROOM_VIEW_3D_AVAILABLE } from "@/features/room-view/ui/RoomView3DHost";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { cx } from "@/shared/lib/cx";
@@ -76,6 +76,10 @@ export function RoomMapSurface({
   const [editTakesFocus, setEditTakesFocus] = useState(false);
   // Edit reads them too: a Hue light's inspector names the model the bridge reports.
   const lampFamilies = useHueLampFamilies(doc.hue.areaChannels, view3dAvailable);
+
+  useEffect(() => {
+    if (view3dAvailable && !viewFailed) preloadRoomView3D();
+  }, [view3dAvailable]);
 
   const handleFace = useCallback((next: RoomFace) => {
     setArrival("chrome");

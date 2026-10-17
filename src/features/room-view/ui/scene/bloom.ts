@@ -36,6 +36,8 @@ const RADIUS = 0.35;
 
 export interface Bloom {
   render(scene: Scene, camera: Camera): void;
+  /** Compiles the programs `render` draws the scene with, which a canvas-bound compile misses. */
+  compile(scene: Scene, camera: Camera): Promise<void>;
   setSize(width: number, height: number): void;
   dispose(): void;
 }
@@ -115,6 +117,30 @@ export function createBloom(renderer: WebGLRenderer, multisample: boolean): Bloo
       }
       mix.uniforms.bloomTexture!.value = glowComposer.readBuffer.texture;
       composer.render();
+    },
+    async compile(scene, camera) {
+      // three keys a program on its render target and the shadow switch, so both passes draw the
+      // room with programs a compile for the canvas never builds; uncompiled, the first frame built
+      // them all at once. `compileAsync` picks the programs before it returns, so the state is put
+      // back before the wait.
+      const target = renderer.getRenderTarget();
+      const shadowsWere = renderer.shadowMap.enabled;
+      const pending: Promise<unknown>[] = [];
+      renderer.setRenderTarget(roomTarget);
+      try {
+        pending.push(renderer.compileAsync(scene, camera));
+        renderer.shadowMap.enabled = false;
+        darken(scene);
+        try {
+          pending.push(renderer.compileAsync(scene, camera));
+        } finally {
+          restore();
+        }
+      } finally {
+        renderer.shadowMap.enabled = shadowsWere;
+        renderer.setRenderTarget(target);
+      }
+      await Promise.all(pending);
     },
     setSize(width, height) {
       const ratio = renderer.getPixelRatio();

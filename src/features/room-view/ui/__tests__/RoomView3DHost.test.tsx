@@ -7,7 +7,12 @@ import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 
 import { COVERED_KEEP_MS, RoomView3DHost } from "../RoomView3DHost";
 
-const windowState = vi.hoisted(() => ({ presence: "visible" as WindowPresence, mounts: 0 }));
+const windowState = vi.hoisted(() => ({
+  presence: "visible" as WindowPresence,
+  mounts: 0,
+  parkedReady: false,
+  drawn: null as (() => void) | null,
+}));
 
 vi.mock("@/features/shell/windowVisibility", () => ({
   useWindowPresence: () => windowState.presence,
@@ -16,12 +21,14 @@ vi.mock("@/features/shell/windowVisibility", () => ({
 vi.mock("../RoomView3D", async () => {
   const { useEffect } = await import("react");
   return {
-    default: function Canvas() {
+    default: function Canvas({ onDrawn }: { onDrawn?: () => void }) {
       useEffect(() => {
         windowState.mounts += 1;
-      }, []);
+        windowState.drawn = onDrawn ?? null;
+      }, [onDrawn]);
       return <div data-testid="room-view-3d-canvas" />;
     },
+    parkedViewReady: () => windowState.parkedReady,
   };
 });
 
@@ -42,9 +49,33 @@ function become(presence: WindowPresence, rerender: (ui: ReactElement) => void) 
 
 afterEach(() => {
   vi.useRealTimers();
+  windowState.parkedReady = false;
+  windowState.drawn = null;
 });
 
+const waitLine = () => screen.getByRole("status", { hidden: true });
+
 describe("RoomView3DHost", () => {
+  it("holds the map's loading line over the night until the room's first frame is drawn", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    await mounted();
+    act(() => vi.advanceTimersByTime(250));
+    expect(waitLine()).toHaveAttribute("data-shown");
+
+    act(() => windowState.drawn?.());
+    act(() => vi.advanceTimersByTime(600));
+    expect(waitLine()).not.toHaveAttribute("data-shown");
+  });
+
+  it("never shows the wait for a parked room adopted already drawn", async () => {
+    // The module is loaded by the test before, as a face switch finds it.
+    windowState.parkedReady = true;
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    await mounted();
+    act(() => vi.advanceTimersByTime(250));
+    expect(waitLine()).not.toHaveAttribute("data-shown");
+  });
+
   it("mounts the view while the window is visible", async () => {
     await mounted();
     expect(windowState.mounts).toBe(1);

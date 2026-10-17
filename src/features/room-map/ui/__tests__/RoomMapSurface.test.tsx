@@ -60,6 +60,7 @@ const viewer = vi.hoisted(() => ({ fail: null as ((error: unknown) => void) | nu
 
 vi.mock("@/features/room-view/ui/RoomView3DHost", () => ({
   ROOM_VIEW_3D_AVAILABLE: true,
+  preloadRoomView3D: () => {},
   RoomView3DHost: (props: ViewerProps) => {
     viewer.fail = props.onFail;
     viewer.props = props;

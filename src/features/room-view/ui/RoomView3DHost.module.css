@@ -16,4 +16,21 @@
   @media (forced-colors: active) {
     .stage { background: Canvas; }
   }
+
+  /* The map's loading line, held over the night until the room's first frame is drawn. */
+  .waiting {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    color: var(--lm-ink-faint);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--lm-dur-base) var(--lm-ease-out);
+  }
+  .waiting[data-shown] { opacity: 1; }
+
+  :global(:root[data-reduced-motion]) .waiting { transition: none; }
 }

@@ -41,7 +41,20 @@ the maintainer saw each time. The park ends early when the window is hidden or t
 finished compiling. Hidden means put away — to the tray, or minimised — and the view goes at once.
 Covered by another window or another Space, the window's document reads hidden too, but the view
 stays mounted for 30 s (`COVERED_KEEP_MS` in `RoomView3DHost.tsx`, read from `useWindowPresence`):
-flicking between windows rebuilt the room on every return. So the room holds still across View | Edit, and only the chrome arrives: the
+flicking between windows rebuilt the room on every return.
+
+**A new view compiles the programs the bloom draws with, not the canvas's.** three keys a program
+on its render target and on the shadow switch, and the bloom draws the room twice into its own
+targets — lit, and darkened with shadows off — so `compileAsync` on the canvas built programs
+nothing drew, and the first frame compiled the real ones on the main thread: 1.9 s on a cold open,
+measured, while the stage showed an empty night. `Bloom.compile` compiles both passes' programs
+before the view counts as ready; the first frame then took 40 ms. The stage keeps the map's
+loading line up until that frame is drawn (`onDrawn`), carrying on from the map's own on a first
+open and held back 200 ms on a rebuild so a quick one never shows it; a parked view is adopted
+already drawn and shows none. Three.js starts loading while the map is still read
+(`preloadRoomView3D`).
+
+So the room holds still across View | Edit, and only the chrome arrives: the
 dock's box stays where it was while its content rises 4 px into it, and the corner drops 4 px into
 place. A stage switch fades the new surface, and the corner slot's zoom or camera, under a dock, a
 corner and any alert that stay. A pick from the first-run templates fades the whole face in. The distances live in the keyframes, because WebKit drops a

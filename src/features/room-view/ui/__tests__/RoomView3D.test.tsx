@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { hueChannelObjectId } from "@/features/room-map/model/objectId";
 import { DEFAULT_ROOM_MAP, type RoomMapConfig } from "@/shared/contracts/roomMap";
 
-import RoomView3D, { __closeParkedRoomViewForTests, type RoomDropTarget } from "../RoomView3D";
+import RoomView3D, { __closeParkedRoomViewForTests, parkedViewReady, type RoomDropTarget } from "../RoomView3D";
 
 const gl = vi.hoisted(() => ({
   throwOnCreate: false,
@@ -93,8 +93,9 @@ vi.mock("../roomScene", async (importOriginal) => {
 vi.mock("../scene/bloom", () => ({
   BLOOM_LAYER: 1,
   OVERLAY: "overlay",
-  createBloom: (renderer: { render: (...args: unknown[]) => void }) => ({
+  createBloom: (renderer: { render: (...args: unknown[]) => void; compileAsync: (...args: unknown[]) => Promise<void> }) => ({
     render: (scene: unknown, camera: unknown) => renderer.render(scene, camera),
+    compile: (scene: unknown, camera: unknown) => renderer.compileAsync(scene, camera),
     setSize: () => {},
     dispose: () => {},
   }),
@@ -140,6 +141,27 @@ describe("RoomView3D", () => {
     expect(container.querySelector("canvas")).toBe(renderer.domElement);
     expect(container.querySelector("[data-ready]")).not.toBeNull();
     unmount();
+  });
+
+  it("says when its first frame is drawn, and at once when it adopts a drawn view", async () => {
+    // A sized host: the view draws nothing into a box with no size.
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 800, 600));
+    const onDrawn = vi.fn<() => void>();
+    const first = render(<RoomView3D config={DEFAULT_ROOM_MAP} label="Room" onFail={() => {}} onDrawn={onDrawn} />);
+    expect(onDrawn).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(onDrawn).toHaveBeenCalledTimes(1);
+    first.unmount();
+    expect(parkedViewReady()).toBe(true);
+
+    const adopted = vi.fn<() => void>();
+    const { unmount } = render(<RoomView3D config={DEFAULT_ROOM_MAP} label="Room" onFail={() => {}} onDrawn={adopted} />);
+    expect(adopted).toHaveBeenCalledTimes(1);
+    expect(onDrawn).toHaveBeenCalledTimes(1);
+    unmount();
+    rect.mockRestore();
   });
 
   it("closes a parked view once the park time passes", async () => {

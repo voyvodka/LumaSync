@@ -178,6 +178,7 @@ function openRoomView(
   onPick: (objectId: string | null) => void,
   onMovePiece: MovePiece | null,
   onHover: (objectId: string | null, clientX: number, clientY: number) => void = () => {},
+  onDrawn: () => void = () => {},
 ): RoomView {
   let host = firstHost;
   const options: SpikeOptions = window.__roomViewSpikeOptions ?? {};
@@ -291,6 +292,7 @@ function openRoomView(
         timings.firstFrameAt = now;
         timings.firstFrameMs = now - started;
         host.setAttribute("data-ready", "");
+        onDrawn();
       }
       // The last few hundred: a view left open for hours grew this by a number a frame.
       if (timings.draws.push(now - t0) > DRAW_TIMINGS_KEPT) timings.draws.shift();
@@ -874,7 +876,7 @@ function openRoomView(
       const begin = async (current: RoomScene) => {
         if (options.asyncCompile ?? true) {
           const t0 = performance.now();
-          await renderer.compileAsync(current.scene, camera);
+          await (bloom ? bloom.compile(current.scene, camera) : renderer.compileAsync(current.scene, camera));
           timings.compileMs = performance.now() - t0;
           if (closed) return;
         }
@@ -1142,7 +1144,10 @@ function openRoomView(
         away = false;
         host = next;
         host.appendChild(renderer.domElement);
-        if (ready) host.setAttribute("data-ready", "");
+        if (ready) {
+          host.setAttribute("data-ready", "");
+          onDrawn();
+        }
         observer?.disconnect();
         observer = new ResizeObserver(fit);
         observer.observe(host);
@@ -1173,8 +1178,9 @@ interface Handlers {
   pick: (objectId: string | null) => void;
   move: MovePiece;
   hover: (objectId: string | null, clientX: number, clientY: number) => void;
+  drawn: () => void;
 }
-const IDLE: Handlers = { fail: () => {}, pick: () => {}, move: () => false, hover: () => {} };
+const IDLE: Handlers = { fail: () => {}, pick: () => {}, move: () => false, hover: () => {}, drawn: () => {} };
 /** A new context, its shaders and the scene paused every face or stage switch; one is kept this long. */
 const PARK_MS = 20_000;
 let parked: { view: RoomView; handlers: Handlers; timer: ReturnType<typeof setTimeout> } | null = null;
@@ -1196,6 +1202,11 @@ function park(view: RoomView, handlers: Handlers) {
     view.close();
   }, PARK_MS);
   parked = { view, handlers, timer };
+}
+
+/** Whether a view put away moments ago is waiting, compiled, for the next one to adopt. */
+export function parkedViewReady(): boolean {
+  return parked?.view.ready() ?? false;
 }
 
 export function __closeParkedRoomViewForTests(): void {
@@ -1229,6 +1240,7 @@ export default function RoomView3D({
   onHover,
   onMovePiece,
   onFail,
+  onDrawn,
   dropRef,
   morphKey,
 }: {
@@ -1252,6 +1264,8 @@ export default function RoomView3D({
   onHover?: (objectId: string | null, clientX: number, clientY: number) => void;
   /** No view could be drawn — no WebGL context, or the scene failed to build. */
   onFail: (error: unknown) => void;
+  /** The room's first frame is on the canvas. */
+  onDrawn?: () => void;
   /** Filled while the view is open, for a library card dragged in from the dock. */
   dropRef?: MutableRefObject<RoomDropTarget | null>;
   /** Changed with a room it should become piece by piece, as a template does. */
@@ -1268,6 +1282,8 @@ export default function RoomView3D({
   onMoveRef.current = onMovePiece;
   const onHoverRef = useRef(onHover);
   onHoverRef.current = onHover;
+  const onDrawnRef = useRef(onDrawn);
+  onDrawnRef.current = onDrawn;
   const selectedRef = useRef(selectedId);
   selectedRef.current = selectedId;
   const zonesRef = useRef(zones);
@@ -1283,6 +1299,7 @@ export default function RoomView3D({
       pick: (objectId) => onPickRef.current?.(objectId),
       move: (objectId, x, z, turn, riders, raised) => onMoveRef.current?.(objectId, x, z, turn, riders, raised) ?? false,
       hover: (objectId, x, y) => onHoverRef.current?.(objectId, x, y),
+      drawn: () => onDrawnRef.current?.(),
     };
     let kept = unpark(host, mine);
     if (!kept) {
@@ -1294,6 +1311,7 @@ export default function RoomView3D({
           (objectId) => handlers.pick(objectId),
           (objectId, x, z, turn, riders, raised) => handlers.move(objectId, x, z, turn, riders, raised),
           (objectId, x, y) => handlers.hover(objectId, x, y),
+          () => handlers.drawn(),
         );
         kept = { view, handlers };
       } catch (error) {
