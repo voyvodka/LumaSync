@@ -290,6 +290,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
       half: [rx, Math.max(ry, 0.04), rz],
       angle: 0,
       rises: true,
+      stored: point,
     });
     const outside = corners !== null && outsideOutline(fixture.glow.at.x + W / 2, fixture.glow.at.z + D / 2, corners);
     return {

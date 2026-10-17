@@ -168,6 +168,7 @@ const POLAR = 0.8;
  *  plan's rule, `CLICK_SLOP_PX` in snapGeometry.ts, so a nudge while clicking a lamp does not throw
  *  the selection away). */
 const CLICK_SLOP_PX = 6;
+const DRAW_TIMINGS_KEPT = 600;
 
 /** The renderer, camera and controls live as long as the view; a room-map change swaps only the
  *  scene. Throws when no WebGL context can be had. */
@@ -291,7 +292,8 @@ function openRoomView(
         timings.firstFrameMs = now - started;
         host.setAttribute("data-ready", "");
       }
-      timings.draws.push(now - t0);
+      // The last few hundred: a view left open for hours grew this by a number a frame.
+      if (timings.draws.push(now - t0) > DRAW_TIMINGS_KEPT) timings.draws.shift();
       if (moving || room.settling()) request();
     };
     let away = false;
@@ -409,6 +411,9 @@ function openRoomView(
       kind: string;
       dx: number;
       dz: number;
+      /** From the box's middle to where the piece is stored. */
+      storedDx: number;
+      storedDz: number;
       ghost: LineSegments;
       /** A high light's line to the floor, riding in the ghost. */
       plumb: Plumb | null;
@@ -518,6 +523,8 @@ function openRoomView(
           kind: item.kind,
           dx: item.centre.x - onFloor.x,
           dz: item.centre.z - onFloor.z,
+          storedDx: (item.stored?.x ?? item.centre.x) - item.centre.x,
+          storedDz: (item.stored?.z ?? item.centre.z) - item.centre.z,
           ghost,
           plumb,
           lifted: null,
@@ -620,7 +627,7 @@ function openRoomView(
       // Landed, it stays where it was let go until the scene is rebuilt from the landed room; a
       // landing refused, or Esc, puts it back.
       const raised = c.rise !== 0 ? { rise: c.rise, centreY: c.fromY + c.rise } : undefined;
-      const landed = commit && c.moved && onMovePiece?.(c.id, c.ghost.position.x, c.ghost.position.z, c.turn, c.lifted?.riders ?? [], raised) === true;
+      const landed = commit && c.moved && onMovePiece?.(c.id, c.ghost.position.x + c.storedDx, c.ghost.position.z + c.storedDz, c.turn, c.lifted?.riders ?? [], raised) === true;
       // Still lifted where it was let go: the landed room must be built, not read as a slide of it.
       if (landed && c.lifted) builtConfig = null;
       if (c.lifted && !landed) {

@@ -23,6 +23,9 @@ export interface Pickable {
   legs?: readonly PickLeg[];
   /** A backlight's box round the screen: the screen is picked where the ray meets both, the strip on its rim. */
   around?: string;
+  /** Where it is stored when that is not the box's middle: a one-sided lamp glows off its mount, and
+   *  a carry landed at the glow moved it a couple of centimetres every time. */
+  stored?: ScenePoint;
 }
 
 export type PickLeg = Pick<Pickable, "centre" | "half" | "angle">;

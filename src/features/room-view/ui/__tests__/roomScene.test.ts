@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { furnitureObjectId, hueChannelObjectId, TV_ANCHOR_OBJECT_ID } from "@/features/room-map/model/objectId";
 import { DEFAULT_ROOM_MAP, type RoomMapConfig, type UsbStripPlacement } from "@/shared/contracts/roomMap";
 
-import { roomToScene } from "../../model/roomSpace";
+import { hueChannelScenePoint, roomToScene, tvMountHeight } from "../../model/roomSpace";
 import { LAMP_LIGHTS } from "../scene/lampLights";
 import { buildRoomScene, disposeScene } from "../roomScene";
 
@@ -328,6 +328,18 @@ describe("buildRoomScene — picking and the selection mark", () => {
     const room = buildRoomScene(furnished, OPTIONS);
     expect(room.pickables.map((p) => p.id).sort()).toEqual(["furniture-chair", "furniture-sofa", "hue-0", "hue-1", "tv"]);
     expect(room.pickables.find((p) => p.id === "furniture-chair")?.angle).toBeCloseTo(Math.PI / 2);
+    disposeScene(room.scene);
+  });
+
+  // A Play bar's glow sits off its mount: a carry landed at the glow walked it 2 cm a time.
+  it("says where a one-sided lamp is stored, apart from the glow it is picked by", () => {
+    const bar = [{ channelIndex: 0, x: 0.2, y: 0, z: 0.3, zOrigin: "bridge" as const }];
+    const room = buildRoomScene({ ...furnished, hueChannels: bar }, { ...OPTIONS, lampFamilies: new Map([[0, "playBar" as const]]) });
+    const lamp = room.pickables.find((p) => p.id === "hue-0")!;
+    const point = hueChannelScenePoint(bar[0]!, furnished.zones, furnished.dimensions, tvMountHeight(furnished.tvAnchor, furnished.dimensions));
+    expect(lamp.stored?.x).toBeCloseTo(point.x);
+    expect(lamp.stored?.z).toBeCloseTo(point.z);
+    expect(Math.hypot(lamp.centre.x - point.x, lamp.centre.z - point.z)).toBeGreaterThan(0.01);
     disposeScene(room.scene);
   });
 
