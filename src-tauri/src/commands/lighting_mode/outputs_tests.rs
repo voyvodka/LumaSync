@@ -29,7 +29,7 @@ use super::preview_scene::{start_scene_queued, stop_scene_lighting};
 use super::snapshot::{BootHueRetryState, HueLeftOutReason, LightingPhase, OutputTarget};
 use super::strip_set::StripSet;
 use super::test_support::{Rig, RigSetup};
-use super::transition::set_lighting_mode_blocking;
+use super::transition::{set_lighting_mode_blocking, stop_lighting};
 use super::tuning::{retune_lighting, LightingTuning};
 use super::{
     stop_lighting_blocking, AmbilightPayload, LightingModeConfig, LightingModeKind,
@@ -2645,6 +2645,74 @@ fn restoring_ambilight() -> Rig {
     })
 }
 
+#[test]
+fn a_join_queued_behind_a_stop_does_not_relight() {
+    let rig = restoring(json!(["usb", "hue"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+    // Holds the lighting turn, so what is sent meanwhile queues in order.
+    let state = rig.state();
+    let turn = block_on(state.transitions.lock());
+    let handle = rig.handle();
+    let stop = spawn(async move { stop_lighting(handle).await });
+    std::thread::sleep(Duration::from_millis(50));
+
+    strip_connects(&rig);
+    std::thread::sleep(Duration::from_millis(50));
+    drop(turn);
+    block_on(stop).unwrap().unwrap();
+
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(
+        rig.running().kind,
+        LightingModeKind::Off,
+        "{:?}",
+        events(&rig)
+    );
+}
+
+#[test]
+fn a_join_queued_behind_off_does_nothing() {
+    let rig = restoring(json!(["usb", "hue"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+    let state = rig.state();
+    let turn = block_on(state.transitions.lock());
+    strip_connects(&rig);
+    std::thread::sleep(Duration::from_millis(50));
+    let off = spawn_apply(&rig, user(Some(off()), None));
+    std::thread::sleep(Duration::from_millis(50));
+    rig.log.clear();
+
+    drop(turn);
+    block_on(off).unwrap().unwrap();
+
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(rig.running().kind, LightingModeKind::Off);
+    assert_eq!(mode_events(&rig), vec!["mode:off:"], "{:?}", events(&rig));
+}
+
+#[test]
+fn two_binds_before_the_join_runs_apply_once() {
+    let rig = restoring(json!(["usb", "hue"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+    rig.log.clear();
+    let state = rig.state();
+    let turn = block_on(state.transitions.lock());
+    strip_connects(&rig);
+    note_local_sink_connected(&rig.handle());
+    std::thread::sleep(Duration::from_millis(50));
+
+    drop(turn);
+
+    wait_until("the strip never joined", || {
+        targets(&rig) == names(&["usb", "hue"])
+    });
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(mode_events(&rig).len(), 1, "{:?}", events(&rig));
+}
+
 /// A scene reads Hue off the stream store, which the fake driver leaves empty.
 fn hue_streams_for_scenes(rig: &Rig) {
     let handle = rig.handle();
@@ -2727,6 +2795,32 @@ fn a_strip_that_binds_during_a_test_pattern_joins_once_it_stops() {
     wait_until("the strip never joined after the test", || {
         targets(&rig) == names(&["usb", "hue"])
     });
+}
+
+#[test]
+fn a_join_queued_behind_a_scene_leaves_it_alone() {
+    let rig = restoring(json!(["usb", "hue"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+    let state = rig.state();
+    let turn = block_on(state.transitions.lock());
+    let handle = rig.handle();
+    let scene = spawn(async move { start_scene_queued(handle, SceneKind::Spiral).await });
+    std::thread::sleep(Duration::from_millis(50));
+
+    strip_connects(&rig);
+    std::thread::sleep(Duration::from_millis(50));
+    drop(turn);
+    block_on(scene).unwrap().unwrap();
+
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(
+        rig.running().kind,
+        LightingModeKind::Ambilight,
+        "{:?}",
+        events(&rig)
+    );
+    assert!(rig.state().runtime.lock().unwrap().preview.scene.is_some());
 }
 
 // ---------------------------------------------------------------------------
