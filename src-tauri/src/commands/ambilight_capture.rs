@@ -26,6 +26,20 @@ fn downscaled_dimensions(width: u32, height: u32, stride: usize) -> (u32, u32) {
     )
 }
 
+/// Once per source size, not per frame: the capture callback runs at display rate.
+#[cfg(any(target_os = "windows", test))]
+fn downscale_log_due(
+    last: &mut Option<(u32, u32)>,
+    width: u32,
+    height: u32,
+    stride: usize,
+) -> bool {
+    let size = (stride > 1).then_some((width, height));
+    let due = size.is_some() && size != *last;
+    *last = size;
+    due
+}
+
 /// Drop the fourth byte of every source pixel, keeping every `stride`-th
 /// pixel on both axes.
 ///
@@ -558,6 +572,7 @@ mod platform {
 
     struct WindowsLiveCaptureHandler {
         latest_frame: SharedFrame,
+        logged_downscale: Option<(u32, u32)>,
     }
 
     impl GraphicsCaptureApiHandler for WindowsLiveCaptureHandler {
@@ -567,6 +582,7 @@ mod platform {
         fn new(ctx: windows_capture::capture::Context<Self::Flags>) -> Result<Self, Self::Error> {
             Ok(Self {
                 latest_frame: ctx.flags,
+                logged_downscale: None,
             })
         }
 
@@ -601,9 +617,9 @@ mod platform {
             // See docs/architecture/capture-and-pipeline.md.
             let stride = super::downscale_stride(width, height);
             let (out_w, out_h) = super::downscaled_dimensions(width, height, stride);
-            if stride > 1 {
+            if super::downscale_log_due(&mut self.logged_downscale, width, height, stride) {
                 log::debug!(
-                    "[ambilight-capture/windows] 4K downscale active: src={}x{} stride={} → ~{}x{}",
+                    "[ambilight-capture/windows] downscale active: src={}x{} stride={} → ~{}x{}",
                     width,
                     height,
                     stride,
@@ -1473,8 +1489,8 @@ mod tests {
     #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     use super::{create_live_frame_source, AmbilightCaptureError};
     use super::{
-        downscale_stride, downscaled_dimensions, select_display_index, subsample_rgb,
-        DisplayCandidate, MAX_CAPTURE_DIM,
+        downscale_log_due, downscale_stride, downscaled_dimensions, select_display_index,
+        subsample_rgb, DisplayCandidate, MAX_CAPTURE_DIM,
     };
 
     /// Where the twin cannot be excluded it hides while capture runs, so the
@@ -1548,6 +1564,20 @@ mod tests {
         assert_eq!(downscale_stride(2560, 1080), 4);
         // Portrait: the longest edge drives the stride regardless of axis.
         assert_eq!(downscale_stride(1080, 3840), 6);
+    }
+
+    #[test]
+    fn downscale_log_is_due_once_per_source_size() {
+        let mut last = None;
+        let mut due = |w, h| downscale_log_due(&mut last, w, h, downscale_stride(w, h));
+        assert!(due(1920, 1080));
+        assert!(
+            !due(1920, 1080),
+            "a second frame of the same size logs nothing"
+        );
+        assert!(due(3840, 2160), "a resolution change logs again");
+        assert!(!due(640, 480), "a frame under the cap is not downscaled");
+        assert!(due(3840, 2160), "coming back over the cap logs again");
     }
 
     #[test]

@@ -4,7 +4,7 @@ How a lighting choice reaches the hardware: the mode, the outputs it runs on, th
 the order they move in. Implementation in `src-tauri/src/commands/lighting_mode/` — `outputs/`
 (`mod.rs` the state, readers and commands; `transaction.rs` the transaction itself; `away_tray.rs`
 away edges, settings saves and the tray; `lease.rs` the Hue test lease; `boot.rs` the launch
-restore's waits; `wled_off.rs` a WLED switch-off), `snapshot.rs` (what runs), `tuning.rs` (retunes), `hue_driver.rs` (Hue start and
+restore's waits and a strip's later join; `wled_off.rs` a WLED switch-off), `snapshot.rs` (what runs), `tuning.rs` (retunes), `hue_driver.rs` (Hue start and
 stop), `config_check.rs` (what a mode must pass before it starts) — and
 `commands/hue/hue_config.rs` (the Hue start request from saved state). Contract in
 `src/shared/contracts/lightingRuntime.ts`.
@@ -335,14 +335,35 @@ waits for one (`wait_for_local_sink`): the first serial connect or WLED bind wit
 (`BOOT_SINK_WAIT_WINDOW`, `note_local_sink_connected` from `connect_serial_port` and
 `connect_wled_sink`) runs one `BootSinkRetry` transaction that resumes the mode on the strip, or adds
 the strip beside the Hue it runs on. Like the boot restore it saves nothing. Any request that says
-what should run — a choice, an unplug, a newer launch — ends the wait, and a connect after the
-window starts nothing. A strip that connected while the restore was still running is caught when
-the wait is set up. When the Hue wait is also pending, the strip resume leaves Hue to it.
+what should run — a choice, an unplug, a newer launch — ends the wait. A strip that connected while
+the restore was still running is caught when the wait is set up. When the Hue wait is also pending,
+the strip resume leaves Hue to it.
+
+**A strip that connects later** joins a mode that is running without it. Past the wait, a mode
+running on Hue with `usb` still selected drove nothing on the strip that bound minutes later, while
+the Lights toggle showed it on. Now any bind outside the wait (`join_local_sink`) checks the same
+thing `sink_join_due` names — a mode runs, it is the one the intent asks for, the selection names
+`usb`, and `usb` is not driven — and runs one `SinkJoin` transaction that re-plans onto the
+selection. That is a worker restart, as the Outputs toggle's is: the targets change, so the old
+worker stops and capture reopens while the Hue keep-alive carries the bridge. A Hue that is
+reconnecting stays in: the join skips the Hue start, which would answer "already active", and waives
+the Hue gate as the settings refresh does, since the gate would refuse the stream and the join would
+then stop it. A mode that is Off stays Off, whether the user chose it or the launch restore ended
+there for want of a strip: a light coming on by itself minutes after launch would be the surprise.
+The join takes the newest ticket as it stands, as the settings refresh does, instead of issuing one:
+it never supersedes a choice in flight, and a choice made after it supersedes it. Since a ticket it
+shares does not stop it from running first, it asks `sink_join_due` again in its turn and does
+nothing if what ran before it already answered the join, if a test pattern or preview scene owns the
+lights, or if a choice that shares its ticket is still to be saved (that choice's own turn answers
+it, with its own reply). A choice still on its way, whose kind differs from what runs, is left to run
+on the strip itself. A test pattern or preview scene that ends restores the mode on what ran before
+it, so its stop asks for the join too. Like the boot resume, the join saves nothing.
 
 The main window no longer awaits the restore: it can wait seconds on a Hue start, and the tray
-labels, onboarding and prompts waited with it. Only the USB reconciler and the Hue auto-add
-(below) still wait (`lightingRestored`), because they write a selection from the one they read and
-the restore is what sets it.
+labels, onboarding and prompts waited with it. Only the USB reconciler, the Hue auto-add (below)
+and a WLED device connected on Devices still wait (`lightingRestored`), because they write a
+selection from the one they read and the restore is what sets it. The WLED connect is held until
+then rather than dropped, since nothing else would add it later.
 
 **The Hue test lease**, ported from the frontend's: `origin: "leaseHue"` with targets naming Hue brings
 the stream up for a test run and remembers whether it opened it; any other targets hand it back —

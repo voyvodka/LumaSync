@@ -12,6 +12,8 @@ pub(super) enum TxKind {
     /// The boot restore's resume once the strip or WLED panel it found
     /// missing connects.
     BootSinkRetry,
+    /// A strip or WLED panel bound while the mode ran without the `usb` it selects. Saves nothing.
+    SinkJoin,
     /// `previous` is the selection before the strip went away.
     UsbUnplug {
         previous: OutputTargets,
@@ -121,14 +123,6 @@ impl<'a, R: Runtime> Transaction<'a, R> {
     fn hue_request(&self) -> Option<StartHueStreamRequest> {
         self.persisted()
             .and_then(|state| hue_start_request(&state, HueRuntimeTriggerSource::ModeControl))
-    }
-
-    async fn apply(
-        &mut self,
-        kind: &LightingModeKind,
-        targets: &[OutputTarget],
-    ) -> Result<LightingModeCommandResult, String> {
-        self.apply_waiving(kind, targets, false).await
     }
 
     /// `waive_hue_gate` keeps a mode that already runs on Hue on it while the
@@ -265,6 +259,22 @@ impl<'a, R: Runtime> Transaction<'a, R> {
             }
             let running = blocking(self.app, read_running).await?;
             return self.reconcile_refresh(&intent, &running).await;
+        }
+        if self.kind == TxKind::SinkJoin {
+            // Asked again in the turn: what ran before it may have answered the join.
+            // A choice still to save shares this ticket and gets its own turn to answer.
+            let running = blocking(self.app, read_running).await?;
+            if intent.persist_mode
+                || !sink_join_due(&intent, running.kind, &running_targets(&running))
+                || !usb_available(self.app)
+                || blocking(self.app, preview_owns_lights).await?
+            {
+                info!(
+                    "[outputs] #{} strip join no longer due; nothing changed",
+                    self.ticket
+                );
+                return Ok(Ending::Applied);
+            }
         }
         self.publish_phase(if intent.kind == LightingModeKind::Off {
             LightingPhase::Stopping
@@ -418,12 +428,15 @@ impl<'a, R: Runtime> Transaction<'a, R> {
                     || self.state.outputs.boot_hue_parked()));
         let running_before = running_targets(running);
         let hue_ran_before = running_before.contains(&OutputTarget::Hue);
+        // A join keeps a reconnecting Hue as the settings refresh does: a start
+        // answers "already active", and the gate would then stop the stream.
+        let waive_hue_gate = self.kind == TxKind::SinkJoin && hue_ran_before;
 
         self.state.tuning.close(Some(intent.kind)).await;
 
         // Phase 1 — Hue first: the worker is handed the stream it will drive,
         // so a stream that is not up yet leaves the worker without Hue.
-        let mut hue_ok = self.hue_live();
+        let mut hue_ok = self.hue_live() || waive_hue_gate;
         let mut had_config = true;
         let mut hue_moved = false;
         if want_hue && hue_ok {
@@ -505,7 +518,10 @@ impl<'a, R: Runtime> Transaction<'a, R> {
             self.applied_generation = self.state.tuning.stored().generation;
         } else {
             self.publish_phase(LightingPhase::Applying);
-            let mut result = match self.apply(&intent.kind, &run_on).await {
+            let mut result = match self
+                .apply_waiving(&intent.kind, &run_on, waive_hue_gate)
+                .await
+            {
                 Ok(result) => result,
                 Err(error) => {
                     warn!("[outputs] apply failed: {error}");
@@ -534,7 +550,10 @@ impl<'a, R: Runtime> Transaction<'a, R> {
                 if self.superseded() {
                     return Ok(Ending::Superseded);
                 }
-                result = match self.apply(&intent.kind, &run_on).await {
+                result = match self
+                    .apply_waiving(&intent.kind, &run_on, waive_hue_gate)
+                    .await
+                {
                     Ok(result) => result,
                     Err(error) => {
                         return self
@@ -567,7 +586,10 @@ impl<'a, R: Runtime> Transaction<'a, R> {
                     if self.superseded() {
                         return Ok(Ending::Superseded);
                     }
-                    result = match self.apply(&intent.kind, &run_on).await {
+                    result = match self
+                        .apply_waiving(&intent.kind, &run_on, waive_hue_gate)
+                        .await
+                    {
                         Ok(result) => result,
                         Err(error) => {
                             return self
@@ -603,7 +625,10 @@ impl<'a, R: Runtime> Transaction<'a, R> {
                 if self.superseded() {
                     return Ok(Ending::Superseded);
                 }
-                result = match self.apply(&intent.kind, &run_on).await {
+                result = match self
+                    .apply_waiving(&intent.kind, &run_on, waive_hue_gate)
+                    .await
+                {
                     Ok(result) => result,
                     Err(error) => {
                         return self

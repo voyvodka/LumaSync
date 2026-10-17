@@ -3,11 +3,11 @@ import type { ReactNode } from "react";
 // the layout, its panels and the four stores are real, so a count that moves
 // is a render the stores or the memo boundaries let through.
 
-import { act, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SECTION_IDS, type SectionId } from "@/shared/contracts/shell";
-import type { LightingModeConfig } from "@/shared/contracts/mode";
+import { normalizeOutputTargets, type LightingModeConfig } from "@/shared/contracts/mode";
 import { renderWithShellStores } from "@/test/shellProviders";
 
 const renders: Record<string, number> = {};
@@ -51,17 +51,20 @@ vi.mock("@/features/device/ui/DevicesPage", () => ({
     hueActive,
     ledSetup,
     renderLedSetup,
+    onWledConnected,
   }: {
     categoryRequest: { category: string } | null;
     hueActive?: boolean;
     ledSetup?: { stripId: string | null } | null;
     renderLedSetup?: (target: { strip: null; name: string; primary: boolean; port: null }) => ReactNode;
+    onWledConnected?: () => void;
   }) => {
     count("devices");
     return (
       <>
         <p data-testid="devices-category">{categoryRequest?.category ?? ""}</p>
         <p data-testid="devices-hue-active">{String(hueActive)}</p>
+        <button type="button" data-testid="devices-wled-connected" onClick={onWledConnected} />
         {ledSetup ? renderLedSetup?.({ strip: null, name: "Strip", primary: true, port: null }) : null}
       </>
     );
@@ -135,6 +138,45 @@ const DOWNLOADING = (progress: number) => ({
   checkFailedNotice: null,
   upToDateAt: null,
   checkedAt: null,
+});
+
+describe("a WLED device the user connects on Devices", () => {
+  it("adds the local output to the selection", async () => {
+    const shell = renderWithShellStores(<SettingsLayout />, {
+      navigation: { uiMode: "full", activeSection: SECTION_IDS.DEVICES },
+      lighting: { outputTargets: ["hue"] },
+    });
+
+    fireEvent.click(await screen.findByTestId("devices-wled-connected"));
+
+    expect(shell.lightingActions.changeOutputTargets).toHaveBeenCalledWith(normalizeOutputTargets(["hue", "usb"]));
+  });
+
+  it("leaves a selection that already has it alone", async () => {
+    const shell = renderWithShellStores(<SettingsLayout />, {
+      navigation: { uiMode: "full", activeSection: SECTION_IDS.DEVICES },
+      lighting: { outputTargets: ["usb"] },
+    });
+
+    fireEvent.click(await screen.findByTestId("devices-wled-connected"));
+
+    expect(shell.lightingActions.changeOutputTargets).not.toHaveBeenCalled();
+  });
+
+  it("waits for the launch restore, whose selection it adds to", async () => {
+    const shell = renderWithShellStores(<SettingsLayout />, {
+      navigation: { uiMode: "full", activeSection: SECTION_IDS.DEVICES },
+      lighting: { outputTargets: [], lightingRestored: false },
+    });
+
+    fireEvent.click(await screen.findByTestId("devices-wled-connected"));
+    expect(shell.lightingActions.changeOutputTargets).not.toHaveBeenCalled();
+
+    act(() => shell.setLighting({ outputTargets: ["hue"], lightingRestored: true }));
+
+    expect(shell.lightingActions.changeOutputTargets).toHaveBeenCalledOnce();
+    expect(shell.lightingActions.changeOutputTargets).toHaveBeenCalledWith(normalizeOutputTargets(["hue", "usb"]));
+  });
 });
 
 describe("SettingsLayout render boundaries", () => {

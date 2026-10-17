@@ -28,6 +28,8 @@ export interface LightingControlState {
   /** The shell boot has settled. Before it the saved pairing is unread, so the
    *  output gate reports checking rather than "no reachable output". */
   bootstrapDone: boolean;
+  /** The launch restore has set the selection; a write before it would save over the stored one. */
+  lightingRestored: boolean;
 }
 
 /** Apply, retune and release all go through the orchestrator's transaction. */

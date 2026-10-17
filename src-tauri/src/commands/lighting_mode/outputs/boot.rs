@@ -341,18 +341,17 @@ pub(super) fn wait_for_local_sink<R: Runtime>(app: &AppHandle<R>, kind: Lighting
 
 /// A serial strip or a WLED panel was bound. Resumes a launch restore that
 /// was waiting for one: the mode it could not run, or the strip beside the
-/// Hue it ran on.
+/// Hue it ran on. Past that wait, a running mode whose selection names the
+/// strip takes it in.
 pub fn note_local_sink_connected<R: Runtime>(app: &AppHandle<R>) {
     let Some(state) = app.try_state::<LightingRuntimeState>() else {
         return;
     };
-    let Some(wait) = locked(&state.outputs.boot_sink_wait).take() else {
+    let wait = locked(&state.outputs.boot_sink_wait).take();
+    let Some(wait) = wait.filter(|wait| Instant::now() < wait.deadline) else {
+        join_local_sink(app);
         return;
     };
-    if Instant::now() >= wait.deadline {
-        info!("[outputs] a strip connected after the boot wait ended; the user picks the mode");
-        return;
-    }
     let seen = state.outputs.latest_ticket.load(Ordering::SeqCst);
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -376,4 +375,51 @@ pub fn note_local_sink_connected<R: Runtime>(app: &AppHandle<R>) {
             Err(error) => warn!("[outputs] boot strip resume failed: {error}"),
         }
     });
+}
+
+/// Also called when a test pattern or preview scene gives the lights back: its
+/// restore runs the mode on what ran before it. Off stays Off. See
+/// docs/architecture/lighting-transaction.md ("A strip that connects later").
+pub(crate) fn join_local_sink<R: Runtime>(app: &AppHandle<R>) {
+    let state = app.state::<LightingRuntimeState>();
+    let snapshot = state.snapshot.read();
+    if !sink_join_due(
+        &state.outputs.intent(),
+        snapshot.mode.kind,
+        &snapshot.active_targets,
+    ) || !usb_available(app)
+    {
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<LightingRuntimeState>();
+        // The newest ticket, not a new one: a choice in flight is never
+        // superseded by this, and one made after it supersedes it.
+        let ticket = state.outputs.latest_ticket.load(Ordering::SeqCst);
+        info!("[outputs] a strip is bound while the mode runs without it; adding it");
+        match run_ticketed(&app, ticket, TxKind::SinkJoin).await {
+            Ok(result) if result.snapshot.active_targets.contains(&OutputTarget::Usb) => {
+                info!("[outputs] strip join: {}", result.status.code)
+            }
+            Ok(result) => info!(
+                "[outputs] strip join left the strip out: {}",
+                result.status.code
+            ),
+            Err(error) => warn!("[outputs] strip join failed: {error}"),
+        }
+    });
+}
+
+/// A choice still on its way, with a kind other than what runs, takes the strip itself.
+pub(super) fn sink_join_due(
+    intent: &LightingIntent,
+    running: LightingModeKind,
+    driven: &[OutputTarget],
+) -> bool {
+    intent.known
+        && running != LightingModeKind::Off
+        && intent.kind == running
+        && intent.targets.contains(&OutputTarget::Usb)
+        && !driven.contains(&OutputTarget::Usb)
 }

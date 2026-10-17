@@ -18,26 +18,35 @@ use tauri::async_runtime::{block_on, spawn, JoinHandle};
 use tauri::Manager;
 
 use super::hue_driver::HueAreaVerdict;
+use super::led_test_pattern::{apply_and_broadcast, stop_led_test_pattern};
 use super::outputs::{
     apply_outputs_with, listen_hue_health, note_hue_reachable, note_local_sink_connected,
     note_settings_saved, refresh_running_with, release_hue_with, wait_for_area_release,
     ApplyOutputsRequest, ApplyOutputsResult, CancelToken, LightingOrigin, ReleaseWait,
     BOOT_HUE_RETRY_POLL, BOOT_HUE_RETRY_WINDOW,
 };
+use super::preview_scene::{start_scene_queued, stop_scene_lighting};
 use super::snapshot::{BootHueRetryState, HueLeftOutReason, LightingPhase, OutputTarget};
+use super::strip_set::StripSet;
 use super::test_support::{Rig, RigSetup};
-use super::transition::set_lighting_mode_blocking;
+use super::transition::{set_lighting_mode_blocking, stop_lighting};
 use super::tuning::{retune_lighting, LightingTuning};
 use super::{
     stop_lighting_blocking, AmbilightPayload, LightingModeConfig, LightingModeKind,
     SolidColorPayload, ACTIVE_AMBILIGHT_WORKERS,
 };
 use crate::commands::hue::light_restore::HueLightsAfterStop;
-use crate::commands::hue::state_store::HueRuntimeTriggerSource;
+use crate::commands::hue::state_store::test_helpers::dummy_active_stream_context;
+use crate::commands::hue::state_store::{
+    HueActiveOutputContext, HueRuntimeStateStore, HueRuntimeTriggerSource,
+};
 use crate::commands::led_output::{
     encode_packet_for_output, ColorCorrectionConfig, EncoderPlan, FirmwareProfile, LedChipType,
 };
 use crate::commands::local_outputs::LocalOutputRegistry;
+use crate::commands::preview::{PreviewSessionState, SceneKind};
+use crate::commands::runtime_telemetry::RuntimeTelemetryState;
+use crate::commands::test_pattern::{TestPatternConfig, TestPatternKind, TestPatternSpeed};
 use crate::commands::wled_sink::{WledProtocol, WledSinkConfig};
 use crate::shutdown::{app_cleanup_steps, run_cleanup, CleanupBudget};
 
@@ -2553,7 +2562,7 @@ fn a_choice_made_before_the_strip_connects_ends_the_wait() {
 }
 
 #[test]
-fn a_strip_that_connects_after_the_wait_starts_nothing() {
+fn a_restore_that_ended_off_stays_off_when_the_strip_connects_late() {
     let rig = restoring(json!(["usb"]));
     apply(&rig, request(LightingOrigin::Boot, None, None));
     rig.state().outputs.lapse_boot_sink_wait();
@@ -2562,6 +2571,256 @@ fn a_strip_that_connects_after_the_wait_starts_nothing() {
 
     std::thread::sleep(Duration::from_millis(200));
     assert!(mode_events(&rig).is_empty(), "{:?}", events(&rig));
+}
+
+#[test]
+fn a_strip_that_connects_after_the_wait_joins_the_mode_running_without_it() {
+    let rig = restoring(json!(["usb", "hue"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+
+    strip_connects(&rig);
+
+    wait_until("the strip never joined", || {
+        let snapshot = rig.state().snapshot.read();
+        snapshot.active_targets == vec![Usb, Hue] && snapshot.phase == LightingPhase::Idle
+    });
+    assert_eq!(
+        events(&rig).iter().filter(|e| *e == "hue:start").count(),
+        1,
+        "the stream is kept, not restarted: {:?}",
+        events(&rig)
+    );
+    assert!(rig.written_keys().is_empty(), "a join saves nothing");
+}
+
+#[test]
+fn a_strip_the_user_deselected_does_not_join() {
+    let rig = restoring(json!(["usb", "hue"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    apply(&rig, user(None, Some(&[Hue])));
+    let before = mode_events(&rig).len();
+
+    strip_connects(&rig);
+
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(mode_events(&rig).len(), before, "{:?}", events(&rig));
+    assert_eq!(rig.state().snapshot.read().active_targets, vec![Hue]);
+}
+
+fn targets(rig: &Rig) -> Option<Vec<String>> {
+    rig.running().targets
+}
+
+fn names(targets: &[&str]) -> Option<Vec<String>> {
+    Some(targets.iter().map(|t| t.to_string()).collect())
+}
+
+#[test]
+fn a_strip_that_joins_while_hue_reconnects_keeps_hue() {
+    let rig = restoring(json!(["usb", "hue"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+    rig.hue.stream_drops();
+    // What the runtime answers a start while it reconnects.
+    rig.hue.script_starts(&["HUE_START_NOOP_ALREADY_ACTIVE"]);
+
+    strip_connects(&rig);
+
+    wait_until("the strip never joined beside Hue", || {
+        targets(&rig) == names(&["usb", "hue"])
+    });
+    assert!(!has(&rig, "hue:stop:system"), "{:?}", events(&rig));
+    assert_eq!(rig.state().snapshot.read().selected_targets, vec![Usb, Hue]);
+}
+
+fn restoring_ambilight() -> Rig {
+    Rig::new(RigSetup {
+        serial_connected: false,
+        state: json!({
+            "lightingMode": ambilight(1.0),
+            "lastOutputTargets": ["usb", "hue"]
+        }),
+        ..RigSetup::default()
+    })
+}
+
+#[test]
+fn a_join_queued_behind_a_stop_does_not_relight() {
+    let rig = restoring(json!(["usb", "hue"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+    // Holds the lighting turn, so what is sent meanwhile queues in order.
+    let state = rig.state();
+    let turn = block_on(state.transitions.lock());
+    let handle = rig.handle();
+    let stop = spawn(async move { stop_lighting(handle).await });
+    std::thread::sleep(Duration::from_millis(50));
+
+    strip_connects(&rig);
+    std::thread::sleep(Duration::from_millis(50));
+    drop(turn);
+    block_on(stop).unwrap().unwrap();
+
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(
+        rig.running().kind,
+        LightingModeKind::Off,
+        "{:?}",
+        events(&rig)
+    );
+}
+
+#[test]
+fn a_join_queued_behind_off_does_nothing() {
+    let rig = restoring(json!(["usb", "hue"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+    let state = rig.state();
+    let turn = block_on(state.transitions.lock());
+    strip_connects(&rig);
+    std::thread::sleep(Duration::from_millis(50));
+    let off = spawn_apply(&rig, user(Some(off()), None));
+    std::thread::sleep(Duration::from_millis(50));
+    rig.log.clear();
+
+    drop(turn);
+    block_on(off).unwrap().unwrap();
+
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(rig.running().kind, LightingModeKind::Off);
+    assert_eq!(mode_events(&rig), vec!["mode:off:"], "{:?}", events(&rig));
+}
+
+#[test]
+fn two_binds_before_the_join_runs_apply_once() {
+    let rig = restoring(json!(["usb", "hue"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+    rig.log.clear();
+    let state = rig.state();
+    let turn = block_on(state.transitions.lock());
+    strip_connects(&rig);
+    note_local_sink_connected(&rig.handle());
+    std::thread::sleep(Duration::from_millis(50));
+
+    drop(turn);
+
+    wait_until("the strip never joined", || {
+        targets(&rig) == names(&["usb", "hue"])
+    });
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(mode_events(&rig).len(), 1, "{:?}", events(&rig));
+}
+
+/// A scene reads Hue off the stream store, which the fake driver leaves empty.
+fn hue_streams_for_scenes(rig: &Rig) {
+    let handle = rig.handle();
+    let store = handle.state::<HueRuntimeStateStore>();
+    let stream = dummy_active_stream_context();
+    store.output_live().publish(Some(HueActiveOutputContext {
+        channels: stream.channels.clone(),
+        color_sender: stream.color_sender.clone(),
+    }));
+    store.runtime.lock().unwrap().active_stream = Some(stream);
+}
+
+#[test]
+fn a_strip_that_binds_during_a_scene_joins_once_the_scene_ends() {
+    let rig = restoring_ambilight();
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+    hue_streams_for_scenes(&rig);
+    block_on(start_scene_queued(rig.handle(), SceneKind::Spiral)).unwrap();
+    assert_eq!(
+        targets(&rig),
+        names(&["hue"]),
+        "setup: the scene runs on Hue"
+    );
+
+    strip_connects(&rig);
+
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(targets(&rig), names(&["hue"]), "the scene keeps the lights");
+    assert!(rig.state().runtime.lock().unwrap().preview.scene.is_some());
+
+    stop_scene_lighting(&rig.handle()).unwrap();
+
+    wait_until("the strip never joined after the scene", || {
+        targets(&rig) == names(&["usb", "hue"])
+    });
+    assert_eq!(rig.running().kind, LightingModeKind::Ambilight);
+}
+
+/// A test pattern on Hue, with the prior its real start records.
+fn start_test_on_hue(rig: &Rig) {
+    let prior = rig.running();
+    let handle = rig.handle();
+    let mut mode = ambilight(1.0);
+    mode.targets = Some(vec!["hue".to_string()]);
+    apply_and_broadcast(
+        &handle,
+        mode,
+        rig.state().inner(),
+        &StripSet::default(),
+        handle.state::<HueRuntimeStateStore>().inner(),
+        handle.state::<RuntimeTelemetryState>().inner(),
+        handle.state::<PreviewSessionState>().inner(),
+        Some(TestPatternConfig {
+            kind: TestPatternKind::Guide,
+            brightness: 0.5,
+            speed: TestPatternSpeed::default(),
+            display_aspect: 16.0 / 9.0,
+        }),
+    )
+    .unwrap();
+    rig.state().runtime.lock().unwrap().preview.test_prior = Some(prior);
+}
+
+#[test]
+fn a_strip_that_binds_during_a_test_pattern_joins_once_it_stops() {
+    let rig = restoring_ambilight();
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+    hue_streams_for_scenes(&rig);
+    start_test_on_hue(&rig);
+
+    strip_connects(&rig);
+
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(targets(&rig), names(&["hue"]), "the test keeps the lights");
+
+    block_on(stop_led_test_pattern(rig.handle())).unwrap();
+
+    wait_until("the strip never joined after the test", || {
+        targets(&rig) == names(&["usb", "hue"])
+    });
+}
+
+#[test]
+fn a_join_queued_behind_a_scene_leaves_it_alone() {
+    let rig = restoring(json!(["usb", "hue"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+    let state = rig.state();
+    let turn = block_on(state.transitions.lock());
+    let handle = rig.handle();
+    let scene = spawn(async move { start_scene_queued(handle, SceneKind::Spiral).await });
+    std::thread::sleep(Duration::from_millis(50));
+
+    strip_connects(&rig);
+    std::thread::sleep(Duration::from_millis(50));
+    drop(turn);
+    block_on(scene).unwrap().unwrap();
+
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(
+        rig.running().kind,
+        LightingModeKind::Ambilight,
+        "{:?}",
+        events(&rig)
+    );
+    assert!(rig.state().runtime.lock().unwrap().preview.scene.is_some());
 }
 
 // ---------------------------------------------------------------------------

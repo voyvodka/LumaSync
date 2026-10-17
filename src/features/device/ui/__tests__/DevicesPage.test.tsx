@@ -6,6 +6,7 @@ import type { DrivenOutputRef, LocalOutputsSnapshot } from "@/shared/contracts/d
 import { HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
 import { DevicesPage } from "../DevicesPage";
 import type * as wledApiModule from "@/features/device/wledApi";
+import type { UseActiveWledSinkDeps } from "@/features/device/useWledSink";
 
 const stopHueMock = vi.fn();
 const stopHueOutputMock = vi.fn(async () => {});
@@ -13,6 +14,7 @@ const useHueOnboardingMock = vi.fn();
 // Mutable so individual tests can override port list without re-declaring the mock.
 const useDeviceConnectionMock = vi.fn();
 let activeWledIpMock: string | null = null;
+const wledSinkDepsMock = vi.fn<(deps: UseActiveWledSinkDeps | undefined) => void>();
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -60,14 +62,17 @@ vi.mock("@/features/device/state/localOutputsStore", () => ({
 // the same mocked `shellStore.load`, so a live one races the scenario's own
 // `mockResolvedValueOnce` and the loser silently gets the default.
 vi.mock("@/features/device/useWledSink", () => ({
-  useActiveWledSink: () => ({
-    activeWledIp: activeWledIpMock,
-    savedSink: null,
-    restoreOutcome: { kind: "idle" },
-    ready: true,
-    markConnected: async () => undefined,
-    forget: async () => ({ code: "WLED_FORGET_OK", message: "", details: null }),
-  }),
+  useActiveWledSink: (deps?: UseActiveWledSinkDeps) => {
+    wledSinkDepsMock(deps);
+    return {
+      activeWledIp: activeWledIpMock,
+      savedSink: null,
+      restoreOutcome: { kind: "idle" },
+      ready: true,
+      markConnected: async () => undefined,
+      forget: async () => ({ code: "WLED_FORGET_OK", message: "", details: null }),
+    };
+  },
 }));
 
 vi.mock("@/features/hue/useHueOnboarding", () => ({
@@ -444,6 +449,19 @@ describe("DevicesPage hue runtime controls", () => {
 // ---------------------------------------------------------------------------
 
 const SUPPORTED_PORT = { portName: "COM3", product: "CH340", manufacturer: "WCH", isSupported: true };
+
+describe("DevicesPage — a WLED device the user connects", () => {
+  it("is reported through the page's onWledConnected", async () => {
+    useDeviceConnectionMock.mockReturnValue(defaultDeviceConnectionState());
+    useHueOnboardingMock.mockReturnValue(createHueHookState());
+    const onWledConnected = vi.fn<() => void>();
+
+    render(<DevicesPage onStopHueOutput={stopHueOutputMock} onWledConnected={onWledConnected} />);
+    await screen.findByTestId("device-entry-hue");
+
+    expect(wledSinkDepsMock).toHaveBeenLastCalledWith(expect.objectContaining({ onUserConnected: onWledConnected }));
+  });
+});
 
 describe("DevicesPage — adding a controller that is plugged in", () => {
   beforeEach(() => {
