@@ -21,6 +21,8 @@ export interface Pickable {
   rises?: boolean;
   /** A bent strip's straight runs, picked and marked one by one; the box above is round them all. */
   legs?: readonly PickLeg[];
+  /** A backlight's box round the screen: the screen is picked where the ray meets both, the strip on its rim. */
+  around?: string;
 }
 
 export type PickLeg = Pick<Pickable, "centre" | "half" | "angle">;
@@ -74,12 +76,14 @@ export function rayBoxDistance(ray: PickRay, item: Pickable): number | null {
   return Math.max(near, 0);
 }
 
-/** The object a ray picks. Lights are what the view is about, so any light the ray passes through
+/** The object a ray picks. Lamps are what the view is about, so any lamp the ray passes through
  *  wins over a nearer piece of furniture: a lamp on a desk, or one half behind the sofa, is still
- *  the one clicked. Among the rest, the nearest. */
+ *  the one clicked. Among the rest, the nearest — a strip too, whose widened box along a whole wall
+ *  took every press on the cabinet standing in front of it. */
 export function pickObject(ray: PickRay, items: readonly Pickable[], minLightHalf = MIN_LIGHT_HALF): string | null {
-  let light: { id: string; t: number } | null = null;
+  let light: { id: string; t: number; around?: string } | null = null;
   let other: { id: string; t: number } | null = null;
+  const hit = new Set<string>();
   for (const item of items) {
     const grow = (half: Pickable["half"]) =>
       item.kind === "light" ? (half.map((h) => Math.max(h, minLightHalf)) as [number, number, number]) : half;
@@ -89,11 +93,13 @@ export function pickObject(ray: PickRay, items: readonly Pickable[], minLightHal
       if (d !== null && (t === null || d < t)) t = d;
     }
     if (t === null) continue;
-    if (item.kind === "light") {
-      if (!light || t < light.t) light = { id: item.id, t };
+    hit.add(item.id);
+    if (item.kind === "light" && !item.line) {
+      if (!light || t < light.t) light = { id: item.id, t, ...(item.around ? { around: item.around } : {}) };
     } else if (!other || t < other.t) {
       other = { id: item.id, t };
     }
   }
+  if (light?.around && hit.has(light.around)) return light.around;
   return light?.id ?? other?.id ?? null;
 }

@@ -69,6 +69,23 @@ describe("liftPiece", () => {
     expect(point.getWorldPosition(new Vector3()).toArray()).toEqual([2.5, 1.5, -1]);
   });
 
+  // A sofa turned a quarter swelled in depth through a morph: the stretch was the room's x.
+  it("stretches a turned piece along its own width", () => {
+    const scene = new Scene();
+    const alongWidth = new Mesh();
+    alongWidth.position.set(2, 0, -1.5);
+    const alongDepth = new Mesh();
+    alongDepth.position.set(2.5, 0, -1);
+    const lifted = liftPiece(scene, { spans: [], extras: [alongWidth, alongDepth], pivot: { x: 2, z: -1 }, turn: Math.PI / 2 });
+    scene.updateMatrixWorld(true);
+    const at = (mesh: Mesh) => mesh.getWorldPosition(new Vector3()).toArray().map((v) => Math.round(v * 1000) / 1000 + 0);
+    expect(at(alongWidth)).toEqual([2, 0, -1.5]);
+    lifted.reshape(2, 1, 0, 0);
+    scene.updateMatrixWorld(true);
+    expect(at(alongWidth)).toEqual([2, 0, -2]);
+    expect(at(alongDepth)).toEqual([2.5, 0, -1]);
+  });
+
   it("discards an extra with its material and texture, but not the material its copies borrow", () => {
     const scene = new Scene();
     const geometry = new BufferGeometry();

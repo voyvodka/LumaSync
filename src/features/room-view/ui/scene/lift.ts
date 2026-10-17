@@ -1,4 +1,6 @@
-import { BufferAttribute, BufferGeometry, Group, type Material, Mesh, type MeshBasicMaterial, type Object3D, type Scene } from "three";
+import { BufferAttribute, BufferGeometry, Group, type Material, Mesh, type MeshBasicMaterial, type Object3D, type Scene, Vector3 } from "three";
+
+const UP = new Vector3(0, 1, 0);
 
 export interface Span {
   mesh: Mesh;
@@ -10,6 +12,8 @@ export interface Liftable {
   spans: Span[];
   extras: Object3D[];
   pivot: { x: number; z: number };
+  /** The turn it was built with, as `rotation.y`: a reshape stretches it along its own width, not the room's x. */
+  turn?: number;
 }
 
 export interface LiftedPiece {
@@ -98,10 +102,13 @@ export function liftPiece(home: Scene, piece: Liftable, riders: ReadonlyMap<stri
   const carried = [...riders].map(([id, rider]) => ({ id, rider, lifted: liftPiece(scene, rider) }));
   const pivot = new Group();
   pivot.position.set(piece.pivot.x, 0, piece.pivot.z);
+  const turn = piece.turn ?? 0;
   const stretch = new Group();
+  stretch.rotation.y = turn;
   pivot.add(stretch);
   const inner = new Group();
-  inner.position.set(-piece.pivot.x, 0, -piece.pivot.z);
+  inner.rotation.y = -turn;
+  inner.position.set(-piece.pivot.x, 0, -piece.pivot.z).applyAxisAngle(UP, -turn);
   stretch.add(inner);
   const saved = piece.spans.map((span) => {
     const copy = new Mesh(copySpan(span), span.mesh.material);

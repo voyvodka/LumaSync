@@ -63,6 +63,23 @@ describe("pickObject", () => {
     expect(pickObject(down(0.5, 0.5), [bent], 0.05)).toBeNull();
   });
 
+  // Grown to a lamp's target size, a strip along the wall took every press on the cabinet before it.
+  it("picks the cabinet in front of a strip, and the strip where nothing stands before it", () => {
+    const strip: Pickable = { id: "usb-wall", kind: "light", centre: { x: 0, y: 0.5, z: -1 }, half: [2, 0.005, 0.005], angle: 0, line: true };
+    const cabinet: Pickable = { id: "furniture-cabinet", kind: "furniture", centre: { x: 0, y: 0.4, z: -0.6 }, half: [0.5, 0.4, 0.3], angle: 0 };
+    const fromFront = (x: number): PickRay => ({ origin: { x, y: 0.5, z: 10 }, direction: { x: 0, y: 0, z: -1 } });
+    expect(pickObject(fromFront(0), [strip, cabinet])).toBe("furniture-cabinet");
+    expect(pickObject(fromFront(1.5), [strip, cabinet])).toBe("usb-wall");
+  });
+
+  it("picks the screen inside its backlight's box, and the backlight on the rim", () => {
+    const tv: Pickable = { id: "tv", kind: "tv", centre: { x: 0, y: 1, z: 0 }, half: [0.6, 0.35, 0.03], angle: 0 };
+    const backlight: Pickable = { id: "usb-bl", kind: "light", centre: { x: 0, y: 1, z: 0 }, half: [0.65, 0.4, 0.08], angle: 0, around: "tv" };
+    const fromFront = (x: number): PickRay => ({ origin: { x, y: 1, z: 10 }, direction: { x: 0, y: 0, z: -1 } });
+    expect(pickObject(fromFront(0), [backlight, tv])).toBe("tv");
+    expect(pickObject(fromFront(0.63), [backlight, tv], 0.05)).toBe("usb-bl");
+  });
+
   it("picks nothing on empty ground", () => {
     expect(pickObject(down(5, 5), [sofa, lampOnSofa])).toBeNull();
   });

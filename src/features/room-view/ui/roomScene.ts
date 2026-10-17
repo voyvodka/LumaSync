@@ -245,7 +245,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     const parts = furnitureParts(item, model);
     transformParts(parts, place);
     const id = furnitureObjectId(item.id);
-    liftable(id, centre.x, centre.z);
+    liftable(id, centre.x, centre.z).turn = -((item.rotation ?? 0) * Math.PI) / 180;
     sort(parts, id);
     shadows.push(contactShadow(item.width / 2, item.height / 2, contactShade(model), place));
     shadowOwners.push(id);
@@ -343,7 +343,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     const id = usbStripObjectId(strip.stripId);
     if (screen && isBacklightStrip(strip, config)) {
       const { centre, width, height } = screen.layout;
-      pickables.push({ id, kind: "light", centre, half: [width / 2 + 0.05, height / 2 + 0.05, 0.08], angle: 0 });
+      pickables.push({ id, kind: "light", centre, half: [width / 2 + 0.05, height / 2 + 0.05, 0.08], angle: 0, around: TV_ANCHOR_OBJECT_ID });
       continue;
     }
     // A leg under a millimetre is a corner dragged onto its neighbour: nothing to draw, and no LEDs
