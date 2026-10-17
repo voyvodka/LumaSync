@@ -134,7 +134,7 @@ describe("HsvColorPicker drag throttle", () => {
   });
 
   it("a tap on the hue ring picks that hue and remembers it", () => {
-    const onChange = vi.fn();
+    const onChange = vi.fn<(hex: string) => void>();
     const { container } = render(<HsvColorPicker value="#0000ff" onChange={onChange} hideHex />);
     const hueGroup = container.querySelectorAll("svg > g")[0] as SVGGElement;
 
