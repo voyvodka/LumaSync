@@ -107,7 +107,6 @@ describe("buildZoneBoxes", () => {
     expect(ghost!.position.toArray().map((v) => Number(v.toFixed(3)))).toEqual([-1.495, 1.25, -0.995]);
     boxes.hold("a", { x0: 0, y0: 0, x1: 2, y1: 2 }, 0.2);
     expect(ghost!.position.y).toBeCloseTo(1.5);
-    // Standing on the floor, its bottom face clears the planks rather than sharing their plane.
     boxes.hold("a", { x0: 0, y0: 0, x1: 2, y1: 2 }, -0.2);
     const bottom = ghost!.position.y - ghost!.scale.y / 2;
     expect(bottom).toBeGreaterThan(0.004);

@@ -108,7 +108,6 @@ describe("HueZoneInspector — a drag across a field", () => {
     fireEvent.pointerUp(box, { pointerId: 1 });
     expect(onUpdate).toHaveBeenCalledTimes(1);
     expect(onUpdate).toHaveBeenLastCalledWith({ centerX: 0, centerY: 0, centerZ: 0, scaleX: 0.35, scaleY: 0.4375, scaleZ: 0.7 });
-    // Saved, the zone stays held until the room is built with it.
     expect(onPreview).not.toHaveBeenCalledWith(null);
   });
 

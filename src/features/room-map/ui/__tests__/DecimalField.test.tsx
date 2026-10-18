@@ -251,7 +251,6 @@ describe("DecimalField — a drag across it", () => {
     fireEvent.pointerMove(box, { clientX: 112, pointerId: 1 });
     fireEvent.pointerUp(box, { pointerId: 1 });
     fireEvent.click(box);
-    // A plain click afterwards still reaches the field.
     fireEvent.pointerDown(box, { button: 0, clientX: 100, pointerId: 1 });
     fireEvent.pointerUp(box, { clientX: 100, pointerId: 1 });
     fireEvent.click(box);

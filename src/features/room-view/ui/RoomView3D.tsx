@@ -109,8 +109,7 @@ export interface RoomDropTarget {
   preview(ghost: DropGhost | null): void;
   /** Lets the held card down where it was dropped, then takes it away. */
   settle(): void;
-  /** The dock's zone fields while dragged: the zone's whole cube at `zone`, as the room's grips show
-   *  it, without building the room each step; null puts it back. */
+  /** A zone's whole cube held at `zone` without building the room, for the dock's dragged fields; null puts it back. */
   holdZone(zoneId: string, zone: HueZone | null): void;
 }
 
