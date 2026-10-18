@@ -29,6 +29,8 @@ interface CommonProps {
   testId?: string;
   /** Takes focus when the inspector it opens in was reached from the keyboard. */
   first?: boolean;
+  /** A drag across the field let go, after the `held` commits it made. */
+  onScrubEnd?: () => void;
 }
 
 interface RequiredValue extends CommonProps {
@@ -86,6 +88,7 @@ export function DecimalField(props: DecimalFieldProps) {
     className,
     testId,
     first = false,
+    onScrubEnd,
   } = props;
   const value: number | undefined = props.value;
   const format = (v: number | undefined) => (v === undefined ? "" : v.toFixed(decimals));
@@ -94,6 +97,8 @@ export function DecimalField(props: DecimalFieldProps) {
   const boxRef = useRef<HTMLElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const scrub = useRef<{ x: number; base: number; moved: boolean } | null>(null);
+  // The click that ends a drag reached the label, which focused the input: the next drag then typed.
+  const swallowClick = useRef(false);
   const [scrubbing, setScrubbing] = useState(false);
 
   if (!editing && draft !== format(value)) setDraft(format(value));
@@ -153,6 +158,7 @@ export function DecimalField(props: DecimalFieldProps) {
   };
 
   const startScrub = (event: React.PointerEvent<HTMLElement>) => {
+    swallowClick.current = false;
     if (disabled || editing || event.button !== 0) return;
     // Kept from focusing until the press turns out to be a click, so a drag does not open the text.
     event.preventDefault();
@@ -179,10 +185,13 @@ export function DecimalField(props: DecimalFieldProps) {
     if (!s) return;
     scrub.current = null;
     setScrubbing(false);
-    if (!s.moved) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
+    if (s.moved) {
+      swallowClick.current = true;
+      onScrubEnd?.();
+      return;
     }
+    inputRef.current?.focus();
+    inputRef.current?.select();
   };
 
   // A button may not sit inside a label; the box needs none of a label's own behaviour anyway.
@@ -202,6 +211,9 @@ export function DecimalField(props: DecimalFieldProps) {
       onPointerMove={moveScrub}
       onPointerUp={endScrub}
       onPointerCancel={endScrub}
+      onClick={(e) => {
+        if (swallowClick.current) e.preventDefault();
+      }}
     >
       {prefix !== undefined && (
         <span className={styles.prefix} aria-hidden="true">

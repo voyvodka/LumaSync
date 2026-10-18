@@ -218,11 +218,44 @@ describe("DecimalField — a drag across it", () => {
   });
 
   it("types after a press that does not move", () => {
-    const { onCommit, input } = renderRequired();
+    const onScrubEnd = vi.fn<() => void>();
+    const { onCommit, input } = renderRequired({ onScrubEnd });
     const box = input.closest("label")!;
     fireEvent.pointerDown(box, { button: 0, clientX: 100, pointerId: 1 });
     fireEvent.pointerUp(box, { clientX: 101, pointerId: 1 });
     expect(input).toHaveFocus();
     expect(onCommit).not.toHaveBeenCalled();
+    expect(onScrubEnd).not.toHaveBeenCalled();
+  });
+
+  it("says when a drag is let go", () => {
+    const onScrubEnd = vi.fn<() => void>();
+    const { input } = renderRequired({ onScrubEnd });
+    const box = input.closest("label")!;
+    fireEvent.pointerDown(box, { button: 0, clientX: 100, pointerId: 1 });
+    fireEvent.pointerMove(box, { clientX: 112, pointerId: 1 });
+    expect(onScrubEnd).not.toHaveBeenCalled();
+    fireEvent.pointerUp(box, { pointerId: 1 });
+    expect(onScrubEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels the click that ends a drag, which the label would hand on to focus the input", () => {
+    const { input } = renderRequired();
+    const box = input.closest("label")!;
+    const cancelled: boolean[] = [];
+    const seen = (e: Event) => {
+      if (e.target === box) cancelled.push(e.defaultPrevented);
+    };
+    document.addEventListener("click", seen);
+    fireEvent.pointerDown(box, { button: 0, clientX: 100, pointerId: 1 });
+    fireEvent.pointerMove(box, { clientX: 112, pointerId: 1 });
+    fireEvent.pointerUp(box, { pointerId: 1 });
+    fireEvent.click(box);
+    // A plain click afterwards still reaches the field.
+    fireEvent.pointerDown(box, { button: 0, clientX: 100, pointerId: 1 });
+    fireEvent.pointerUp(box, { clientX: 100, pointerId: 1 });
+    fireEvent.click(box);
+    document.removeEventListener("click", seen);
+    expect(cancelled).toEqual([true, false]);
   });
 });

@@ -32,7 +32,7 @@ import {
 } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-import type { FurniturePlacement, RoomMapConfig } from "@/shared/contracts/roomMap";
+import type { FurniturePlacement, HueZone, RoomMapConfig } from "@/shared/contracts/roomMap";
 
 import { LAMP_COLOURS } from "../model/lampColours";
 import type { LampFamily } from "../model/lampFamily";
@@ -109,6 +109,9 @@ export interface RoomDropTarget {
   preview(ghost: DropGhost | null): void;
   /** Lets the held card down where it was dropped, then takes it away. */
   settle(): void;
+  /** The dock's zone fields while dragged: the zone's whole cube at `zone`, as the room's grips show
+   *  it, without building the room each step; null puts it back. */
+  holdZone(zoneId: string, zone: HueZone | null): void;
 }
 
 interface RoomView extends RoomDropTarget {
@@ -1165,6 +1168,11 @@ function openRoomView(
       },
       preview: previewDrop,
       settle: settleDrop,
+      holdZone(zoneId, zone) {
+        if (!room || !builtConfig) return;
+        const { widthMeters, depthMeters } = builtConfig.dimensions;
+        if (room.holdZone(zoneId, zone && zoneRect(zone, widthMeters, depthMeters), zone?.centerZ)) request();
+      },
       setMood(mood) {
         const same = (m: RoomMood | null) =>
           m !== null &&
@@ -1429,7 +1437,7 @@ export default function RoomView3D({
   onFail: (error: unknown) => void;
   /** The room's first frame is on the canvas. */
   onDrawn?: () => void;
-  /** Filled while the view is open, for a library card dragged in from the dock. */
+  /** Filled while the view is open, for a library card dragged in from the dock and the zone fields. */
   dropRef?: MutableRefObject<RoomDropTarget | null>;
   /** Changed with a room it should become piece by piece, as a template does. */
   morphKey?: number;

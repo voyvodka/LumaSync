@@ -940,6 +940,11 @@ export function RoomMapEditor({
     onDuplicate: handleDuplicate,
     onDelete: deleteById,
     onUpdateHueZone: handleHueZoneUpdate,
+    onPreviewHueZone: (zoneId, zone) => {
+      const view = roomDropRef.current;
+      view?.holdZone(zoneId, zone);
+      return view !== null;
+    },
     onRenameHueZone: handleRenameHueZone,
     onDeleteHueZone: handleDeleteHueZone,
     onAssignChannelToZone: handleAssignChannelToZone,

@@ -42,7 +42,9 @@ function renderZone({
   roomHeightM = 2.5,
   zones = [zone],
   channels = [],
+  onPreview,
 }: {
+  onPreview?: (zone: HueZone | null) => boolean;
   zone?: HueZone;
   roomWidthM?: number;
   roomDepthM?: number;
@@ -66,6 +68,7 @@ function renderZone({
       roomWidthM={roomWidthM}
       roomDepthM={roomDepthM}
       roomHeightM={roomHeightM}
+      onPreview={onPreview}
       {...handlers}
     />,
   );
@@ -81,6 +84,54 @@ function commit(input: HTMLInputElement, value: string) {
   fireEvent.change(input, { target: { value } });
   fireEvent.keyDown(input, { key: "Enter" });
 }
+
+function drag(input: HTMLInputElement, toX: number) {
+  const box = input.closest("label")!;
+  fireEvent.pointerDown(box, { button: 0, clientX: 100, pointerId: 1 });
+  fireEvent.pointerMove(box, { clientX: 100 + toX / 2, pointerId: 1 });
+  fireEvent.pointerMove(box, { clientX: 100 + toX, pointerId: 1 });
+  fireEvent.pointerUp(box, { pointerId: 1 });
+}
+
+describe("HueZoneInspector — a drag across a field", () => {
+  it("is shown held while it lasts and saved once, when let go", () => {
+    const onPreview = vi.fn<(zone: HueZone | null) => boolean>(() => true);
+    const { onUpdate, size } = renderZone({ onPreview });
+    const box = size.closest("label")!;
+    fireEvent.pointerDown(box, { button: 0, clientX: 100, pointerId: 1 });
+    fireEvent.pointerMove(box, { clientX: 120, pointerId: 1 });
+    fireEvent.pointerMove(box, { clientX: 140, pointerId: 1 });
+    // Ten steps of 5 cm: 1.25 m to 1.75 m, shown in the field and the room but not saved.
+    expect(size.value).toBe("1.75");
+    expect(onPreview).toHaveBeenLastCalledWith(expect.objectContaining({ scaleX: 0.35, scaleZ: 0.7 }));
+    expect(onUpdate).not.toHaveBeenCalled();
+    fireEvent.pointerUp(box, { pointerId: 1 });
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onUpdate).toHaveBeenLastCalledWith({ centerX: 0, centerY: 0, centerZ: 0, scaleX: 0.35, scaleY: 0.4375, scaleZ: 0.7 });
+    // Saved, the zone stays held until the room is built with it.
+    expect(onPreview).not.toHaveBeenCalledWith(null);
+  });
+
+  it("puts the zone back when the drag ends where it began", () => {
+    const onPreview = vi.fn<(zone: HueZone | null) => boolean>(() => true);
+    const { onUpdate, height } = renderZone({ onPreview });
+    const box = height.closest("label")!;
+    fireEvent.pointerDown(box, { button: 0, clientX: 100, pointerId: 1 });
+    fireEvent.pointerMove(box, { clientX: 120, pointerId: 1 });
+    fireEvent.pointerMove(box, { clientX: 100, pointerId: 1 });
+    fireEvent.pointerUp(box, { pointerId: 1 });
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(onPreview).toHaveBeenLastCalledWith(null);
+  });
+
+  it("saves each step where no room view can show it", () => {
+    const onPreview = vi.fn<(zone: HueZone | null) => boolean>(() => false);
+    const { onUpdate, size } = renderZone({ onPreview });
+    drag(size, 40);
+    expect(onUpdate).toHaveBeenCalledTimes(2);
+    expect(onUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ scaleX: 0.35 }));
+  });
+});
 
 describe("HueZoneInspector — size and height", () => {
   it("shows its edge in metres and writes it over each side of the room", () => {

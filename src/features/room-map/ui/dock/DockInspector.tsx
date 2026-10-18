@@ -52,6 +52,8 @@ export interface InspectorActions {
   onDuplicate: (objectId: string) => void;
   onDelete: (objectId: string) => void;
   onUpdateHueZone: (zoneId: string, patch: Partial<HueZone>) => void;
+  /** Shows a zone dragged in the card's fields without saving it; false when no room view can. */
+  onPreviewHueZone: (zoneId: string, zone: HueZone | null) => boolean;
   onRenameHueZone: (zoneId: string, name: string) => void;
   onDeleteHueZone: (zoneId: string) => void;
   onAssignChannelToZone: (channelIndex: number, zoneId: string | null) => void;
@@ -140,6 +142,7 @@ export function DockInspector({
           roomDepthM={config.dimensions.depthMeters}
           roomHeightM={config.dimensions.heightMeters}
           onUpdate={(patch) => actions.onUpdateHueZone(zone.id, patch)}
+          onPreview={(next) => actions.onPreviewHueZone(zone.id, next)}
           onRename={(name) => actions.onRenameHueZone(zone.id, name)}
           onAssignChannel={actions.onAssignChannelToZone}
           onDelete={() => actions.onDeleteHueZone(zone.id)}

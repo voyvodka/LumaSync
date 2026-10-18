@@ -39,7 +39,7 @@ function setup(overrides: Partial<LibraryDropArgs> & { inRoom?: boolean; outline
   const inRoom = overrides.inRoom ?? false;
   const root = stage(inRoom);
   const ghost: PlanDropGhostHandle = { show: vi.fn<PlanDropGhostHandle["show"]>() };
-  const room: RoomDropTarget = { floorAt: vi.fn<RoomDropTarget["floorAt"]>(() => ({ x: 0.5, z: -0.5 })), preview: vi.fn<RoomDropTarget["preview"]>(), settle: vi.fn<() => void>() };
+  const room: RoomDropTarget = { floorAt: vi.fn<RoomDropTarget["floorAt"]>(() => ({ x: 0.5, z: -0.5 })), preview: vi.fn<RoomDropTarget["preview"]>(), settle: vi.fn<() => void>(), holdZone: vi.fn<RoomDropTarget["holdZone"]>() };
   const args: LibraryDropArgs = {
     rootRef: { current: root },
     inRoom,

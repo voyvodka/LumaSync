@@ -39,6 +39,7 @@ function actions(): InspectorActions {
     onDuplicate: vi.fn<InspectorActions["onDuplicate"]>(),
     onDelete: vi.fn<InspectorActions["onDelete"]>(),
     onUpdateHueZone: vi.fn<InspectorActions["onUpdateHueZone"]>(),
+    onPreviewHueZone: vi.fn<InspectorActions["onPreviewHueZone"]>(() => false),
     onRenameHueZone: vi.fn<InspectorActions["onRenameHueZone"]>(),
     onDeleteHueZone: vi.fn<InspectorActions["onDeleteHueZone"]>(),
     onAssignChannelToZone: vi.fn<InspectorActions["onAssignChannelToZone"]>(),
