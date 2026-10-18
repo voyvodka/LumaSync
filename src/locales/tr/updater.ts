@@ -54,6 +54,7 @@ const updater: Catalogue<typeof enUpdater> = {
   checking: "Kontrol ediliyor…",
   upToDate: "En son sürümü kullanıyorsun · {{time}} itibarıyla",
   upToDateShort: "Güncel",
+  lastChecked: "Son kontrol {{time}}",
 };
 
 export default updater;

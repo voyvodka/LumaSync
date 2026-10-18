@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { clamp } from "@/shared/lib/math";
 import type { LedSegmentKey } from "../model/contracts";
 import styles from "./CountChip.module.css";
 
@@ -50,7 +51,7 @@ export function CountChip({ label, value, min, max, style, edges, icon, link, on
     if (editing) inputRef.current?.select();
   }, [editing]);
 
-  const step = (by: number) => onChange(Math.max(min, Math.min(max, value + by)));
+  const step = (by: number) => onChange(clamp(value + by, min, max));
   const finish = (commit: boolean) => {
     const parsed = Number.parseInt(draft, 10);
     if (commit && Number.isFinite(parsed) && parsed !== value) onChange(parsed);

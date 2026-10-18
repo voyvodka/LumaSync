@@ -20,7 +20,9 @@ use super::super::hue_http::{classify_hue_response_blocking, HueHttpFault};
 use super::credential_store::REDACTED;
 use super::sender::{RequestPacer, HUE_HTTP_FALLBACK_MAX_REQUESTS_PER_SEC};
 use super::state_store::HueRuntimeOwner;
-use super::transport::{blocking_client_for_key, read_body_blocking, send_error_text};
+use super::transport::{
+    blocking_client_for_key, is_safe_resource_id, read_body_blocking, send_error_text,
+};
 
 /// Ceiling on one interactive restore: a first pass over ~25 lights at the
 /// ~10 req/s light budget, then the watch. A bigger area is restored as far
@@ -204,7 +206,7 @@ pub(crate) fn parse_light_state(item: &Value) -> Option<HueLightState> {
 /// The PUT body that puts one light back. An off light gets `on` alone: v1
 /// refused colour writes to an off light, and the bridge has already put its
 /// colour back on leaving entertainment.
-pub(crate) fn restore_body(state: &HueLightState) -> Value {
+fn restore_body(state: &HueLightState) -> Value {
     if !state.on {
         return json!({ "on": { "on": false } });
     }
@@ -517,9 +519,9 @@ impl RestoreRun<'_> {
         true
     }
 
-    /// Our own stream has ended by now, so a busy area is another streamer —
-    /// or a reconnect of ours the stop overtook, which gives it back within
-    /// moments. Waits until `end` for it to come free. Only a read that says
+    /// Our own stream has ended by now — the stop waited for any reconnect it
+    /// overtook to give the area back — so a busy area is another streamer.
+    /// Waits until `end` for it to come free. Only a read that says
     /// "free" lets the writes go: a lost read is asked again, never taken for
     /// free, or one garbled answer would paint under another app's stream.
     fn wait_for_area_free(&mut self, end: Instant) -> Result<(), HueLightRestoreStop> {
@@ -817,11 +819,6 @@ pub(crate) fn reads_as(snapshot: &HueLightState, reading: &HueLightState) -> boo
         }
         _ => false,
     }
-}
-
-/// An id from the bridge, spliced into a path.
-fn is_safe_resource_id(id: &str) -> bool {
-    !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
 fn put_light_state(

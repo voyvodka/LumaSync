@@ -1,9 +1,10 @@
-import { memo, useEffect, useCallback, Suspense, type ReactNode } from "react";
+import { memo, useEffect, useCallback, useRef, Suspense, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { normalizeOutputTargets } from "@/shared/contracts/mode";
 import { SECTION_IDS, SECTION_ORDER, type SectionId, type UIMode } from "@/shared/contracts/shell";
 import { preloadableComponent } from "@/shared/lib/preloadableComponent";
 import { shallowEqual } from "@/shared/lib/store";
-import { LightsSection } from "./sections/LightsSection";
+import { LightsPage } from "@/features/lights/ui/LightsPage";
 import { SettingsPage } from "./ui/SettingsPage";
 import { buildDiagnostics } from "./ui/diagnostics";
 import { detectOsName } from "./ui/helpLinks";
@@ -25,11 +26,12 @@ import {
 import { useUpdaterActions, useUpdaterState, type UpdaterSnapshot } from "../updater/UpdaterProvider";
 import { useHueShellStatus, useHueShellStatusReader, type HueShellStatus } from "../hue/state/hueShellStatus";
 import { useSetupGuideActions } from "../onboarding/state/setupGuideControl";
-import { CompactLayout } from "./sections/compact/CompactLayout";
+import { LightsCompact } from "@/features/lights/ui/LightsCompact";
+import { SECTION_PANEL_ID } from "../shell/TitleBar";
 import { CalibrationPanel, preloadCalibrationPanel } from "../calibration/ui/CalibrationPanel";
 import type { LedSetupTarget } from "@/features/device/ui/DevicesPage";
 import { useCapturedDisplayName } from "../calibration/ui/useCapturedDisplayName";
-import type { RoomMapEditorProps } from "@/features/room-map/ui/RoomMapEditor";
+import type { RoomMapSurfaceProps } from "@/features/room-map/ui/RoomMapSurface";
 
 // The full-only sections that each outweigh the rest of the shell are split out,
 // so the compact window never parses them (LED Setup's is in its own panel). See
@@ -37,8 +39,8 @@ import type { RoomMapEditorProps } from "@/features/room-map/ui/RoomMapEditor";
 const DevicesPage = preloadableComponent("DevicesPage", () =>
   import("@/features/device/ui/DevicesPage").then((m) => m.DevicesPage),
 );
-const RoomMapEditor = preloadableComponent<RoomMapEditorProps>("RoomMapEditor", () =>
-  import("@/features/room-map/ui/RoomMapEditor").then((m) => m.RoomMapEditor),
+const RoomMapSurface = preloadableComponent<RoomMapSurfaceProps>("RoomMapSurface", () =>
+  import("@/features/room-map/ui/RoomMapSurface").then((m) => m.RoomMapSurface),
 );
 
 /** Warms the full-only chunks once full mode has painted, so a tab switch rarely meets the fallback. */
@@ -82,7 +84,7 @@ const LightsPanel = memo(function LightsPanel() {
   const openDevices = useCallback(() => void goToSection(SECTION_IDS.DEVICES), [goToSection]);
   return (
     <div className="h-full overflow-hidden">
-      <LightsSection
+      <LightsPage
         mode={lighting.lightingMode}
         outputTargets={lighting.outputTargets}
         localOutputConnected={lighting.localSink !== null}
@@ -108,13 +110,31 @@ const LightsPanel = memo(function LightsPanel() {
 const selectDeviceCategoryRequest = (state: NavigationState) => state.deviceCategoryRequest;
 const selectLedSetup = (state: NavigationState) => state.ledSetup;
 const selectHueActive = (status: HueShellStatus) => status.configured && status.streaming;
+const selectLightingRestored = (state: LightingControlState) => state.lightingRestored;
 
 const DevicesPanel = memo(function DevicesPanel() {
   const categoryRequest = useNavigationState(selectDeviceCategoryRequest);
   const hueActive = useHueShellStatus(selectHueActive);
   const reportVisibleCategory = useVisibleDeviceCategoryReporter();
   const { goToSection, openLedSetup, closeLedSetup } = useNavigationActions();
-  const { stopHueOutput } = useLightingActions();
+  const { stopHueOutput, changeOutputTargets } = useLightingActions();
+  const readLighting = useLightingControlReader();
+  const lightingRestored = useLightingControlState(selectLightingRestored);
+  const wledChoicePending = useRef(false);
+  // Connecting a WLED device is the "use it" intent, as pairing a strip is; `usb` names either.
+  const addUsb = useCallback(() => {
+    const selected = readLighting().outputTargets;
+    if (!selected.includes("usb")) changeOutputTargets(normalizeOutputTargets([...selected, "usb"]));
+  }, [readLighting, changeOutputTargets]);
+  const chooseConnectedWled = useCallback(() => {
+    if (readLighting().lightingRestored) addUsb();
+    else wledChoicePending.current = true;
+  }, [readLighting, addUsb]);
+  useEffect(() => {
+    if (!lightingRestored || !wledChoicePending.current) return;
+    wledChoicePending.current = false;
+    addUsb();
+  }, [lightingRestored, addUsb]);
   const openRoomMap = useCallback(() => void goToSection(SECTION_IDS.ROOM_MAP), [goToSection]);
   const ledSetup = useNavigationState(selectLedSetup);
   const closeLedSetupNow = useLedSetupCloser();
@@ -137,6 +157,7 @@ const DevicesPanel = memo(function DevicesPanel() {
         categoryRequest={categoryRequest}
         onVisibleCategoryChange={reportVisibleCategory}
         hueActive={hueActive}
+        onWledConnected={chooseConnectedWled}
       />
     </div>
   );
@@ -146,6 +167,7 @@ const selectLocalOutputConnected = (state: LightingControlState) => state.localS
 const selectHueSessionActive = (status: HueShellStatus) => status.streaming || status.reconnecting;
 const selectCheckingForUpdates = (snapshot: UpdaterSnapshot) => snapshot.state.status === "checking";
 const selectUpToDateAt = (snapshot: UpdaterSnapshot) => snapshot.upToDateAt;
+const selectCheckedAt = (snapshot: UpdaterSnapshot) => snapshot.checkedAt;
 
 const SystemPanel = memo(function SystemPanel() {
   const { i18n } = useTranslation();
@@ -173,6 +195,7 @@ const SystemPanel = memo(function SystemPanel() {
   }, [readLighting, readHue, i18n]);
   const isCheckingForUpdates = useUpdaterState(selectCheckingForUpdates);
   const upToDateAt = useUpdaterState(selectUpToDateAt);
+  const lastCheckedAt = useUpdaterState(selectCheckedAt);
   const { checkForUpdates, devSetState } = useUpdaterActions();
   const setupGuide = useSetupGuideActions();
   return (
@@ -182,6 +205,7 @@ const SystemPanel = memo(function SystemPanel() {
         onCheckForUpdates={checkForUpdates}
         isCheckingForUpdates={isCheckingForUpdates}
         upToDateAt={upToDateAt}
+        lastCheckedAt={lastCheckedAt}
         devSetUpdaterState={devSetState}
         localOutputConnected={localOutputConnected}
         hueActive={hueActive}
@@ -196,6 +220,7 @@ const selectRoomMapHue = (status: HueShellStatus) => ({
   reachable: status.reachable,
   configured: status.configured,
   probeVerdict: status.probeVerdict,
+  streaming: status.streaming,
 });
 
 const RoomMapPanel = memo(function RoomMapPanel() {
@@ -205,12 +230,13 @@ const RoomMapPanel = memo(function RoomMapPanel() {
   const openDevices = useCallback(() => void goToSection(SECTION_IDS.DEVICES), [goToSection]);
   return (
     <div className="h-full overflow-hidden">
-      <RoomMapEditor.Component
+      <RoomMapSurface.Component
         onNavigateToDevices={openDevices}
         hueReachable={hue.reachable}
         outputTargets={outputTargets}
         hueConfigured={hue.configured}
         hueProbeVerdict={hue.probeVerdict}
+        hueStreaming={hue.streaming}
       />
     </div>
   );
@@ -240,7 +266,7 @@ export const SECTION_REGISTRY = {
   },
   [SECTION_IDS.ROOM_MAP]: {
     render: () => <RoomMapPanel />,
-    preload: RoomMapEditor.preload,
+    preload: RoomMapSurface.preload,
   },
 } satisfies Record<SectionId, SectionEntry>;
 
@@ -254,14 +280,19 @@ export const SettingsLayout = memo(function SettingsLayout() {
 
   // ── Compact mode ──────────────────────────────────────────────────────
   if (uiMode === "compact") {
-    return <CompactLayout />;
+    return <LightsCompact />;
   }
 
   // ── Full mode ─────────────────────────────────────────────────────────
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden" data-testid="full-layout" style={{ background: "var(--lm-bg)", color: "var(--lm-ink)" }}>
       {/* Main content */}
-      <main className="min-h-0 min-w-0 flex-1 overflow-hidden" role="main" data-testid={`section-panel-${activeSection}`}>
+      <main
+        id={SECTION_PANEL_ID}
+        className="min-h-0 min-w-0 flex-1 overflow-hidden"
+        role="main"
+        data-testid={`section-panel-${activeSection}`}
+      >
         <Suspense fallback={<SectionPlaceholder />}>
           {sectionEntry(activeSection).render()}
         </Suspense>

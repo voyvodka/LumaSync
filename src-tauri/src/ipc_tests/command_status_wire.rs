@@ -113,6 +113,14 @@ fn wled_responses_are_unchanged() {
         r#"{"status":{"code":"WLED_DISCOVERY_TIMEOUT","message":"t","details":"port \"COM3\" — busy\n"},"devices":[]}"#,
     );
     assert_wire(
+        "browse_wled_devices",
+        &WledDiscoveryResponse {
+            status: CommandStatus::ok("WLED_BROWSE_OK", "ok"),
+            devices: vec![],
+        },
+        r#"{"status":{"code":"WLED_BROWSE_OK","message":"ok","details":null},"devices":[]}"#,
+    );
+    assert_wire(
         "connect_wled_sink",
         &WledConnectResponse {
             status: CommandStatus::ok("WLED_CONNECT_OK", "ok"),

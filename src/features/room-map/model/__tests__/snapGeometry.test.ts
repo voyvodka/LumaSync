@@ -36,6 +36,26 @@ describe("getObjectRects", () => {
     expect(rects).toEqual([{ id: "__origin", x: 3, y: 2, w: 0, h: 0 }]);
   });
 
+  it("adds the other lights as points for a light, through their zone, and none for a piece", () => {
+    const config = configWith({
+      dimensions: { widthMeters: 4, depthMeters: 4, heightMeters: 2.5 },
+      furniture: [],
+      tvAnchor: undefined,
+      zones: [{ id: "z", name: "z", entertainmentAreaId: "a", centerX: 0.5, centerY: 0, centerZ: 0, scaleX: 0.5, scaleY: 0.5, scaleZ: 1, channelIndices: [1] }],
+      hueChannels: [
+        { channelIndex: 0, x: -1, y: 1, z: 0 },
+        { channelIndex: 1, x: 0, y: 0, z: 0, zoneId: "z", zoneRelativePosition: { x: 1, y: 0, z: 0 } },
+        { channelIndex: 2, x: 0, y: 0, z: 0 },
+      ],
+    });
+    const lights = getObjectRects(config, "hue-2").filter((r) => r.id.startsWith("hue-"));
+    expect(lights).toEqual([
+      { id: "hue-0", x: 0, y: 0, w: 0, h: 0 },
+      { id: "hue-1", x: 4, y: 2, w: 0, h: 0 },
+    ]);
+    expect(getObjectRects(config, "furniture-a").some((r) => r.id.startsWith("hue-"))).toBe(false);
+  });
+
   it("excludes the dragged object so it cannot snap to itself", () => {
     const config = configWith({
       furniture: [furniture("a", 1, 1, 2, 1), furniture("b", 4, 1, 2, 1)],
@@ -154,5 +174,18 @@ describe("computeSnap", () => {
 
     expect(result.snapX).toBeCloseTo(3);
     expect(result.guides).toContainEqual({ axis: "x", position: 3 });
+  });
+});
+
+describe("computeSnap — both axes", () => {
+  // A closer x match found on a later piece wiped the y guide an earlier one had drawn.
+  it("draws a guide for each axis it snaps on, from different pieces", () => {
+    const dragging = { id: "d", x: 0.02, y: 5.03, w: 1, h: 1 };
+    const level = { id: "a", x: 9, y: 5, w: 1, h: 1 };
+    const above = { id: "b", x: 0, y: 0, w: 1, h: 1 };
+    const result = computeSnap(dragging, [level, above], 0.1);
+    expect(result.snapX).not.toBeNull();
+    expect(result.snapY).not.toBeNull();
+    expect(new Set(result.guides.map((g) => g.axis))).toEqual(new Set(["x", "y"]));
   });
 });

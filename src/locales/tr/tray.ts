@@ -6,6 +6,7 @@ const tray: Catalogue<typeof enTray> = {
   lightsOff: "Işıklar Kapalı",
   ambilight: "Ambilight",
   solidColor: "Sabit Renk",
+  effect: "Efekt",
   closeOverlays: "Kaplamaları Kapat",
   quit: "LumaSync'ten Çık",
   outcomeTitle: "Tepsiden ışık seçimi",

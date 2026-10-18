@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { changeLanguage, I18N_LANGUAGE_NAMES, I18N_SUPPORTED_LANGUAGES, type I18nLanguage } from "@/features/i18n/i18n";
 import { shellStore } from "@/features/persistence/shellStore";
 import { getStartupEnabled, setStartup } from "@/features/tray/trayController";
+import { ChoiceStrip } from "@/shared/ui/ChoiceStrip/ChoiceStrip";
 import { Toggle, togglePillClass } from "@/shared/ui/Toggle/Toggle";
 import { cx } from "@/shared/lib/cx";
 import { RowNote, rowStyles, SettingRow } from "@/shared/ui/SettingRow/SettingRow";
@@ -132,20 +133,14 @@ export function LanguageRow() {
     <SettingRow
       label={label}
       control={
-        <select
-          className={rowStyles.select}
-          aria-label={label}
+        // Two languages: both on show, each named in itself, rather than behind a list.
+        <ChoiceStrip
+          label={label}
           value={current}
-          onChange={(e) => {
-            void change(e.target.value as I18nLanguage);
-          }}
-        >
-          {I18N_SUPPORTED_LANGUAGES.map((lang) => (
-            <option key={lang} value={lang}>
-              {I18N_LANGUAGE_NAMES[lang]}
-            </option>
-          ))}
-        </select>
+          options={I18N_SUPPORTED_LANGUAGES.map((lang) => ({ value: lang, label: I18N_LANGUAGE_NAMES[lang] }))}
+          onChange={(lang) => void change(lang as I18nLanguage)}
+          testIdPrefix="language-"
+        />
       }
     />
   );

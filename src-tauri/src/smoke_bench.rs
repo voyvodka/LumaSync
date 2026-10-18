@@ -256,7 +256,7 @@ fn capture_probe() {
     let total = pixels as u64;
     let avg = [sums[0] / total, sums[1] / total, sums[2] / total];
 
-    let borders = detect_black_borders(&frame, BLACK_BORDER_THRESHOLD);
+    let borders = detect_black_borders(&frame, BLACK_BORDER_THRESHOLD).unwrap_or_default();
 
     log::info!(
         "[smoke-capture] frame={}x{} pixels={} avg={},{},{} borders={:.4},{:.4},{:.4},{:.4} ms={}",

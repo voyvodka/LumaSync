@@ -61,25 +61,6 @@ describe("resolveInspectorTarget", () => {
     expect(resolveInspectorTarget(populated, "hue-1", null)).toEqual({ kind: "empty" });
   });
 
-  it("resolves the parent zone name for an assigned channel, null for a loose one", () => {
-    expect(resolveInspectorTarget(populated, "hue-4", null)).toMatchObject({
-      zoneName: "Behind TV",
-    });
-    expect(resolveInspectorTarget(populated, "hue-0", null)).toMatchObject({ zoneName: null });
-  });
-
-  it("yields a null zone name when the channel points at a zone that is gone", () => {
-    const orphaned = configWith({
-      hueChannels: [{ channelIndex: 0, x: 0, y: 0, z: 0, zoneId: "missing" }],
-      zones: [],
-    });
-
-    expect(resolveInspectorTarget(orphaned, "hue-0", null)).toMatchObject({
-      kind: "hueChannel",
-      zoneName: null,
-    });
-  });
-
   it("lets a concrete object selection win over an active Hue zone (W4-F2 priority swap)", () => {
     expect(resolveInspectorTarget(populated, "furniture-f1", "zone-a").kind).toBe("furniture");
   });

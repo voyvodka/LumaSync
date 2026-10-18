@@ -1,0 +1,30 @@
+@layer components {
+  /* SelectionFrame's handle: a 10 px mark in a 24 px target, one size on screen at any zoom. */
+  .grip {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    margin: -5px 0 0 -5px;
+    border: 1.5px solid var(--lm-amber);
+    border-radius: 2px;
+    background: var(--lm-bg);
+    pointer-events: auto;
+    touch-action: none;
+    transform: scale(var(--grip-scale, 1));
+  }
+  .grip::before { content: ""; position: absolute; inset: -7px; }
+  .grip:hover { background: var(--lm-amber); }
+  .nw { top: 0; left: 0; cursor: nwse-resize; }
+  .n { top: 0; left: 50%; cursor: ns-resize; }
+  .ne { top: 0; left: 100%; cursor: nesw-resize; }
+  .e { top: 50%; left: 100%; cursor: ew-resize; }
+  .se { top: 100%; left: 100%; cursor: nwse-resize; }
+  .s { top: 100%; left: 50%; cursor: ns-resize; }
+  .sw { top: 100%; left: 0; cursor: nesw-resize; }
+  .w { top: 50%; left: 0; cursor: ew-resize; }
+
+  @media (forced-colors: active) {
+    .grip { border-color: Highlight; background: Canvas; }
+    .grip:hover { background: Highlight; }
+  }
+}

@@ -1,6 +1,8 @@
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
+import { seatBacklight } from "../model/backlight";
 import { parseObjectId } from "../model/objectId";
+import { keepStripInside, roomBoxOf } from "../model/pieceGeometry";
 import { roomObjectAdapter } from "../model/roomObjectKinds";
 
 export const MAX_HISTORY = 50;
@@ -10,9 +12,11 @@ export const MAX_HISTORY = 50;
  *  presses a beat apart stay two undo steps. */
 export const GESTURE_COALESCE_MS = 600;
 
+/** A function patch is also handed the map as it stood before the open gesture it joins (the
+ *  current map otherwise), for a change each step should make from where the gesture began. */
 export type RoomMapPatch =
   | Partial<RoomMapConfig>
-  | ((config: RoomMapConfig) => Partial<RoomMapConfig>);
+  | ((config: RoomMapConfig, gestureBase: RoomMapConfig) => Partial<RoomMapConfig>);
 
 export interface RoomMapSelection {
   objectId: string | null;
@@ -54,7 +58,9 @@ export type RoomMapAction =
   | { type: "undo" }
   | { type: "redo" }
   | { type: "select"; objectId: string | null }
-  | { type: "selectHueZone"; hueZoneId: string | null };
+  | { type: "selectHueZone"; hueZoneId: string | null }
+  /** Nothing selected: a click on the empty plan. `select(null)` alone leaves a zone active. */
+  | { type: "clearSelection" };
 
 export function initialRoomMapState(): RoomMapState {
   return {
@@ -68,8 +74,8 @@ export function initialRoomMapState(): RoomMapState {
   };
 }
 
-function resolvePatch(patch: RoomMapPatch, config: RoomMapConfig): Partial<RoomMapConfig> {
-  return typeof patch === "function" ? patch(config) : patch;
+function resolvePatch(patch: RoomMapPatch, config: RoomMapConfig, gestureBase: RoomMapConfig = config): Partial<RoomMapConfig> {
+  return typeof patch === "function" ? patch(config, gestureBase) : patch;
 }
 
 function objectExists(config: RoomMapConfig, objectId: string): boolean {
@@ -78,7 +84,7 @@ function objectExists(config: RoomMapConfig, objectId: string): boolean {
 }
 
 /** Undo can take away the very object that is selected; a selection pointing
- *  at nothing would leave the inspector and the property bar dangling. */
+ *  at nothing would leave the inspector dangling. */
 function reconcileSelection(config: RoomMapConfig, selection: RoomMapSelection): RoomMapSelection {
   const objectId =
     selection.objectId !== null && objectExists(config, selection.objectId) ? selection.objectId : null;
@@ -102,6 +108,14 @@ function joinsOpenGesture(
   return next.continued === true || next.at - open.at <= GESTURE_COALESCE_MS;
 }
 
+function changesNothing(from: RoomMapConfig, to: RoomMapConfig): boolean {
+  const keys = new Set([...Object.keys(from), ...Object.keys(to)]) as Set<keyof RoomMapConfig>;
+  for (const key of keys) {
+    if (from[key] !== to[key] && JSON.stringify(from[key]) !== JSON.stringify(to[key])) return false;
+  }
+  return true;
+}
+
 export function roomMapReducer(state: RoomMapState, action: RoomMapAction): RoomMapState {
   switch (action.type) {
     case "hydrate":
@@ -114,11 +128,16 @@ export function roomMapReducer(state: RoomMapState, action: RoomMapAction): Room
         selection: reconcileSelection(action.config, state.selection),
       };
     case "apply": {
-      const partial = resolvePatch(action.patch, state.config);
-      const config = action.replace
-        ? (partial as RoomMapConfig)
-        : { ...state.config, ...partial };
       const merges = action.gesture !== undefined && joinsOpenGesture(state.gesture, action.gesture);
+      const base = merges ? state.past[state.past.length - 1] : undefined;
+      const partial = resolvePatch(action.patch, state.config, base);
+      const merged = action.replace ? (partial as RoomMapConfig) : { ...state.config, ...partial };
+      // One place for every writer: whatever moved the screen or its bound strip, the strip ends behind it.
+      const room = roomBoxOf(merged);
+      const seated = seatBacklight(merged, (s) => keepStripInside(s, room));
+      const config = seated ? { ...merged, usbStrips: seated } : merged;
+      // An arrow held against a wall rebuilt the array it left as it was: no undo step, no save.
+      if (changesNothing(state.config, config)) return state;
       return {
         config,
         past: merges ? state.past : pushBounded(state.past, state.config),
@@ -181,5 +200,8 @@ export function roomMapReducer(state: RoomMapState, action: RoomMapAction): Room
       }
       return { ...state, selection: { objectId, hueZoneId: action.hueZoneId } };
     }
+    case "clearSelection":
+      if (state.selection.objectId === null && state.selection.hueZoneId === null) return state;
+      return { ...state, selection: { objectId: null, hueZoneId: null } };
   }
 }

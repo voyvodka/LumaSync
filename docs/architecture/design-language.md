@@ -23,7 +23,7 @@ zone identity data and LED test-pattern swatches.
 
 **Chrome is amber in every mode; there is no dynamic accent.** A per-mode accent layer
 (`useAccentTheme`, `--accent-color`) was orphaned by a redesign and removed in #358. Where a surface
-shows the user's live colour — the hero card, Solid swatches — it reads that colour from its own
+shows the user's live colour — the Solid stage and its swatches — it reads that colour from its own
 state (`useSolidColorDraft` carries the drag draft), not from a global variable. Bringing a global
 accent back is a design decision, not a refactor.
 
@@ -35,15 +35,13 @@ referenced nowhere; it is not a focus or accent colour.
 **What is left of the old palette is small, and it only shrinks.** Slate is gone. Raw Tailwind
 `zinc-*` and palette colours survive in the room-map canvas objects and overlays (`room-map/ui/`). A file touched for another reason moves to the tokens in the
 same change; nothing new starts on the raw palette, and there is no third palette.
-`statusBannerConvention.test.ts` keeps the raw `emerald-900/20` / `rose-900/20` banner idiom out of
-the files it was removed from — it was once re-planted behind a false "kept for tests" comment.
 
 **No component or icon library.** Tailwind 4, the `lm-*` classes and `src/shared/ui/` only. Icons
 are hand-drawn inline SVG in `src/shared/ui/icons.tsx` (`stroke="currentColor"`, `fill="none"`); an
 icon used in more than one place goes there, a single-use one may stay inline beside its caller.
 
-**Compact is a separate layout, not a narrow full.** `SettingsLayout` renders `CompactLayout`
-(`settings/sections/compact/`) in compact mode, so a control added only to a full-mode section does
+**Compact is a separate layout, not a narrow full.** `SettingsLayout` renders `LightsCompact`
+(`features/lights/ui/`) in compact mode, so a control added only to a full-mode section does
 not exist for a compact user. Decide which mode it belongs to; do not assume it appears in both.
 
 **The interface is direct and quiet, not corporate.** What the maintainer asked for, settled while
@@ -114,6 +112,12 @@ rebuilding LED Setup; apply it to every new screen:
 - **Before building, show options.** Two or three directions with a sketch each, a recommendation,
   then build; iterate on the running app with hot reload.
 
+**The 3D room is the exception, on the maintainer's word.** Inside the room view's canvas — its
+scene, its lighting, its scene moods, its camera and light motion — the target is expressive: lamps
+that bloom and light the room, coloured spill, a camera that travels to what was picked. "Quiet"
+and "motion is small" below hold for the chrome around it (the dock, the face switch, the
+controls), not for the room itself.
+
 **Motion is small, light and answers a change.** The maintainer's taste, stated plainly: tiny,
 sweet micro-animations, never big ones and never a loop on a button. Each one shows what just
 changed and is gone in about a quarter of a second. The patterns are components — reach for them
@@ -135,6 +139,20 @@ before writing a transition by hand: `StateSwap`, `PageSwap`, `SpinSwap`, `Popov
 - **Land, don't slide:** a mark that moves reappears where it now is with a small scale-in and a
   one-shot ripple, rather than travelling across the stage.
 - **Tick:** a number that changes nudges in by ~3 px.
+- **A slider holds the user's value until the value given back catches up.** A drag commits faster
+  than the lights answer (retunes are coalesced), so what comes back meanwhile is behind the pointer;
+  taken as it came, it pulled the thumb back and shook the readout. `RangeRow` keeps the user's
+  value while the pointer is down and until the prop equals it (or ~1.2 s after the last move), and
+  a readout given as a function follows that value rather than the prop. Every stage slider is a
+  `RangeRow` — Solid's temperature included, through its `track` — so this lives in one place.
+- **A value set from outside glides; a drag does not.** A stage slider (`RangeRow`) whose value
+  changes under it — another effect's default, a scene applied — eases its thumb and fill there and
+  ticks its readout and a new name in; the value the user is dragging follows the pointer untouched.
+  The glide is React state for its quarter second, not a write to the input: React puts a
+  controlled input back on any render in between, which showed as a one-frame jump to the end.
+- **What leaves, leaves in place:** a row that goes when the rows around it change (an effect's
+  setting it no longer has) fades out where it stood while the others slide over it — `useFlip`'s
+  `exits`, an inert, unnamed copy — instead of vanishing and letting the rest jump.
 - **Morph a change of shape:** when what is drawn changes proportion (LED Setup's monitor on a
   display switch), it eases from the old shape to the new with a transform (FLIP), and what cannot
   morph (an SVG path — WebKit does not animate `d`) steps out and draws again once it has landed.
@@ -162,7 +180,13 @@ are box-shadows, so a ring never shifts layout; the utility form is
 `focus-visible:ring-2 focus-visible:ring-amber/60`. A button or canvas that shows a ring on every mouse click is wrong — `:focus` is for
 text fields, where the browser treats click focus as visible anyway. A ring painted on an element
 that opaque children cover is invisible: the room-map editor draws its ring on a `::after` above
-them for that reason.
+them for that reason. That ring keys off a Tab landing on the editor (`data-tabbed`), not
+`:focus-visible`: WebKit counted the focus an action hands back to the editor as visible and ringed
+the whole room after a shortcut or a drop.
+
+**Text clears 4.5:1 on the page.** `--lm-ink-faint` is the quietest text colour, used for captions,
+inactive tabs and the status bar; it was `#4d5564`, 2.7:1, until an audit read it as unreadable and
+it rose to `#737c8c`. A colour quieter than that is for borders and marks, never for words.
 
 **32 px is the tap-target floor**, for every clickable element. `IconButton` guarantees it and a
 name; a hand-rolled control has to guarantee both itself.
@@ -181,25 +205,44 @@ on the Settings choice or the OS request in every window, set from the boot read
 and forced colours can only be verified by hand on Windows.
 
 **A modal dialog is `role="dialog"` + `aria-modal="true"` + `aria-labelledby`, with
-`useDialogFocus`** (`src/shared/ui/`) trapping focus, closing on Escape through `onClose`, and
+`useDialogFocus`** (`src/shared/lib/`) trapping focus, closing on Escape through `onClose`, and
 returning focus on close — or it is a `ConfirmDialog`, which does all of that. `aria-modal` without
 the trap is worse than neither: assistive technology treats the background as inert while Tab still
-walks into it. A popover that does not block (`HeroColorCard`'s picker, the room-map shortcut list)
+walks into it. A popover that does not block (the shared `Popover` as a `dialog`, the room-map shortcut list)
 says `aria-modal="false"`. A scrim starts at `var(--lm-titlebar-h)`, never `inset: 0`: covering the
-title bar takes the drag region and the window controls with it (`modalScrimLayering.test.ts`).
+title bar takes the drag region and the window controls with it (`modalScrimLayering.test.ts`). It
+dims with `--lm-scrim`: the three modals had drifted to three depths.
 
 **Live regions are `polite`.** The one `assertive` region is the error boundary's fallback.
 
 ## i18n in components
 
 **Every user-facing string goes through `t()`**, EN and TR in the same change; rich text uses
-`<Trans>` (`UpdateModal`, `LightsSection`), never concatenation, and a count uses i18next plural keys
+`<Trans>` (`OutputsRail`), never concatenation, and a count uses i18next plural keys
 (`key_one` / `key_other` with `{ count }`), never a ternary in code.
 
 **Parity cannot see a hardcoded literal.** An English string written straight into JSX has no key in
 either locale, so the parity test and `check:i18n` both pass while a Turkish user sees English
 inside Turkish chrome — the room-map rename dialog and the status-bar key hints shipped that way.
 Catching it is review's job; no gate can.
+
+**One word per thing, in both languages.** A first-time audit found the same act called Flash,
+Identify, Tanıt and Tanımla on four screens, and "output", "calibration" and "frames" in sentences
+a user reads. The words, settled 2026-10:
+
+| Thing | EN | TR |
+|---|---|---|
+| A light strip, USB or WLED | strip | şerit |
+| What lights at all (strips and Hue) | light, lights | ışık, ışıklar |
+| Making a real light show itself | Blink | Yanıp söndür |
+| Working out a strip's colour order | Find order | Sırayı bul |
+| Counting the LEDs on each edge | LED setup (the screen: LED Setup) | LED kurulumu |
+| The controller's program | firmware | bellenim |
+| Philips' hub | Hue Bridge | Hue Bridge |
+| A Hue streaming group | entertainment area | eğlence alanı |
+
+"Output", "calibration", "frames" and "worker" stay in code. English is British ("colour"),
+sentence case everywhere except the tray menu, which follows the platform's title-case menus.
 
 **The global error boundary's hardcoded English is deliberate.** It can fire before i18next has
 loaded, so it carries fallback copy for that case; everywhere else it is localised.
@@ -215,7 +258,7 @@ multi-line blocks.
 
 **Every window is wrapped in an error boundary at its root** (`renderRoot` in `main.tsx`):
 `GlobalErrorBoundaryWithI18n`, which logs and offers a real process relaunch, or `TwinErrorBoundary`
-for the transparent overlay ([`ui-and-shell.md`](ui-and-shell.md)). A new window goes through the
+for the twin overlay and the preview scene window, both full-display ([`ui-and-shell.md`](ui-and-shell.md)). A new window goes through the
 same function. The boundary reaches Tauri only through `platform/platformApi.ts` and
 `shell/launchApi.ts`, which import nothing but `shared/`: the fallback has to render when a feature
 module is what threw, so no bridge it uses may pull feature code in.

@@ -1,0 +1,67 @@
+@layer components {
+  /* No stacking context of its own, so each part takes its place among the plan's layers. */
+  .layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  /* Under every object, over the grid: a wall gives way to a piece standing against it. */
+  .level,
+  .plumb {
+    position: absolute;
+    z-index: 2;
+    border-radius: 999px;
+    pointer-events: auto;
+    transition: background var(--lm-dur-quick);
+  }
+  .level { cursor: row-resize; }
+  .plumb { cursor: col-resize; }
+  .level:hover,
+  .plumb:hover,
+  .level:active,
+  .plumb:active { background: color-mix(in srgb, var(--lm-amber) 35%, transparent); }
+
+  /* The cut's grip: a move mark to slide the shape, a × to put the rectangle back. Screen-sized. */
+  .grip {
+    position: absolute;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    pointer-events: none;
+    transform: translate(-16px, -16px) scale(var(--wall-scale, 1));
+    transform-origin: 16px 16px;
+    /* Over the cut's wash (11) and the walls (12), so it stays reachable over a piece in the cut. */
+    z-index: 13;
+  }
+  .move,
+  .remove {
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--lm-line-2);
+    background: var(--lm-panel-2);
+    color: var(--lm-ink-dim);
+    pointer-events: auto;
+    touch-action: none;
+    transition: color var(--lm-dur-quick), border-color var(--lm-dur-quick);
+  }
+  .move { width: 32px; height: 32px; border-radius: 50%; cursor: move; }
+  .move svg { width: 16px; height: 16px; }
+  .remove { width: 22px; height: 22px; padding: 0; border-radius: 50%; }
+  .remove::before { content: ""; position: absolute; inset: -5px; }
+  .remove { position: relative; }
+  .remove svg { width: 10px; height: 10px; }
+  .move:hover { border-color: var(--lm-amber); color: var(--lm-amber); }
+  .remove:hover { border-color: var(--lm-red); color: var(--lm-red); }
+
+  :global(:root[data-reduced-motion]) .move,
+  :global(:root[data-reduced-motion]) .remove,
+  :global(:root[data-reduced-motion]) .level,
+  :global(:root[data-reduced-motion]) .plumb { transition: none; }
+
+  @media (forced-colors: active) {
+    .level:hover,
+    .plumb:hover { background: Highlight; }
+    .move,
+    .remove { border-color: ButtonText; background: ButtonFace; color: ButtonText; }
+  }
+}

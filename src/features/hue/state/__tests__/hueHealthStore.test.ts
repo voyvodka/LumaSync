@@ -25,6 +25,7 @@ import {
   resetHealth,
   runtimeStatus,
 } from "../../__tests__/fakeHueHealth";
+import { flush } from "../../__tests__/support/flushTimers";
 
 vi.mock("../../hueHealthApi", async () => (await import("../../__tests__/fakeHueHealth")).fakeHueHealthApi);
 
@@ -42,12 +43,6 @@ vi.mock("@/features/shell/windowVisibilityEventsApi", () => ({
 }));
 
 let visibility: DocumentVisibilityState = "visible";
-
-const flush = async (ms = 0) => {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(ms);
-  });
-};
 
 const setVisibility = (next: DocumentVisibilityState) => {
   visibility = next;

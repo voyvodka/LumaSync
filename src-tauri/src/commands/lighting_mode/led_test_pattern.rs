@@ -10,21 +10,23 @@ use tauri::{AppHandle, Manager, Runtime};
 use super::config::{
     AmbilightPayload, LightingModeCommandResult, LightingModeConfig, LightingModeKind,
 };
-use super::hydrate::{
-    hydrate_mode_payload, maybe_hydrate_led_calibration, read_persisted_shell_state,
-};
-use super::preview::build_edge_emitter;
+use super::hydrate::{hydrate_mode_payload, maybe_hydrate_led_calibration};
+use super::outputs::{join_local_sink, restore_payload_for};
+use super::preview::build_twin_sink;
 use super::runtime::LightingRuntimeState;
 use super::snapshot;
+use super::strip_set::{strips_from, StripSet};
 use super::transition::{
     apply_mode_change, command_status, note_applied_mode, run_mode_transition,
 };
+use super::tuning::{accepting_for_running, StoredTuning};
 use crate::commands::calibration::list_displays;
 use crate::commands::hue::state_store::{snapshot_hue_output_context, HueRuntimeStateStore};
 use crate::commands::led_calibration::LedCalibrationConfig;
 use crate::commands::led_output::LedColorOrder;
-use crate::commands::led_preview::{emit_preview_state_changed, LedTwinState};
-use crate::commands::local_outputs::{DrivenLocal, LocalOutputRegistry};
+use crate::commands::local_outputs::LocalOutputRegistry;
+use crate::commands::preview::session::resolve_display;
+use crate::commands::preview::PreviewSessionState;
 use crate::commands::runtime_telemetry::RuntimeTelemetryState;
 use crate::commands::shell_state::{self, PersistedShellState};
 use crate::commands::status::CommandStatus;
@@ -38,6 +40,7 @@ const LED_TEST_PATTERN_STOPPED: &str = "LED_TEST_PATTERN_STOPPED";
 const LED_TEST_PATTERN_INVALID_PARAMS: &str = "LED_TEST_PATTERN_INVALID_PARAMS";
 const LED_TEST_PATTERN_NO_CALIBRATION: &str = "LED_TEST_PATTERN_NO_CALIBRATION";
 const LED_TEST_PATTERN_RUNTIME_ERROR: &str = "LED_TEST_PATTERN_RUNTIME_ERROR";
+const LED_TEST_PATTERN_SCENE_ACTIVE: &str = "LED_TEST_PATTERN_SCENE_ACTIVE";
 
 /// Aspect (width / height) of the display the strip surrounds, used to weight
 /// the synthetic frame's perimeter. Prefers the user's selected display so it
@@ -47,13 +50,7 @@ fn resolve_display_aspect<R: Runtime>(app: &AppHandle<R>) -> f32 {
         return DEFAULT_DISPLAY_ASPECT;
     };
     let selected = shell_state::persisted(app).and_then(|state| state.selected_display_id());
-
-    let target = selected
-        .and_then(|id| displays.iter().find(|d| d.id == id))
-        .or_else(|| displays.iter().find(|d| d.is_primary))
-        .or_else(|| displays.first());
-
-    match target {
+    match resolve_display(&displays, selected.as_deref()) {
         Some(d) if d.height > 0 => d.width as f32 / d.height as f32,
         _ => DEFAULT_DISPLAY_ASPECT,
     }
@@ -69,27 +66,25 @@ pub(super) fn apply_and_broadcast<R: Runtime>(
     runtime_state: &LightingRuntimeState,
     // The whole "usb" channel, WLED included: collapsed to the serial one, a WLED-only session
     // ran preview-only and its restore was gated on stop.
-    driven: Option<&DrivenLocal>,
+    strips: &StripSet,
     hue_runtime_state: &HueRuntimeStateStore,
     telemetry_state: &RuntimeTelemetryState,
-    twin_state: &LedTwinState,
+    preview_session: &PreviewSessionState,
     test_pattern: Option<TestPatternConfig>,
 ) -> Result<LightingModeCommandResult, String> {
     runtime_state.tuning.close_blocking();
-    hydrate_mode_payload(&mut payload, &|| read_persisted_shell_state(app));
-    let (device_connected, connected_port, wled_sink) = DrivenLocal::plan_args(driven);
+    hydrate_mode_payload(&mut payload, &|| shell_state::persisted(app));
+    let (device_connected, connected_port, wled_sink) = strips.plan_args();
 
-    let edge_emitter = Some(build_edge_emitter(app));
+    let twin_sink = Some(build_twin_sink(app));
 
     let starts_a_test = test_pattern.is_some();
     let result = {
-        let mut owner = runtime_state
-            .runtime
-            .lock()
-            .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
+        let mut owner = runtime_state.lock_owner()?;
         let hue_output = Some(hue_runtime_state.output_live());
         owner.preview.pending_test_pattern = test_pattern;
-        owner.preview.preview_gate = Some(twin_state.preview_active());
+        owner.preview.preview_gate = Some(preview_session.twin_open());
+        owner.strips = strips.clone();
         apply_mode_change(
             &mut owner,
             payload,
@@ -98,7 +93,7 @@ pub(super) fn apply_and_broadcast<R: Runtime>(
             wled_sink,
             hue_output,
             Some(telemetry_state.shared_snapshot()),
-            edge_emitter,
+            twin_sink,
             None,
         )
     };
@@ -157,8 +152,17 @@ pub struct LedTestPatternResult {
     pub status: CommandStatus,
 }
 
-/// Start a synthetic LED test pattern (spiral, chase, etc.) for the LED
-/// Preview feature — resolves available output targets, requires a real
+/// A test refused before anything was applied.
+fn not_started(code: &str, message: &str, details: Option<String>) -> LedTestPatternResult {
+    LedTestPatternResult {
+        active: false,
+        preview_only: false,
+        status: command_status(code, message, details),
+    }
+}
+
+/// Start a synthetic LED test pattern (LED Setup's guide, a channel probe)
+/// — resolves available output targets, requires a real
 /// strip calibration to size the pattern, and captures the prior live mode
 /// so `stop_led_test_pattern` can restore it.
 #[tauri::command]
@@ -179,39 +183,36 @@ fn start_led_test_pattern_blocking<R: Runtime>(
     let runtime_state = app.state::<LightingRuntimeState>();
     let hue_runtime_state = app.state::<HueRuntimeStateStore>();
     let telemetry_state = app.state::<RuntimeTelemetryState>();
-    let led_twin_state = app.state::<LedTwinState>();
+    let preview_session = app.state::<PreviewSessionState>();
+    // The scene owns the lights; its stop restores the mode a test would
+    // record as its own prior.
+    if runtime_state.scene_active() {
+        return Ok(not_started(
+            LED_TEST_PATTERN_SCENE_ACTIVE,
+            "A preview scene is running; stop it first.",
+            None,
+        ));
+    }
     if !payload.brightness.is_finite() || !(0.0..=1.0).contains(&payload.brightness) {
-        return Ok(LedTestPatternResult {
-            active: false,
-            preview_only: false,
-            status: command_status(
-                LED_TEST_PATTERN_INVALID_PARAMS,
-                "Test pattern brightness must be within 0..1.",
-                None,
-            ),
-        });
+        return Ok(not_started(
+            LED_TEST_PATTERN_INVALID_PARAMS,
+            "Test pattern brightness must be within 0..1.",
+            None,
+        ));
     }
     if let Some(Err(reason)) = payload.led_calibration.as_ref().map(|c| c.validate()) {
-        return Ok(LedTestPatternResult {
-            active: false,
-            preview_only: false,
-            status: command_status(
-                LED_TEST_PATTERN_INVALID_PARAMS,
-                "The LED layout for the test is not valid.",
-                Some(reason),
-            ),
-        });
+        return Ok(not_started(
+            LED_TEST_PATTERN_INVALID_PARAMS,
+            "The LED layout for the test is not valid.",
+            Some(reason),
+        ));
     }
     if matches!(payload.pattern, TestPatternKind::ChannelProbe { slot } if slot > 2) {
-        return Ok(LedTestPatternResult {
-            active: false,
-            preview_only: false,
-            status: command_status(
-                LED_TEST_PATTERN_INVALID_PARAMS,
-                "Channel probe slot must be 0, 1 or 2.",
-                None,
-            ),
-        });
+        return Ok(not_started(
+            LED_TEST_PATTERN_INVALID_PARAMS,
+            "Channel probe slot must be 0, 1 or 2.",
+            None,
+        ));
     }
 
     let test_config = TestPatternConfig {
@@ -223,7 +224,10 @@ fn start_led_test_pattern_blocking<R: Runtime>(
 
     // Resolve sink availability up front to choose targets + report
     // preview-only without re-deriving it from apply_mode_change.
-    let driven = app.state::<LocalOutputRegistry>().driven_checked()?;
+    let strips = strips_from(
+        &app.state::<LocalOutputRegistry>(),
+        shell_state::persisted(app).as_ref(),
+    )?;
     let hue_available = snapshot_hue_output_context(hue_runtime_state.inner())?
         .map(|ctx| !ctx.channels.is_empty())
         .unwrap_or(false);
@@ -232,7 +236,7 @@ fn start_led_test_pattern_blocking<R: Runtime>(
     let want_usb = requested.is_empty() || requested.iter().any(|t| t == "usb");
     let want_hue = requested.iter().any(|t| t == "hue");
     // A bound WLED device IS the "usb" channel — see `UsbOutputPlan`.
-    let use_usb = driven.is_some() && want_usb;
+    let use_usb = strips.primary().is_some() && want_usb;
     let use_hue = hue_available && want_hue;
     let preview_only = !use_usb && !use_hue;
 
@@ -248,6 +252,7 @@ fn start_led_test_pattern_blocking<R: Runtime>(
         kind: LightingModeKind::Ambilight,
         solid: None,
         ambilight: Some(test_pattern_ambilight(payload.brightness)),
+        effect: None,
         targets: Some(targets),
         display_id: None,
         led_calibration: payload.led_calibration.clone(),
@@ -261,49 +266,35 @@ fn start_led_test_pattern_blocking<R: Runtime>(
     // A synthetic test needs a real strip layout to size its frame. Resolve
     // the effective calibration up front: with no usable calibration the
     // worker would silently degrade to a single-LED twin (one dot) while the
-    // chase band is sized for FALLBACK_TOTAL_LEDS — a misleading single-dot
+    // guide is sized for FALLBACK_TOTAL_LEDS — a misleading single-dot
     // preview. Route the user to the calibration flow with a coded status
     // instead. (Never throws — coded status on the Ok result.)
-    maybe_hydrate_led_calibration(&mut config, &|| read_persisted_shell_state(app));
+    maybe_hydrate_led_calibration(&mut config, &|| shell_state::persisted(app));
     let effective_total_leds = config
         .led_calibration
         .as_ref()
         .map(|cal| cal.total_leds)
         .unwrap_or(0);
     if effective_total_leds <= 1 {
-        return Ok(LedTestPatternResult {
-            active: false,
-            preview_only: false,
-            status: command_status(
-                LED_TEST_PATTERN_NO_CALIBRATION,
-                "No LED calibration is available to size the test pattern.",
-                None,
-            ),
-        });
+        return Ok(not_started(
+            LED_TEST_PATTERN_NO_CALIBRATION,
+            "No LED calibration is available to size the test pattern.",
+            None,
+        ));
     }
 
     // Capture the live mode to restore on stop — but never overwrite a real
     // prior mode with a test mode if we are already previewing.
     {
-        let prior = {
-            let owner = runtime_state
-                .runtime
-                .lock()
-                .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
-            if owner.preview.active_test_pattern.is_some() {
-                None
-            } else {
-                // Fresh run — rewind the animation. A tweak to an already
-                // running pattern keeps its phase instead.
-                owner
-                    .preview
-                    .pattern_phase
-                    .store(0f32.to_bits(), Ordering::Relaxed);
-                Some(owner.active_mode.clone())
-            }
-        };
-        if let Some(prior_mode) = prior {
-            led_twin_state.set_prior_mode(prior_mode);
+        let mut owner = runtime_state.lock_owner()?;
+        if owner.preview.active_test_pattern.is_none() {
+            // Fresh run — rewind the animation. A tweak to an already
+            // running pattern keeps its phase instead.
+            owner
+                .preview
+                .pattern_phase
+                .store(0f32.to_bits(), Ordering::Relaxed);
+            owner.preview.test_prior = Some(owner.active_mode.clone());
         }
     }
 
@@ -311,14 +302,12 @@ fn start_led_test_pattern_blocking<R: Runtime>(
         app,
         config,
         runtime_state.inner(),
-        driven.as_ref(),
+        &strips,
         hue_runtime_state.inner(),
         telemetry_state.inner(),
-        led_twin_state.inner(),
+        preview_session.inner(),
         Some(test_config),
     )?;
-
-    emit_preview_state_changed(app);
 
     let outcome = if is_ambilight_start_ok(&result.status.code) {
         let code = if preview_only {
@@ -363,27 +352,39 @@ pub(super) fn is_ambilight_start_ok(code: &str) -> bool {
     code == "AMBILIGHT_MODE_STARTED" || code == "AMBILIGHT_MODE_UPDATED"
 }
 
-/// The pre-test mode with its output stamps and calibration re-read from disk.
-/// The snapshot dates from test start and hydration is caller-wins, so stale
-/// values would revert a chip / profile / correction change made mid-test and
-/// the calibration editor's save-then-stop. The snapshot's layout survives only
-/// when disk has none, instead of dropping to the legacy 1-LED frame.
+/// The pre-test mode as a choice of it would run now: its payload and the
+/// shared brightness from the retune store, its output stamps and calibration
+/// re-read from disk. The snapshot dates from test start and hydration is
+/// caller-wins, so stale values would revert a retune, a chip / profile /
+/// correction change made mid-test and the calibration editor's
+/// save-then-stop. The snapshot's layout survives only when disk has none,
+/// instead of dropping to the legacy 1-LED frame.
 pub(super) fn restore_mode_after_test(
     prior: Option<LightingModeConfig>,
+    stored: &StoredTuning,
     load: &dyn Fn() -> Option<PersistedShellState>,
 ) -> LightingModeConfig {
-    let mut restore = prior.unwrap_or_default();
-    restore.chip_type = None;
-    restore.firmware_profile = None;
-    restore.color_correction = None;
-    restore.color_order = None;
-    if let Some(snapshot_calibration) = restore.led_calibration.take() {
+    let prior = prior.unwrap_or_default();
+    let mut restore = restore_payload_for(&prior, stored, load().as_ref());
+    if let Some(snapshot_calibration) = prior.led_calibration {
         maybe_hydrate_led_calibration(&mut restore, load);
         if restore.led_calibration.is_none() {
             restore.led_calibration = Some(snapshot_calibration);
         }
     }
     restore
+}
+
+/// What a transaction's commit does for retunes, after a restore that ran
+/// outside one: the restored mode takes them again, and one that arrived
+/// after the restore read the store at `generation` is applied now. Not
+/// `carried`, so the next choice re-applies rather than trust it.
+pub(super) fn accept_retunes_after_restore<R: Runtime>(app: &AppHandle<R>, generation: u64) {
+    let hue_output = app.state::<HueRuntimeStateStore>().output_live();
+    let accepting = accepting_for_running(app, hue_output);
+    app.state::<LightingRuntimeState>()
+        .tuning
+        .commit_blocking(accepting, generation, false);
 }
 
 /// Stop the running LED test pattern and restore the mode that was active
@@ -402,26 +403,47 @@ fn stop_led_test_pattern_blocking<R: Runtime>(
     let runtime_state = app.state::<LightingRuntimeState>();
     let hue_runtime_state = app.state::<HueRuntimeStateStore>();
     let telemetry_state = app.state::<RuntimeTelemetryState>();
-    let led_twin_state = app.state::<LedTwinState>();
-    let driven = app.state::<LocalOutputRegistry>().driven_checked()?;
-    let restore = restore_mode_after_test(led_twin_state.take_prior_mode(), &|| {
-        read_persisted_shell_state(app)
-    });
+    let preview_session = app.state::<PreviewSessionState>();
+    let strips = strips_from(
+        &app.state::<LocalOutputRegistry>(),
+        shell_state::persisted(app).as_ref(),
+    )?;
+    let prior = {
+        let mut owner = runtime_state.lock_owner()?;
+        let prior = owner.preview.test_prior.take();
+        // A user's choice that superseded the test dropped its prior and runs
+        // now; the test's own stop still comes (LED Setup's dispose, a
+        // Flash's timer) and must not apply Off around the transaction.
+        if prior.is_none() && owner.preview.active_test_pattern.is_none() {
+            return Ok(LedTestPatternResult {
+                active: owner.active_mode.kind != LightingModeKind::Off,
+                preview_only: false,
+                status: command_status(
+                    LED_TEST_PATTERN_STOPPED,
+                    "No LED test pattern was running.",
+                    None,
+                ),
+            });
+        }
+        prior
+    };
+    let stored = runtime_state.tuning.stored();
+    let restore = restore_mode_after_test(prior, &stored, &|| shell_state::persisted(app));
     let mut result = apply_and_broadcast(
         app,
         restore,
         runtime_state.inner(),
-        driven.as_ref(),
+        &strips,
         hue_runtime_state.inner(),
         telemetry_state.inner(),
-        led_twin_state.inner(),
+        preview_session.inner(),
         None,
     )?;
 
     // A gated restore (DEVICE_NOT_CONNECTED / HUE_NOT_READY) returns before
     // `apply_mode_change` tears the previous worker down, so the synthetic
     // pattern would keep running with no way to stop it. Fall back to Off.
-    if runtime_state.preview_snapshot().test_active {
+    if runtime_state.test_pattern_active() {
         warn!(
             "[stop_led_test_pattern] restore gated ({}) — forcing Off so the synthetic worker stops",
             result.status.code
@@ -430,16 +452,16 @@ fn stop_led_test_pattern_blocking<R: Runtime>(
             app,
             LightingModeConfig::default(),
             runtime_state.inner(),
-            driven.as_ref(),
+            &strips,
             hue_runtime_state.inner(),
             telemetry_state.inner(),
-            led_twin_state.inner(),
+            preview_session.inner(),
             None,
         )?;
     }
+    accept_retunes_after_restore(app, stored.generation);
+    join_local_sink(app);
 
-    led_twin_state.recompute();
-    emit_preview_state_changed(app);
     Ok(LedTestPatternResult {
         active: result.active,
         preview_only: false,

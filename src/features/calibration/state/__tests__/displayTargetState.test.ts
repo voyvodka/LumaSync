@@ -213,3 +213,45 @@ describe("switchActiveDisplay — rapid clicks", () => {
     expect(opened).not.toContain("display-3");
   });
 });
+
+describe("closeActiveDisplay", () => {
+  it("closes the overlay an open still in flight puts up", async () => {
+    const { state, openDisplayOverlay, closeDisplayOverlay } = createState();
+    let land!: () => void;
+    openDisplayOverlay.mockImplementationOnce(
+      () =>
+        new Promise<DisplayOverlayCommandResult>((resolve) => {
+          land = () => resolve(okResult());
+        }),
+    );
+
+    const opening = state.switchActiveDisplay("display-1");
+    await Promise.resolve();
+    const closing = state.closeActiveDisplay();
+    land();
+    await Promise.all([opening, closing]);
+
+    expect(closeDisplayOverlay).toHaveBeenCalledWith("display-1");
+    expect(state.getSnapshot().activeDisplayId).toBeNull();
+  });
+
+  it("drops a click still waiting its turn", async () => {
+    const { state, openDisplayOverlay } = createState();
+    let land!: () => void;
+    openDisplayOverlay.mockImplementationOnce(
+      () =>
+        new Promise<DisplayOverlayCommandResult>((resolve) => {
+          land = () => resolve(okResult());
+        }),
+    );
+
+    const first = state.switchActiveDisplay("display-1");
+    const waiting = state.switchActiveDisplay("display-2");
+    const closing = state.closeActiveDisplay();
+    land();
+    await Promise.all([first, waiting, closing]);
+
+    expect(openDisplayOverlay).not.toHaveBeenCalledWith("display-2", undefined);
+    expect(state.getSnapshot().activeDisplayId).toBeNull();
+  });
+});

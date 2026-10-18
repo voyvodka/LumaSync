@@ -56,6 +56,7 @@
   @keyframes card-in { from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)); } }
   @keyframes card-out { to { opacity: 0; transform: translate(-50%, calc(-50% - 6px)); } }
 
+  :global(:root[data-reduced-motion]) .primary { transition: none; }
   :global(:root[data-reduced-motion]) .card,
   :global(:root[data-reduced-motion]) .leaving { animation: none; }
 }

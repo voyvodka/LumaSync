@@ -151,6 +151,8 @@
   @keyframes tick { from { opacity: 0.35; transform: translateY(-3px); } }
 
   :global(:root[data-reduced-motion]) .tick { animation: none; }
+  :global(:root[data-reduced-motion]) :is(.step, .remove, .link),
+  :global(:root[data-reduced-motion]) .chip:is(:hover, :focus-within) :is(.step, .remove, .link) { transition: none; }
   :global(:root[data-reduced-motion]) .before,
   :global(:root[data-reduced-motion]) .after { clip-path: none; }
 

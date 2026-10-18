@@ -30,7 +30,15 @@
   }
   .label { color: var(--lm-ink-dim); }
   .value { display: inline-flex; align-items: center; gap: 4px; color: var(--lm-ink-faint); }
-  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--lm-ink-faint); }
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--lm-ink-faint);
+    transition: background-color var(--lm-dur-base) linear, box-shadow var(--lm-dur-base) linear;
+  }
+  .value[data-changed] { animation: word-in var(--lm-dur-base) var(--lm-ease-out); }
+  @keyframes word-in { from { opacity: 0; transform: translateY(3px); } }
 
   .ok { color: var(--lm-green); }
   .active { color: var(--lm-amber); }
@@ -71,7 +79,8 @@
   .latency { display: inline-block; min-width: 7ch; text-align: right; font-variant-numeric: tabular-nums; }
   .lowFps { font-weight: 500; }
 
-  :global(:root[data-reduced-motion]) .button { transition: none; }
+  :global(:root[data-reduced-motion]) :is(.button, .dot) { transition: none; }
+  :global(:root[data-reduced-motion]) .value[data-changed] { animation: none; }
 
   @media (forced-colors: active) {
     .bar { border-top-color: CanvasText; }

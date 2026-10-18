@@ -10,29 +10,12 @@ export interface HueRuntimeStatusCardRetry {
 }
 
 export interface HueRuntimeStatusCardModel {
-  variant: "success" | "error" | "info";
-  titleKey: TranslationKey;
-  bodyKey: TranslationKey;
-  details?: string;
   actionHints: HueRuntimeActionHint[];
   retry?: HueRuntimeStatusCardRetry;
-  triggerSourceKey?: TranslationKey;
 }
 
 export interface HueRuntimeStatusCardInput {
   status: HueRuntimeStatusView | null;
-}
-
-function resolveVariant(status: HueRuntimeStatusView): HueRuntimeStatusCardModel["variant"] {
-  if (status.state === "Running") {
-    return "success";
-  }
-
-  if (status.state === "Failed") {
-    return "error";
-  }
-
-  return "info";
 }
 
 export function deriveFamilyActionHints(code: string | null | undefined): HueRuntimeActionHint[] {
@@ -91,12 +74,7 @@ function resolveActionHints(status: HueRuntimeStatusView): HueRuntimeActionHint[
 
 export function buildHueRuntimeStatusCard(input: HueRuntimeStatusCardInput): HueRuntimeStatusCardModel {
   if (!input.status) {
-    return {
-      variant: "info",
-      titleKey: "hue:runtime.idleTitle",
-      bodyKey: "hue:runtime.idleBody",
-      actionHints: [],
-    };
+    return { actionHints: [] };
   }
 
   const status = input.status;
@@ -108,12 +86,6 @@ export function buildHueRuntimeStatusCard(input: HueRuntimeStatusCardInput): Hue
   const hasRetry = remainingAttempts !== undefined || nextAttemptMs !== undefined;
 
   return {
-    variant: resolveVariant(status),
-    titleKey: `hue:runtime.states.${status.state}`,
-    // `status.code` is `HueRuntimeStatusCode | string` — HUE-* fault-family codes (see
-    // deriveFamilyActionHints) are open strings by design, not enum members.
-    bodyKey: `hue:runtime.codes.${status.code}` as TranslationKey,
-    details: status.details ?? undefined,
     actionHints: resolveActionHints(status),
     retry: hasRetry
       ? {
@@ -122,6 +94,5 @@ export function buildHueRuntimeStatusCard(input: HueRuntimeStatusCardInput): Hue
           labelKey: "hue:runtime.retry.progress",
         }
       : undefined,
-    triggerSourceKey: `hue:runtime.triggerSource.${status.triggerSource}`,
   };
 }

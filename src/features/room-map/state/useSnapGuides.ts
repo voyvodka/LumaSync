@@ -13,6 +13,8 @@ export type { ObjectRect, SnapGuide, SnapResult };
 
 export interface UseSnapGuidesReturn {
   guides: SnapGuide[];
+  /** A piece is being dragged now: the plan shows its grid more strongly meanwhile. */
+  dragging: boolean;
   onDragMove: (id: string, x: number, y: number, w: number, h: number) => SnapResult;
   onDragEnd: () => void;
 }
@@ -27,6 +29,8 @@ export function sameGuides(a: readonly SnapGuide[], b: readonly SnapGuide[]): bo
  *  enters or leaves a snap, so an unchanged list is not stored. */
 export function useSnapGuides(config: RoomMapConfig): UseSnapGuidesReturn {
   const [guides, setGuides] = useState<SnapGuide[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const draggingRef = useRef(false);
   const guidesRef = useRef<SnapGuide[]>(guides);
   const configRef = useRef(config);
   configRef.current = config;
@@ -39,6 +43,10 @@ export function useSnapGuides(config: RoomMapConfig): UseSnapGuidesReturn {
 
   const onDragMove = useCallback(
     (id: string, x: number, y: number, w: number, h: number): SnapResult => {
+      if (!draggingRef.current) {
+        draggingRef.current = true;
+        setDragging(true);
+      }
       const others = getObjectRects(configRef.current, id);
       const dragging: ObjectRect = { id, x, y, w, h };
       const result = computeSnap(dragging, others, SNAP_THRESHOLD_M);
@@ -50,7 +58,11 @@ export function useSnapGuides(config: RoomMapConfig): UseSnapGuidesReturn {
 
   const onDragEnd = useCallback(() => {
     publish([]);
+    if (draggingRef.current) {
+      draggingRef.current = false;
+      setDragging(false);
+    }
   }, [publish]);
 
-  return { guides, onDragMove, onDragEnd };
+  return { guides, dragging, onDragMove, onDragEnd };
 }

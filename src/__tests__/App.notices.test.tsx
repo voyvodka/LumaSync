@@ -84,7 +84,9 @@ it.each(["compact", "full"] as const)("gives the %s notice slot its own row inst
   expect(noticeSlot).toBeInTheDocument();
   expect(noticeSlot).toHaveAttribute("data-variant", uiMode);
 
-  const slot = noticeSlot.parentElement!;
+  // The slot's row is its Reveal, which grows it in and out of that column.
+  const row = noticeSlot.closest("[data-reveal]")!;
+  const slot = row.parentElement!;
   expect(slot.className).toContain("flex");
   expect(slot.className).toContain("flex-col");
 

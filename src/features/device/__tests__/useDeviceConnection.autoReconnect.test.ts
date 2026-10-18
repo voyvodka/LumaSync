@@ -16,6 +16,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { withRegistry } from "./support/fakeRegistry";
+import { listResponse } from "./support/portList";
 
 import { createConnectionEventBus, type ConnectionEvent } from "../connectionEvents";
 import type { SerialConnectionStatus, SerialPortListResponse } from "../deviceConnectionApi";
@@ -25,13 +26,6 @@ import type { DeviceConnectionControllerDeps } from "@/features/device/state/con
 // ---------------------------------------------------------------------------
 // Helpers shared across scenarios
 // ---------------------------------------------------------------------------
-
-function listResponse(ports: SerialPortListResponse["ports"]): SerialPortListResponse {
-  return {
-    status: { code: "LIST_PORTS_OK", message: "ok", details: null },
-    ports,
-  };
-}
 
 const BLUETOOTH_PORT: SerialPortListResponse["ports"][number] = {
   name: "/dev/cu.Bluetooth-Incoming-Port",

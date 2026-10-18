@@ -15,7 +15,7 @@ use super::super::hue::transport::{
 };
 use super::super::hue_http::classify_hue_response;
 use super::super::status::CommandStatus;
-use super::{command_status, identity_mismatch_status, send_clip_v1};
+use super::{identity_mismatch_status, send_clip_v1};
 
 /// A discovered or verified Hue bridge, as surfaced to the frontend picker.
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -166,7 +166,7 @@ fn merge_discovery_sources(
 
     if !bridges.is_empty() {
         return HueDiscoveryResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "HUE_DISCOVERY_OK",
                 "Hue bridges discovered successfully.",
                 None,
@@ -178,7 +178,7 @@ fn merge_discovery_sources(
     // No bridges from either source.
     if cloud_status_code == "HUE_DISCOVERY_FAILED" {
         HueDiscoveryResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "HUE_DISCOVERY_FAILED",
                 "Could not discover Hue bridges automatically. You can continue with manual IP.",
                 cloud_error,
@@ -187,7 +187,7 @@ fn merge_discovery_sources(
         }
     } else {
         HueDiscoveryResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "HUE_DISCOVERY_EMPTY",
                 "No Hue bridges discovered automatically. You can continue with manual IP.",
                 None,
@@ -212,7 +212,7 @@ pub async fn verify_hue_bridge_ip(bridge_ip: String) -> HueVerifyBridgeIpRespons
         Ok(clients) => clients,
         Err(error) => {
             return HueVerifyBridgeIpResponse {
-                status: command_status(
+                status: CommandStatus::new(
                     "HUE_IP_UNREACHABLE",
                     "Could not initialize bridge verification client.",
                     Some(error),
@@ -286,7 +286,7 @@ pub(crate) async fn verify_bridge_at(
             verified
         }
         Err(error) => HueVerifyBridgeIpResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "HUE_IP_UNREACHABLE",
                 "Could not reach Hue bridge at the provided IP. Verify bridge power/network and try again.",
                 Some(error),
@@ -299,7 +299,7 @@ pub(crate) async fn verify_bridge_at(
 pub fn parse_discovery_payload(payload: &str) -> HueDiscoveryResponse {
     match serde_json::from_str::<Vec<DiscoveryBridge>>(payload) {
         Ok(discovered) if discovered.is_empty() => HueDiscoveryResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "HUE_DISCOVERY_EMPTY",
                 "No Hue bridges discovered automatically. You can continue with manual IP.",
                 None,
@@ -319,7 +319,7 @@ pub fn parse_discovery_payload(payload: &str) -> HueDiscoveryResponse {
                 .collect::<Vec<_>>();
 
             HueDiscoveryResponse {
-                status: command_status(
+                status: CommandStatus::new(
                     "HUE_DISCOVERY_OK",
                     "Hue bridges discovered successfully.",
                     None,
@@ -328,7 +328,7 @@ pub fn parse_discovery_payload(payload: &str) -> HueDiscoveryResponse {
             }
         }
         Err(error) => HueDiscoveryResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "HUE_DISCOVERY_FAILED",
                 "Bridge discovery returned an unexpected response.",
                 Some(error.to_string()),
@@ -343,7 +343,7 @@ pub fn parse_discovery_payload(payload: &str) -> HueDiscoveryResponse {
 pub fn verify_hue_bridge_ip_input(ip: &str) -> HueVerifyBridgeIpResponse {
     if !is_valid_bridge_addr(ip) {
         return HueVerifyBridgeIpResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "HUE_IP_INVALID",
                 "Bridge IP is not a local-network IPv4 address.",
                 Some("Use a value like 192.168.1.50".to_string()),
@@ -353,7 +353,7 @@ pub fn verify_hue_bridge_ip_input(ip: &str) -> HueVerifyBridgeIpResponse {
     }
 
     HueVerifyBridgeIpResponse {
-        status: command_status(
+        status: CommandStatus::new(
             "HUE_IP_VALID",
             "Bridge IP format is valid. Verifying reachability...",
             None,
@@ -366,7 +366,7 @@ fn parse_bridge_config_payload(bridge_ip: &str, payload: &str) -> HueVerifyBridg
     let parsed = serde_json::from_str::<Value>(payload);
     let Ok(value) = parsed else {
         return HueVerifyBridgeIpResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "HUE_IP_UNREACHABLE",
                 "Bridge responded with unexpected payload during IP verification.",
                 parsed.err().map(|error| error.to_string()),
@@ -395,7 +395,7 @@ fn parse_bridge_config_payload(bridge_ip: &str, payload: &str) -> HueVerifyBridg
         .map(str::to_string);
 
     HueVerifyBridgeIpResponse {
-        status: command_status(
+        status: CommandStatus::new(
             "HUE_IP_VALID",
             "Hue bridge is reachable at the provided IP.",
             None,

@@ -5,6 +5,7 @@ import {
   DEFAULT_LED_COLOR_ORDER,
   FIRMWARE_PROFILE,
   LED_CHIP_TYPE,
+  DEVICE_ERROR_CODES,
   SERIAL_CONNECT_STATUS,
   SERIAL_DISCONNECT_STATUS,
   SERIAL_OUTPUT_STATUS,
@@ -34,10 +35,12 @@ import { useStripUnlit, type FlashOutcome } from "../state/stripFlash";
 import { useAdvertisedFirmwareProfile, useAdvertisedPixelLayout } from "../useAdvertisedFirmwareProfile";
 import type { UseDeviceConnectionResult } from "../useDeviceConnection";
 import { ChipRow, ColorOrderRow, FirmwareRow, saveHardware } from "./StripHardwareRows";
+import { StripColorRow } from "./StripColorRow";
 import { StripFlash } from "./StripFlash";
 import { StripLayoutRow } from "./StripLayoutRow";
 import { StripName } from "./StripName";
 import { CodedNote, UnlitHelp, connectFailedOn } from "./StripNotes";
+import pageStyles from "@/shared/ui/SettingRow/SettingPage.module.css";
 import styles from "./StripPage.module.css";
 
 export interface StripPageProps {
@@ -191,11 +194,12 @@ export function StripPage({
     ) : null;
 
   // Why it is not lighting: the user's own failed connect first, else what Rust recorded for the port.
-  // A port let go of (DISCONNECTED) is not a failure.
+  // A port let go of (DISCONNECTED) is not a failure, nor one unplugged: the state word says that.
   const entryFailed =
     entry !== null &&
     !entry.connected &&
     entry.status.code !== SERIAL_OUTPUT_STATUS.DISCONNECTED &&
+    entry.status.code !== DEVICE_ERROR_CODES.PORT_NOT_FOUND &&
     entry.status.code !== SERIAL_CONNECT_STATUS.OK;
   const userFailed = !connected && connectFailedOn(device, port);
   // Held through a retry: the note stays where it is rather than closing and reopening on the same words.
@@ -247,9 +251,9 @@ export function StripPage({
   ];
 
   return (
-    <section className={styles.page} hidden={!isActive} aria-labelledby={headingId} data-testid="strip-page">
+    <section className={pageStyles.page} hidden={!isActive} aria-labelledby={headingId} data-testid="strip-page">
       <StripName stripId={strip.id} name={name} renamed={strip.name !== undefined} headingId={headingId} />
-      <div className={styles.rows}>
+      <div className={pageStyles.rows}>
         <Reveal open>
           <SettingRow
             label={t("device:strip.row.controller")}
@@ -258,7 +262,7 @@ export function StripPage({
             testId="strip-controller"
             controlFills
             control={
-              <PageSwap id={state} way="fade" className={styles.swap}>
+              <PageSwap id={state} way="fade" className={pageStyles.swap}>
                 <StateWord tone={view.tone} live={false}>
                   {t(view.word)}
                 </StateWord>
@@ -339,6 +343,9 @@ export function StripPage({
         </Reveal>
         <Reveal open>
           <ColorOrderRow stripId={strip.id} order={order} canIdentify={connected} />
+        </Reveal>
+        <Reveal open>
+          <StripColorRow />
         </Reveal>
 
         <Reveal open>

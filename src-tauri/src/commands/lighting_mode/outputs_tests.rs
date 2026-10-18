@@ -18,26 +18,35 @@ use tauri::async_runtime::{block_on, spawn, JoinHandle};
 use tauri::Manager;
 
 use super::hue_driver::HueAreaVerdict;
+use super::led_test_pattern::{apply_and_broadcast, stop_led_test_pattern};
 use super::outputs::{
     apply_outputs_with, listen_hue_health, note_hue_reachable, note_local_sink_connected,
     note_settings_saved, refresh_running_with, release_hue_with, wait_for_area_release,
     ApplyOutputsRequest, ApplyOutputsResult, CancelToken, LightingOrigin, ReleaseWait,
     BOOT_HUE_RETRY_POLL, BOOT_HUE_RETRY_WINDOW,
 };
+use super::preview_scene::{start_scene_queued, stop_scene_lighting};
 use super::snapshot::{BootHueRetryState, HueLeftOutReason, LightingPhase, OutputTarget};
+use super::strip_set::StripSet;
 use super::test_support::{Rig, RigSetup};
-use super::transition::set_lighting_mode_blocking;
+use super::transition::{set_lighting_mode_blocking, stop_lighting};
 use super::tuning::{retune_lighting, LightingTuning};
 use super::{
     stop_lighting_blocking, AmbilightPayload, LightingModeConfig, LightingModeKind,
     SolidColorPayload, ACTIVE_AMBILIGHT_WORKERS,
 };
 use crate::commands::hue::light_restore::HueLightsAfterStop;
-use crate::commands::hue::state_store::HueRuntimeTriggerSource;
+use crate::commands::hue::state_store::test_helpers::dummy_active_stream_context;
+use crate::commands::hue::state_store::{
+    HueActiveOutputContext, HueRuntimeStateStore, HueRuntimeTriggerSource,
+};
 use crate::commands::led_output::{
     encode_packet_for_output, ColorCorrectionConfig, EncoderPlan, FirmwareProfile, LedChipType,
 };
 use crate::commands::local_outputs::LocalOutputRegistry;
+use crate::commands::preview::{PreviewSessionState, SceneKind};
+use crate::commands::runtime_telemetry::RuntimeTelemetryState;
+use crate::commands::test_pattern::{TestPatternConfig, TestPatternKind, TestPatternSpeed};
 use crate::commands::wled_sink::{WledProtocol, WledSinkConfig};
 use crate::shutdown::{app_cleanup_steps, run_cleanup, CleanupBudget};
 
@@ -55,6 +64,7 @@ fn solid(r: u8) -> LightingModeConfig {
             g: 20,
             b: 30,
             brightness: 1.0,
+            kelvin: None,
         }),
         ..LightingModeConfig::default()
     }
@@ -300,6 +310,20 @@ fn off_stops_the_worker_and_clears_the_outputs() {
     assert!(result.snapshot.active_targets.is_empty());
     assert_eq!(result.snapshot.phase, LightingPhase::Idle);
     assert_eq!(rig.saved("lightingMode").unwrap()["kind"], json!("off"));
+}
+
+/// The power button turns the lights back on in the last lit kind, which an Off
+/// must not overwrite.
+#[test]
+fn a_lit_choice_saves_its_kind_and_an_off_keeps_it() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(1), &[Usb]);
+    assert_eq!(rig.saved("lastLitKind"), Some(json!("solid")));
+
+    apply(&rig, user(Some(off()), None));
+
+    assert_eq!(rig.saved("lightingMode").unwrap()["kind"], json!("off"));
+    assert_eq!(rig.saved("lastLitKind"), Some(json!("solid")));
 }
 
 /// The worker holds a handle on the Hue sender; the stream stops second.
@@ -585,15 +609,58 @@ fn off_on_a_wled_strip_paints_it_black_and_switches_it_off() {
 
     apply(&rig, user(Some(off()), None));
 
-    let (len, _) = receiver.recv_from(&mut datagram).expect("a black frame");
+    // Resends of the Solid frame from before the Off may still be queued.
+    let len = loop {
+        let (len, _) = receiver.recv_from(&mut datagram).expect("a black frame");
+        if datagram[2..len].iter().all(|byte| *byte == 0) {
+            break len;
+        }
+    };
     assert_eq!(datagram[0], 2, "DRGB");
     assert_eq!(len, 2 + 59 * 3);
-    assert!(datagram[2..len].iter().all(|byte| *byte == 0));
+    receiver
+        .set_read_timeout(Some(Duration::from_millis(1200)))
+        .unwrap();
+    assert!(
+        receiver.recv_from(&mut datagram).is_err(),
+        "nothing may follow the black frame: a held Solid frame would light the switched-off device again"
+    );
     assert!(
         order(&rig, "mode:off:", "wled:off:127.0.0.1"),
         "{:?}",
         events(&rig)
     );
+}
+
+/// One frame lit a Solid colour only until the device's realtime timeout ran out.
+#[test]
+fn solid_on_a_wled_strip_is_resent_inside_its_realtime_timeout() {
+    let rig = Rig::new(RigSetup {
+        serial_connected: false,
+        ..RigSetup::default()
+    });
+    let receiver = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    receiver
+        .set_read_timeout(Some(Duration::from_millis(1500)))
+        .unwrap();
+    let config = WledSinkConfig {
+        ip: "127.0.0.1".parse().unwrap(),
+        port: receiver.local_addr().unwrap().port(),
+        led_count: 59,
+        protocol: WledProtocol::Drgb,
+    };
+    rig.app.state::<LocalOutputRegistry>().wled_bound(config);
+    running(&rig, solid(200), &[Usb]);
+
+    let mut datagram = [0u8; 2048];
+    let (len, _) = receiver.recv_from(&mut datagram).expect("the Solid frame");
+    let first = datagram[..len].to_vec();
+    for _ in 0..2 {
+        let (len, _) = receiver
+            .recv_from(&mut datagram)
+            .expect("a resend inside the realtime timeout");
+        assert_eq!(&datagram[..len], &first[..]);
+    }
 }
 
 #[test]
@@ -742,6 +809,7 @@ fn a_mode_choice_keeps_the_last_payloads_and_saves_the_selection() {
     let mut first = solid(10);
     first.ambilight = Some(AmbilightPayload {
         brightness: 0.7,
+        saturation: Some(1.3),
         ..AmbilightPayload::default()
     });
     running(&rig, first, &[Usb]);
@@ -757,13 +825,146 @@ fn a_mode_choice_keeps_the_last_payloads_and_saves_the_selection() {
     let saved = rig.saved("lightingMode").unwrap();
     assert_eq!(saved["solid"]["r"], json!(10));
     assert_eq!(
-        saved["ambilight"]["brightness"]
+        saved["ambilight"]["saturation"]
             .as_f64()
-            .map(|b| (b * 10.0).round()),
-        Some(7.0)
+            .map(|s| (s * 10.0).round()),
+        Some(13.0)
+    );
+    // One brightness: the Ambilight kept is saved at the one Solid was chosen with.
+    assert_eq!(
+        saved["ambilight"]["brightness"],
+        saved["solid"]["brightness"]
     );
     assert_eq!(saved.get("targets"), None);
     assert_eq!(rig.saved("lastOutputTargets"), Some(json!(["usb", "hue"])));
+}
+
+// ---------------------------------------------------------------------------
+// One brightness for every mode
+// ---------------------------------------------------------------------------
+
+fn kind_only(kind: LightingModeKind) -> LightingModeConfig {
+    LightingModeConfig {
+        kind,
+        ..LightingModeConfig::default()
+    }
+}
+
+fn near(value: f32, expected: f32) -> bool {
+    (value - expected).abs() < 1e-4
+}
+
+/// Dimmed under Ambilight, the strip stays dim when the user switches to Solid.
+#[test]
+fn a_brightness_retuned_in_one_mode_is_what_the_next_runs_at() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight(1.0), &[Usb]);
+    assert_eq!(retune(&rig, ambilight_tuning(0.3)), "RETUNE_APPLIED");
+
+    let result = apply(&rig, user(Some(kind_only(LightingModeKind::Solid)), None));
+
+    assert_eq!(result.status.code, "OUTPUTS_APPLIED");
+    let solid = result.snapshot.mode.solid.as_ref().expect("Solid runs");
+    assert!(near(solid.brightness, 0.3), "{}", solid.brightness);
+    assert!(near(result.snapshot.brightness, 0.3));
+    let saved = rig.saved("lightingMode").unwrap();
+    let ambilight = saved["ambilight"]["brightness"].as_f64().unwrap() as f32;
+    assert!(near(ambilight, 0.3), "{saved}");
+}
+
+/// A payload of the chosen kind is a choice of its brightness; the kind alone,
+/// or a retune of a kind that is not running, moves nothing.
+#[test]
+fn only_a_choice_or_a_retune_of_what_runs_moves_the_brightness() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight(0.5), &[Usb]);
+    assert_eq!(retune(&rig, solid_tuning(9)), "RETUNE_NOT_RUNNING");
+
+    let effect = apply(&rig, user(Some(kind_only(LightingModeKind::Effect)), None));
+    let brightness = effect.snapshot.mode.effect.as_ref().map(|e| e.brightness);
+    assert!(brightness.is_some_and(|b| near(b, 0.5)), "{brightness:?}");
+
+    let chosen = apply(&rig, user(Some(solid(10)), None));
+    assert!(near(chosen.snapshot.brightness, 1.0));
+}
+
+/// Off carries no payload, so the snapshot says what a lit mode would run at.
+#[test]
+fn off_still_reports_the_shared_brightness() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight(0.4), &[Usb]);
+
+    let result = apply(&rig, user(Some(off()), None));
+
+    assert_eq!(result.snapshot.mode.kind, LightingModeKind::Off);
+    assert!(
+        near(result.snapshot.brightness, 0.4),
+        "{}",
+        result.snapshot.brightness
+    );
+}
+
+/// A payload this session never touched is saved at the shared brightness too,
+/// so a build that keeps one per mode reads the same value whatever it starts.
+#[test]
+fn every_saved_payload_carries_the_shared_brightness() {
+    let rig = Rig::new(RigSetup {
+        state: json!({
+            "lightingMode": {
+                "kind": "off",
+                "effect": { "id": "wave", "speed": 0.5, "brightness": 0.9 }
+            }
+        }),
+        ..RigSetup::default()
+    });
+
+    running(&rig, ambilight(0.4), &[Usb]);
+
+    let saved = rig.saved("lightingMode").unwrap();
+    let effect = saved["effect"]["brightness"].as_f64().unwrap() as f32;
+    assert!(near(effect, 0.4), "{saved}");
+    assert_eq!(
+        saved["effect"]["speed"],
+        json!(0.5),
+        "the rest is carried through"
+    );
+}
+
+/// A file from a build that kept one brightness per mode starts at the last
+/// lit mode's, and the next save writes it into all three.
+#[test]
+fn a_launch_from_an_older_file_runs_at_the_last_lit_modes_brightness() {
+    let rig = Rig::new(RigSetup {
+        state: json!({
+            "lastLitKind": "effect",
+            "lightingMode": {
+                "kind": "ambilight",
+                "ambilight": { "brightness": 0.3 },
+                "solid": { "r": 1, "g": 2, "b": 3, "brightness": 0.5 },
+                "effect": { "id": "wave", "speed": 0.5, "brightness": 0.8 }
+            }
+        }),
+        ..RigSetup::default()
+    });
+
+    let booted = apply(&rig, request(LightingOrigin::Boot, None, None));
+
+    assert_eq!(booted.status.code, "OUTPUTS_APPLIED", "{booted:?}");
+    let ambilight = booted
+        .snapshot
+        .mode
+        .ambilight
+        .as_ref()
+        .map(|a| a.brightness);
+    assert!(ambilight.is_some_and(|b| near(b, 0.8)), "{ambilight:?}");
+    assert!(near(booted.snapshot.brightness, 0.8));
+
+    apply(&rig, user(Some(kind_only(LightingModeKind::Solid)), None));
+    let saved = rig.saved("lightingMode").unwrap();
+    for key in ["ambilight", "solid", "effect"] {
+        let brightness = saved[key]["brightness"].as_f64().unwrap() as f32;
+        assert!(near(brightness, 0.8), "{key}: {saved}");
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1201,6 +1402,64 @@ fn an_ambilight_start_whose_usb_write_fails_runs_on_hue_alone() {
 }
 
 #[test]
+fn an_effect_start_whose_usb_write_fails_runs_on_hue_alone() {
+    let rig = Rig::new(RigSetup::default());
+    rig.fail_usb_writes(1);
+    let effect = LightingModeConfig {
+        kind: LightingModeKind::Effect,
+        effect: Some(super::config::DEFAULT_EFFECT),
+        ..LightingModeConfig::default()
+    };
+
+    let result = apply(&rig, user(Some(effect), Some(&[Usb, Hue])));
+
+    assert_eq!(
+        result.snapshot.mode.kind,
+        LightingModeKind::Effect,
+        "{:?}",
+        events(&rig)
+    );
+    assert_eq!(result.snapshot.active_targets, vec![Hue]);
+    assert_eq!(result.outcome.dropped_targets, vec![Usb]);
+}
+
+/// An effect is placed in the room the way the screen is: Hue lights sample
+/// the drawn frame where the room map puts them.
+#[test]
+fn an_effect_carries_the_room_map_to_hue() {
+    let rig = Rig::new(RigSetup {
+        state: json!({
+            "roomMap": {
+                "dimensions": { "widthMeters": 4, "depthMeters": 5, "heightMeters": 2.5 },
+                "tvAnchor": { "x": 1, "y": 0, "width": 1.2, "height": 0.1 },
+                "hueChannels": [{
+                    "channelIndex": 0, "channelId": 4, "entertainmentAreaId": "area-1",
+                    "x": 0.5, "y": 1, "z": 0.3
+                }],
+                "zones": []
+            }
+        }),
+        ..RigSetup::default()
+    });
+    let effect = LightingModeConfig {
+        kind: LightingModeKind::Effect,
+        effect: Some(super::config::DEFAULT_EFFECT),
+        ..LightingModeConfig::default()
+    };
+
+    apply(&rig, user(Some(effect), Some(&[Usb, Hue])));
+
+    let running = rig.running();
+    assert_eq!(running.kind, LightingModeKind::Effect, "{:?}", events(&rig));
+    let placements = running
+        .room_geometry
+        .expect("the room map reached the effect")
+        .hue_placements;
+    assert_eq!(placements.len(), 1);
+    assert_eq!(placements[0].channel_id, 4);
+}
+
+#[test]
 fn a_usb_only_start_whose_write_keeps_failing_still_fails() {
     let rig = Rig::new(RigSetup::default());
     rig.fail_usb_writes(2);
@@ -1475,6 +1734,7 @@ fn an_unplug_behind_a_queued_start_still_drops_usb() {
 
 fn ambilight_tuning(brightness: f32) -> LightingTuning {
     LightingTuning {
+        effect: None,
         solid: None,
         ambilight: Some(AmbilightPayload {
             brightness,
@@ -1485,14 +1745,58 @@ fn ambilight_tuning(brightness: f32) -> LightingTuning {
 
 fn solid_tuning(r: u8) -> LightingTuning {
     LightingTuning {
+        effect: None,
         solid: Some(SolidColorPayload {
             r,
             g: 0,
             b: 0,
             brightness: 1.0,
+            kelvin: None,
         }),
         ambilight: None,
     }
+}
+
+/// A Solid retune sends its colour straight to the outputs and leaves the
+/// running mode's copy alone, so the twin must be handed the new colour or it
+/// keeps drawing the old one.
+#[test]
+fn a_solid_retune_reaches_the_twin() {
+    use crate::commands::preview::feed::twin_colour;
+    use crate::commands::preview::PreviewSessionState;
+    use tauri::ipc::{Channel, InvokeResponseBody};
+
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(1), &[Usb]);
+    let frames: Arc<Mutex<Vec<Vec<u8>>>> = Arc::default();
+    let sink = Arc::clone(&frames);
+    let session = rig.app.state::<PreviewSessionState>();
+    session.open_for_test("display-1", "led-twin-overlay-1", "led-control-popup-1");
+    session.subscribe_for_test(
+        "led-twin-overlay-1",
+        Channel::new(move |body| {
+            if let InvokeResponseBody::Raw(bytes) = body {
+                sink.lock().unwrap().push(bytes);
+            }
+            Ok(())
+        }),
+    );
+
+    assert_eq!(retune(&rig, solid_tuning(200)), "RETUNE_APPLIED");
+
+    let expected =
+        twin_colour(crate::commands::led_output::EncoderPlan::default().correct([200, 0, 0]));
+    let first_led = |what: &str| {
+        let frames = frames.lock().unwrap();
+        let last = frames.last().unwrap_or_else(|| panic!("{what}"));
+        [last[16], last[17], last[18]]
+    };
+    assert_eq!(first_led("the retune sent the twin a frame"), expected);
+
+    // Any later refresh (the twin reopened, shown again) draws it too.
+    frames.lock().unwrap().clear();
+    crate::commands::preview::feed::refresh(&rig.handle());
+    assert_eq!(first_led("the refresh sent the twin a frame"), expected);
 }
 
 #[test]
@@ -1548,6 +1852,29 @@ fn a_drag_during_a_start_lands() {
     );
 
     assert_eq!(rig.state().tuning.accepting_brightness(), Some(0.25));
+}
+
+/// A brightness dragged while the kind it retunes is coming up is the shared
+/// one once that start commits: the commit replays it, and the snapshot says it.
+#[test]
+fn a_brightness_dragged_during_a_start_is_the_shared_one_once_it_commits() {
+    let rig = Rig::new(RigSetup::default());
+    let gate = rig.hue.hold_starts();
+    let start = spawn_apply(&rig, user(Some(ambilight(1.0)), Some(&[Usb, Hue])));
+    wait_until("the start reached Hue", || rig.hue.starts_entered() == 1);
+
+    assert_eq!(retune(&rig, ambilight_tuning(0.25)), "RETUNE_DEFERRED");
+    gate.add_permits(1);
+    let started = block_on(start).unwrap().unwrap();
+
+    assert_eq!(started.status.code, "OUTPUTS_APPLIED");
+    assert_eq!(rig.state().tuning.accepting_brightness(), Some(0.25));
+    assert!(
+        near(started.snapshot.brightness, 0.25),
+        "{}",
+        started.snapshot.brightness
+    );
+    assert_eq!(rig.state().tuning.brightness(), Some(0.25));
 }
 
 /// A drag between the apply and the commit is replayed by the commit.
@@ -2235,7 +2562,7 @@ fn a_choice_made_before_the_strip_connects_ends_the_wait() {
 }
 
 #[test]
-fn a_strip_that_connects_after_the_wait_starts_nothing() {
+fn a_restore_that_ended_off_stays_off_when_the_strip_connects_late() {
     let rig = restoring(json!(["usb"]));
     apply(&rig, request(LightingOrigin::Boot, None, None));
     rig.state().outputs.lapse_boot_sink_wait();
@@ -2244,6 +2571,256 @@ fn a_strip_that_connects_after_the_wait_starts_nothing() {
 
     std::thread::sleep(Duration::from_millis(200));
     assert!(mode_events(&rig).is_empty(), "{:?}", events(&rig));
+}
+
+#[test]
+fn a_strip_that_connects_after_the_wait_joins_the_mode_running_without_it() {
+    let rig = restoring(json!(["usb", "hue"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+
+    strip_connects(&rig);
+
+    wait_until("the strip never joined", || {
+        let snapshot = rig.state().snapshot.read();
+        snapshot.active_targets == vec![Usb, Hue] && snapshot.phase == LightingPhase::Idle
+    });
+    assert_eq!(
+        events(&rig).iter().filter(|e| *e == "hue:start").count(),
+        1,
+        "the stream is kept, not restarted: {:?}",
+        events(&rig)
+    );
+    assert!(rig.written_keys().is_empty(), "a join saves nothing");
+}
+
+#[test]
+fn a_strip_the_user_deselected_does_not_join() {
+    let rig = restoring(json!(["usb", "hue"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    apply(&rig, user(None, Some(&[Hue])));
+    let before = mode_events(&rig).len();
+
+    strip_connects(&rig);
+
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(mode_events(&rig).len(), before, "{:?}", events(&rig));
+    assert_eq!(rig.state().snapshot.read().active_targets, vec![Hue]);
+}
+
+fn targets(rig: &Rig) -> Option<Vec<String>> {
+    rig.running().targets
+}
+
+fn names(targets: &[&str]) -> Option<Vec<String>> {
+    Some(targets.iter().map(|t| t.to_string()).collect())
+}
+
+#[test]
+fn a_strip_that_joins_while_hue_reconnects_keeps_hue() {
+    let rig = restoring(json!(["usb", "hue"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+    rig.hue.stream_drops();
+    // What the runtime answers a start while it reconnects.
+    rig.hue.script_starts(&["HUE_START_NOOP_ALREADY_ACTIVE"]);
+
+    strip_connects(&rig);
+
+    wait_until("the strip never joined beside Hue", || {
+        targets(&rig) == names(&["usb", "hue"])
+    });
+    assert!(!has(&rig, "hue:stop:system"), "{:?}", events(&rig));
+    assert_eq!(rig.state().snapshot.read().selected_targets, vec![Usb, Hue]);
+}
+
+fn restoring_ambilight() -> Rig {
+    Rig::new(RigSetup {
+        serial_connected: false,
+        state: json!({
+            "lightingMode": ambilight(1.0),
+            "lastOutputTargets": ["usb", "hue"]
+        }),
+        ..RigSetup::default()
+    })
+}
+
+#[test]
+fn a_join_queued_behind_a_stop_does_not_relight() {
+    let rig = restoring(json!(["usb", "hue"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+    // Holds the lighting turn, so what is sent meanwhile queues in order.
+    let state = rig.state();
+    let turn = block_on(state.transitions.lock());
+    let handle = rig.handle();
+    let stop = spawn(async move { stop_lighting(handle).await });
+    std::thread::sleep(Duration::from_millis(50));
+
+    strip_connects(&rig);
+    std::thread::sleep(Duration::from_millis(50));
+    drop(turn);
+    block_on(stop).unwrap().unwrap();
+
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(
+        rig.running().kind,
+        LightingModeKind::Off,
+        "{:?}",
+        events(&rig)
+    );
+}
+
+#[test]
+fn a_join_queued_behind_off_does_nothing() {
+    let rig = restoring(json!(["usb", "hue"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+    let state = rig.state();
+    let turn = block_on(state.transitions.lock());
+    strip_connects(&rig);
+    std::thread::sleep(Duration::from_millis(50));
+    let off = spawn_apply(&rig, user(Some(off()), None));
+    std::thread::sleep(Duration::from_millis(50));
+    rig.log.clear();
+
+    drop(turn);
+    block_on(off).unwrap().unwrap();
+
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(rig.running().kind, LightingModeKind::Off);
+    assert_eq!(mode_events(&rig), vec!["mode:off:"], "{:?}", events(&rig));
+}
+
+#[test]
+fn two_binds_before_the_join_runs_apply_once() {
+    let rig = restoring(json!(["usb", "hue"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+    rig.log.clear();
+    let state = rig.state();
+    let turn = block_on(state.transitions.lock());
+    strip_connects(&rig);
+    note_local_sink_connected(&rig.handle());
+    std::thread::sleep(Duration::from_millis(50));
+
+    drop(turn);
+
+    wait_until("the strip never joined", || {
+        targets(&rig) == names(&["usb", "hue"])
+    });
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(mode_events(&rig).len(), 1, "{:?}", events(&rig));
+}
+
+/// A scene reads Hue off the stream store, which the fake driver leaves empty.
+fn hue_streams_for_scenes(rig: &Rig) {
+    let handle = rig.handle();
+    let store = handle.state::<HueRuntimeStateStore>();
+    let stream = dummy_active_stream_context();
+    store.output_live().publish(Some(HueActiveOutputContext {
+        channels: stream.channels.clone(),
+        color_sender: stream.color_sender.clone(),
+    }));
+    store.runtime.lock().unwrap().active_stream = Some(stream);
+}
+
+#[test]
+fn a_strip_that_binds_during_a_scene_joins_once_the_scene_ends() {
+    let rig = restoring_ambilight();
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+    hue_streams_for_scenes(&rig);
+    block_on(start_scene_queued(rig.handle(), SceneKind::Spiral)).unwrap();
+    assert_eq!(
+        targets(&rig),
+        names(&["hue"]),
+        "setup: the scene runs on Hue"
+    );
+
+    strip_connects(&rig);
+
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(targets(&rig), names(&["hue"]), "the scene keeps the lights");
+    assert!(rig.state().runtime.lock().unwrap().preview.scene.is_some());
+
+    stop_scene_lighting(&rig.handle()).unwrap();
+
+    wait_until("the strip never joined after the scene", || {
+        targets(&rig) == names(&["usb", "hue"])
+    });
+    assert_eq!(rig.running().kind, LightingModeKind::Ambilight);
+}
+
+/// A test pattern on Hue, with the prior its real start records.
+fn start_test_on_hue(rig: &Rig) {
+    let prior = rig.running();
+    let handle = rig.handle();
+    let mut mode = ambilight(1.0);
+    mode.targets = Some(vec!["hue".to_string()]);
+    apply_and_broadcast(
+        &handle,
+        mode,
+        rig.state().inner(),
+        &StripSet::default(),
+        handle.state::<HueRuntimeStateStore>().inner(),
+        handle.state::<RuntimeTelemetryState>().inner(),
+        handle.state::<PreviewSessionState>().inner(),
+        Some(TestPatternConfig {
+            kind: TestPatternKind::Guide,
+            brightness: 0.5,
+            speed: TestPatternSpeed::default(),
+            display_aspect: 16.0 / 9.0,
+        }),
+    )
+    .unwrap();
+    rig.state().runtime.lock().unwrap().preview.test_prior = Some(prior);
+}
+
+#[test]
+fn a_strip_that_binds_during_a_test_pattern_joins_once_it_stops() {
+    let rig = restoring_ambilight();
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+    hue_streams_for_scenes(&rig);
+    start_test_on_hue(&rig);
+
+    strip_connects(&rig);
+
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(targets(&rig), names(&["hue"]), "the test keeps the lights");
+
+    block_on(stop_led_test_pattern(rig.handle())).unwrap();
+
+    wait_until("the strip never joined after the test", || {
+        targets(&rig) == names(&["usb", "hue"])
+    });
+}
+
+#[test]
+fn a_join_queued_behind_a_scene_leaves_it_alone() {
+    let rig = restoring(json!(["usb", "hue"]));
+    apply(&rig, request(LightingOrigin::Boot, None, None));
+    rig.state().outputs.lapse_boot_sink_wait();
+    let state = rig.state();
+    let turn = block_on(state.transitions.lock());
+    let handle = rig.handle();
+    let scene = spawn(async move { start_scene_queued(handle, SceneKind::Spiral).await });
+    std::thread::sleep(Duration::from_millis(50));
+
+    strip_connects(&rig);
+    std::thread::sleep(Duration::from_millis(50));
+    drop(turn);
+    block_on(scene).unwrap().unwrap();
+
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(
+        rig.running().kind,
+        LightingModeKind::Ambilight,
+        "{:?}",
+        events(&rig)
+    );
+    assert!(rig.state().runtime.lock().unwrap().preview.scene.is_some());
 }
 
 // ---------------------------------------------------------------------------
@@ -2919,4 +3496,32 @@ mod bridge_wait {
             assert_eq!(result.outcome.hue_left_out, left_out, "{script}");
         }
     }
+}
+
+// The frontend tells "no mismatch" (null) from a field that is gone (undefined)
+// only if the key is always sent: the contract verifier skips a field TS lacks.
+#[test]
+fn the_apply_outcome_always_sends_its_wled_advisory_null_or_filled() {
+    let none = serde_json::to_value(super::outputs::ApplyOutputsOutcome::default()).unwrap();
+    assert_eq!(none.get("wledAdvisory"), Some(&serde_json::Value::Null));
+
+    let found = serde_json::to_value(super::outputs::ApplyOutputsOutcome {
+        wled_advisory: Some(super::config::WledLiveFrameAdvisory {
+            code: "WLED_LIVE_LED_COUNT_MISMATCH".to_string(),
+            message: "m".to_string(),
+            frame_led_count: 60,
+            sink_led_count: 120,
+        }),
+        ..Default::default()
+    })
+    .unwrap();
+    assert_eq!(
+        found["wledAdvisory"],
+        json!({
+            "code": "WLED_LIVE_LED_COUNT_MISMATCH",
+            "message": "m",
+            "frameLedCount": 60,
+            "sinkLedCount": 120,
+        })
+    );
 }

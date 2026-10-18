@@ -1,0 +1,43 @@
+@layer components {
+  /* Placed by transform, so following the pointer never lays the page out again. */
+  .chip {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 9px 0 8px;
+    border: 1px solid color-mix(in srgb, var(--lm-ink) 12%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--lm-panel) 72%, transparent);
+    backdrop-filter: blur(10px) saturate(1.3);
+    color: var(--lm-ink);
+    font: 500 11px/1 var(--lm-sans);
+    white-space: nowrap;
+    pointer-events: none;
+    animation: chip-in 140ms var(--lm-ease-out);
+  }
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--lm-ink-faint);
+  }
+  .chip[data-lit] .dot {
+    background: var(--lm-amber);
+    box-shadow: 0 0 6px var(--lm-amber);
+  }
+  .state { color: var(--lm-ink-dim); }
+
+  @keyframes chip-in {
+    from { opacity: 0; scale: 0.94; }
+  }
+  :global(:root[data-reduced-motion]) .chip { animation: none; }
+
+  @media (forced-colors: active) {
+    .chip { border-color: CanvasText; background: Canvas; backdrop-filter: none; }
+  }
+}

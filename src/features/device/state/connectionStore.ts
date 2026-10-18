@@ -1,6 +1,5 @@
 import { DEVICE_OPERATION, DEVICE_STATUS, type DeviceOperation } from "@/shared/contracts/device";
 import type { DeviceConnectionControllerState, Listener } from "./connectionTypes";
-import { withDerivedFlags } from "./connectionStateHelpers";
 
 // Shared gate: only one of {manual connect, health check, recovery, boot
 // reconnect} may run at a time; `invalidateCurrentOperation` lets recovery
@@ -24,8 +23,7 @@ export function createConnectionStore(initial: DeviceConnectionControllerState):
   let disposed = false;
 
   const notify = () => {
-    const snapshot = withDerivedFlags(state);
-    state = snapshot;
+    const snapshot = state;
     listeners.forEach((listener) => {
       listener(snapshot);
     });

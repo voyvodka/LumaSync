@@ -1,0 +1,25 @@
+@layer components {
+  .page {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 240px;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--lm-bg);
+    color: var(--lm-ink);
+  }
+  .scroll { min-width: 0; min-height: 0; overflow-y: auto; }
+  /* A width a hand and an eye can cross; only the Effect stage, a grid of tiles, uses more. */
+  .column {
+    --lights-col: 712px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    max-width: 1048px;
+    margin: 0 auto;
+    padding: 22px 24px 28px;
+  }
+  .column > * { width: 100%; max-width: var(--lights-col); }
+  .column > [data-wide] { max-width: 952px; }
+}

@@ -1,0 +1,30 @@
+{
+  "_note": "One twin frame as Rust encodes it (preview/feed.rs encode_frame) and the twin decodes it (twinFrame.ts). Both tests read this file.",
+  "seq": 7,
+  "layoutRevision": 3,
+  "leds": [
+    [
+      255,
+      0,
+      0
+    ],
+    [
+      0,
+      128,
+      255
+    ],
+    [
+      1,
+      2,
+      3
+    ]
+  ],
+  "lamps": [
+    [
+      10,
+      20,
+      30
+    ]
+  ],
+  "hex": "07000000030000000300000001000000ff00000080ff0102030a141e"
+}

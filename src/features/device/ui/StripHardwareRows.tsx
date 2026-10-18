@@ -49,6 +49,7 @@ const FAILURE_KEYS = {
   other: "lights:led.colorOrder.identify.otherHint",
   notSending: "lights:led.colorOrder.identify.errors.notSending",
   noCalibration: "lights:led.colorOrder.identify.errors.noCalibration",
+  sceneActive: "lights:led.colorOrder.identify.errors.sceneActive",
   startFailed: "lights:led.colorOrder.identify.errors.startFailed",
   saveFailed: "lights:led.colorOrder.identify.errors.saveFailed",
   stopFailed: "lights:led.colorOrder.identify.errors.stopFailed",

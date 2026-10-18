@@ -42,6 +42,7 @@ export function HueAreaRow({ hue, choice, change, refresh, primary }: HueAreaRow
   return (
     <SettingRow
       label={t("hue:row.area")}
+      hint={t("hue:areas.hint")}
       value={value}
       testId="hue-area-row"
       control={

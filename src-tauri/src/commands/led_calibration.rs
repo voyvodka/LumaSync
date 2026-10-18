@@ -318,17 +318,75 @@ fn rotate_sequence(mut sequence: Vec<LedSequenceItem>, start_index: usize) -> Ve
 // Edge-position mapping — (segment, local_index) → normalised screen coords
 // ---------------------------------------------------------------------------
 
+/// Where the strip lies around the screen: the edge counts, and the stand gap
+/// the bottom LEDs sit either side of. Mirror of `StripShape` in
+/// src/features/calibration/model/startPoint.ts.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StripShape {
+    pub counts: LedSegmentCounts,
+    /// LED pitches with no LED in them, mid-bottom (`bottom_missing`).
+    pub bottom_missing: u16,
+}
+
+impl StripShape {
+    pub fn of(config: &LedCalibrationConfig) -> Self {
+        Self {
+            counts: config.counts.clone(),
+            bottom_missing: config.bottom_missing,
+        }
+    }
+
+    /// The stand gap the bottom really leaves: it needs an LED on each side.
+    fn gap(&self) -> u16 {
+        if self.counts.bottom >= 2 {
+            self.bottom_missing
+        } else {
+            0
+        }
+    }
+
+    /// LED pitches along `segment`: its LEDs, and on the bottom the gap too.
+    pub fn pitches(&self, segment: LedSegment) -> u16 {
+        let count = segment.count(&self.counts);
+        match segment {
+            LedSegment::Bottom => count + self.gap(),
+            _ => count,
+        }
+    }
+
+    /// The pitch an LED sits at along its edge. The bottom runs right to left,
+    /// and those past the right-hand run (`resolve_bottom_gap_local`'s split)
+    /// sit beyond the gap.
+    pub fn pitch_of(&self, item: &LedSequenceItem) -> u16 {
+        let past_gap = item.segment == LedSegment::Bottom
+            && self.gap() > 0
+            && item.local_index >= self.counts.bottom / 2;
+        if past_gap {
+            item.local_index + self.gap()
+        } else {
+            item.local_index
+        }
+    }
+}
+
 /// Map a `LedSequenceItem` to a normalised screen position `(norm_x, norm_y)`
-/// where `(0.0, 0.0)` is top-left and `(1.0, 1.0)` is bottom-right.
+/// where `(0.0, 0.0)` is top-left and `(1.0, 1.0)` is bottom-right: the edge's
+/// pitches spread end to end, so the bottom LEDs sit either side of the stand
+/// gap where LED Setup draws them.
 ///
 /// Used by `sample_frame_for_sequence` and the synthetic test-pattern source
 /// to derive the pixel-averaging window centre for each LED.
-pub fn led_to_screen_pos(item: &LedSequenceItem, counts: &LedSegmentCounts) -> (f32, f32) {
-    // Fractional position along the segment [0, 1].
-    let frac = if item.local_index == 0 || segment_count(item.segment, counts) <= 1 {
-        0.0_f32
+pub fn led_to_screen_pos(item: &LedSequenceItem, shape: &StripShape) -> (f32, f32) {
+    let pitches = shape.pitches(item.segment);
+    let pitch = shape.pitch_of(item);
+    // Fractional position along the segment [0, 1]. A lone LED stands for its whole edge, so it
+    // sits at the middle, where LED Setup draws it — its start corner is another edge's colour.
+    let frac = if pitches <= 1 {
+        0.5_f32
+    } else if pitch == 0 {
+        0.0
     } else {
-        item.local_index as f32 / (segment_count(item.segment, counts) - 1) as f32
+        pitch as f32 / (pitches - 1) as f32
     };
 
     match item.segment {
@@ -341,10 +399,6 @@ pub fn led_to_screen_pos(item: &LedSequenceItem, counts: &LedSegmentCounts) -> (
         // Left edge: bottom → top  (x fixed near left)
         LedSegment::Left => (0.0, 1.0 - frac),
     }
-}
-
-fn segment_count(segment: LedSegment, counts: &LedSegmentCounts) -> u16 {
-    segment.count(counts)
 }
 
 // ---------------------------------------------------------------------------
@@ -424,13 +478,13 @@ pub fn derive_base_interval_ms_for(total_leds: u16, bytes_per_pixel: usize) -> u
 pub fn sample_frame_for_sequence(
     frame: &crate::commands::ambilight_capture::CapturedFrame,
     sequence: &[LedSequenceItem],
-    counts: &LedSegmentCounts,
+    shape: &StripShape,
     window_frac: f32,
 ) -> Vec<[u8; 3]> {
     sample_frame_within_insets(
         frame,
         sequence,
-        counts,
+        shape,
         window_frac,
         &BlackBorderInsets::default(),
     )
@@ -444,7 +498,7 @@ pub fn sample_frame_for_sequence(
 pub fn sample_frame_within_insets(
     frame: &crate::commands::ambilight_capture::CapturedFrame,
     sequence: &[LedSequenceItem],
-    counts: &LedSegmentCounts,
+    shape: &StripShape,
     window_frac: f32,
     insets: &BlackBorderInsets,
 ) -> Vec<[u8; 3]> {
@@ -465,7 +519,7 @@ pub fn sample_frame_within_insets(
     sequence
         .iter()
         .map(|item| {
-            let (nx, ny) = led_to_screen_pos(item, counts);
+            let (nx, ny) = led_to_screen_pos(item, shape);
             let cx = cols.start + (nx * (content_w as f32 - 1.0)).round() as usize;
             let cy = rows.start + (ny * (content_h as f32 - 1.0)).round() as usize;
 
@@ -562,6 +616,44 @@ mod tests {
     }
 
     // Test 3: bottomMissing with gap anchors
+    /// The user's layout: 16 bottom LEDs either side of a 3-pitch stand. The
+    /// two LEDs beside the stand are the gap's width apart, and the bottom's
+    /// ends stay at the corners, as LED Setup draws them.
+    #[test]
+    fn bottom_leds_sit_either_side_of_the_stand_gap() {
+        let shape = StripShape {
+            counts: LedSegmentCounts {
+                top: 16,
+                right: 14,
+                bottom: 16,
+                left: 14,
+            },
+            bottom_missing: 3,
+        };
+        let at = |local_index| {
+            led_to_screen_pos(
+                &LedSequenceItem {
+                    index: 0,
+                    segment: LedSegment::Bottom,
+                    local_index,
+                },
+                &shape,
+            )
+            .0
+        };
+        let pitch = 1.0 / 18.0;
+        assert!(
+            (at(0) - 1.0).abs() < 1e-6,
+            "the right end stays at the corner"
+        );
+        assert!(at(15).abs() < 1e-6, "the left end stays at the corner");
+        assert!((at(6) - at(7) - pitch).abs() < 1e-6);
+        assert!(
+            (at(7) - at(8) - 4.0 * pitch).abs() < 1e-6,
+            "the stand's three pitches lie between the right run and the left"
+        );
+    }
+
     #[test]
     fn bottom_missing_gap_anchor_skips_center() {
         // 80 bottom LEDs, 20 bottomMissing
@@ -751,8 +843,8 @@ mod tests {
             total_leds: 2,
         };
         let seq = build_led_sequence(&config);
-        let colors1 = sample_frame_for_sequence(&frame, &seq, &config.counts, 0.3);
-        let colors2 = sample_frame_for_sequence(&frame, &seq, &config.counts, 0.3);
+        let colors1 = sample_frame_for_sequence(&frame, &seq, &StripShape::of(&config), 0.3);
+        let colors2 = sample_frame_for_sequence(&frame, &seq, &StripShape::of(&config), 0.3);
         assert_eq!(colors1, colors2, "sampling must be deterministic");
         assert_eq!(colors1.len(), 2);
     }
@@ -915,7 +1007,7 @@ mod tests {
         build_led_sequence(config)
             .iter()
             .map(|item| {
-                let (x, y) = led_to_screen_pos(item, &config.counts);
+                let (x, y) = led_to_screen_pos(item, &StripShape::of(config));
                 (segment_key(item.segment), item.local_index, x, y)
             })
             .collect()

@@ -1,0 +1,94 @@
+@layer components {
+  .root {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
+    background: var(--lm-bg);
+    color: var(--lm-ink);
+    font-family: var(--lm-sans);
+    overflow: hidden;
+  }
+
+  /* The whole bar drags the window; its buttons are the only things in it that do not. */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+    height: 40px;
+    padding: 0 6px 0 14px;
+    border-bottom: 1px solid var(--lm-line);
+  }
+
+  .title {
+    flex: 1;
+    min-width: 0;
+    font-size: 12.5px;
+    color: var(--lm-ink-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .headerButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    cursor: pointer;
+    transition: color var(--lm-dur-quick) var(--lm-ease-out), background-color var(--lm-dur-quick) var(--lm-ease-out);
+  }
+  .headerButton:hover { color: var(--lm-ink); background: var(--lm-panel-2); }
+  /* A transparent outline, not none: forced colours drop the box-shadow ring and paint the outline. */
+  .headerButton:focus-visible { outline: 2px solid transparent; box-shadow: var(--lm-focus-ring); color: var(--lm-ink); }
+  .headerButton svg { width: 14px; height: 14px; }
+
+  .held {
+    font-size: 11.5px;
+    line-height: 1.4;
+    color: var(--lm-ink-dim);
+  }
+
+  .body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 14px 12px;
+  }
+
+  /* The compact window's stage, at the popup's width. */
+  .stage {
+    min-width: 0;
+  }
+  /* A scene's own settings, in the card the mode's settings are drawn in, so the two line up. */
+  .sceneCard {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+    padding: 10px 14px;
+    border-radius: 14px;
+    background: var(--lm-panel);
+  }
+
+  .error {
+    font-size: 11.5px;
+    line-height: 1.4;
+    color: var(--lm-red);
+  }
+
+  :global(:root[data-reduced-motion]) .headerButton {
+    transition: none;
+  }
+
+  @media (forced-colors: active) {
+    .header { border-bottom-color: CanvasText; }
+    .headerButton:focus-visible { outline-color: Highlight; outline-offset: 2px; }
+  }
+}

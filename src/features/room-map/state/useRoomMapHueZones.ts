@@ -1,14 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { shellStore } from "@/features/persistence/shellStore";
 import type {
+  HueChannelPlacement,
   HueZone,
   HueZoneCommandResult,
   HueZoneStatusCode,
   RoomMapConfig,
+  ZoneRelativePosition,
 } from "@/shared/contracts/roomMap";
 import { isHueZoneApplied, replaceHueChannel } from "@/shared/contracts/roomMap";
+import { detachHueChannel } from "../model/hueChannelPosition";
 import { findScopedHueChannel } from "../model/hueChannelScope";
+import { zoneToken } from "../model/zoneColor";
+import { bottomKeptCenterZ, withCubeEdge, zoneEdge } from "../model/zoneCube";
+import { type CubeFootprint, defaultZoneEdge } from "../model/zoneRect";
 import {
   assignChannelToHueZone,
   createHueZone,
@@ -25,24 +30,35 @@ export interface UseRoomMapHueZonesArgs {
   adopt: (patch: RoomMapPatch) => void;
   activeHueZoneId: string | null;
   selectHueZone: (zoneId: string | null) => void;
-  setObjectPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  /** The area new zones are authored in (`useRoomMapHueArea`); `null` adds nothing. */
+  hueAreaId: string | null;
 }
 
 export interface UseRoomMapHueZonesReturn {
   hueZones: HueZone[];
   activeHueZone: HueZone | null;
-  /** Cached active entertainment area id from shellStore — used when authoring Hue zones. */
-  hueAreaId: string | null;
-  hueBridgeConfigured: boolean;
   /** Code of the last refused mutation, until dismissed. `null` while nothing is refused. */
   hueZoneRejection: HueZoneStatusCode | null;
   dismissHueZoneRejection: () => void;
-  handleAddHueZone: () => void;
+  /** Without `footprint`, half the tallest cube the room holds, at its middle. */
+  handleAddHueZone: (footprint?: CubeFootprint) => void;
   handleDeleteHueZone: (zoneId: string) => void;
   handleRenameHueZone: (zoneId: string, name: string) => void;
-  handleAssignChannelToZone: (channelIndex: number, targetZoneId: string | null) => void;
-  handleHueZoneCenterChange: (zoneId: string, centerX: number, centerY: number) => void;
+  /** Without `dropped`, the stored light lands at the zone's middle. */
+  handleAssignChannelToZone: (channelIndex: number, targetZoneId: string | null, dropped?: DroppedLight) => void;
+  /** `held`: a key's run of steps, one undo step and one save. Without `centerZ`, its height stays. */
+  handleHueZoneCenterChange: (zoneId: string, centerX: number, centerY: number, held?: boolean, centerZ?: number) => void;
   handleHueZoneUpdate: (zoneId: string, patch: Partial<HueZone>) => void;
+  /** One undo step per release: unlike a field's stream, two resizes a beat apart must not merge.
+   *  Without `centerZ`, its bottom stays. */
+  handleHueZoneResize: (zoneId: string, footprint: CubeFootprint & { centerZ?: number }) => void;
+}
+
+const SHAPE_KEYS = ["centerX", "centerY", "centerZ", "scaleX", "scaleY", "scaleZ"] as const;
+
+export interface DroppedLight {
+  channel: HueChannelPlacement;
+  at: ZoneRelativePosition;
 }
 
 // Hue Zone CRUD. Every handler is local-first and optimistic: the local edit
@@ -54,30 +70,9 @@ export function useRoomMapHueZones({
   adopt,
   activeHueZoneId,
   selectHueZone,
-  setObjectPanelOpen,
+  hueAreaId,
 }: UseRoomMapHueZonesArgs): UseRoomMapHueZonesReturn {
   const { t } = useTranslation();
-  const [hueAreaId, setHueAreaId] = useState<string | null>(null);
-
-  // "Configured" is `hueAppKey` (legacy plaintext) OR a keychain backend. The
-  // editor deliberately stops there — anything beyond needs `useHueOnboarding`,
-  // and mounting that state machine here for a header is too much.
-  const [hueBridgeConfigured, setHueBridgeConfigured] = useState(false);
-  // Load the persisted last-selected entertainment area id once. We do not
-  // mount useHueOnboarding here to keep the editor decoupled from the
-  // onboarding state machine; the area id alone is enough to author zones.
-  useEffect(() => {
-    let cancelled = false;
-    void shellStore.load().then((state) => {
-      if (cancelled) return;
-      setHueAreaId(state.lastHueAreaId ?? null);
-      const hasKeychain = state.credentialStorageBackend === "keychain";
-      const hasLegacyKey = !!state.hueAppKey;
-      const hasBridge = !!state.lastHueBridge;
-      setHueBridgeConfigured(hasBridge && (hasKeychain || hasLegacyKey));
-    });
-    return () => { cancelled = true; };
-  }, []);
 
   const hueZones = config.zones;
 
@@ -112,13 +107,11 @@ export function useRoomMapHueZones({
     [adopt],
   );
 
-  const handleAddHueZone = useCallback(() => {
+  const handleAddHueZone = useCallback((footprint?: CubeFootprint) => {
     if (!hueAreaId) return;
     const id = `hue-zone-${crypto.randomUUID()}`;
     const name = t("roomMap:hueZones.defaultName", { N: String(hueZones.length + 1) });
-    const palette = ["--lm-zone-1", "--lm-zone-2", "--lm-zone-3", "--lm-zone-4", "--lm-zone-5", "--lm-zone-6"];
-    const colorVar = `var(${palette[hueZones.length % palette.length]})`;
-    const newZone: HueZone = {
+    const draft: HueZone = {
       id,
       name,
       entertainmentAreaId: hueAreaId,
@@ -129,24 +122,20 @@ export function useRoomMapHueZones({
       scaleY: 0.5,
       scaleZ: 0.5,
       channelIndices: [],
-      borderColor: colorVar,
+      borderColor: zoneToken(hueZones.length),
     };
+    const { widthMeters: w, depthMeters: d, heightMeters: h } = config.dimensions;
+    const newZone = withCubeEdge(draft, footprint?.edge ?? defaultZoneEdge(w, d, h), config.dimensions, { x: footprint?.centerX ?? 0, y: footprint?.centerY ?? 0, z: 0 });
     apply({ zones: [...config.zones, newZone] });
     selectHueZone(id);
-    setObjectPanelOpen(true);
 
     settle("create_hue_zone", createHueZone({ zone: newZone, existingZones: hueZones }), false);
-  }, [hueAreaId, hueZones, config.zones, apply, t, selectHueZone, setObjectPanelOpen, settle]);
+  }, [hueAreaId, hueZones, config.zones, config.dimensions, apply, t, selectHueZone, settle]);
 
   const handleDeleteHueZone = useCallback(
     (zoneId: string) => {
       const nextZones = config.zones.filter((z) => z.id !== zoneId);
-      // Detach channels that pointed at this zone — they fall back to legacy absolute placement.
-      const nextChannels = config.hueChannels.map((ch) =>
-        ch.zoneId === zoneId
-          ? { ...ch, zoneId: undefined, zoneRelativePosition: undefined }
-          : ch,
-      );
+      const nextChannels = config.hueChannels.map((ch) => (ch.zoneId === zoneId ? detachHueChannel(ch, config.zones) : ch));
       apply({ zones: nextZones, hueChannels: nextChannels });
 
       settle(
@@ -180,12 +169,13 @@ export function useRoomMapHueZones({
     [config.zones, apply, settle],
   );
 
-  // One handler for all three channel→zone paths (both drops and the popover).
+  // One handler for both channel→zone paths (the light's zone picker and the zone's light chips).
   // It writes three fields that must stay in sync — `zoneId`,
   // `zoneRelativePosition`, `channelIndices` — see docs/architecture/room-map.md.
   const handleAssignChannelToZone = useCallback(
-    (channelIndex: number, targetZoneId: string | null) => {
-      const channel = findScopedHueChannel(config.hueChannels, hueAreaId, channelIndex);
+    (channelIndex: number, targetZoneId: string | null, dropped?: DroppedLight) => {
+      const channel = dropped?.channel ?? findScopedHueChannel(config.hueChannels, hueAreaId, channelIndex);
+      const at = dropped?.at ?? { x: 0, y: 0, z: 0 };
       if (!channel) return;
       // No-op if already in the target bucket — avoids spurious invokes.
       const currentZoneId = channel.zoneId ?? null;
@@ -197,17 +187,20 @@ export function useRoomMapHueZones({
       const targetZone = targetZoneId
         ? hueZones.find((z) => z.id === targetZoneId)
         : null;
+      if (targetZoneId && !targetZone) return;
+      // A zone holds its own area's lights: across areas the channel would point at a zone whose
+      // `channelIndices` the sync below leaves alone, the desync the backend refuses.
+      if (targetZone && channel.entertainmentAreaId && targetZone.entertainmentAreaId !== channel.entertainmentAreaId) {
+        return;
+      }
       const entertainmentAreaId =
         targetZone?.entertainmentAreaId ?? hueAreaId ?? "";
 
-      // Default zone-relative position lands on the zone center so the
-      // dot is visible inside the dashed bounds; the user can drag it
-      // afterwards to refine the placement.
       const nextChannels = replaceHueChannel(
         config.hueChannels,
         targetZoneId
-          ? { ...channel, zoneId: targetZoneId, zoneRelativePosition: { x: 0, y: 0, z: 0 } }
-          : { ...channel, zoneId: undefined, zoneRelativePosition: undefined },
+          ? { ...channel, zoneId: targetZoneId, zoneRelativePosition: at }
+          : detachHueChannel(channel, config.zones),
       );
       // Keep Hue zones' `channelIndices` in sync — remove from old zone,
       // add to new zone (idempotent). Only Hue zones live in
@@ -232,7 +225,7 @@ export function useRoomMapHueZones({
         assignChannelToHueZone({
           channelIndex,
           zoneId: targetZoneId,
-          zoneRelativePosition: targetZoneId ? { x: 0, y: 0, z: 0 } : null,
+          zoneRelativePosition: targetZoneId ? at : null,
           entertainmentAreaId,
           existingZones: config.zones,
           channels: config.hueChannels,
@@ -248,16 +241,16 @@ export function useRoomMapHueZones({
     : null;
 
   const handleHueZoneCenterChange = useCallback(
-    (zoneId: string, centerX: number, centerY: number) => {
+    (zoneId: string, centerX: number, centerY: number, held = false, centerZ?: number) => {
       let updated: HueZone | undefined;
       const next = config.zones.map((z) => {
         if (z.id === zoneId) {
-          updated = { ...z, centerX, centerY };
+          updated = withCubeEdge(z, zoneEdge(z, config.dimensions), config.dimensions, { x: centerX, y: centerY, z: centerZ ?? z.centerZ });
           return updated;
         }
         return z;
       });
-      apply({ zones: next });
+      apply({ zones: next }, held ? { gesture: `hue-zone:${zoneId}:centerX,centerY` } : undefined);
       if (updated) {
         settle(
           "update_hue_zone (center)",
@@ -266,18 +259,19 @@ export function useRoomMapHueZones({
         );
       }
     },
-    [config.zones, apply, settle],
+    [config.zones, config.dimensions, apply, settle],
   );
 
-  // The patch passes through verbatim — do NOT mirror one axis onto the other.
-  // Zones are physical squares, so the two scales legitimately differ in a
-  // non-square room. See docs/architecture/room-map.md.
+  // A patch that touches its shape is made a cube again, taking `scaleX` as the edge.
   const handleHueZoneUpdate = useCallback(
     (zoneId: string, patch: Partial<HueZone>) => {
       let updated: HueZone | undefined;
       const next = config.zones.map((z) => {
         if (z.id === zoneId) {
-          updated = { ...z, ...patch };
+          const merged = { ...z, ...patch };
+          updated = SHAPE_KEYS.some((key) => key in patch)
+            ? withCubeEdge(merged, zoneEdge(merged, config.dimensions), config.dimensions)
+            : merged;
           return updated;
         }
         return z;
@@ -293,14 +287,24 @@ export function useRoomMapHueZones({
         );
       }
     },
-    [config.zones, apply, settle],
+    [config.zones, config.dimensions, apply, settle],
+  );
+
+  const handleHueZoneResize = useCallback(
+    (zoneId: string, footprint: CubeFootprint & { centerZ?: number }) => {
+      const zone = config.zones.find((z) => z.id === zoneId);
+      if (!zone) return;
+      const z = footprint.centerZ ?? bottomKeptCenterZ(zone, footprint.edge, config.dimensions);
+      const updated = withCubeEdge(zone, footprint.edge, config.dimensions, { x: footprint.centerX, y: footprint.centerY, z });
+      apply({ zones: config.zones.map((z) => (z.id === zoneId ? updated : z)) });
+      settle("update_hue_zone (resize)", updateHueZone({ zone: updated, existingZones: config.zones }), false);
+    },
+    [config.zones, config.dimensions, apply, settle],
   );
 
   return {
     hueZones,
     activeHueZone,
-    hueAreaId,
-    hueBridgeConfigured,
     hueZoneRejection,
     dismissHueZoneRejection,
     handleAddHueZone,
@@ -309,5 +313,6 @@ export function useRoomMapHueZones({
     handleAssignChannelToZone,
     handleHueZoneCenterChange,
     handleHueZoneUpdate,
+    handleHueZoneResize,
   };
 }

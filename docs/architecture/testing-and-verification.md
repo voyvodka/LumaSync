@@ -47,8 +47,8 @@ maintainer's real one.
 
 It is **deliberately not a required check** — branch protection pins the four `Build and
 Check (<os>)` / `Analyze (javascript-typescript)` contexts by name, and this job must never take one
-of those names (renaming a workflow job renames its status context; see `ls-project-bugs`, "branch
-protection deadlock" post-mortem, for what that did the one time it happened by accident).
+of those names: renaming a workflow job renames its status context, and a required context that
+no job reports any more blocks every PR.
 
 Steps, mirroring the `verify` job's macOS toolchain setup (same pinned actions, same Xcode-26
 selection, same `rust-toolchain.toml`) but with its own `Swatinem/rust-cache` key
@@ -162,8 +162,9 @@ A run **shares the installed app's state**. It reads and writes the same `shell-
 isolated profile, and it opens a visible window that cycles through modes and tabs. So: say so
 before running it on a machine someone is using, put back anything a spec seeds, and never assume a
 starting state. A run with real lights attached changes someone's room: before it, snapshot the
-area's lights and restore them afterwards, turn them off on anything unexpected, and never open the
-LED control popup from an unattended run — revealing it starts a pattern on its own (`hue.md`).
+area's lights and restore them afterwards, and turn them off on anything unexpected. A spec that
+opens the LED preview closes it again: the session hides the main window and lays a click-through
+twin over the display (`capture-and-pipeline.md`).
 `shell.e2e.ts` asserted the app "boots into compact mode" long after boot began
 restoring the persisted mode; on a machine last left in full, the first three specs failed — and
 then the suite *repaired itself*, because the section-routing spec ends by switching back to
@@ -226,8 +227,8 @@ the harness does not fail, it just quietly agrees with you.
 - **CSS `:hover` is unreachable.** The plugin's pointer events are synthetic — it builds
   `new MouseEvent(...)` in JS and dispatches it (`platform/executor.rs`), so no OS cursor ever moves
   and `document.querySelectorAll(":hover")` stays empty through both `execute` and the W3C Actions
-  endpoint. Hover in this app is Tailwind `hover:` throughout and there is not one `onMouseEnter`,
-  so **none** of it is verifiable here. A hover test written against this layer passes without
+  endpoint. Hover in this app is CSS `:hover` — Tailwind `hover:` and the modules' own rules —
+  almost throughout, so **none** of that is verifiable here. A hover test written against this layer passes without
   testing anything.
 - **The IPC boundary cannot be hooked from a spec at all.** Assigning to
   `window.__TAURI_INTERNALS__.invoke` records zero calls while the backend is demonstrably
@@ -253,7 +254,7 @@ the harness does not fail, it just quietly agrees with you.
 |---|---|
 | Hover, focus-within, real pointer behaviour | the dev mock in a browser — below |
 | A state that needs hardware you do not have | the dev mock |
-| What the backend actually did | the Rust log — `docs/debugging.md`, and the patterns in `AGENTS.md` |
+| What the backend actually did | the Rust log — `docs/debugging.md` and the patterns it lists |
 | A second window | a manual run, or the dev mock with `?window=<label>` |
 | Window geometry, tray, native chrome | a manual run |
 
@@ -266,7 +267,8 @@ focus-within and real pointer behaviour checkable at all — the cursor there is
 
 Nothing under `src/` may name `mock/`, which is what makes the ship-safety guarantee structural
 rather than a matter of trusting tree-shaking; `verify:mock-not-shipped` asserts it and proves the
-build guard by running into it. The reverse direction is fine and deliberate: `mock/` imports
+build guard by running into it; CI's build job then runs it with `--dist` against the frontend the
+smoke binary embedded, so a sentinel that reached a real bundle fails there. The reverse direction is fine and deliberate: `mock/` imports
 contract types, and `mock/hotplug.ts` imports two runtime singletons on purpose.
 
 Four things about it are not obvious and each cost a cycle:

@@ -9,6 +9,35 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Added
 
+- The room's floor and walls: Room settings offers the floor as oak, walnut, ash, herringbone
+  parquet, carpet, light or dark tile, a black-and-white checkerboard, terracotta or concrete, and
+  the walls in warm or cool white, greige, blush, sage, clay, ochre, forest green, navy or charcoal,
+  each disc drawn in its own pattern, and the 3D view draws the room in them. A template keeps
+  them, and a choice from a newer version survives a change made here.
+- Effects: a fourth lighting mode beside Off, Ambilight and Solid, with sixteen effects — wave,
+  colour cycle, breathe, candle, fireplace, drift, gradient, ocean, aurora, twinkle, comet,
+  scanner, chase, plasma, sunrise and natural light — in eleven palettes or up to three colours of
+  your own, with speed, brightness and, where an effect has them, size, intensity, direction or a
+  sunrise's length. Each light is coloured where it is: strip LEDs around the screen, Hue lights
+  where the room map (or the bridge) puts them, so a wave crosses the strip and the room as one and
+  a few Hue lamps each get their own colour. A sunrise carries on where it was after a relaunch.
+  Effects need no screen recording and are in the menu bar menu, the compact window, the LED
+  preview popup and on ⌥4 (Alt+4). A build from before effects starts with the lights off if the
+  last mode was an effect. On a few Hue bulbs an effect always keeps at least one lit — a sunrise
+  starts there as a dim ember instead of minutes of darkness — while strips and Hue gradient lights
+  keep the effect's own look.
+- Solid has a White tab: a colour temperature from 2000 to 6500 K.
+- Scenes: a row under the mode buttons, on Lights and in the compact window, where one press
+  plays a whole look — Ambilight with its brightness, saturation and response, a colour or white,
+  or an effect with its palette and settings. It starts with six suggestions (Movie, Game, Warm
+  evening, Reading, Fireplace, Aurora); the scenes button's library adds more from fifteen,
+  reorders and deletes them. Up to 24 scenes. "+" makes a new scene from the light that is running
+  and a scene's Edit in the library opens it: the row becomes a bar with its name, the page's own
+  controls shape it while the lights show every change, Save keeps it, Cancel puts the light back
+  as it was, and a reset button returns it to its suggested (or saved) look. While a scene is
+  edited the effects fold into one row that scrolls sideways, so the palettes and sliders stay in
+  view. A sunrise scene starts over each time you choose it. An Ambilight scene shows as a small
+  screen, warm or cool by how quickly it follows.
 - The lights go off when the computer locks, sleeps or turns its display off, and the mode that
   ran comes back when you return — after the unlock, if waking up shows the lock screen. Settings →
   General → "Lights off when away" turns this off. macOS and Windows.
@@ -18,16 +47,21 @@ https://keepachangelog.com/en/1.1.0/
   submit the issue yourself, or close the tab.
 - Updates: besides the check at launch, LumaSync now checks once a day while it runs, and retries
   a failed check after 1, 5 and 15 minutes instead of waiting for the next launch. An update found
-  in the background is offered the next time you open the window.
-
+  in the background is offered the next time you open the window. Settings → Updates says when
+  it last checked.
 - USB strips: connecting now asks the controller what it is. A LumaSync controller that answers
   reports its firmware version, the frame format it expects and whether it wants RGB or RGBW
   pixels, and Settings marks a firmware profile or LED chip type that disagrees, without changing
   either for you. Controllers that do not answer, such as Adalight sketches, connect exactly as
   before, about a quarter of a second later.
+- Room map: beds, storage, plants and rugs join sofas, tables and chairs, a new piece starts at a
+  real size for its kind, and a piece's second side is labelled Depth. Earlier versions show an error
+  screen when the room map is opened on a map with a bed, storage, plant or rug (Restart recovers;
+  lighting is unaffected). From this version on, a kind added by a newer version is drawn as a plain
+  box, and a model or tone this version does not know is ignored but kept.
 - Room map: the TV has an optional mount height. Left empty it follows 40% of the room height, so
   changing the ceiling moves it too. The TV's footprint field is now labelled Depth, since it never
-  meant the screen's height. A small "Room-aware" chip in the room map toolbar and under the Hue
+  meant the screen's height. A small "Room-aware" chip in the room map's corner and under the Hue
   output on the Lights page shows when Hue lights are sampled by where they stand around the TV,
   and opens a short explanation.
 - USB strips: a color order setting for strips whose colors come out swapped, such as red
@@ -49,12 +83,13 @@ https://keepachangelog.com/en/1.1.0/
 - Settings → Appearance: "Interface size" makes the interface 90%, 100%, 110% or 125% of its
   normal size, in the main window and the control popup; ⌘/Ctrl with + − 0 change it too. The
   compact window grows with it; the full window keeps the size you gave it unless that would be
-  too small.
+  too small. The title bar keeps its size, in line with the window buttons, and the page changes
+  size behind a short fade instead of jumping in place.
 - Settings → General: "Lights on launch" can start LumaSync with the lights off instead of resuming
   the last mode; the mode's settings are kept for the next time you turn it on. "Close button" can
   quit LumaSync instead of keeping it running in the background, and "Notifications" turns its
   system notifications off.
-- Settings → Help lists the keyboard shortcuts, and "Diagnostics" copies the app version, your
+- Settings → Help lists the keyboard shortcuts behind its "Show" button, and "Diagnostics" copies the app version, your
   system, the mode and what is connected, as text to paste into a bug report. It holds no network
   addresses, device ids or keys, and nothing is sent.
 - Hue: the channel list on Devices → Hue Bridges names each channel's lights the way the Hue app
@@ -63,11 +98,211 @@ https://keepachangelog.com/en/1.1.0/
 - WLED: the WLED page keeps showing your saved device after you leave it, with a "Forget device"
   action. Forgetting stops sending to it (lighting carries on with your other outputs, or stops if
   it was the only one) and stops LumaSync reconnecting to it at launch.
+- LED preview, rebuilt: opened from Lights or the menu bar menu, it shows the LEDs — dots in a band
+  along the screen's edges, as LED Setup draws them — and the Hue lamps on screen as they really light — the layout the strip runs, its colours as the eye sees them, Hue
+  lamps where the room map places them — and changes no light by opening. Its small remote starts
+  with six test scenes that play full screen while Ambilight captures them: an edge tour (order,
+  direction, corners), a colour spiral, a sunset, drifting colour fields, a letterboxed film for
+  black-bar detection — with its own "Ignore black bars" switch to compare the two, never saved —
+  and a latency test that measures the delay from a captured frame to the
+  lights' output. A scene borrows the lights and gives them back when it stops; choosing a mode
+  anywhere ends it. The remote also holds the modes with the compact window's settings for each
+  (Solid's colour or white, Ambilight's response, an effect with its palette and speed), an eye
+  that hides the on-screen LEDs, and Hide and Close. On macOS the preview follows you onto a
+  full-screen app's Space, and closing it leaves you where you are. The preview's windows stay out
+  of the capture (macOS, and Windows 10 2004 or later; elsewhere the on-screen LEDs hide while
+  Ambilight captures).
+- Room-aware Hue. With a TV placed on the room map, each Hue light now samples the part of the
+  screen that matches where it stands: its height picks the band — a floor lamp takes the bottom
+  of the picture, a ceiling light the top — and its position left or right of the TV picks the
+  side. Its distance from the TV sets how much it follows the screen and how much it keeps a
+  softer room-wide colour; no light is ever switched off for being far away, and even the
+  farthest light keeps part of its own side of the picture. Every room template
+  except Empty places a TV, so if you set up your room map from one of those templates this turns
+  on by itself when you update. Lights whose height LumaSync does not know yet sample the middle
+  of the screen. Moving a light or the TV applies to running Ambilight within about half a second,
+  without restarting the Hue stream. With no TV on the room map, Hue sampling is unchanged.
+- A development mode that answers the Tauri IPC boundary from fixtures, so UI work no longer needs
+  hardware attached. This first part ships the seam and the guarantees around it; the fixtures and
+  the scenario picker follow. `bun run dev:mock` serves the frontend to a browser with the Tauri
+  runtime simulated, which is the only place real pointer behaviour — CSS `:hover` among it — can be
+  checked at all; `bun run tauri:mock` runs the desktop app with the same seam in place. Neither can
+  reach a shipped build: the mock has no path into the production module graph, both Vite plugins
+  are dev-server only, a production build aborts outright if the flag is set, and
+  `bun run verify:mock-not-shipped` proves all three on every run of `check:all` by running into the
+  guard rather than reading the code that implements it.
+- The development mode now answers with fixtures and ships a scenario picker, so every screen can be
+  reached without hardware. Ten scenarios, and the eight past "nothing configured" and "fully
+  furnished" each reproduce a state the app once got wrong: an entertainment area that is genuinely
+  empty, a bridge that cannot be reached, a key the bridge no longer accepts, a Hue-only session, a
+  pairing waiting on the link button, refused screen-recording permission, and a store that rejects
+  every write. An empty state and a failed state look identical from outside, which is why both are
+  one click away. The picker sits on the left edge under `Ctrl+Shift+M`; clicking a scenario reloads
+  into it, shift-clicking swaps the fixtures under the running app so a response that lands after
+  its scenario is gone reports itself. Fixtures never answer on a microtask, and the delay is
+  adjustable, because a mock that answers instantly hides every loading state and ordering bug
+  behind it.
 
 ### Changed
 
+- Room map editing, made direct:
+  - A selected piece gets a frame with eight handles that grow it from a side or a corner (⇧ keeps
+    its proportions from a corner) and a knob at its front that turns it in 15° steps (⇧ for any
+    angle) and shows which way it faces. The frame sits above every piece, so a rug's handles stay
+    reachable under the sofa on it.
+  - Pieces are drawn lowest first, as seen from above: a rug stays under the sofa or table on it,
+    whatever was added last.
+  - A dragged piece follows the grid as it moves, holds the grid on the axis an alignment guide did
+    not catch, stays inside the room's walls, and ⌥ drags it freely. The grid shows more strongly
+    while a piece moves.
+  - The room's walls drag: pulling one makes the room bigger or smaller with the opposite wall and
+    everything in the room left where it is. A cut (L, U or T) has a grip that slides it along the
+    walls or onto another one, and a × that puts the rectangle back. The walls are grey rather than
+    red, and they stay when the grid is turned off.
+  - On a trackpad two fingers pan the plan and a pinch zooms; a mouse wheel still zooms.
+  - A number in the inspector changes by dragging across it (⇧ for ten steps at a time); a press
+    without moving types, as before. The value sits beside its mark instead of across the field.
+  - A dragged piece moves freely and is caught by a grid line only when it comes near one, instead
+    of jumping half a metre at a time; sizes land on 5 cm. A turned piece's side handles show the
+    cursor along the way they drag. The name field edits as the number fields do, with a soft tint
+    and an amber line instead of a framed box.
+  - The 3D room's light reads its mode more clearly: an effect colours each lamp and strip with its
+    own stop of the palette instead of one middle colour, so it no longer looks like Solid white, and
+    the dock's lights show the palette; lit lamps fill the room with a warm bounce tinted by their
+    colour, Off darkens it plainly under a cool moonlight, a lamp keeps a soft pool on the floor under it, bulbs blow out
+    less, and a strip stays one soft lit line from further in before its LEDs show one by one.
+  - The 3D view has the lights' everyday controls: a button in its corner names the running mode,
+    and opens the modes, the brightness, Solid's colour and white, and the effect for every light at
+    once, as the tray window does.
+  - The room can be laid out in 3D: Edit opens on the 3D room, with a 3D | Plan switch in its
+    corner, and the dock works there as on the plan — add a piece from the palette, pick anything
+    in the room to edit it in its card, carry and turn it, delete it, undo. The walls, a strip's ends
+    and corners, images and Hue zones are still drawn on the plan, which opens for them.
+  - The 3D view can look at something other than the room's middle: a right drag moves it, the
+    wheel zooms toward the pointer and further than before, a double-click turns the room about what
+    it lands on and comes closer, and the corner has zoom buttons and "Whole room" to go back. A
+    click on furniture keeps the light that is selected, the light card's link says "Place on map"
+    (it said "Edit", like the switch above it), and someone without Hue is no longer told their area
+    has no Hue lights. Storage longer than a sideboard reads as a run of wardrobes, with doors about
+    half a metre wide.
+  - Several objects at once — furniture, the TV, Hue lights and strips: ⇧-click adds one to the
+    selection or takes it out, a box dragged across empty floor selects what it covers, dragging a
+    piece or the TV moves them all as one undo step (a desk carries its monitor and its lamps), and
+    Delete removes them all. The shortcuts list names these, and ⌥-drag for moving
+    without snapping.
+  - Camera moves ease in about a third of a second instead of jumping: the 3D view's zoom buttons,
+    "Whole room" and a double-click's focus, and the plan's zoom buttons, fit and arrow-key pans.
+    What the pointer drives — a drag, the wheel, a pinch — still follows it at once.
+  - Switching between View and Edit, or between Edit's 3D and Plan, no longer pauses while the 3D
+    room opens again. The room is handed across and holds still, while the dock's content and the
+    corner controls settle into place. The plan fades in under a dock that stays, and the 3D | Plan
+    switch's plate slides as View | Edit's does. The room map's other switches move as well: the
+    right-click menu rises in, the Room-aware note opens as a popover (and as a growing row on
+    Lights), and the lights button's mode name and dot fade from one mode to the next.
+  - In Edit's 3D room a piece of furniture can be picked up and carried across the floor: the
+    piece itself follows the pointer in an amber frame, a desk taking its monitor along, and it
+    lands there on release, inside the walls (Esc puts it back); a Hue lamp moves as the frame
+    alone. While it is held the wheel or R turns it in 15° steps (⇧R the other way); a drag on
+    anything else still turns the room. View only looks: there a drag always turns the room. Wardrobes are drawn as a run of doors standing proud of the
+    carcass with shadow gaps, long bar handles, a cornice and a set-back plinth.
+  - The plan opens already framed instead of sliding into place, and switching between the plan and
+    the 3D view keeps where each was looking for the session (a resized room is framed afresh).
+  - A USB strip shows in the 3D view: one behind the screen is picked there as its backlight, one
+    along a wall runs as a thin lit line at skirting height, and either one clicked opens its card.
+  - The 3D room fills its view between the View/Edit switch and the dock instead of leaving most of
+    the width empty, reads as an evening interior with each lamp throwing a wider, stronger pool on
+    the floor and wash on the walls near it, and a lamp standing in an L's or U's cut throws no
+    pool on a floor that is not there.
+  - In the 3D view each light's chip is filled with the colour its lamp glows in the room, the inner
+    walls of a U- or T-shaped room drop when they stand between the camera and the room, Blink waits
+    with its reason while Hue streams instead of failing on the press, a table lamp stays on what is
+    under it and a pendant hangs at least to head height.
+  - The template list says what the room map is for, a blank room opens on Edit rather than an
+    empty 3D view, a second piece added lands beside the first instead of on it, the TV snaps like
+    the furniture does, the cut's width, depth and offset fields carry drawn marks instead of the
+    English letters W, D and ↦, and the room settings' wall row reads "On wall".
+  - A Hue light is drawn as its model — a Play bar, Signe, Go, Iris or Bloom has its own shape — and
+    one that lights only one side, such as a Play bar turned to the wall, lights that side in the
+    3D room instead of all round. The light's card picks the model when the bridge names the wrong
+    one and turns a one-sided light to face where it really points, drawn on the plan as a wedge;
+    left empty it faces its nearest wall.
+  - A Hue light set down on a desk or a shelf stands on its top, and moved off it goes back to the
+    floor, whether dragged on the plan, typed or carried in 3D; the light's card offers to stand it
+    on the piece under it.
+  - A kitchen: a counter run with a stone worktop, sink and hob, an island with a seating overhang,
+    and a fridge, read from the piece's shape unless one is picked. Chairs can be stools or a
+    beanbag and storage a chest of drawers. Like a bed, a kitchen shows an error screen in versions
+    before this one.
+  - The palette's Templates tile, and Room settings → "Templates…", open the templates over a furnished room too, with a way back;
+    a template picked there is one undo step. A new "Showroom" template lays out every kind of
+    furniture in every model it comes in, side by side, in a 10 × 8 m room.
+  - A strip's card takes its tape's LEDs per metre: with it set, the strip's length follows its LED
+    count (90 LEDs at 60 a metre is 1.5 m), and a strip drawn longer or shorter offers "Fit to … m".
+  - A strip can bend: double-click its line on the plan to put a corner there, drag the corner to run
+    the strip round a desk or a room corner (up to eight), and double-click a corner to take it out;
+    its card offers "Add a corner" and "Straighten". A bent strip moves, copies and fits its length
+    along its corners, and the 3D room draws it leg by leg. Versions before this one draw it straight
+    and leave its corners behind when it is moved.
+  - Close up in the 3D view a strip shows each of its LEDs; from afar it is one unbroken lit line.
+  - A USB strip is drawn at its real width, about a centimetre, flat on its wall or the floor, and
+    its card takes a height for the 3D room (empty runs it at the skirting along a wall, on the floor
+    elsewhere) and offers "Onto the wall" to lay it along the nearest wall.
+  - A mode no longer washes the whole 3D room in its colour: Ambilight keeps the room dark with a
+    rim of light around the screen, and an effect lights the room at about half its lamps.
+- The Lights page's outputs say what they are in plain words: "USB strip" (not the CH340 chip name
+  for every controller), "Hue lights", "Bridge · ready" / "live · 20 Hz" instead of "standby" /
+  "DTLS 20 Hz", and "Not set up". The Hue area row explains in its ⓘ what an entertainment area is
+  and where the Hue app makes one, and the channel list's sync line says "Not compared with the
+  bridge" instead of "Bridge not read yet".
+- One word for each thing across the app, in English and Turkish: making a real strip or Hue light
+  show itself is "Blink" / "Yanıp söndür" everywhere (it was Flash, Identify, Tanıt and Tanımla),
+  working out a strip's colour order is "Find order" / "Sırayı bul", firmware is "bellenim" in
+  Turkish, "Hue Bridge" is spelled one way, English is British throughout ("colour"), and template
+  and dialog titles are in sentence case.
+- Plainer words in Settings and the notice line: "Compact window" / "Full window" for the title-bar
+  switch (it said "Full settings"), "Start at login", "When LumaSync starts: Last mode / Lights off",
+  "Off when locked or asleep", "Live stats", "LED setup needed" instead of "Calibration required",
+  "No lights connected" instead of "No reachable output", "Privacy settings" for the screen-recording
+  action (it read like the app's own Settings), and the Welcome line is shorter. Language is the
+  first row of General.
+- The room's overall colour in Ambilight keeps the screen's colour instead of greying it out. It was
+  the plain average of the frame, so a picture with its colour in one part of the screen averaged to
+  a washed-out tone — and that colour is most of what a lamp far from the screen, or a strip that can
+  only show one colour, displays. It now gives coloured areas more say over the hue while keeping the
+  same brightness.
+- One brightness for every mode. Switching between Ambilight, Solid and Effect keeps the brightness
+  where it was, on Lights, in the compact window and in the LED preview, instead of each mode
+  keeping its own. The modes' separate brightnesses become one: the last lit mode's. Choosing a
+  scene sets it too, so a 20% scene leaves every mode at 20%.
+
+- LED Setup's Test shows the layout on the strip: LED #1 green, each edge's end LEDs blue, the two
+  beside the stand red, and a white light running the way the strip goes. Edits show at once.
+
+- Lights and the compact window are rebuilt around one stage: the mode buttons on top, the scenes
+  under them, and the running mode's settings below, passing to the next mode's from the side you
+  moved to. Every mode's settings share one quieter look, the page keeps a readable width in a
+  wide window — where the effect gallery alone grows, into more columns — and the outputs sit in
+  a column on the right with an entry to the LED preview.
+  Sliders are easier to catch (a 32 px target), and the compact window fits an effect's palettes
+  on one line that scrolls sideways. The five fixed colour tiles are replaced by scenes.
+- Off is a power button beside the modes instead of a mode of its own. With the lights off the
+  last mode's settings stay on the page, dimmed under a veil that says so and offers "Turn on"
+  with that mode's name; the power button and that button bring the mode back, after a relaunch
+  too. The mode buttons and scenes no longer grey out for a moment while a mode starts.
+- The Lights stages move with what you change. Switching between Colour and White, or any choice
+  of that kind such as Ambilight's response, slides its mark across and eases the stage to its new
+  height. Changing effect eases its settings: a slider glides to the new effect's value while its
+  name and readout fade in, and a setting the new effect does not have fades out where it was. A
+  fast drag no longer makes a slider's number shake or its thumb jump back. Saturation marks 100%
+  on its track, settles into it as you pass and returns to it when you press its value, and an
+  effect's six directions are one choice drawn as icons of one size.
+- Colour correction moved from Lights to Devices: each strip's page has a Colour row that opens
+  gamma, white point and saturation. It is still one setting for every output, strips and Hue
+  alike, until each strip has its own.
 - The button that switches between the compact and full window is a quiet grey icon that lights
   up on hover, instead of an amber box.
+- Settings → General: the interface language is a two-way choice, English | Türkçe, each by its
+  own name, instead of a list for two.
 - The window opens on your saved layout, guide state and Hue settings from its first frame, rather
   than drawing defaults for a moment. Launching into the full window also no longer rewrites
   settings that did not change on the way to the first frame.
@@ -224,10 +459,52 @@ https://keepachangelog.com/en/1.1.0/
   panning moves the canvas without redrawing every object, and moving an object no longer redraws
   the whole editor each time a snap guide is re-checked. Undoing a Hue zone change the bridge
   refused no longer brings back the refused state.
-- Room map: with more than one Hue entertainment area, the object list, the inspector, the
-  property bar, arrow nudges and "Move to" only touch the area on screen. Before, a light with the
-  same number in another area could be listed, shown or moved with it. Dragging a Hue light that
+- Room map: with more than one Hue entertainment area, the object list, the inspector, arrow
+  nudges and moving a light between zones only touch the area on screen. Before, a light with the same number in
+  another area could be listed, shown or moved with it. Dragging a Hue light that
   belongs to a zone now starts from where its dot is drawn instead of jumping.
+- Room map: opened for the first time with a Hue bridge paired, it offers the templates and keeps
+  offering them; the Hue lights the bridge reports used to make them vanish a moment after opening.
+- Room map: the plan draws each piece from above as what it is — a sofa with its seats and back,
+  an L sofa's chaise, a bed with its pillows, a desk with its screen and keyboard, a plant's leaves
+  in its pot, a rug with its fringe — in the colours the piece has, instead of a coloured box. A
+  piece's name shows when the pointer is on it or it is selected. The templates show their room
+  drawn the same way.
+- Room map: the row of numbers under the plan is gone, and its numbers sit in the inspector with
+  the rest of what you select — a piece's position, size, height and rotation, a strip's start and
+  LED count, a Hue light's place in metres, an image's position, scale and proportions — so the
+  plan gets that height back. A number applies when you leave it or press Enter, takes a comma or a
+  point, and steps with the arrow keys (ten steps with Shift); one out of range, like Esc, puts the
+  old value back.
+- Several USB strips at once. Ambilight now lights every saved, enabled strip that is connected
+  and laid out, each from its own layout, firmware, chip and colour order, from one screen capture —
+  the slower strip skips frames on its own link instead of slowing the others. Unplugging one
+  restarts the mode on the others. The settings you
+  change without naming a strip are for your first enabled strip, and that strip now gets the mode
+  even when another one was plugged in first. A strip that will not open is left out — said only
+  in the log for now — and the others keep running; turning the mode off and on again retries it. Off paints every strip the mode lit black, and Solid, effects, the test pattern and
+  the preview scene still use the first strip alone. The Lights and Devices pages still name one
+  strip as the connected one — the one plugged in first — whichever strips are lit.
+- Room map: a room can be L-, U- or T-shaped. Room settings has a Shape row — rectangle, L, U or T,
+  which corner or wall the cut is at, and its size in metres — and the plan draws the walls along
+  that outline with the cut-away part hatched. A wall of the cut can be dragged on the plan, and a
+  double-click on a plain room's wall cuts a notch there. A piece left in the cut-away part is
+  marked with a dashed ring and "Outside" in its panel, never moved or refused. Changing the room's width or depth keeps the shape,
+  and the room cannot be made too small for it. A template or Reset goes back to a rectangle. The
+  lighting still reads the room as its full rectangle, so a lamp in the cut-away corner is sampled
+  as before.
+- Room map: the plan fills the editor. The toolbar, the chips down the left, the side panel and the
+  coordinate readout are gone; one panel floats over the plan's foot at a height that never
+  changes. With nothing selected it shows what you can add — each piece drawn as the plan draws it,
+  then the TV, a strip, an image and a Hue zone, with how your Hue area stands beside them — and
+  with something selected, its name, its choices (type, model, tone, screen, zone) and its numbers
+  in two rows, with lock, duplicate, delete and close at the end. Two buttons at its side open the
+  list of everything in the room, the Hue lights under their zones, and the room's own settings.
+  Undo, redo, zoom and the keys sit in a small capsule in the top corner. A light joins a zone from
+  its zone picker, or from the light buttons in the zone's panel, instead of being dragged; a zone's
+  colour is one of six. Esc steps back from a light to its zone and then to what you can add, and a
+  click on empty floor lets go of everything. Clicking a piece no longer brings up a rename box;
+  its name is edited in place.
 - Room map: a background image larger than 20 MB is refused with a message that says so, rather
   than copied into the app's data folder. Copies of background images that no room map layer uses
   any more are deleted the next time the app starts.
@@ -299,9 +576,23 @@ https://keepachangelog.com/en/1.1.0/
   seen the strip settings; reconnecting on its own at launch does not bring the notice back. While
   the app is reconnecting to a strip on its own, you can press Connect to take over. Each rail
   badge counts what is active: a connected strip, a streaming bridge, a bound WLED device.
+- Frontend and Rust dependencies refreshed to their latest stable releases within their current
+  major versions — Tauri 2.12.3 with its plugins on matching npm and crate versions, Vite 8.3.4,
+  Vitest 5.0.4 — plus happy-dom 20 → 21 for the test environment. WebdriverIO stays on 9 because
+  the Tauri test service does not support 10 yet.
+- With both USB and Hue selected, a lighting mode now starts on USB when the Hue bridge cannot be
+  used — unreachable, needing a re-pair, or not set up — instead of refusing to start at all. A
+  notice says Hue was left out and why. Hue is not retried in the background: turn it back on
+  once the bridge is back, and the next launch tries it again on its own, because your saved
+  output selection is not changed.
+- Frontend and Rust dependencies refreshed to their latest stable releases within their current
+  major versions, including Tauri 2.11.6 (a security fix keeping one app window from reading data
+  sent to another) and the Tauri plugins kept on matching npm and crate versions.
 
 ### Removed
 
+- The LED preview's synthetic test patterns (chase, rainbow, spiral and gamut) and its old
+  settings; the preview's scenes and LED Setup's Test replace them.
 - Room map: "LED counts from map". LED Setup is the one place that sets how many LEDs each edge
   has, and the strip on the room map follows the total you save there.
 - Devices: the Manual Entry page, which only said manual entry was not available yet. A Hue bridge
@@ -309,6 +600,105 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- A Hue light set to Ceiling light or Pendant in the room map goes up to where it hangs — the
+  ceiling, or a pendant's shade a little below it — in the same undo step, so the 3D room and the
+  colours it gets agree on its height; a spot or a bulb can be hung from the ceiling with one click,
+  and the plan draws a dashed ring around a light that hangs overhead.
+- The 3D room stays put while another window or Space covers the app and comes back as it was,
+  instead of being built again on every return when flicking between windows; it is let go after
+  30 seconds covered, and at once when the window is closed to the tray or minimised.
+- An icon-only button draws its icon in the middle of its hover plate: the 3D view's light card
+  (Back to the lights, Blink) and Lights' Add output drew it against the left edge.
+- In the 3D room a monitor stands on its desk at the desk's real height, on its stand near the back,
+  instead of sinking a wide screen into the top or floating a small one on a long pole. The
+  Showroom template gives each piece its own id, so the dining chair and table no longer select
+  together (apply it again to fix a room laid out from it before).
+
+- Choosing from a list inside a popover — an effect in the 3D view's lights — no longer closes the
+  popover around it too, and Esc closes the inner list first.
+
+- The room's dock is wider (up to 920 px) and its furniture row scrolls sideways with whole names,
+  so the palette no longer cuts every name to a few letters ("Kan…", "Sand…").
+
+- In the 3D view, carrying a piece or changing anything in the room no longer throws the view back
+  to the room's middle; only resizing the room frames it afresh.
+- In the room map, undoing back past a template no longer drops the editor for the template list with
+  no way to redo, and ⇧⌘Z / Ctrl+Shift+Z redoes on every keyboard layout.
+- The scene chips are one Tab stop and the arrow keys move between them, as the mode buttons above
+  do; they were six Tab stops and the arrows did nothing. Choosing Edit in the scenes library puts
+  the cursor in the scene's name, where it used to drop focus on the page and leave Escape dead.
+- The colour picker's labels are in sentence case, its hex field is a full-height field, the "+"
+  beside the scenes says "New scene from this light", the colour correction rows read "Red gamma"
+  and "White point (K)", and Turkish says "Sinema bantları" for letterbox.
+- An unplugged strip reads "Unplugged" with a still dot instead of a spinner that never stopped,
+  and without a red "Port not found" under it that grew the row; it still reconnects by itself.
+- Typing the address of the WLED device already added opens its strip instead of adding it a
+  second time as "WLED … 2". The address field's example now reads "e.g. 192.168.1.50" so it is
+  not taken for a filled-in value, and a search that finds nothing says so after a few seconds
+  and points at the address field. An address that does not answer says to check that the
+  device is on and on the same network; so does a Hue Bridge that cannot be reached.
+- A fresh install's Lights page no longer offers an amber "Turn on Ambilight" that does nothing: with
+  no light connected the dimmed stage says so and offers "Add a light", which opens Devices (from the
+  compact window, the full one); a turn-on that cannot run is grey. "No lights connected" in the
+  notice line is amber rather than a red error, since nothing failed.
+- Switching between the compact and full window, or changing the interface size, while settings
+  cannot be saved left the full layout in a compact-sized window; the layout now follows the window
+  and the "settings can't be saved" notice says some changes won't stick.
+- The error screen can be dragged by its top edge again, as the title bar it replaced could.
+- In the compact window a notice's action — "Devices ›", "System Settings ›", its × — sat past the
+  window's edge and could not be pressed; the line now ellipsizes and its arrow opens the rest.
+- Quiet text (navigation tabs, the status bar, captions, the room's light facts) is readable: its
+  colour rose from 2.7:1 to 4.8:1 against the background.
+- The brightness and other sliders show a focus ring on their thumb when reached with the keyboard.
+- A short compact window no longer squeezes the scenes row to nothing under the stage; the column
+  scrolls instead.
+- A popover whose content grows after it opens — Room settings gaining the L, U or T rows — moves to
+  stay inside the window instead of running under the status bar.
+- "Checking outputs…" no longer flashes at launch and pushes the page down and back up; it shows only
+  when the check takes longer than a moment.
+- The LED preview's Response choices and the room view card's buttons have a 32 px target and the
+  amber focus ring; popovers, info tips and lists keep their frame and focus under Windows contrast
+  themes.
+- A Solid colour, and every Solid scene, now stays on a WLED device instead of going back to the
+  device's own effect after about two seconds. Solid sent the device a single frame, which WLED shows
+  only until its realtime timeout runs out; the colour is now resent twice a second while Solid runs
+  there, and stops before the next mode — Off's switch-off above all — reaches the device.
+- Ambilight's "Ignore black bars" holds through a real film: a subtitle, a logo or the cursor in a
+  bar, a fade to black, a dark shot at one edge and the grey bars some players draw no longer make
+  the top and bottom LEDs fall into the bars or the picture get cropped, and the crop moves only
+  once its reads agree instead of jumping every 2.5 seconds.
+- Stopping an LED test pattern (LED Setup's Test, Devices → Flash) or a preview scene brings the
+  lights back with the colour and brightness as saved now, not as they were before your last change,
+  and brightness and colour drags work again straight away instead of doing nothing until the next
+  mode change. A test's stop that arrives after you picked another mode no longer turns the lights
+  off, and the preview twin no longer goes back to an old Solid colour when it is shown again.
+- After updating from an earlier release, Solid and Effect start at the brightness they were saved
+  with, not Ambilight's, and that brightness is no longer replaced on the next save.
+- macOS: starting a preview scene no longer brings back a twin or remote you had hidden.
+- A colour, effect or brightness picked again in one window after the other window (the preview's
+  remote or the main window) changed it now reaches the lights; before, the stage showed it while
+  the lights kept the other window's choice. A pick whose change failed is sent again.
+- Hue: when the health check gives up on a stream (its retries ran out, or the bridge refused the
+  key), the stream really stops, instead of the lamps following the screen under a card that said
+  Stopped. One dropped stream uses one reconnect attempt, not two. After a short network drop a
+  reconnect no longer says another app took the area when the only holder is LumaSync's own dropped
+  session. Pressing Off while Hue is reconnecting switches the lamps off instead of leaving them on.
+- Hue: a short network drop while opening the area picker or pressing Refresh no longer deletes the
+  saved entertainment area and turns Start off; the failure is shown and the area is kept, and a
+  refused key asks for a re-pair.
+- Saving a Hue channel placement from Devices no longer undoes a USB strip just added to the room
+  map or an LED count LED Setup had just saved beside it.
+- An LED Setup change made while a save is still being written is no longer silently undone; it stays
+  on screen, marked unsaved.
+- macOS: clicking the empty part of the title bar, or the header of the LED preview's remote, no longer
+  makes the window jump sideways.
+- The LED preview's remote opens at its own size, never taller than the screen; it came back at the
+  size an older version gave it, and its settings fell into a scroll.
+- A long list opened in a short window — the effect list in the LED preview — stays inside the
+  window and scrolls, rather than running off its edge.
+- LEDs either side of a monitor stand take the colour of the screen above where they sit; they were
+  spread over the whole bottom edge as if there were no gap, and the LED preview showed no gap.
+- Opening and closing the LED preview no longer adds two windows' worth of memory each time.
 - Busy labels no longer flash and snap back on fast answers. "Checking…" on Revalidate, health
   checks, update checks and Hue's row actions now stays readable, and Hue's Channels row keeps its
   word through Revalidate instead of flipping to "Loading" and back.
@@ -411,6 +801,19 @@ https://keepachangelog.com/en/1.1.0/
 - Room map: "Reset map" keeps your Hue lights, Hue zones and the strips connected in Devices. Room
   height can be edited, a Hue light's height slider inside a zone only covers the heights the zone
   allows, and Hue lights are numbered the same in the list as on the map.
+- A USB strip with no LED layout saved shows the colour of the whole picture instead of the screen's
+  top-left corner.
+- A strip edge with a single LED takes its colour from the middle of that edge, where LED Setup draws
+  it, instead of from its corner, which belongs to the neighbouring edge.
+- An effect on Hue lights alone, with no LED layout saved, spreads across the lights you have; a
+  hidden one-LED strip in the screen's corner no longer took part in where it ran.
+- Room map: clicking a piece of furniture or the TV no longer moves it. With the grid on, a click
+  snapped it to the nearest grid line as though it had been dragged, so a piece off the grid
+  jumped up to half a metre the moment it was selected.
+- Room map: keys stay with what has focus. An arrow on a panel button or in a menu no longer also
+  moves the selected object, Delete there no longer removes it, and Space presses a focused button
+  instead of starting a pan. The right-click menu takes focus, moves with the arrow keys and hands
+  focus back to the map when it closes, and a Hue light no longer opens an empty one.
 - Settings: "Launch at login" now sets what you asked for instead of flipping whatever the system
   last reported, and says so when it cannot. "Check for updates" tells you when you are already on
   the latest version. When settings cannot be saved, one notice says so instead of switches quietly
@@ -483,7 +886,7 @@ https://keepachangelog.com/en/1.1.0/
 - Hue: the spinners while pairing and reconnecting now slow down when Reduce Motion is on; the
   setting never reached them before.
 - Screen readers: the manual bridge IP field on the Hue page has a name, and the entertainment-area
-  list, the compact window's scene tiles and the room map's "Move to" menu say which item is
+  list, the compact window's scene tiles and the room map's zone picker say which item is
   chosen instead of showing it only by colour. An area another app is streaming to is announced
   as unavailable.
 - Ambilight: at the heaviest smoothing a strip could stop a few steps short of the colour on
@@ -927,50 +1330,6 @@ https://keepachangelog.com/en/1.1.0/
 - The status bar and the capture-stalled notice no longer redraw the window every second while
   nothing they show has changed.
 
-### Added
-
-- Room-aware Hue. With a TV placed on the room map, each Hue light now samples the part of the
-  screen that matches where it stands: its height picks the band — a floor lamp takes the bottom
-  of the picture, a ceiling light the top — and its position left or right of the TV picks the
-  side. Its distance from the TV sets how much it follows the screen and how much it keeps a
-  softer room-wide colour; no light is ever switched off for being far away, and even the
-  farthest light keeps part of its own side of the picture. Every room template
-  except Empty places a TV, so if you set up your room map from one of those templates this turns
-  on by itself when you update. Lights whose height LumaSync does not know yet sample the middle
-  of the screen. Moving a light or the TV applies to running Ambilight within about half a second,
-  without restarting the Hue stream. With no TV on the room map, Hue sampling is unchanged.
-- A development mode that answers the Tauri IPC boundary from fixtures, so UI work no longer needs
-  hardware attached. This first part ships the seam and the guarantees around it; the fixtures and
-  the scenario picker follow. `bun run dev:mock` serves the frontend to a browser with the Tauri
-  runtime simulated, which is the only place real pointer behaviour — CSS `:hover` among it — can be
-  checked at all; `bun run tauri:mock` runs the desktop app with the same seam in place. Neither can
-  reach a shipped build: the mock has no path into the production module graph, both Vite plugins
-  are dev-server only, a production build aborts outright if the flag is set, and
-  `bun run verify:mock-not-shipped` proves all three on every run of `check:all` by running into the
-  guard rather than reading the code that implements it.
-- The development mode now answers with fixtures and ships a scenario picker, so every screen can be
-  reached without hardware. Ten scenarios, and the eight past "nothing configured" and "fully
-  furnished" each reproduce a state the app once got wrong: an entertainment area that is genuinely
-  empty, a bridge that cannot be reached, a key the bridge no longer accepts, a Hue-only session, a
-  pairing waiting on the link button, refused screen-recording permission, and a store that rejects
-  every write. An empty state and a failed state look identical from outside, which is why both are
-  one click away. The picker sits on the left edge under `Ctrl+Shift+M`; clicking a scenario reloads
-  into it, shift-clicking swaps the fixtures under the running app so a response that lands after
-  its scenario is gone reports itself. Fixtures never answer on a microtask, and the delay is
-  adjustable, because a mock that answers instantly hides every loading state and ordering bug
-  behind it.
-
-### Changed
-
-- With both USB and Hue selected, a lighting mode now starts on USB when the Hue bridge cannot be
-  used — unreachable, needing a re-pair, or not set up — instead of refusing to start at all. A
-  notice says Hue was left out and why. Hue is not retried in the background: turn it back on
-  once the bridge is back, and the next launch tries it again on its own, because your saved
-  output selection is not changed.
-- Frontend and Rust dependencies refreshed to their latest stable releases within their current
-  major versions, including Tauri 2.11.6 (a security fix keeping one app window from reading data
-  sent to another) and the Tauri plugins kept on matching npm and crate versions.
-
 ### Security
 
 - Each app window can now call only the LumaSync commands its own screens use. The LED preview
@@ -992,6 +1351,7 @@ https://keepachangelog.com/en/1.1.0/
   your local network. Existing pairings keep working: the first connection after updating learns
   the bridge's certificate, which is remembered in a small file beside the app's settings rather
   than in the keychain, so it adds no keychain prompt.
+- Dependency floors raised to patched releases: undici `^7.30.0` (GHSA-2gqq-gqf2-x968), serialize-javascript `^7.1.2`, @puppeteer/browsers `^3.2.4`. The lockfile already held them; the ranges still allowed a vulnerable undici.
 
 ### Internal
 
@@ -999,7 +1359,14 @@ https://keepachangelog.com/en/1.1.0/
   and a CI check that fails when a change makes every frame allocate more memory or rebuild a
   colour table. Two small per-frame allocations went away on the way, one on the Hue path and one
   on every USB send.
-
+- The frontend bundle has a size gate that fails, per chunk class: the start-up code every window
+  loads, and each chunk loaded later. The old limit only printed a warning and had been passed
+  without anyone noticing.
+- The room map editor saves only what it changed. It wrote its whole copy of the map, so a strip
+  added by connecting a controller, or an LED count saved in LED Setup, while it was open would have
+  been taken away by its next save; the settings pages showing one section at a time was all that
+  prevented it. The unused room map save counter is gone from the settings file.
+- A 3D room view, built only into dev builds and builds with `VITE_ROOM_VIEW_SPIKE=1`: three.js in its own lazy chunk that the chunk gate fails if it appears in a release build. In those builds the room map's inspector also offers a model per piece (a desk, a corner sofa, a bookshelf, a palm…), a tone, a height, and TV or monitor for the screen. It draws parametric furniture read from each piece's size and neighbours and each Hue light as its fixture (a Play bar, a floor lamp, a pendant…) from the bridge's archetype, and hands its WebGL context back when it closes.
 
 ## [1.5.5]
 

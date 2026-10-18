@@ -1,9 +1,9 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "preview-popup",
-  "description": "v1.6 interactive control popup. Listens for mode and preview events, reads and patches shell state, persists its own position from three geometry reads, and drags by its header. App commands: what ControlPopupApp, its hooks and its error boundary invoke; hiding goes through one of them rather than the window API. Policy: docs/architecture/ui-and-shell.md, \"Capabilities\".",
+  "description": "v1.6 interactive control popup. Listens for mode and preview events, reads and patches shell state, persists its own position from three geometry reads, and drags by its header (on macOS a press goes to start_window_drag). App commands: what ControlPopupApp, its hooks and its error boundary invoke; closing and hiding go through the session commands rather than the window API. Policy: docs/architecture/ui-and-shell.md, \"Capabilities\".",
   "windows": [
-    "led-control-popup"
+    "led-control-popup-*"
   ],
   "permissions": [
     "core:event:allow-listen",
@@ -20,12 +20,15 @@
     "allow-apply-outputs",
     "allow-retune-lighting",
     "allow-get-lighting-runtime",
-    "allow-get-led-preview-status",
-    "allow-start-led-test-pattern",
-    "allow-stop-led-test-pattern",
-    "allow-close-led-twin-overlay",
-    "allow-hide-led-control-popup",
-    "allow-show-notification",
-    "allow-open-log-dir"
+    "allow-close-preview",
+    "allow-get-preview-session",
+    "allow-set-preview-popup-hidden",
+    "allow-set-preview-twin-hidden",
+    "allow-start-preview-scene",
+    "allow-stop-preview-scene",
+    "allow-set-preview-scene-brightness",
+    "allow-set-preview-scene-black-borders",
+    "allow-open-log-dir",
+    "allow-start-window-drag"
   ]
 }

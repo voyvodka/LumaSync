@@ -67,4 +67,13 @@ describe("StatusBar", () => {
     expect(screen.queryByRole("group")).toBeNull();
     expect(screen.getByTestId("status-bar").textContent).not.toMatch(/^v\d|\bv\d/);
   });
+
+  it("ticks a new state word in, and not the one the window opens on", () => {
+    const item = (state: string, kind: "ok" | "active") => ({ id: "hue" as const, label: "Hue", state, kind });
+    const { rerender } = render(<StatusBar uiMode="full" items={[item("Ready", "ok")]} />);
+    expect(screen.getByText("Ready")).not.toHaveAttribute("data-changed");
+    rerender(<StatusBar uiMode="full" items={[item("Streaming", "active")]} />);
+    expect(screen.getByText("Streaming")).toHaveAttribute("data-changed");
+  });
 });
+

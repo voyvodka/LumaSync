@@ -335,6 +335,12 @@ impl ShutdownCoordinator {
 
 static COORDINATOR: ShutdownCoordinator = ShutdownCoordinator::new();
 
+/// Whether a shutdown has started. Windows closing from here on are the app
+/// going away, not the user closing them.
+pub(crate) fn in_progress() -> bool {
+    COORDINATOR.fired.load(Ordering::SeqCst)
+}
+
 /// Starts the orderly shutdown; later triggers are logged and ignored.
 pub(crate) fn begin<R: Runtime>(app: &AppHandle<R>, trigger: ShutdownTrigger, restart: bool) {
     let cleanup_app = app.clone();

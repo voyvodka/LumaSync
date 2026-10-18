@@ -1,0 +1,132 @@
+@layer components {
+  .surface {
+    --room-switch-w: 152px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .face {
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* Both faces draw the same room, handed across the switch, so the room holds still and only the
+     chrome arrives: the dock's box stays where it was and its content rises into it, the corner's
+     drops into place. The one it replaced is already gone, so nothing draws twice. The plan is a
+     new surface and fades in; so does the whole face back from the templates, whose pick may have
+     changed the room. Distances are in the keyframes: WebKit drops a var() read there. */
+  .arriving :global([data-room-dock] > *) {
+    animation: dock-in var(--lm-dur-base) var(--lm-ease-out) backwards;
+  }
+  .arriving :global([data-room-corner]) {
+    animation: corner-in var(--lm-dur-base) var(--lm-ease-out) backwards;
+  }
+  .arriving :global([data-stage="plan"]:not([data-switched]) > :not([data-room-dock], [data-room-corner])),
+  .arriving :global([data-room-page]),
+  .whole {
+    animation: face-in var(--lm-dur-base) var(--lm-ease-out) backwards;
+  }
+
+  @keyframes dock-in {
+    from {
+      opacity: 0;
+      translate: 0 4px;
+    }
+  }
+  @keyframes corner-in {
+    from {
+      opacity: 0;
+      translate: 0 -4px;
+    }
+  }
+  @keyframes face-in {
+    from { opacity: 0; }
+  }
+
+  /* Rides above both faces at one spot, so the pointer and keyboard focus stay on it across a
+     switch. */
+  .switch {
+    position: absolute;
+    top: 8px;
+    left: 12px;
+    z-index: 30;
+    width: var(--room-switch-w);
+    height: 32px;
+    border-radius: 8px;
+    background: var(--lm-panel);
+    box-shadow: inset 0 0 0 1px var(--lm-line-2);
+  }
+
+  /* The chosen face is marked by one plate that slides between the two; the labels never move. */
+  .mark {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 50%;
+    border-radius: 8px;
+    background: var(--lm-panel-2);
+    box-shadow: inset 0 0 0 1px var(--lm-amber);
+    transform: translateX(calc(var(--i, 0) * 100%));
+    transition: transform var(--lm-dur-base) var(--lm-ease-out);
+  }
+
+  .group {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    height: 100%;
+  }
+
+  .item {
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    font-family: var(--lm-sans);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color var(--lm-dur-quick);
+  }
+  .item:hover:not(:disabled) { color: var(--lm-ink); }
+  .item[aria-checked="true"] { color: var(--lm-amber); }
+  .item:focus-visible {
+    outline: none;
+    box-shadow: var(--lm-focus-ring-inset);
+  }
+  .item:disabled {
+    cursor: not-allowed;
+    color: var(--lm-ink-faint);
+  }
+
+  :global(:root[data-reduced-motion]) .arriving :global([data-room-dock] > *),
+  :global(:root[data-reduced-motion]) .arriving :global([data-room-corner]),
+  :global(:root[data-reduced-motion]) .arriving :global([data-stage="plan"]:not([data-switched]) > :not([data-room-dock], [data-room-corner])),
+  :global(:root[data-reduced-motion]) .arriving :global([data-room-page]),
+  :global(:root[data-reduced-motion]) .whole { animation: none; }
+  :global(:root[data-reduced-motion]) .mark,
+  :global(:root[data-reduced-motion]) .item { transition: none; }
+
+  @media (forced-colors: active) {
+    .switch {
+      box-shadow: none;
+      outline: 1px solid CanvasText;
+    }
+    .mark {
+      box-shadow: none;
+      background: Highlight;
+      forced-color-adjust: none;
+    }
+    .item[aria-checked="true"] {
+      color: HighlightText;
+      forced-color-adjust: none;
+    }
+    .item:focus-visible { outline: 2px solid Highlight; }
+    /* On the Highlight plate a Highlight ring could not be seen. */
+    .item[aria-checked="true"]:focus-visible { outline-color: CanvasText; }
+  }
+}

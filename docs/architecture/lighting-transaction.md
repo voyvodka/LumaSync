@@ -1,8 +1,10 @@
 # The lighting transaction
 
 How a lighting choice reaches the hardware: the mode, the outputs it runs on, the Hue stream, and
-the order they move in. Implementation in `src-tauri/src/commands/lighting_mode/` — `outputs.rs`
-(the transaction), `snapshot.rs` (what runs), `tuning.rs` (retunes), `hue_driver.rs` (Hue start and
+the order they move in. Implementation in `src-tauri/src/commands/lighting_mode/` — `outputs/`
+(`mod.rs` the state, readers and commands; `transaction.rs` the transaction itself; `away_tray.rs`
+away edges, settings saves and the tray; `lease.rs` the Hue test lease; `boot.rs` the launch
+restore's waits and a strip's later join; `wled_off.rs` a WLED switch-off), `snapshot.rs` (what runs), `tuning.rs` (retunes), `hue_driver.rs` (Hue start and
 stop), `config_check.rs` (what a mode must pass before it starts) — and
 `commands/hue/hue_config.rs` (the Hue start request from saved state). Contract in
 `src/shared/contracts/lightingRuntime.ts`.
@@ -20,8 +22,8 @@ snapshot (`useLightingRuntime.ts`: seeded by `get_lighting_runtime`, kept by
 | A strip unplugged | `apply_outputs` `{ targets, origin: "usbUnplug" }` — the rest, or `[]` when it was the only one |
 | Launch | `apply_outputs` `{ origin: "boot" }` — Rust reads the saved mode and outputs itself |
 | LED control popup mode strip | `apply_outputs` `{ mode, origin: "popup" }` |
-| Tray: the Off / Ambilight / Solid check group | built in Rust (`tray_request`), never through a window; the kind alone, `origin: "tray"` |
-| Test patterns (LED Setup, popup tiles) | `apply_outputs` `{ targets, origin: "leaseHue" }` around each run |
+| Tray: the Off / Ambilight / Solid / Effect check group | built in Rust (`tray_request`), never through a window; the kind alone, `origin: "tray"` |
+| Test patterns (LED Setup) | `apply_outputs` `{ targets, origin: "leaseHue" }` around each run |
 | Devices card Stop retrying / Retry stop | `release_hue_output` |
 | Devices → Hue Forget | built in Rust (`forget_hue_bridge`): `release_hue_with`, then a `user` choice of the saved targets without `hue` (`hue.md`, "Forgetting a bridge") |
 | Devices → WLED Forget device | built in Rust (`forget_wled_device`): a `usbUnplug` request without `usb` when that device is the bound local sink |
@@ -92,7 +94,7 @@ one is stopped rather than left lit. A start that tore the old mode down and the
 the local output's own (a start failure whose details are an `LED_OUTPUT_*` or `WLED_*` code: a dead
 port after a replug, a WLED device that stopped answering) beside another output. Then the mode
 starts again without USB and `usb` drops from the session's selection, as a device-gate refusal
-does; a failure of anything else (capture) still ends the mode (`usb_output_failed`, `outputs.rs`).
+does; a failure of anything else (capture) still ends the mode (`usb_output_failed`, `outputs/mod.rs`).
 It used to end the mode with Hue in it, so a replugged strip turned the user's Hue lights off.
 
 **A refused choice says why.** Every refusal used to reach the main window as a status code it did
@@ -131,8 +133,8 @@ no other origin publishes one. Every later publish carries it along unchanged.
   visible window's notice is enough; a choice that ran says nothing.
 - The popup shows its own refused or failed choice inline, in the same copy.
 
-**The tray's mode group is a check group** (`TrayLighting`, `tray_mode_items`). Off, Ambilight and
-Solid are check items; the check follows the snapshot's running mode, redrawn on every publish
+**The tray's mode group is a check group** (`TrayLighting`, `tray_mode_items`). Off, Ambilight,
+Solid and Effect are check items; the check follows the snapshot's running mode, redrawn on every publish
 (`sync_tray_modes` in `lib.rs`, newest revision wins). A click toggles a check item natively before
 the choice has run, so the group is redrawn at once from what runs; clicking the running mode sends
 nothing, as its button in the window does nothing. The items are greyed while a transaction runs,
@@ -150,7 +152,9 @@ re-reads readiness before each attempt and must not take over a foreign session;
 streamer is the only blocker it used to spend the whole retry budget on it and end
 `TRANSIENT_RETRY_EXHAUSTED`, which reads as a network fault. It now ends `Failed` at once with
 `HUE_AREA_TAKEN_OVER` (`restart_refused` in `reconnect.rs`, `register_area_taken_over` in
-`retry.rs`), which the Hue card names.
+`retry.rs`), which the Hue card names. Only once our own dropped session has let go: while no
+deactivate PUT for it has landed, the streamer may be that session, which the bridge holds for
+about ten seconds, and the attempt is retried (`hue.md`).
 
 **Off stops the worker first, whatever its targets, then Hue.** A user's Off also stops Hue when a
 bridge is configured but no stream is known here, as the frontend's Off did — that is what cancels
@@ -160,12 +164,17 @@ a retry. A target change made while Off stops nothing.
 mode (`reconcile_off`, `user_off`) — ends each output it finds driven with its lights dark, rather
 than letting go and leaving them as the last frame or the device's own state had them:
 
-- **The strip** gets one all-black frame once the mode has stopped (`blank_usb_after_off` in
-  `transition.rs`), encoded like any Solid frame for its profile, chip, order and length. Stopping
+- **Every strip the run drove** gets one all-black frame once the mode has stopped
+  (`blank_usb_after_off` in `transition.rs`), each encoded like any Solid frame for its own profile,
+  chip, order and length from the record the run left on the owner (`ended_run`, taken by the Off
+  that blanks it, so a second Off paints nothing). Stopping
   a mode only stops writing, and a strip holds the last frame it was sent — a Solid colour
   indefinitely. `device-output.md` has the transport detail.
 - **A WLED device** gets the black frame and then `POST /json/state {"on":false}`, beside the Hue
-  stop rather than before it, so an unanswering device cannot hold the Hue switch-off back.
+  stop rather than before it, so an unanswering device cannot hold the Hue switch-off back. A Solid
+  colour on WLED is resent by a hold (`SolidHold`, `device-output.md`), and `stop_previous` drops
+  that hold before anything else, so its thread is joined before the black frame: a resend landing
+  after it would light the switched-off device again.
 - **Hue** gets `HueLightsAfterStop::TurnOff`, unless `ShellState.hueOffBehavior` is `restore`. The
   setting is read from the saved state when the Off runs, never from the request or the mode's
   payload, so a change made in any window after the mode started counts. Absent is `turnOff`.
@@ -203,6 +212,13 @@ Linux does not listen yet (logind's `PrepareForSleep` and session `Lock` are the
 return does not wait for a strip that is still re-enumerating after wake, as the launch restore
 does; the lights come back on the unlock, usually seconds after.
 
+**Effects** run through the transaction like any mode: `payload_for` takes the newest effect from
+the retune store, then the saved one, and stamps the room geometry as for Ambilight, since an
+effect places its lights by the room map; `persist_mode` saves `lightingMode.effect` beside the other
+payloads, so the tray's Effect item, which sends the kind alone, brings back the last effect. A
+retune carries `LightingTuning.effect` into the running effect's cell, normalised the way a start
+is. How an effect is drawn is in `capture-and-pipeline.md` ("Effects are drawn at each light").
+
 **The intent follows what ran.** A choice the backend did not run is not retried by the next
 transaction: the intent's kind settles back to what runs. A target left out of the running mode
 drops from the session's selection, never from what is saved.
@@ -231,10 +247,28 @@ a drag during a start lands, and no colour packet reaches the strip once Off has
 Off's own black frame does. Answers:
 `RETUNE_APPLIED`, `RETUNE_DEFERRED` (a transaction bringing that kind up will apply it),
 `RETUNE_NOT_RUNNING` (stored for the next start). A settled drag is saved 300 ms after the last
-retune.
+retune. A test pattern's or preview scene's stop runs outside a transaction, so once the mode it
+interrupted is back it commits accepting itself (`accept_retunes_after_restore`); without that,
+every drag after a test or scene answered `RETUNE_NOT_RUNNING` until the next transaction. A retune
+never writes the running mode's copy (`active_mode`), so whatever reads that copy for its payload
+reads the store over it: the twin's still Solid frame, and the restore after a test or scene.
+
+**One brightness for every mode.** `StoredTuning.brightness` is the only authority; each payload's
+own field is what it was chosen with, and `stored()` stamps the shared value over it, as do
+`payload_for` (a default Solid or Effect included, since it runs), the commit's replay and
+`persist_mode`. What moves it: a choice whose mode carries a payload of its own kind (a scene, a
+stage commit), a retune once it Applies or is Deferred — one of a kind that is not running moves
+nothing — and the boot seed, `PersistedShellState::lighting_brightness`, which reads a file from a
+build that kept one per mode as the last lit mode's — `lastLitKind`, else the lit kind the file was
+running, since no released build wrote `lastLitKind`. So a mode press sends the kind alone: a payload
+there would be read as a new choice of brightness, and the copies the popup and the compact window
+held fell back to white at full brightness. `persist_mode` writes the value into every payload on
+disk, those this session never touched too, so a build that keeps one per mode reads the same value
+whichever it starts. The snapshot carries it as `brightness`, because Off has no payload to read it
+from. A preview scene's brightness is its own and never touches it.
 
 **What runs is one snapshot, never the runtime lock.** `LightingRuntimeSnapshot` carries the
-running mode, the driven targets, the session's selection, the phase, the held-out reason, the
+running mode, the shared brightness, the driven targets, the session's selection, the phase, the held-out reason, the
 boot wait and the last choice's answer. Its revision is bumped under a small mutex and the event is emitted after that mutex is
 released, so two publishers can deliver out of order; `listenLightingRuntime` keeps the higher
 revision. A transaction publishes when it starts, at each phase, and when it ends; so do the test
@@ -301,14 +335,35 @@ waits for one (`wait_for_local_sink`): the first serial connect or WLED bind wit
 (`BOOT_SINK_WAIT_WINDOW`, `note_local_sink_connected` from `connect_serial_port` and
 `connect_wled_sink`) runs one `BootSinkRetry` transaction that resumes the mode on the strip, or adds
 the strip beside the Hue it runs on. Like the boot restore it saves nothing. Any request that says
-what should run — a choice, an unplug, a newer launch — ends the wait, and a connect after the
-window starts nothing. A strip that connected while the restore was still running is caught when
-the wait is set up. When the Hue wait is also pending, the strip resume leaves Hue to it.
+what should run — a choice, an unplug, a newer launch — ends the wait. A strip that connected while
+the restore was still running is caught when the wait is set up. When the Hue wait is also pending,
+the strip resume leaves Hue to it.
+
+**A strip that connects later** joins a mode that is running without it. Past the wait, a mode
+running on Hue with `usb` still selected drove nothing on the strip that bound minutes later, while
+the Lights toggle showed it on. Now any bind outside the wait (`join_local_sink`) checks the same
+thing `sink_join_due` names — a mode runs, it is the one the intent asks for, the selection names
+`usb`, and `usb` is not driven — and runs one `SinkJoin` transaction that re-plans onto the
+selection. That is a worker restart, as the Outputs toggle's is: the targets change, so the old
+worker stops and capture reopens while the Hue keep-alive carries the bridge. A Hue that is
+reconnecting stays in: the join skips the Hue start, which would answer "already active", and waives
+the Hue gate as the settings refresh does, since the gate would refuse the stream and the join would
+then stop it. A mode that is Off stays Off, whether the user chose it or the launch restore ended
+there for want of a strip: a light coming on by itself minutes after launch would be the surprise.
+The join takes the newest ticket as it stands, as the settings refresh does, instead of issuing one:
+it never supersedes a choice in flight, and a choice made after it supersedes it. Since a ticket it
+shares does not stop it from running first, it asks `sink_join_due` again in its turn and does
+nothing if what ran before it already answered the join, if a test pattern or preview scene owns the
+lights, or if a choice that shares its ticket is still to be saved (that choice's own turn answers
+it, with its own reply). A choice still on its way, whose kind differs from what runs, is left to run
+on the strip itself. A test pattern or preview scene that ends restores the mode on what ran before
+it, so its stop asks for the join too. Like the boot resume, the join saves nothing.
 
 The main window no longer awaits the restore: it can wait seconds on a Hue start, and the tray
-labels, onboarding and prompts waited with it. Only the USB reconciler and the Hue auto-add
-(below) still wait (`lightingRestored`), because they write a selection from the one they read and
-the restore is what sets it.
+labels, onboarding and prompts waited with it. Only the USB reconciler, the Hue auto-add (below)
+and a WLED device connected on Devices still wait (`lightingRestored`), because they write a
+selection from the one they read and the restore is what sets it. The WLED connect is held until
+then rather than dropped, since nothing else would add it later.
 
 **The Hue test lease**, ported from the frontend's: `origin: "leaseHue"` with targets naming Hue brings
 the stream up for a test run and remembers whether it opened it; any other targets hand it back —
@@ -354,6 +409,33 @@ restores the mode from the saved settings — and does nothing while Off.
 **A test pattern is not the mode.** A test runs as an Ambilight worker over a synthetic source, but
 starting one publishes nothing: every window keeps showing the mode it interrupted, and the test's
 stop publishes the restored one. The main window used to render the test as Ambilight running.
+The stop restores the interrupted mode as a choice of it would run now (`restore_payload_for`): its
+payload and the shared brightness from the store, not the copy the start recorded, which predates
+any retune and brought back the colour and brightness from before it. A stop with no test running —
+a user's choice superseded the test and dropped its prior, and LED Setup or a Devices Flash still
+sends its stop — answers `LED_TEST_PATTERN_STOPPED` and touches nothing; it used to apply Off around
+the transaction while the saved mode said otherwise.
+
+**A preview scene borrows the lights the same way, and the user's choice ends it.** A scene runs
+Ambilight on the user's saved settings (`lighting_mode/preview_scene.rs`), on the outputs they chose
+that can be driven now — Hue only when its stream is already up, since starting it belongs to the
+transaction. Its marker and the mode it interrupted (`preview.scene`, `preview.session_prior`) are
+set and cleared under the runtime lock, like `test_prior`, and `apply_config_blocking` and
+`stop_lighting_blocking` take both in the critical section of a user's change — before the apply,
+which reads the marker — so a late scene stop cannot put the old mode back over the user's choice.
+While it plays nothing is published or saved: the settings refresh leaves it alone,
+`accepting_for_running` offers retunes nothing, and `persist_running_choice` returns. Its brightness
+has its own command, `set_preview_scene_brightness`, which writes the running worker's live settings
+and nothing else; through `retune_lighting` it would land in the stored tuning and become the user's
+next Ambilight brightness. Its black-bar switch is the same kind of thing,
+`set_preview_scene_black_borders`: it starts as the Ambilight setting the scene was built from,
+flips the worker's live crop only, carries to the next scene as the brightness does — but not out of
+the latency scene, which keeps it off so a flip reaches the output uncropped — and a black-bar
+change made on Lights while a scene plays waits, like any retune, until it stops. The stop restores
+with the settings as saved now, falls to Off if that restore is gated, and back at Off paints the
+strip black and switches a WLED panel off, as a user's Off does. Entering or leaving a scene
+rebuilds the worker rather than retuning it, so the history skip it was started with
+(`WorkerPacing::preview_scene`) matches what it captures.
 
 **Targets are a set, and an unknown one is an error.** The request carries target names; they parse
 into a `BTreeSet<OutputTarget>` (ordered `usb, hue`, deduped by construction), and a name this build

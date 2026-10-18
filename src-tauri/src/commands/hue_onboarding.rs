@@ -89,7 +89,7 @@ use super::status::CommandStatus;
 /// The address answered with a certificate that is not the bridge's we expect
 /// (or not a bridge's at all). Nothing carrying a secret was sent.
 fn identity_mismatch_status(details: String) -> CommandStatus {
-    command_status(
+    CommandStatus::new(
         "HUE_BRIDGE_IDENTITY_MISMATCH",
         "The device at this address is not the Hue bridge LumaSync paired with, or its certificate changed.",
         Some(details),
@@ -149,14 +149,6 @@ where
         }
         // Surface the HTTPS failure: on a Bridge Pro that is the actionable one.
         Err(_) => Err(https_error),
-    }
-}
-
-fn command_status(code: &str, message: &str, details: Option<String>) -> CommandStatus {
-    CommandStatus {
-        code: code.to_string(),
-        message: message.to_string(),
-        details,
     }
 }
 

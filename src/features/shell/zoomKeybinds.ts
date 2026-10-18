@@ -2,8 +2,6 @@ import type { KeybindPlatform } from "@/shared/contracts/shell";
 
 export type ZoomAction = "in" | "out" | "reset";
 
-export const ZOOM_ACTIONS: readonly ZoomAction[] = ["in", "out", "reset"];
-
 /**
  * By `event.key`, unlike the mode keys: `+` and `-` sit on different physical keys per layout (on
  * TR-Q `-` is the key whose code is `Equal`), and a printed character is what the badge promises.

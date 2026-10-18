@@ -1,9 +1,13 @@
 import type { HueChannelPlacement, RoomMapConfig } from "@/shared/contracts/roomMap";
-import { findHueChannel, replaceHueChannel } from "@/shared/contracts/roomMap";
+import { findHueChannel, replaceHueChannel, translateStrip } from "@/shared/contracts/roomMap";
 
+import { moveTvWithBacklight } from "./backlight";
+import { findDecorLight, moveDecorLight, updateDecorLight } from "./decorLight";
 import { moveHueChannelToWorld, nudgeHueChannel } from "./hueChannelPosition";
+import { seatMovedLight } from "./lightSeat";
 import { findScopedHueChannel, updateScopedHueChannel } from "./hueChannelScope";
 import { furnitureObjectId, usbStripObjectId, type RoomObjectKind, type RoomObjectRef } from "./objectId";
+import { keepPlacedInside, keepStripInside, roomBoxOf } from "./pieceGeometry";
 import type { InspectorTarget } from "./resolveInspectorTarget";
 
 type Patch = Partial<RoomMapConfig>;
@@ -38,15 +42,19 @@ export interface RoomObjectAdapter<K extends RoomObjectKind> {
   moveTo: (config: RoomMapConfig, ref: RoomObjectRef<K>, x: number, y: number, ctx: RoomObjectContext) => Patch | null;
   /** Reads the newest config: a held arrow applies many of these in a row. */
   nudge: ((config: RoomMapConfig, ref: RoomObjectRef<K>, direction: NudgeDirection, ctx: RoomObjectContext) => Patch) | null;
-  resize: ((config: RoomMapConfig, ref: RoomObjectRef<K>, width: number, height: number) => Patch | null) | null;
-  rotateTo: ((config: RoomMapConfig, ref: RoomObjectRef<K>, rotation: number) => Patch) | null;
   rotateBy: ((config: RoomMapConfig, ref: RoomObjectRef<K>, degrees: number) => Patch) | null;
-  /** The label the rename dialog opens on, and the patch that renames. */
-  rename: {
-    current: (config: RoomMapConfig, ref: RoomObjectRef<K>) => string;
-    apply: (config: RoomMapConfig, ref: RoomObjectRef<K>, label: string) => Patch;
-  } | null;
+  /** A new name, from the inspector's name field. */
+  rename: ((config: RoomMapConfig, ref: RoomObjectRef<K>, label: string, ctx: RoomObjectContext) => Patch) | null;
   inspect: (config: RoomMapConfig, ref: RoomObjectRef<K>) => InspectorTarget | null;
+}
+
+/** The TV at (`x`, `y`) inside the walls, its backlight carried as a drag carries it. */
+function tvMovedTo(config: RoomMapConfig, x: number, y: number): Patch {
+  const tv = config.tvAnchor!;
+  const room = roomBoxOf(config);
+  const tvAnchor = keepPlacedInside({ ...tv, x, y }, room);
+  const usbStrips = moveTvWithBacklight(config.usbStrips, tv, tvAnchor, (s) => keepStripInside(s, room));
+  return usbStrips ? { tvAnchor, usbStrips } : { tvAnchor };
 }
 
 const worldStep = ({ x, y, coarse }: NudgeDirection) => {
@@ -69,14 +77,11 @@ export const ROOM_OBJECT_KINDS = {
       config.tvAnchor ? { tvAnchor: { ...config.tvAnchor, locked: !config.tvAnchor.locked } } : null,
     remove: () => ({ tvAnchor: undefined }),
     duplicate: null,
-    moveTo: (config, _ref, x, y) => (config.tvAnchor ? { tvAnchor: { ...config.tvAnchor, x, y } } : null),
+    moveTo: (config, _ref, x, y) => (config.tvAnchor ? tvMovedTo(config, x, y) : null),
     nudge: (cfg, _ref, direction) => {
       const { dx, dy } = worldStep(direction);
-      return cfg.tvAnchor ? { tvAnchor: { ...cfg.tvAnchor, x: cfg.tvAnchor.x + dx, y: cfg.tvAnchor.y + dy } } : {};
+      return cfg.tvAnchor ? tvMovedTo(cfg, cfg.tvAnchor.x + dx, cfg.tvAnchor.y + dy) : {};
     },
-    resize: (config, _ref, width, height) =>
-      config.tvAnchor ? { tvAnchor: { ...config.tvAnchor, width, height } } : null,
-    rotateTo: null,
     rotateBy: null,
     rename: null,
     inspect: (config) => (config.tvAnchor ? { kind: "tv", tv: config.tvAnchor } : null),
@@ -95,31 +100,24 @@ export const ROOM_OBJECT_KINDS = {
       return { patch: { furniture: [...config.furniture, dup] }, objectId: furnitureObjectId(dup.id) };
     },
     moveTo: (config, ref, x, y) => ({
-      furniture: config.furniture.map((f) => (f.id === ref.furnitureId ? { ...f, x, y } : f)),
+      furniture: config.furniture.map((f) => (f.id === ref.furnitureId ? keepPlacedInside({ ...f, x, y }, roomBoxOf(config)) : f)),
     }),
     nudge: (cfg, ref, direction) => {
       const { dx, dy } = worldStep(direction);
       return {
-        furniture: cfg.furniture.map((f) => (f.id === ref.furnitureId ? { ...f, x: f.x + dx, y: f.y + dy } : f)),
+        furniture: cfg.furniture.map((f) =>
+          f.id === ref.furnitureId ? keepPlacedInside({ ...f, x: f.x + dx, y: f.y + dy }, roomBoxOf(cfg)) : f,
+        ),
       };
     },
-    resize: (config, ref, width, height) => ({
-      furniture: config.furniture.map((f) => (f.id === ref.furnitureId ? { ...f, width, height } : f)),
-    }),
-    rotateTo: (config, ref, rotation) => ({
-      furniture: config.furniture.map((f) => (f.id === ref.furnitureId ? { ...f, rotation } : f)),
-    }),
     rotateBy: (config, ref, degrees) => ({
       furniture: config.furniture.map((f) =>
         f.id === ref.furnitureId ? { ...f, rotation: ((f.rotation ?? 0) + degrees) % 360 } : f,
       ),
     }),
-    rename: {
-      current: (config, ref) => config.furniture.find((f) => f.id === ref.furnitureId)?.label ?? "",
-      apply: (config, ref, label) => ({
-        furniture: config.furniture.map((f) => (f.id === ref.furnitureId ? { ...f, label } : f)),
-      }),
-    },
+    rename: (config, ref, label) => ({
+      furniture: config.furniture.map((f) => (f.id === ref.furnitureId ? { ...f, label } : f)),
+    }),
     inspect: (config, ref) => {
       const item = config.furniture.find((f) => f.id === ref.furnitureId);
       return item ? { kind: "furniture", item } : null;
@@ -131,27 +129,23 @@ export const ROOM_OBJECT_KINDS = {
     toggleLock: (config, ref) => ({
       usbStrips: config.usbStrips.map((s) => (s.stripId === ref.stripId ? { ...s, locked: !s.locked } : s)),
     }),
-    remove: (config, ref) => ({ usbStrips: config.usbStrips.filter((s) => s.stripId !== ref.stripId) }),
+    remove: (config, ref) => ({
+      usbStrips: config.usbStrips.filter((s) => s.stripId !== ref.stripId),
+      ...(config.tvAnchor?.backlightStripId === ref.stripId ? { tvAnchor: { ...config.tvAnchor, backlightStripId: undefined } } : {}),
+    }),
     duplicate: (config, ref, offset) => {
       const src = config.usbStrips.find((s) => s.stripId === ref.stripId);
       if (!src) return null;
-      const dup = {
-        ...src,
-        stripId: crypto.randomUUID(),
-        startX: src.startX + offset,
-        startY: src.startY + offset,
-        endX: src.endX + offset,
-        endY: src.endY + offset,
-      };
+      // A copy is a drawn strip: one port drives one tape, and the original keeps it.
+      const { portName: _port, ...drawn } = translateStrip(src, offset, offset);
+      const dup = { ...drawn, stripId: crypto.randomUUID() };
       return { patch: { usbStrips: [...config.usbStrips, dup] }, objectId: usbStripObjectId(dup.stripId) };
     },
     // A strip moves by its start point; the end keeps the same offset from it.
     moveTo: (config, ref, x, y) => ({
       usbStrips: config.usbStrips.map((s) => {
         if (s.stripId !== ref.stripId) return s;
-        const dx = x - s.startX;
-        const dy = y - s.startY;
-        return { ...s, startX: x, startY: y, endX: s.endX + dx, endY: s.endY + dy };
+        return keepStripInside(translateStrip(s, x - s.startX, y - s.startY), roomBoxOf(config));
       }),
     }),
     nudge: (cfg, ref, direction) => {
@@ -159,13 +153,11 @@ export const ROOM_OBJECT_KINDS = {
       return {
         usbStrips: cfg.usbStrips.map((s) =>
           s.stripId === ref.stripId
-            ? { ...s, startX: s.startX + dx, startY: s.startY + dy, endX: s.endX + dx, endY: s.endY + dy }
+            ? keepStripInside(translateStrip(s, dx, dy), roomBoxOf(cfg))
             : s,
         ),
       };
     },
-    resize: null,
-    rotateTo: null,
     rotateBy: null,
     rename: null,
     inspect: (config, ref) => {
@@ -181,13 +173,13 @@ export const ROOM_OBJECT_KINDS = {
       const target = visibleHueChannels.find((ch) => ch.channelIndex === ref.channelIndex);
       return target ? { hueChannels: replaceHueChannel(config.hueChannels, { ...target, locked: !target.locked }) } : null;
     },
-    // Channels are bridge-managed and detaching goes through "Move to →
-    // Unassigned". See docs/architecture/room-map.md for the bug that removing one caused.
+    // Channels are bridge-managed, and a light leaves its zone through its zone picker.
+    // See docs/architecture/room-map.md for the bug that removing one caused.
     remove: null,
     duplicate: null,
     moveTo: (config, ref, x, y, { hueAreaId }) => ({
       hueChannels: updateScopedHueChannel(config.hueChannels, hueAreaId, ref.channelIndex, (ch) =>
-        moveHueChannelToWorld(ch, config.zones, x, y),
+        seatMovedLight(ch, moveHueChannelToWorld(ch, config.zones, x, y), config),
       ),
     }),
     // Hue ignores Shift: its space is [-1, 1], where a metre-sized step would leave the room.
@@ -196,15 +188,37 @@ export const ROOM_OBJECT_KINDS = {
         nudgeHueChannel(ch, cfg.zones, x * HUE_NUDGE_STEP, -y * HUE_NUDGE_STEP),
       ),
     }),
-    resize: null,
-    rotateTo: null,
     rotateBy: null,
-    rename: null,
+    rename: (config, ref, label, { hueAreaId }) => ({
+      hueChannels: updateScopedHueChannel(config.hueChannels, hueAreaId, ref.channelIndex, (ch) => ({ ...ch, label })),
+    }),
     inspect: (config, ref) => {
       const channel = findHueChannel(config.hueChannels, ref.channelIndex);
       if (!channel) return null;
-      const zoneName = channel.zoneId ? (config.zones.find((z) => z.id === channel.zoneId)?.name ?? null) : null;
-      return { kind: "hueChannel", channel, zoneName };
+      return { kind: "hueChannel", channel };
+    },
+  },
+  decor: {
+    exists: (config, ref) => findDecorLight(config, ref.structureId) !== null,
+    isLocked: (config, ref) => !!findDecorLight(config, ref.structureId)?.locked,
+    toggleLock: (config, ref) => {
+      const light = findDecorLight(config, ref.structureId);
+      return light ? updateDecorLight(config, ref.structureId, { locked: !light.locked }) : null;
+    },
+    // A template's own; removing one is not offered yet, and "Drive with a Hue light" replaces it.
+    remove: null,
+    duplicate: null,
+    moveTo: (config, ref, x, y) => moveDecorLight(config, ref.structureId, x, y),
+    nudge: (cfg, ref, direction) => {
+      const light = findDecorLight(cfg, ref.structureId);
+      const { dx, dy } = worldStep(direction);
+      return (light && moveDecorLight(cfg, ref.structureId, light.x + dx, light.y + dy)) ?? {};
+    },
+    rotateBy: null,
+    rename: (config, ref, label) => updateDecorLight(config, ref.structureId, { label }) ?? {},
+    inspect: (config, ref) => {
+      const light = findDecorLight(config, ref.structureId);
+      return light ? { kind: "decor", light } : null;
     },
   },
   image: {
@@ -219,15 +233,10 @@ export const ROOM_OBJECT_KINDS = {
       imageLayers: config.imageLayers.map((l) => (l.id === ref.layerId ? { ...l, offsetX: x, offsetY: y } : l)),
     }),
     nudge: null,
-    resize: null,
-    rotateTo: null,
     rotateBy: null,
-    rename: {
-      current: (config, ref) => config.imageLayers.find((l) => l.id === ref.layerId)?.label ?? "",
-      apply: (config, ref, label) => ({
-        imageLayers: config.imageLayers.map((l) => (l.id === ref.layerId ? { ...l, label } : l)),
-      }),
-    },
+    rename: (config, ref, label) => ({
+      imageLayers: config.imageLayers.map((l) => (l.id === ref.layerId ? { ...l, label } : l)),
+    }),
     inspect: (config, ref) => {
       const layer = config.imageLayers.find((l) => l.id === ref.layerId);
       return layer ? { kind: "image", layer } : null;

@@ -4,6 +4,7 @@ import {
   HUE_IDENTIFY_STATUS,
   HUE_LIGHT_NAMES_STATUS,
   type HueIdentifyStatus,
+  type HueLightName,
 } from "@/shared/contracts/hue";
 import { parseCommandError } from "@/shared/contracts/status";
 
@@ -15,14 +16,21 @@ import {
   type HuePairingCredentials,
 } from "../hueOnboardingApi";
 
-/** Names read this session, per bridge and set of lights. A set is read once;
- *  nothing polls, and only a Revalidate asks again. */
-const nameCache = new Map<string, Readonly<Record<string, string>>>();
+import {
+  __resetHueLightCache,
+  cachedHueLights,
+  forgetHueLights,
+  hueLightCacheKey,
+  storeHueLights,
+} from "./hueLightCache";
 
 /** Test seam — the cache is module state. */
 export function __resetHueLightNameCache(): void {
-  nameCache.clear();
+  __resetHueLightCache();
 }
+
+const namesOf = (lights: readonly HueLightName[]): Readonly<Record<string, string>> =>
+  Object.fromEntries(lights.map((light) => [light.id, light.name]));
 
 const NO_NAMES: Readonly<Record<string, string>> = {};
 
@@ -45,7 +53,7 @@ export function useHueLightNames(
     () => [...new Set(channels.flatMap((channel) => channel.lightIds))].sort(),
     [channels],
   );
-  const key = bridge && credentials && lightIds.length > 0 ? `${bridge.ip}|${lightIds.join(",")}` : null;
+  const key = bridge && credentials && lightIds.length > 0 ? hueLightCacheKey(bridge.ip, lightIds) : null;
   const [names, setNames] = useState<{ key: string | null; value: Readonly<Record<string, string>> }>({
     key: null,
     value: NO_NAMES,
@@ -55,9 +63,9 @@ export function useHueLightNames(
   // biome-ignore lint/correctness/useExhaustiveDependencies: `key` stands for bridge, credentials and ids; reloadToken re-runs the read
   useEffect(() => {
     if (key === null || !bridge || !credentials) return;
-    const cached = nameCache.get(key);
+    const cached = cachedHueLights(key);
     if (cached) {
-      setNames({ key, value: cached });
+      setNames({ key, value: namesOf(cached) });
       return;
     }
     let cancelled = false;
@@ -71,9 +79,8 @@ export function useHueLightNames(
           );
           return;
         }
-        const value = Object.fromEntries(response.lights.map((light) => [light.id, light.name]));
-        nameCache.set(key, value);
-        setNames({ key, value });
+        storeHueLights(key, response.lights);
+        setNames({ key, value: namesOf(response.lights) });
       } catch (error) {
         if (!cancelled) {
           console.warn(`[LumaSync] Hue light names invoke rejected: ${parseCommandError(error).message}`);
@@ -86,7 +93,7 @@ export function useHueLightNames(
   }, [key, reloadToken]);
 
   const reloadLightNames = useCallback(() => {
-    if (key !== null) nameCache.delete(key);
+    if (key !== null) forgetHueLights(key);
     setReloadToken((n) => n + 1);
   }, [key]);
 

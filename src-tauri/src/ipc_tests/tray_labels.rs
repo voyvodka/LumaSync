@@ -49,3 +49,11 @@ fn a_push_without_the_status_line_is_rejected() {
     partial.as_object_mut().expect("object").remove("status");
     assert!(serde_json::from_value::<TrayLabels>(partial).is_err());
 }
+
+/// A frontend older than the Effect mode pushes no label for it; the item
+/// still reads as a word rather than failing the push.
+#[test]
+fn a_push_without_the_effect_label_falls_back_to_english() {
+    let pushed: TrayLabels = serde_json::from_value(labels()).expect("labels deserialize");
+    assert_eq!(pushed.effect, "Effect");
+}

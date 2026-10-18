@@ -1,0 +1,11 @@
+@layer components {
+  /* The room fades in over the backdrop once its first frame is drawn, rather than appearing whole
+     after the shaders compile. */
+  .host > canvas {
+    opacity: 0;
+    transition: opacity var(--lm-dur-slow) var(--lm-ease-out);
+  }
+  .host[data-ready] > canvas { opacity: 1; }
+
+  :global(:root[data-reduced-motion]) .host > canvas { transition: none; }
+}

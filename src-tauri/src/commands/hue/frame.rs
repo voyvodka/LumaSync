@@ -516,7 +516,7 @@ pub(crate) fn linear_rgb_to_xy(red: f64, green: f64, blue: f64) -> (f64, f64, f6
 /// docs/architecture/hue.md) — some chromaticities land outside the RGB cube
 /// even after the upstream gamut clip, and clamping is the correct response to
 /// that, not a redo.
-pub(crate) fn xy_to_linear_rgb(x: f64, y: f64, target_y: f64) -> (f64, f64, f64) {
+fn xy_to_linear_rgb(x: f64, y: f64, target_y: f64) -> (f64, f64, f64) {
     // Treat negative or near-zero target luminance as "true black". This
     // keeps the EPSILON guard (the channel is unrenderable) but moves it
     // to the *target* luminance — never the input chromaticity's `y` —

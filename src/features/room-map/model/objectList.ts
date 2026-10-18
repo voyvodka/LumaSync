@@ -1,19 +1,22 @@
 import type { TFunction } from "i18next";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
+
+import { decorLightNames, listDecorLights } from "./decorLight";
+import { furnitureName } from "./furnitureName";
 import {
+  decorLightObjectId,
   furnitureObjectId,
   hueChannelObjectId,
   imageLayerObjectId,
   TV_ANCHOR_OBJECT_ID,
   usbStripObjectId,
+  type RoomObjectKind,
 } from "./objectId";
 import { hueChannelName } from "./hueChannelLabel";
 
-export type RoomObjectType = "tv" | "furniture" | "usb" | "hue" | "image";
-
 export interface ObjectRowEntry {
   id: string;
-  type: RoomObjectType;
+  type: RoomObjectKind;
   label: string;
   locked?: boolean;
   zoneId?: string | null;
@@ -44,7 +47,7 @@ export function buildObjectList(
     rows.push({
       id: furnitureObjectId(f.id),
       type: "furniture",
-      label: f.label ?? t(`roomMap:furniture.type.${f.type}`),
+      label: furnitureName(f, t),
       locked: f.locked,
     });
   }
@@ -54,6 +57,15 @@ export function buildObjectList(
       type: "usb",
       label: t("roomMap:objectPanel.ledLabel", { count: String(s.ledCount) }),
       locked: s.locked,
+    });
+  }
+  const decorNames = decorLightNames(config, t);
+  for (const light of listDecorLights(config)) {
+    rows.push({
+      id: decorLightObjectId(light.id),
+      type: "decor",
+      label: decorNames.get(light.id)!,
+      locked: light.locked,
     });
   }
   for (const ch of config.hueChannels) {

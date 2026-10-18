@@ -34,6 +34,17 @@ describe("localSinkOf", () => {
     expect(localSinkOf({ kind: "wled", ip: "192.168.1.42" }, ports)).toEqual({ transport: "wled", id: "192.168.1.42" });
   });
 
+  it("carries a WLED device's silence, and only a WLED device's", () => {
+    expect(localSinkOf({ kind: "wled", ip: "192.168.1.42" }, ports, false)).toEqual({
+      transport: "wled",
+      id: "192.168.1.42",
+      reachable: false,
+    });
+    expect(localSinkOf({ kind: "serial", portName: "/dev/cu.usbserial-10" }, ports, false)).not.toHaveProperty(
+      "reachable",
+    );
+  });
+
   it("names nothing when nothing is driven", () => {
     expect(localSinkOf(null, ports)).toBeNull();
   });
@@ -52,7 +63,7 @@ describe("wledOutput", () => {
   it("finds the bound device, or nothing", () => {
     expect(wledOutput(null)).toBeNull();
     expect(
-      wledOutput({ revision: 1, outputs: [{ kind: "wled", ip: "a", ledCount: 1, connected: true }], driven: null })?.ip,
+      wledOutput({ revision: 1, outputs: [{ kind: "wled", ip: "a", ledCount: 1, connected: true, reachable: true }], driven: null })?.ip,
     ).toBe("a");
   });
 });
@@ -66,7 +77,7 @@ const strip = (portName: string, connected: boolean, code: SerialCommandStatusCo
     firmware: null,
     updatedAtUnixMs: 0,
   }) as const;
-const wled = (ip: string) => ({ kind: "wled", ip, ledCount: 60, connected: true }) as const;
+const wled = (ip: string) => ({ kind: "wled", ip, ledCount: 60, connected: true, reachable: true }) as const;
 const registry = (revision: number, ...outputs: LocalOutputsSnapshot["outputs"]): LocalOutputsSnapshot => ({
   revision,
   outputs,

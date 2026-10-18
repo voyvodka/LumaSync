@@ -1,0 +1,133 @@
+@layer components {
+  /* A value at rest: no frame, the number in ink. The box arrives with intent — a tint on hover,
+     the panel and an amber underline opening from the middle while editing. */
+  .field {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    height: 32px;
+    padding: 0 8px;
+    border-radius: 7px;
+    /* At rest a drag across it changes the value; a press without moving types. */
+    cursor: ew-resize;
+    touch-action: none;
+    transition: background var(--lm-dur-quick);
+  }
+  .editing { cursor: text; }
+  .scrubbing { background: rgb(255 255 255 / 6%); }
+  .scrubbing .input { color: var(--lm-amber); }
+  /* A tint rather than a panel colour: the field sits on the dock and on popovers alike. */
+  .field:hover:not(.disabled) { background: rgb(255 255 255 / 4%); }
+  .editing { background: rgb(255 255 255 / 6%); }
+
+  .field::after {
+    content: "";
+    position: absolute;
+    right: 8px;
+    bottom: 4px;
+    left: 8px;
+    height: 1px;
+    background: var(--lm-amber);
+    transform: scaleX(0);
+    transition: transform var(--lm-dur-base) var(--lm-ease-out);
+  }
+  .editing::after { transform: scaleX(1); }
+
+  .prefix {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    min-width: 12px;
+    font-family: var(--lm-mono);
+    font-size: 10px;
+    color: var(--lm-ink-faint);
+    transition: color var(--lm-dur-quick);
+  }
+  .prefix svg { width: 12px; height: 12px; }
+  .field:hover:not(.disabled) .prefix,
+  .editing .prefix { color: var(--lm-ink-dim); }
+
+  .input {
+    flex: 0 1 auto;
+    min-width: 2ch;
+    max-width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--lm-ink);
+    font-family: var(--lm-mono);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    caret-color: var(--lm-amber);
+    cursor: inherit;
+    outline: none;
+  }
+  .input::placeholder { color: var(--lm-ink-faint); }
+  .input::selection {
+    background: color-mix(in srgb, var(--lm-amber) 35%, transparent);
+    color: var(--lm-ink);
+  }
+
+  .unit {
+    flex-shrink: 0;
+    font-family: var(--lm-mono);
+    font-size: 10px;
+    color: var(--lm-ink-faint);
+  }
+
+  .unitSwitch {
+    display: grid;
+    place-items: center;
+    min-width: 32px;
+    align-self: stretch;
+    margin: 0 -6px 0 0;
+    padding: 0 4px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+  }
+  .unitSwitch:hover {
+    color: var(--lm-ink);
+    background: rgb(255 255 255 / 6%);
+  }
+  .unitSwitch:focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--lm-focus-ring-inset);
+  }
+  :global(:root[data-reduced-motion]) .unitSwitch { transition: none; }
+
+  .disabled { cursor: not-allowed; }
+  .disabled .input {
+    color: var(--lm-ink-faint);
+    cursor: not-allowed;
+  }
+
+  .hint {
+    margin: 0 8px;
+    font-size: 9.5px;
+    line-height: 1.3;
+    letter-spacing: 0.01em;
+    color: var(--lm-ink-dim);
+  }
+
+  :global(:root[data-reduced-motion]) .field,
+  :global(:root[data-reduced-motion]) .field::after,
+  :global(:root[data-reduced-motion]) .prefix { transition: none; }
+
+  @media (forced-colors: active) {
+    .editing { outline: 2px solid Highlight; }
+    .field::after { background: Highlight; }
+    .unitSwitch {
+      border: 1px solid ButtonBorder;
+      color: ButtonText;
+    }
+    .unitSwitch:focus-visible { outline: 2px solid Highlight; }
+  }
+}

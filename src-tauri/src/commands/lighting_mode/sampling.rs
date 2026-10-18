@@ -10,56 +10,152 @@ use crate::commands::ambilight_capture::{
     detect_black_borders, BlackBorderInsets, CapturedFrame, BLACK_BORDER_THRESHOLD,
 };
 use crate::commands::ambilight_scene::{hue_default_screen_affinity, LightTopology};
+use crate::commands::led_calibration::{
+    build_led_sequence, LedCalibrationConfig, LedSegmentCounts, LedSequenceItem, StripShape,
+};
 use crate::commands::room_affinity::{room_aware_hue_samples, room_geometry_rejection};
 use crate::models::room_map::RoomGeometry;
 
-/// Periodically caches detected black border insets for the ambilight worker.
+#[cfg(test)]
+thread_local! {
+    static BORDER_DETECTIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Detection passes run on this thread: one per frame however many strips sample it.
+#[cfg(test)]
+pub(super) fn border_detections_on_this_thread() -> usize {
+    BORDER_DETECTIONS.with(|n| n.get())
+}
+
+/// The black-border insets the worker samples inside, kept steady.
 ///
-/// Detection runs at most once every `UPDATE_INTERVAL` to avoid per-frame overhead.
-/// When disabled all insets remain zero (full-frame sampling).
+/// Detection runs at most every `UPDATE_INTERVAL`. A frame with nothing to
+/// measure (black, a fade) changes nothing, and a new answer moves an axis —
+/// the letterbox rows or the pillarbox columns, each on its own — only once
+/// `STABLE_READS` reads in a row agree on it to within a scan step, so a
+/// subtitle, a logo or one dark shot does not move the crop. The first answer
+/// after detection is switched on is taken at once. When disabled all insets
+/// stay zero (full-frame sampling).
 pub(super) struct BlackBorderCache {
     insets: BlackBorderInsets,
+    rows: AxisCandidate,
+    cols: AxisCandidate,
+    settled: bool,
+    changed: bool,
     last_updated: Instant,
     enabled: bool,
 }
 
+/// A depth one axis has read but not yet taken, and how many reads agreed.
+#[derive(Default)]
+struct AxisCandidate(Option<(f32, u8)>);
+
+impl AxisCandidate {
+    /// Whether `read` has now held long enough to replace `current`.
+    fn holds(&mut self, current: f32, read: f32, tolerance: f32) -> bool {
+        if (read - current).abs() <= tolerance {
+            self.0 = None;
+            return false;
+        }
+        let reads = match self.0 {
+            Some((candidate, reads)) if (read - candidate).abs() <= tolerance => reads + 1,
+            _ => 1,
+        };
+        if reads >= BlackBorderCache::STABLE_READS {
+            self.0 = None;
+            true
+        } else {
+            self.0 = Some((read, reads));
+            false
+        }
+    }
+}
+
 impl BlackBorderCache {
-    const UPDATE_INTERVAL: Duration = Duration::from_millis(2500);
+    const UPDATE_INTERVAL: Duration = Duration::from_millis(500);
+    const STABLE_READS: u8 = 3;
 
     pub(super) fn new(enabled: bool) -> Self {
-        // Subtract the interval so the very first frame triggers a detection pass.
-        let past = Instant::now()
-            .checked_sub(Self::UPDATE_INTERVAL)
-            .unwrap_or_else(Instant::now);
         Self {
             insets: BlackBorderInsets::default(),
-            last_updated: past,
+            rows: AxisCandidate::default(),
+            cols: AxisCandidate::default(),
+            settled: false,
+            changed: false,
+            last_updated: Self::due_now(),
             enabled,
         }
     }
 
+    /// An `Instant` one interval ago, so the next frame triggers a detection pass.
+    fn due_now() -> Instant {
+        Instant::now()
+            .checked_sub(Self::UPDATE_INTERVAL)
+            .unwrap_or_else(Instant::now)
+    }
+
     pub(super) fn set_enabled(&mut self, enabled: bool) {
-        if self.enabled != enabled {
-            self.enabled = enabled;
-            if !enabled {
-                self.insets = BlackBorderInsets::default();
-            }
+        if self.enabled == enabled {
+            return;
+        }
+        self.enabled = enabled;
+        self.rows = AxisCandidate::default();
+        self.cols = AxisCandidate::default();
+        self.settled = false;
+        if enabled {
+            self.last_updated = Self::due_now();
+        } else if self.insets != BlackBorderInsets::default() {
+            self.insets = BlackBorderInsets::default();
+            self.changed = true;
         }
     }
 
     pub(super) fn update_if_due(&mut self, frame: &CapturedFrame) {
-        if !self.enabled {
-            self.insets = BlackBorderInsets::default();
+        if !self.enabled || self.last_updated.elapsed() < Self::UPDATE_INTERVAL {
             return;
         }
-        if self.last_updated.elapsed() >= Self::UPDATE_INTERVAL {
-            self.insets = detect_black_borders(frame, BLACK_BORDER_THRESHOLD);
-            self.last_updated = Instant::now();
+        self.last_updated = Instant::now();
+        #[cfg(test)]
+        BORDER_DETECTIONS.with(|n| n.set(n.get() + 1));
+        // One scan step of the detector, as a fraction of each axis.
+        let step = |len: u32| 8.0 / len.max(1) as f32;
+        self.absorb(
+            detect_black_borders(frame, BLACK_BORDER_THRESHOLD),
+            (step(frame.height), step(frame.width)),
+        );
+    }
+
+    fn absorb(&mut self, read: Option<BlackBorderInsets>, (row_step, col_step): (f32, f32)) {
+        let Some(read) = read else {
+            return;
+        };
+        let mut next = self.insets.clone();
+        if !self.settled {
+            self.settled = true;
+            next = read;
+        } else {
+            if self.rows.holds(self.insets.top, read.top, row_step) {
+                (next.top, next.bottom) = (read.top, read.bottom);
+            }
+            if self.cols.holds(self.insets.left, read.left, col_step) {
+                (next.left, next.right) = (read.left, read.right);
+            }
+        }
+        if next != self.insets {
+            self.insets = next;
+            self.changed = true;
         }
     }
 
     pub(super) fn insets(&self) -> &BlackBorderInsets {
         &self.insets
+    }
+
+    /// Whether the insets moved since the last call: the scene stage then
+    /// measures this frame's change against a different rectangle and must
+    /// not read the move as a cut.
+    pub(super) fn take_changed(&mut self) -> bool {
+        std::mem::take(&mut self.changed)
     }
 }
 
@@ -157,6 +253,60 @@ pub const LIVE_SAMPLE_WINDOW: f32 = 0.05;
 /// pitch or neighbouring LEDs blend into each other and no LED can reach the
 /// intensity the pattern asked for.
 pub const SYNTHETIC_SAMPLE_WINDOW: f32 = 0.0125;
+/// Sampling box for a strip with no layout on record — the legacy single-zone device, which shows
+/// one colour for the whole strip. The half-window is `content * window / 2`, so at 2.0 it is at
+/// least the whole content rectangle from any position: the lone LED takes the picture's mean
+/// (inside any black bars) instead of the corner a one-LED segment maps to.
+pub const WHOLE_FRAME_SAMPLE_WINDOW: f32 = 2.0;
+
+/// The strip the worker samples: the layout on record; without one, a single LED (backward-compat
+/// with v1.3 firmware) — but only when a strip output reads it. With neither a layout nor a strip
+/// output (Hue alone) there is no strip: a fallback LED there was sampled every frame for nothing,
+/// and stood in an effect's bounds as a light that does not exist.
+pub(super) fn strip_for_worker(
+    led_calibration: Option<&LedCalibrationConfig>,
+    strip_output: bool,
+) -> (Vec<LedSequenceItem>, StripShape, u16) {
+    if let Some(cal) = led_calibration {
+        return (build_led_sequence(cal), StripShape::of(cal), cal.total_leds);
+    }
+    let leds = u16::from(strip_output);
+    let fallback = LedCalibrationConfig {
+        template_id: None,
+        counts: LedSegmentCounts {
+            top: leds,
+            right: 0,
+            bottom: 0,
+            left: 0,
+        },
+        bottom_missing: 0,
+        corner_ownership: "horizontal".to_string(),
+        visual_preset: "subtle".to_string(),
+        start_anchor: "top-start".to_string(),
+        start_local_index: None,
+        direction: "cw".to_string(),
+        total_leds: leds,
+    };
+    (
+        build_led_sequence(&fallback),
+        StripShape::of(&fallback),
+        leds,
+    )
+}
+
+/// Which box the strip samples with. A synthetic test paints exact per-LED blocks; a strip with no
+/// layout takes the whole picture; anything else the live box. Without a strip output (Hue only)
+/// the strip sample is thrown away, so it keeps the cheap live box rather than averaging the frame
+/// for nothing.
+pub(super) fn sample_window_for(synthetic: bool, has_layout: bool, has_strip: bool) -> f32 {
+    if synthetic {
+        SYNTHETIC_SAMPLE_WINDOW
+    } else if !has_layout && has_strip {
+        WHOLE_FRAME_SAMPLE_WINDOW
+    } else {
+        LIVE_SAMPLE_WINDOW
+    }
+}
 
 /// Per-channel Hue inputs the worker holds between frames: where each channel
 /// samples the screen, and what the scene stage relates it by. Rebuilt only when
@@ -238,4 +388,115 @@ pub(super) fn hue_topology_and_affinity(
             .map(|ch| hue_default_screen_affinity(ch.position_y))
             .collect(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One scan step of a 640x360 frame.
+    const STEP: (f32, f32) = (8.0 / 360.0, 8.0 / 640.0);
+
+    impl BlackBorderCache {
+        fn absorb_read(&mut self, read: Option<BlackBorderInsets>) {
+            self.absorb(read, STEP);
+        }
+    }
+
+    fn bars(rows: f32) -> BlackBorderInsets {
+        BlackBorderInsets {
+            top: rows,
+            bottom: rows,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn the_first_answer_is_taken_at_once() {
+        let mut cache = BlackBorderCache::new(true);
+        cache.absorb_read(Some(bars(0.13)));
+        assert_eq!(cache.insets(), &bars(0.13));
+        assert!(cache.take_changed());
+        assert!(!cache.take_changed());
+    }
+
+    // A fade or a cut through black must not drop the crop until the picture is back.
+    #[test]
+    fn a_frame_with_nothing_to_measure_keeps_the_crop() {
+        let mut cache = BlackBorderCache::new(true);
+        cache.absorb_read(Some(bars(0.13)));
+        cache.take_changed();
+        cache.absorb_read(None);
+        assert_eq!(cache.insets(), &bars(0.13));
+        assert!(!cache.take_changed());
+    }
+
+    // A subtitle or one dark shot lasts a read or two; the crop waits for an answer that holds.
+    #[test]
+    fn a_new_crop_waits_until_reads_agree_on_it() {
+        let mut cache = BlackBorderCache::new(true);
+        cache.absorb_read(Some(bars(0.13)));
+        cache.absorb_read(Some(bars(0.05)));
+        cache.absorb_read(Some(bars(0.05)));
+        assert_eq!(cache.insets(), &bars(0.13));
+        cache.absorb_read(Some(bars(0.13)));
+        cache.absorb_read(Some(bars(0.05)));
+        cache.absorb_read(Some(bars(0.05)));
+        assert_eq!(
+            cache.insets(),
+            &bars(0.13),
+            "an agreeing read starts the count again"
+        );
+        cache.absorb_read(Some(bars(0.05)));
+        assert_eq!(cache.insets(), &bars(0.05));
+    }
+
+    #[test]
+    fn switching_detection_off_drops_the_crop_and_on_again_reads_at_once() {
+        let mut cache = BlackBorderCache::new(true);
+        cache.absorb_read(Some(bars(0.13)));
+        cache.take_changed();
+        cache.set_enabled(false);
+        assert_eq!(cache.insets(), &BlackBorderInsets::default());
+        assert!(cache.take_changed());
+        cache.set_enabled(true);
+        assert!(cache.last_updated.elapsed() >= BlackBorderCache::UPDATE_INTERVAL);
+        cache.absorb_read(Some(bars(0.13)));
+        assert_eq!(cache.insets(), &bars(0.13));
+    }
+
+    // Detection quantises to a scan step; a read one step off is the same crop.
+    #[test]
+    fn reads_within_a_scan_step_agree() {
+        let mut cache = BlackBorderCache::new(true);
+        cache.absorb_read(Some(bars(0.0)));
+        cache.absorb_read(Some(bars(0.13)));
+        cache.absorb_read(Some(bars(0.135)));
+        cache.absorb_read(Some(bars(0.13)));
+        assert_eq!(cache.insets(), &bars(0.13));
+        cache.take_changed();
+        cache.absorb_read(Some(bars(0.135)));
+        assert_eq!(
+            cache.insets(),
+            &bars(0.13),
+            "a step's wobble does not move the crop"
+        );
+        assert!(!cache.take_changed());
+    }
+
+    // A letterbox settling must not wait on, or be reset by, the pillarbox columns.
+    #[test]
+    fn each_axis_settles_on_its_own() {
+        let mut cache = BlackBorderCache::new(true);
+        cache.absorb_read(Some(BlackBorderInsets::default()));
+        for left in [0.1, 0.0, 0.1] {
+            cache.absorb_read(Some(BlackBorderInsets {
+                left,
+                right: left,
+                ..bars(0.13)
+            }));
+        }
+        assert_eq!(cache.insets().top, 0.13);
+        assert_eq!(cache.insets().left, 0.0);
+    }
 }

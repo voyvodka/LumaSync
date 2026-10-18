@@ -1,0 +1,54 @@
+@layer components {
+  /* Floats over the room's foot at one height whatever it shows, so nothing above it moves. Both
+     faces' docks share it, so a switch between them leaves the box where it was. 920 px holds the
+     palette's Turkish names in one row; at 760 every one was cut. */
+  .dock {
+    position: absolute;
+    bottom: var(--room-dock-bottom);
+    left: 50%;
+    z-index: 40;
+    display: grid;
+    grid-template-columns: 32px 1px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    width: min(920px, calc(100% - 24px));
+    height: var(--room-dock-h);
+    padding: 10px;
+    border: 1px solid var(--lm-line-2);
+    border-radius: 14px;
+    background: var(--lm-panel-2);
+    box-shadow: 0 16px 40px rgb(0 0 0 / 50%);
+    transform: translateX(-50%);
+  }
+  .single { grid-template-columns: minmax(0, 1fr); }
+  .glass {
+    border-color: color-mix(in srgb, var(--lm-ink) 10%, transparent);
+    background: color-mix(in srgb, var(--lm-panel-2) 64%, transparent);
+    backdrop-filter: blur(20px) saturate(1.5);
+    box-shadow: 0 16px 40px rgb(0 0 0 / 45%), inset 0 1px 0 color-mix(in srgb, var(--lm-ink) 6%, transparent);
+  }
+
+  .separator {
+    align-self: stretch;
+    background: var(--lm-line-2);
+  }
+
+  .content {
+    min-width: 0;
+    height: 70px;
+  }
+  .swap {
+    --page-height: 70px;
+    --page-inset: 0;
+    --page-gap: 0;
+  }
+
+  @media (forced-colors: active) {
+    .dock {
+      border-color: CanvasText;
+      background: Canvas;
+      backdrop-filter: none;
+    }
+    .separator { background: CanvasText; }
+  }
+}

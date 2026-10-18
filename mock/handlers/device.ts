@@ -168,15 +168,30 @@ export const deviceHandlers = {
     };
   },
 
-  [DEVICE_COMMANDS.DISCOVER_WLED_DEVICES]: () => {
+  [DEVICE_COMMANDS.DISCOVER_WLED_DEVICES]: (args) => {
     const { wled } = getWorld();
+    // As in Rust: the one device at that address, or nothing there.
+    const devices = wled.devices.filter((d) => d.host === args.request.ip);
     return {
       status: status(
         // There is no "empty" code: discovery either answered, timed out, or
         // could not be reached. An empty list under OK is the honest shape.
-        wled.devices.length > 0 ? "WLED_DISCOVERY_OK" : "WLED_DISCOVERY_UNREACHABLE",
-        `${wled.devices.length} device(s)`,
+        devices.length > 0 ? "WLED_DISCOVERY_OK" : "WLED_DISCOVERY_UNREACHABLE",
+        `${devices.length} device(s)`,
       ),
+      devices: devices.map((d) => ({
+        ip: d.host,
+        name: d.name,
+        ledCount: d.ledCount,
+        version: "0.15.0-mock",
+      })),
+    };
+  },
+
+  [DEVICE_COMMANDS.BROWSE_WLED_DEVICES]: () => {
+    const { wled } = getWorld();
+    return {
+      status: status("WLED_BROWSE_OK", `${wled.devices.length} device(s)`),
       devices: wled.devices.map((d) => ({
         ip: d.host,
         name: d.name,
@@ -267,6 +282,9 @@ export const deviceHandlers = {
         lastCaptureErrorCode: t.lastCaptureErrorCode,
         lastCaptureErrorAtSecs: t.lastCaptureErrorAtSecs,
         captureTargetFps: t.captureTargetFps,
+        lastOutputErrorCode: t.lastOutputErrorCode,
+        lastOutputErrorAtSecs: t.lastOutputErrorAtSecs,
+        workerStopped: t.workerStopped,
       },
       hue: w.hue.everActive
         ? {
@@ -305,20 +323,20 @@ export function applyLightingMode(payload: LightingModeConfig): LightingModeComm
   const w = getWorld();
 
   // Target derivation mirrors `apply_mode_change_inner`
-  // (`src-tauri/src/commands/lighting_mode.rs:2004-2008`): empty/absent
+  // (`src-tauri/src/commands/lighting_mode/transition.rs`): empty/absent
   // `targets` means USB-required for backward compat; "hue" opts a
-  // mode into the Hue gate below. Order matters — the USB gate (2023-2036)
-  // runs before the Hue gate (2039-2052) in Rust, so it must here too: a
+  // mode into the Hue gate below. Order matters — the USB gate runs before
+  // the Hue gate in Rust, so it must here too: a
   // request needing both with neither available reports DEVICE_NOT_CONNECTED,
   // not HUE_NOT_READY.
   const requestedTargets = targets ?? [];
   const needsUsb = requestedTargets.length === 0 || requestedTargets.includes("usb");
   const needsHue = requestedTargets.includes("hue");
 
-  // USB gate (`lighting_mode.rs:2016-2036`). A registered WLED sink
-  // satisfies it the same way `UsbOutputPlan::Wled` does in Rust, even with
-  // no serial port connected — `usb_available = device_connected ||
-  // usb_plan.is_some()`.
+  // USB gate. A registered WLED sink satisfies it the same way
+  // `UsbOutputPlan::Wled` does in Rust, even with no serial port connected —
+  // `usb_available = usb_plan.is_some()`, and the plan is the WLED sink when
+  // one is bound, else the connected serial port.
   const usbAvailable = w.serial.connectedPort !== null || w.wled.connectedHost !== null;
   if (kind !== "off" && needsUsb && !usbAvailable) {
     return {
@@ -333,12 +351,12 @@ export function applyLightingMode(payload: LightingModeConfig): LightingModeComm
     };
   }
 
-  // Hue gate (`lighting_mode.rs:2039-2052`). `hue_output` there is `Some`
+  // Hue gate. `hue_output` there is `Some`
   // only once `start_hue_stream` has actually spawned a sender —
-  // `snapshot_hue_output_context` (`hue/state_store.rs:451-463`) reads
+  // `snapshot_hue_output_context` (`commands/hue/state_store.rs`) reads
   // `owner.active_stream`, which is set only at start's step 4c and cleared
-  // by every stop/gate-block/abort/reconnect path (`hue/retry.rs:150,187,303`,
-  // `hue/reconnect.rs:167,416`). Never-started, `Idle`/gate-blocked,
+  // by every stop/gate-block/abort/reconnect path (`commands/hue/retry.rs`,
+  // `commands/hue/reconnect.rs`). Never-started, `Idle`/gate-blocked,
   // `Reconnecting` and `Failed` all leave it `None` — only a genuinely
   // `Running` stream leaves it `Some`. `hue.streaming` is the mock's proxy
   // for that same fact (see `hueRuntimeFault` in `./hue.ts`, which is what
@@ -382,7 +400,11 @@ export function applyLightingMode(payload: LightingModeConfig): LightingModeComm
     mode: getWorld().lighting.mode,
     wledAdvisory: null,
     status: status(
-      kind === "ambilight" ? "AMBILIGHT_MODE_STARTED" : "SOLID_MODE_APPLIED",
+      kind === "ambilight"
+        ? "AMBILIGHT_MODE_STARTED"
+        : kind === "effect"
+          ? "EFFECT_MODE_STARTED"
+          : "SOLID_MODE_APPLIED",
       "Mode applied",
     ),
   };

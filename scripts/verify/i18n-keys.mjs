@@ -7,6 +7,8 @@ import { readFileSync, readdirSync, existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 
+import { KNOWN_DYNAMIC_PREFIXES } from "./lib/i18nDynamicPrefixes.mjs";
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "../..");
 
@@ -17,22 +19,6 @@ const NAMESPACE_REGISTRY_FILE = resolve(ROOT, "src/features/i18n/namespaces.ts")
 
 const CONTRACTS_DIR = resolve(ROOT, "src/shared/contracts");
 
-// Static heads of live `` t(`prefix.${x}`) `` sites. An unlisted head is only a
-// note(), but orphan accounting under it is unreliable until the list catches up.
-// phase01-shell-contracts.mjs reads this array literal, so it stays a flat list.
-const KNOWN_DYNAMIC_PREFIXES = [
-  "hue:runtime.codes",
-  "hue:runtime.states",
-  "hue:runtime.triggerSource",
-  "hue:runtime.writeback.codes",
-  "common:hotplug.targetLabel",
-  "preview:pattern",
-  "preview:status",
-  "preview:test.speed",
-  "roomMap:furniture.type",
-  "settings:nav.sections",
-  "telemetry:queueHealth",
-];
 
 // What `${x}` can be at each dynamic site, read from src/shared/contracts/.
 // Only children in that set count as referenced, so a key whose value left the
@@ -52,10 +38,6 @@ const DYNAMIC_PREFIX_DOMAINS = {
     exempt: ["HUE_CHANNEL_POSITIONS_UPDATED", "HUE_CHANNEL_POSITIONS_FAILED"],
   },
   "hue:runtime.states": { sources: ["hue.ts HUE_RUNTIME_STATES"], extra: ["undefined"] },
-  "hue:runtime.triggerSource": {
-    sources: ["hue.ts HUE_RUNTIME_TRIGGER_SOURCE"],
-    extra: ["undefined"],
-  },
   // HueChannelWritebackStatusCode minus its success member.
   "hue:runtime.writeback.codes": {
     sources: [
@@ -65,17 +47,15 @@ const DYNAMIC_PREFIX_DOMAINS = {
     ],
   },
   "common:hotplug.targetLabel": { sources: ["hue.ts HueRuntimeTarget"] },
-  "preview:pattern": { sources: ["preview.ts LED_TEST_PATTERN_KIND"] },
-  // The popup's error line: exactly useTestPatternRunner's ERROR_CODES.
-  "preview:status": {
-    sources: [
-      "preview.ts LED_TEST_STATUS.PATTERN_NO_CALIBRATION",
-      "preview.ts LED_TEST_STATUS.PATTERN_INVALID_PARAMS",
-      "preview.ts LED_TEST_STATUS.PATTERN_RUNTIME_ERROR",
-    ],
-  },
-  "preview:test.speed": { sources: ["preview.ts TestPatternSpeed"] },
-  "roomMap:furniture.type": { sources: ["roomMap.ts FurniturePlacement.type"] },
+  "lights:effect.directions": { sources: ["effects.ts EFFECT_DIRECTIONS"] },
+  "lights:effect.names": { sources: ["effects.ts EFFECT_IDS"] },
+  "lights:effect.palettes": { sources: ["effects.ts PALETTE_IDS"] },
+  "lights:scenes.suggested": { sources: ["scenes.ts SUGGESTED_SCENE_IDS"] },
+  "roomMap:furniture.tone": { sources: ["roomMap.ts FURNITURE_TONES"] },
+  "roomMap:furniture.type": { sources: ["roomMap.ts FURNITURE_TYPES"] },
+  "roomMap:furniture.variant": { sources: ["roomMap.ts FURNITURE_VARIANTS"] },
+  "roomMap:surfaces.floor": { sources: ["roomMap.ts FLOOR_FINISHES"] },
+  "roomMap:surfaces.walls": { sources: ["roomMap.ts WALL_COLORS"] },
   "settings:nav.sections": { sources: ["shell.ts SECTION_IDS"] },
   "telemetry:queueHealth": { sources: ["telemetry.ts TELEMETRY_QUEUE_HEALTH"] },
 };

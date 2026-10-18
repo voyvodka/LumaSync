@@ -15,16 +15,16 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { DISPLAY_OVERLAY_COMMANDS } from "../../src/shared/contracts/display";
 import { PLATFORM_COMMANDS } from "../../src/shared/contracts/platform";
-import { CONTROL_POPUP_STATUS, PREVIEW_COMMANDS } from "../../src/shared/contracts/preview";
+import { PREVIEW_COMMANDS, PREVIEW_STATUS } from "../../src/shared/contracts/preview";
 import { SHELL_COMMANDS } from "../../src/shared/contracts/shell";
 import { handlerFor, INTENTIONALLY_UNMAPPED, PASSTHROUGH_COMMANDS } from "../handlers";
 import { SCENARIOS } from "../scenarios";
 import { setWorld } from "../state";
-import { resetPopupVisibility } from "../handlers/windowless";
+import { resetPreviewSession } from "../handlers/windowless";
 
 beforeEach(() => {
   setWorld(SCENARIOS.furnished.build());
-  resetPopupVisibility();
+  resetPreviewSession();
 });
 
 const call = (command: string) => {
@@ -41,10 +41,8 @@ describe("commands whose effect needs a window the browser does not have", () =>
   });
 
   it.each([
-    PREVIEW_COMMANDS.OPEN_CONTROL_POPUP,
-    PREVIEW_COMMANDS.SHOW_CONTROL_POPUP,
-    PREVIEW_COMMANDS.HIDE_CONTROL_POPUP,
-    PREVIEW_COMMANDS.GET_PREVIEW_STATUS,
+    PREVIEW_COMMANDS.OPEN_PREVIEW,
+    PREVIEW_COMMANDS.CLOSE_PREVIEW,
     DISPLAY_OVERLAY_COMMANDS.OPEN_DISPLAY_OVERLAY,
     DISPLAY_OVERLAY_COMMANDS.CLOSE_DISPLAY_OVERLAY,
     DISPLAY_OVERLAY_COMMANDS.UPDATE_DISPLAY_OVERLAY_PREVIEW,
@@ -55,17 +53,23 @@ describe("commands whose effect needs a window the browser does not have", () =>
     expect(() => call(command)).not.toThrow();
   });
 
-  it("reports the visibility the caller just asked for", () => {
-    // A popup answering `visible: false` right after a successful show is the
-    // kind of fixture that sends someone looking for a bug in the window code.
-    expect(call(PREVIEW_COMMANDS.SHOW_CONTROL_POPUP)).toMatchObject({
-      code: CONTROL_POPUP_STATUS.SHOWN,
-      visible: true,
+  it("reads back the session the caller just opened, hid and closed", () => {
+    expect(call(PREVIEW_COMMANDS.OPEN_PREVIEW)).toMatchObject({
+      session: { state: "live", popupHidden: false },
+      status: { code: PREVIEW_STATUS.OPENED },
     });
-    expect(call(PREVIEW_COMMANDS.HIDE_CONTROL_POPUP)).toMatchObject({
-      code: CONTROL_POPUP_STATUS.HIDDEN,
-      visible: false,
+    expect(handlerFor(PREVIEW_COMMANDS.SET_POPUP_HIDDEN)?.({ payload: { hidden: true } })).toMatchObject({
+      session: { state: "live", popupHidden: true },
     });
+    expect(call(PREVIEW_COMMANDS.OPEN_PREVIEW)).toMatchObject({
+      session: { popupHidden: false },
+      status: { code: PREVIEW_STATUS.ALREADY_OPEN },
+    });
+    expect(call(PREVIEW_COMMANDS.CLOSE_PREVIEW)).toMatchObject({
+      session: { state: "closed" },
+      status: { code: PREVIEW_STATUS.CLOSED },
+    });
+    expect(call(PREVIEW_COMMANDS.CLOSE_PREVIEW)).toMatchObject({ status: { code: PREVIEW_STATUS.NOT_OPEN } });
   });
 
   it("leaves nothing on the unmapped list without a runtime answer", () => {

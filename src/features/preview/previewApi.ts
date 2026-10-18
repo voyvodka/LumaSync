@@ -1,21 +1,22 @@
-/** Preview API bridge (v1.6) — thin `invoke()` wrappers over
- * `PREVIEW_COMMANDS`, wrapped in try/catch to degrade a transport
- * rejection to a synthetic coded failure rather than throwing. */
+/** Preview API bridge — thin `invoke()` wrappers over `PREVIEW_COMMANDS`,
+ * wrapped in try/catch to degrade a transport rejection to a synthetic coded
+ * failure rather than throwing. */
+
+import { Channel } from "@tauri-apps/api/core";
 
 import {
-  CONTROL_POPUP_STATUS,
   LED_TEST_STATUS,
   PREVIEW_COMMANDS,
-  TWIN_OVERLAY_STATUS,
-  type CloseLedTwinOverlayPayload,
-  type ControlPopupResult,
-  type LedPreviewStatus,
+  PREVIEW_STATUS,
   type LedTestPatternResult,
-  type OpenLedTwinOverlayPayload,
+  type PreviewSession,
+  type PreviewSessionResult,
+  type PreviewSessionStatusCode,
+  type SceneKind,
   type StartLedTestPatternPayload,
-  type TwinOverlayResult,
+  type TwinSubscribeResult,
 } from "@/shared/contracts/preview";
-import { parseCommandError } from "@/shared/contracts/status";
+import { parseCommandError, type CommandStatusOf } from "@/shared/contracts/status";
 import { invokeCommand, type CommandInvoker } from "@/shared/ipcApi";
 
 // ---------------------------------------------------------------------------
@@ -34,14 +35,14 @@ function failedTestResult(error: unknown): LedTestPatternResult {
   };
 }
 
-function idlePreviewStatus(): LedPreviewStatus {
-  return {
-    testActive: false,
-    source: "idle",
-    twinDisplays: [],
-    popupVisible: false,
-    liveTwinSupported: false,
-  };
+function failureStatus<C extends string>(code: C, error: unknown): CommandStatusOf<C> {
+  const parsed = parseCommandError(error);
+  return { code, message: parsed.message, details: parsed.code ?? null };
+}
+
+/** A rejected session command says nothing about the session, so it reads closed with the failure's code. */
+function failedSessionResult(code: PreviewSessionStatusCode, error: unknown): PreviewSessionResult {
+  return { session: { state: "closed" }, status: failureStatus(code, error) };
 }
 
 // ---------------------------------------------------------------------------
@@ -75,93 +76,128 @@ export async function stopLedTestPattern(
   }
 }
 
-export async function getLedPreviewStatus(
-  invoker: CommandInvoker = invokeCommand,
-): Promise<LedPreviewStatus> {
+// ---------------------------------------------------------------------------
+// Preview session
+// ---------------------------------------------------------------------------
+
+/** Open the preview: popup and twin, main window out of the way. Changes no light. */
+export async function openPreview(invoker: CommandInvoker = invokeCommand): Promise<PreviewSessionResult> {
   try {
-    return await invoker(PREVIEW_COMMANDS.GET_PREVIEW_STATUS);
+    return await invoker(PREVIEW_COMMANDS.OPEN_PREVIEW);
   } catch (error) {
-    console.error("[LumaSync] get_led_preview_status failed:", error);
-    return idlePreviewStatus();
+    console.error("[LumaSync] open_preview failed:", error);
+    return failedSessionResult(PREVIEW_STATUS.OPEN_FAILED, error);
+  }
+}
+
+export async function closePreview(invoker: CommandInvoker = invokeCommand): Promise<PreviewSessionResult> {
+  try {
+    return await invoker(PREVIEW_COMMANDS.CLOSE_PREVIEW);
+  } catch (error) {
+    console.error("[LumaSync] close_preview failed:", error);
+    return failedSessionResult(PREVIEW_STATUS.CLOSE_FAILED, error);
+  }
+}
+
+export async function setPreviewPopupHidden(
+  hidden: boolean,
+  invoker: CommandInvoker = invokeCommand,
+): Promise<PreviewSessionResult> {
+  try {
+    return await invoker(PREVIEW_COMMANDS.SET_POPUP_HIDDEN, { payload: { hidden } });
+  } catch (error) {
+    console.error("[LumaSync] set_preview_popup_hidden failed:", error);
+    return failedSessionResult(PREVIEW_STATUS.NOT_OPEN, error);
+  }
+}
+
+/** The session as Rust holds it. A rejected read says nothing about it, so it
+ * answers `null` rather than inventing a closed session. */
+export async function getPreviewSession(invoker: CommandInvoker = invokeCommand): Promise<PreviewSession | null> {
+  try {
+    return await invoker(PREVIEW_COMMANDS.GET_SESSION);
+  } catch (error) {
+    console.error("[LumaSync] get_preview_session failed:", error);
+    return null;
+  }
+}
+
+export async function setPreviewTwinHidden(
+  hidden: boolean,
+  invoker: CommandInvoker = invokeCommand,
+): Promise<PreviewSessionResult> {
+  try {
+    return await invoker(PREVIEW_COMMANDS.SET_TWIN_HIDDEN, { payload: { hidden } });
+  } catch (error) {
+    console.error("[LumaSync] set_preview_twin_hidden failed:", error);
+    return failedSessionResult(PREVIEW_STATUS.NOT_OPEN, error);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Twin overlay window
+// Scenes
 // ---------------------------------------------------------------------------
 
-/** Open the borderless digital-twin overlay window mirroring LED output on the given display. */
-export async function openLedTwinOverlay(
-  payload: OpenLedTwinOverlayPayload,
+/** Play `kind`; a playing scene switches in place. */
+export async function startPreviewScene(
+  kind: SceneKind,
   invoker: CommandInvoker = invokeCommand,
-): Promise<TwinOverlayResult> {
+): Promise<PreviewSessionResult> {
   try {
-    return await invoker(PREVIEW_COMMANDS.OPEN_TWIN_OVERLAY, { payload });
+    return await invoker(PREVIEW_COMMANDS.START_SCENE, { payload: { kind } });
   } catch (error) {
-    console.error("[LumaSync] open_led_twin_overlay failed:", error);
-    return {
-      ok: false,
-      code: TWIN_OVERLAY_STATUS.OPEN_FAILED,
-      message: parseCommandError(error).message,
-    };
+    console.error("[LumaSync] start_preview_scene failed:", error);
+    return failedSessionResult(PREVIEW_STATUS.SCENE_START_FAILED, error);
   }
 }
 
-/// `payload` defaults to `{}` rather than `undefined`: Tauri drops an undefined
-/// key during serialization, and the Rust arg is required, so the documented
-/// "close every overlay" branch would fail with "invalid args" instead.
-export async function closeLedTwinOverlay(
-  payload: CloseLedTwinOverlayPayload = {},
-  invoker: CommandInvoker = invokeCommand,
-): Promise<TwinOverlayResult> {
+/** Stop the scene; the mode it interrupted comes back. */
+export async function stopPreviewScene(invoker: CommandInvoker = invokeCommand): Promise<PreviewSessionResult> {
   try {
-    return await invoker(PREVIEW_COMMANDS.CLOSE_TWIN_OVERLAY, { payload });
+    return await invoker(PREVIEW_COMMANDS.STOP_SCENE);
   } catch (error) {
-    console.error("[LumaSync] close_led_twin_overlay failed:", error);
-    return {
-      ok: false,
-      code: TWIN_OVERLAY_STATUS.CLOSE_FAILED,
-      message: parseCommandError(error).message,
-    };
+    console.error("[LumaSync] stop_preview_scene failed:", error);
+    // The scene may still be playing: RESTORE_FAILED says the lights are not
+    // back, and claims no stop.
+    return failedSessionResult(PREVIEW_STATUS.RESTORE_FAILED, error);
   }
 }
 
-// ---------------------------------------------------------------------------
-// Control popup window
-// ---------------------------------------------------------------------------
-
-/** Create the LED control popup window if it doesn't exist yet, or bring it to front if it does. */
-export async function openLedControlPopup(
+export async function setPreviewSceneBrightness(
+  brightness: number,
   invoker: CommandInvoker = invokeCommand,
-): Promise<ControlPopupResult> {
+): Promise<PreviewSessionResult> {
   try {
-    return await invoker(PREVIEW_COMMANDS.OPEN_CONTROL_POPUP);
+    return await invoker(PREVIEW_COMMANDS.SET_SCENE_BRIGHTNESS, { payload: { brightness } });
   } catch (error) {
-    console.error("[LumaSync] open_led_control_popup failed:", error);
-    return { ok: false, code: CONTROL_POPUP_STATUS.FAILED, message: parseCommandError(error).message, visible: false };
+    console.error("[LumaSync] set_preview_scene_brightness failed:", error);
+    return failedSessionResult(PREVIEW_STATUS.SCENE_NOT_RUNNING, error);
   }
 }
 
-/** Unminimize, show, and focus the LED control popup. Fails if it hasn't been created via `openLedControlPopup` yet. */
-export async function showLedControlPopup(
+export async function setPreviewSceneBlackBorders(
+  enabled: boolean,
   invoker: CommandInvoker = invokeCommand,
-): Promise<ControlPopupResult> {
+): Promise<PreviewSessionResult> {
   try {
-    return await invoker(PREVIEW_COMMANDS.SHOW_CONTROL_POPUP);
+    return await invoker(PREVIEW_COMMANDS.SET_SCENE_BLACK_BORDERS, { payload: { enabled } });
   } catch (error) {
-    console.error("[LumaSync] show_led_control_popup failed:", error);
-    return { ok: false, code: CONTROL_POPUP_STATUS.FAILED, message: parseCommandError(error).message, visible: false };
+    console.error("[LumaSync] set_preview_scene_black_borders failed:", error);
+    return failedSessionResult(PREVIEW_STATUS.SCENE_NOT_RUNNING, error);
   }
 }
 
-/** Hide the LED control popup window without destroying it — `showLedControlPopup` can bring it back. */
-export async function hideLedControlPopup(
+/** The twin's frames, each handed to `onFrame` as the raw buffer. */
+export async function subscribeTwinFrames(
+  onFrame: (frame: ArrayBuffer) => void,
   invoker: CommandInvoker = invokeCommand,
-): Promise<ControlPopupResult> {
+): Promise<TwinSubscribeResult> {
+  const channel = new Channel<ArrayBuffer>();
+  channel.onmessage = onFrame;
   try {
-    return await invoker(PREVIEW_COMMANDS.HIDE_CONTROL_POPUP);
+    return await invoker(PREVIEW_COMMANDS.SUBSCRIBE_TWIN_FRAMES, { onFrame: channel });
   } catch (error) {
-    console.error("[LumaSync] hide_led_control_popup failed:", error);
-    return { ok: false, code: CONTROL_POPUP_STATUS.FAILED, message: parseCommandError(error).message, visible: false };
+    console.error("[LumaSync] subscribe_twin_frames failed:", error);
+    return { layout: null, status: failureStatus(PREVIEW_STATUS.NOT_OPEN, error) };
   }
 }

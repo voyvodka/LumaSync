@@ -1,0 +1,97 @@
+@layer components {
+  /* The tone at rest: its disc and a quiet chevron, nothing more. */
+  .button {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 4px;
+    height: 32px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    transition: background var(--lm-dur-quick);
+  }
+  .button:hover:not(:disabled),
+  .open { background: rgb(255 255 255 / 4%); }
+  .button:focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--lm-focus-ring-inset);
+  }
+  .button:disabled { cursor: not-allowed; opacity: 0.5; }
+  .chevron {
+    display: grid;
+    place-items: center;
+    color: var(--lm-ink-faint);
+    transform: rotate(180deg);
+    transition: transform var(--lm-dur-base) var(--lm-ease-out);
+  }
+  .open .chevron { transform: none; }
+
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 4px;
+  }
+
+  .inline {
+    display: flex;
+    flex-shrink: 0;
+  }
+
+  /* A 32 px hit area around a 20 px disc; the chosen one gets a ring and a check, not colour alone. */
+  .swatch {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    cursor: pointer;
+  }
+  .swatch:focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--lm-focus-ring);
+  }
+  .swatch:disabled { cursor: not-allowed; opacity: 0.5; }
+  .disc {
+    display: block;
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--lm-line-2);
+    border-radius: 999px;
+  }
+  .discDefault {
+    background:
+      linear-gradient(135deg, transparent 45%, var(--lm-ink-faint) 45% 55%, transparent 55%),
+      transparent;
+  }
+  .swatch[aria-checked="true"] .disc {
+    box-shadow: 0 0 0 2px var(--lm-bg), 0 0 0 4px var(--lm-amber);
+  }
+  .swatch[aria-checked="true"]::after {
+    content: "";
+    position: absolute;
+    width: 6px;
+    height: 10px;
+    border: solid var(--lm-ink);
+    border-width: 0 2px 2px 0;
+    transform: translate(0, -1px) rotate(45deg);
+    filter: drop-shadow(0 0 1px var(--lm-bg));
+  }
+
+  :global(:root[data-reduced-motion]) .button,
+  :global(:root[data-reduced-motion]) .chevron { transition: none; }
+
+  @media (forced-colors: active) {
+    .swatch[aria-checked="true"] .disc {
+      outline: 2px solid Highlight;
+      outline-offset: 1px;
+    }
+    .disc { forced-color-adjust: none; }
+    .open { outline: 1px solid Highlight; }
+  }
+}

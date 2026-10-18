@@ -1,5 +1,6 @@
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
-import { furnitureObjectId, TV_ANCHOR_OBJECT_ID } from "./objectId";
+import { hueToPlanMetres, resolveHueChannelWorld } from "./hueChannelPosition";
+import { furnitureObjectId, hueChannelObjectId, parseObjectId, TV_ANCHOR_OBJECT_ID } from "./objectId";
 
 export interface ObjectRect {
   id: string;
@@ -22,6 +23,15 @@ export interface SnapResult {
 
 export const SNAP_THRESHOLD_M = 0.08; // ~5px at typical zoom
 
+/** How far, in screen pixels, a press may wander and still be a click rather than a drag. 3 px let
+ *  a trackpad click's wobble move what was only being selected. */
+export const CLICK_SLOP_PX = 6;
+
+/** A press that never left its spot selects; snapping it to the grid would move a piece nobody dragged. */
+export function isClick(startX: number, startY: number, endX: number, endY: number): boolean {
+  return Math.hypot(endX - startX, endY - startY) < CLICK_SLOP_PX;
+}
+
 export function getObjectRects(config: RoomMapConfig, excludeId: string): ObjectRect[] {
   const rects: ObjectRect[] = [];
 
@@ -34,6 +44,17 @@ export function getObjectRects(config: RoomMapConfig, excludeId: string): Object
     const fId = furnitureObjectId(f.id);
     if (fId === excludeId) continue;
     rects.push({ id: fId, x: f.x, y: f.y, w: f.width, h: f.height });
+  }
+
+  // Lights line up with lights; a sofa caught on every bulb would never sit where it was put.
+  if (parseObjectId(excludeId)?.kind === "hue") {
+    const { widthMeters, depthMeters } = config.dimensions;
+    for (const ch of config.hueChannels) {
+      const id = hueChannelObjectId(ch.channelIndex);
+      if (id === excludeId) continue;
+      const at = hueToPlanMetres(resolveHueChannelWorld(ch, config.zones), widthMeters, depthMeters);
+      rects.push({ id, x: at.x, y: at.y, w: 0, h: 0 });
+    }
   }
 
   // Origin (room center) as a zero-size rect so objects snap to it
@@ -49,7 +70,8 @@ export function computeSnap(
   others: ObjectRect[],
   threshold: number,
 ): SnapResult {
-  const guides: SnapGuide[] = [];
+  const xGuides: SnapGuide[] = [];
+  const yGuides: SnapGuide[] = [];
   let snapX: number | null = null;
   let snapY: number | null = null;
   let bestDx = threshold;
@@ -80,10 +102,10 @@ export function computeSnap(
       if (diff < bestDx) {
         bestDx = diff;
         snapX = dragging.x + (otherVal - dragVal);
-        guides.length = 0; // reset — we found a closer match
-        guides.push({ axis: "x", position: otherVal });
+        xGuides.length = 0;
+        xGuides.push({ axis: "x", position: otherVal });
       } else if (diff === bestDx && snapX !== null) {
-        guides.push({ axis: "x", position: otherVal });
+        xGuides.push({ axis: "x", position: otherVal });
       }
     }
 
@@ -101,13 +123,10 @@ export function computeSnap(
       if (diff < bestDy) {
         bestDy = diff;
         snapY = dragging.y + (otherVal - dragVal);
-        // Only reset Y guides
-        const xGuides = guides.filter((g) => g.axis === "x");
-        guides.length = 0;
-        guides.push(...xGuides);
-        guides.push({ axis: "y", position: otherVal });
+        yGuides.length = 0;
+        yGuides.push({ axis: "y", position: otherVal });
       } else if (diff === bestDy && snapY !== null) {
-        guides.push({ axis: "y", position: otherVal });
+        yGuides.push({ axis: "y", position: otherVal });
       }
     }
   }
@@ -115,5 +134,5 @@ export function computeSnap(
   if (bestDx >= threshold) snapX = null;
   if (bestDy >= threshold) snapY = null;
 
-  return { snapX, snapY, guides };
+  return { snapX, snapY, guides: [...xGuides, ...yGuides] };
 }

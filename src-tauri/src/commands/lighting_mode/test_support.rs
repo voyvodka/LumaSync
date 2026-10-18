@@ -28,8 +28,8 @@ use crate::commands::hue::state_store::{
     HueRuntimeStateStore, HueRuntimeTriggerSource, StartHueStreamRequest,
 };
 use crate::commands::led_output::{LedOutputBridge, LedOutputError, LedPacketSender};
-use crate::commands::led_preview::LedTwinState;
 use crate::commands::local_outputs::LocalOutputRegistry;
+use crate::commands::preview::PreviewSessionState;
 use crate::commands::runtime_telemetry::RuntimeTelemetryState;
 use crate::commands::shell_state::{ShellStateStore, SHELL_STATE_CHANGED_EVENT};
 
@@ -538,7 +538,7 @@ impl Rig {
         })));
         app.manage(HueRuntimeStateStore::default());
         app.manage(LocalOutputRegistry::default());
-        app.manage(LedTwinState::default());
+        app.manage(PreviewSessionState::default());
         app.manage(RuntimeTelemetryState::default());
         app.manage(ShellStateStore::in_memory());
 

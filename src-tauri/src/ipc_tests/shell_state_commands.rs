@@ -92,7 +92,13 @@ fn a_patch_merges_removes_and_announces_itself() {
 fn the_popup_and_the_main_window_patch_different_keys_and_both_survive() {
     let app = app();
     let main = main_webview(&app);
-    let popup = window(&app, crate::commands::led_preview::LED_CONTROL_POPUP_LABEL);
+    let popup = window(
+        &app,
+        &format!(
+            "{}0",
+            crate::commands::preview::LED_CONTROL_POPUP_LABEL_PREFIX
+        ),
+    );
 
     invoke(
         &main,
@@ -160,7 +166,13 @@ fn the_overlays_cannot_write_and_the_popup_cannot_replace() {
     let app = app();
     let twin = window(&app, "led-twin-overlay-0");
     let calibration = window(&app, "calibration-overlay-00000000000000ff-0");
-    let popup = window(&app, crate::commands::led_preview::LED_CONTROL_POPUP_LABEL);
+    let popup = window(
+        &app,
+        &format!(
+            "{}0",
+            crate::commands::preview::LED_CONTROL_POPUP_LABEL_PREFIX
+        ),
+    );
 
     invoke(&twin, "get_shell_state", json!({})).expect("the twin reads its layout");
     for webview in [&twin, &calibration] {

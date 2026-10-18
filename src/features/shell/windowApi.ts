@@ -1,9 +1,15 @@
 /** Bridge to the Tauri window that hosts the calling webview — the main window,
  * or the LED control popup when called from there. */
 import type { UnlistenFn } from "@tauri-apps/api/event";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export type { UnlistenFn };
+
+/** Settings → Interface size: the calling webview's own zoom, as a factor (1.25 for 125 %). */
+export function setCurrentWebviewZoom(factor: number): Promise<void> {
+  return getCurrentWebview().setZoom(factor);
+}
 
 export function focusCurrentWindow(): Promise<void> {
   return getCurrentWindow().setFocus();

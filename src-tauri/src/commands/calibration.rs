@@ -13,6 +13,12 @@ use tauri::{
     WebviewWindowBuilder,
 };
 
+use crate::commands::main_thread::on_main;
+
+/// What `list_displays` answers in a test: `MockRuntime` panics on the monitor list.
+#[cfg(test)]
+pub(crate) struct TestDisplays(pub(crate) Vec<DisplayInfoPayload>);
+
 /// Metadata for one enumerated display, used to size and position the
 /// calibration and LED-twin overlay windows.
 #[derive(Clone, Serialize)]
@@ -125,11 +131,11 @@ fn close_overlay_window<R: Runtime>(app: &AppHandle<R>, window_label: &str) -> R
 
 /// Build a transparent, click-through, always-on-top overlay window sized and
 /// positioned to fill `target_display`. Extracted from `open_overlay_window`
-/// so the v1.6 LED-twin overlay can reuse the exact window recipe (transparent
+/// so the LED-twin overlay can reuse the exact window recipe (transparent
 /// background, ignore-cursor-events, Windows child-HWND clickthrough
 /// propagation) without duplicating it. `init_script` is injected before any
-/// page script runs — mirror of the calibration overlay's
-/// `__LUMASYNC_OVERLAY_PREVIEW__` and the twin's `__LUMASYNC_TWIN_DISPLAY_ID__`.
+/// page script runs — the calibration overlay's `__LUMASYNC_OVERLAY_PREVIEW__`.
+/// `visible: false` builds it hidden, for a caller that must set it up first.
 pub fn build_transparent_overlay<R: Runtime>(
     app: &AppHandle<R>,
     window_label: &str,
@@ -137,6 +143,7 @@ pub fn build_transparent_overlay<R: Runtime>(
     title: &str,
     target_display: &DisplayInfoPayload,
     init_script: Option<&str>,
+    visible: bool,
 ) -> Result<tauri::WebviewWindow<R>, String> {
     let mut builder = WebviewWindowBuilder::new(app, window_label, url)
         .title(title)
@@ -155,7 +162,7 @@ pub fn build_transparent_overlay<R: Runtime>(
         // the activation chain (WS_EX_NOACTIVATE on Windows).
         // See docs/architecture/ui-and-shell.md.
         .focusable(false)
-        .visible(true);
+        .visible(visible);
     if let Some(script) = init_script {
         builder = builder.initialization_script(script);
     }
@@ -212,7 +219,7 @@ fn open_overlay_window<R: Runtime>(
     target_display: &DisplayInfoPayload,
     preview: Option<&OverlayPreviewPayload>,
 ) -> Result<(), String> {
-    let overlay_url = build_overlay_webview_url()?;
+    let overlay_url = build_overlay_webview_url();
     let preview_json = serialize_overlay_preview_payload(preview)?;
     let preload_script = format!("window.__LUMASYNC_OVERLAY_PREVIEW__ = {preview_json};");
 
@@ -223,6 +230,7 @@ fn open_overlay_window<R: Runtime>(
         "Calibration Overlay",
         target_display,
         Some(preload_script.as_str()),
+        true,
     )?;
 
     let _ = window.eval(
@@ -524,8 +532,8 @@ fn serialize_overlay_preview_payload(
         .map_err(|error| format!("OVERLAY_PREVIEW_SERIALIZE_FAILED: {error}"))
 }
 
-fn build_overlay_webview_url() -> Result<WebviewUrl, String> {
-    Ok(WebviewUrl::App(PathBuf::from("calibration-overlay.html")))
+fn build_overlay_webview_url() -> WebviewUrl {
+    WebviewUrl::App(PathBuf::from("calibration-overlay.html"))
 }
 
 /// Result of the window work an overlay open performs, carried back to the
@@ -620,6 +628,10 @@ fn logical_origin(x: i32, y: i32, scale_factor: f64) -> (i32, i32) {
 
 #[tauri::command]
 pub fn list_displays<R: Runtime>(app: AppHandle<R>) -> Result<Vec<DisplayInfoPayload>, String> {
+    #[cfg(test)]
+    if let Some(displays) = app.try_state::<TestDisplays>() {
+        return Ok(displays.0.clone());
+    }
     let monitors = app
         .available_monitors()
         .map_err(|error| format!("DISPLAY_LIST_FAILED: {error}"))?;
@@ -641,7 +653,7 @@ pub fn list_displays<R: Runtime>(app: AppHandle<R>) -> Result<Vec<DisplayInfoPay
         .primary_monitor()
         .ok()
         .flatten()
-        .and_then(|monitor| monitor.name().map(|name| name.to_string()));
+        .and_then(|monitor| monitor.name().cloned());
 
     let displays = monitors
         .into_iter()
@@ -649,7 +661,7 @@ pub fn list_displays<R: Runtime>(app: AppHandle<R>) -> Result<Vec<DisplayInfoPay
         .map(|(index, monitor)| {
             let name = monitor
                 .name()
-                .map(|value| value.to_string())
+                .cloned()
                 .unwrap_or_else(|| format!("Display {}", index + 1));
             let position = monitor.position();
             let size = monitor.size();
@@ -678,8 +690,35 @@ pub fn list_displays<R: Runtime>(app: AppHandle<R>) -> Result<Vec<DisplayInfoPay
 
 /// Open (or move) the calibration overlay onto the requested display,
 /// closing any previously open overlay first.
+///
+/// Async only to hand the open to the main thread as one step (`main_thread`):
+/// a webview built from a sync command never finishes on Windows.
 #[tauri::command]
-pub fn open_display_overlay<R: Runtime>(
+pub async fn open_display_overlay<R: Runtime>(
+    app: AppHandle<R>,
+    display_id: String,
+    preview: Option<OverlayPreviewPayload>,
+) -> Result<DisplayOverlayCommandResult, String> {
+    match on_main(&app, move |app| {
+        open_display_overlay_now(
+            app.clone(),
+            app.state::<OverlayState>(),
+            display_id,
+            preview,
+        )
+    })
+    .await
+    {
+        Ok(opened) => opened,
+        Err(reason) => Ok(overlay_error_result(
+            "OVERLAY_OPEN_FAILED",
+            "Could not open display overlay.",
+            &reason,
+        )),
+    }
+}
+
+pub(crate) fn open_display_overlay_now<R: Runtime>(
     app: AppHandle<R>,
     overlay_state: State<'_, OverlayState>,
     display_id: String,
@@ -925,9 +964,7 @@ mod tests {
 
     #[test]
     fn overlay_webview_url_uses_app_surface() {
-        let url = build_overlay_webview_url().expect("app URL should parse");
-
-        match url {
+        match build_overlay_webview_url() {
             WebviewUrl::App(path) => assert_eq!(path.to_string_lossy(), "calibration-overlay.html"),
             _ => panic!("expected app webview URL for overlay surface"),
         }

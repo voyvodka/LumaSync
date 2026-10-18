@@ -245,17 +245,32 @@ export async function isDisabled(selector: string): Promise<boolean> {
   }, selector);
 }
 
-/** The lighting-mode kind whose `[data-testid="mode-button-<kind>"]` currently
- *  carries `aria-checked="true"`, or `null` if the compact mode strip is not
- *  mounted (i.e. the app is in full mode) or nothing is checked yet. */
+/** The running lighting-mode kind as the strip shows it, or `null` if no strip is mounted or
+ *  nothing is checked yet. Off is the power switch (`mode-button-off`, `role="switch"`) reading
+ *  unchecked; a lit kind is its radio checked while the switch is on. */
 export async function activeModeKind(): Promise<string | null> {
   return browser.execute(() => {
-    const buttons = Array.from(
-      document.querySelectorAll<HTMLElement>('[data-testid^="mode-button-"]'),
+    const power = document.querySelector<HTMLElement>('[data-testid="mode-button-off"]');
+    if (power === null) return null;
+    if (power.getAttribute("aria-checked") === "false") return "off";
+    const radios = Array.from(
+      document.querySelectorAll<HTMLElement>('[role="radio"][data-testid^="mode-button-"]'),
     );
-    const active = buttons.find((b) => b.getAttribute("aria-checked") === "true");
+    const active = radios.find((b) => b.getAttribute("aria-checked") === "true");
     return active?.getAttribute("data-testid")?.replace("mode-button-", "") ?? null;
   });
+}
+
+/** Chooses `kind` on the strip: a lit kind by its radio; Off by the power switch, pressed only
+ *  while the lights are on — pressed while off, it turns the last lit mode back on. */
+export async function chooseMode(kind: string): Promise<void> {
+  if (kind !== "off") {
+    await clickTestId(`mode-button-${kind}`);
+    return;
+  }
+  if ((await activeModeKind()) !== "off") {
+    await clickTestId("mode-button-off");
+  }
 }
 
 /** The section whose `[data-testid="section-tab-<id>"]` currently carries

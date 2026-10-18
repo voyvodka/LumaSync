@@ -12,7 +12,7 @@ layer covers a build path another misses. Lowering it reintroduces the v1.5.2 la
 *Resolved* below. The macOS jobs also select the newest installed Xcode: `screencapturekit` pulls
 `apple-metal`, whose Swift bridge needs the macOS 26 SDK at compile time; its `#available` guard
 keeps the binary runnable on 12.3. (The step names still say "screencapturekit 8"; the lockfile is
-on 10.x.)
+on 11.x.)
 
 **A debug build keeps line tables for our code and no debug info for dependencies**
 (`[profile.dev]` in `src-tauri/Cargo.toml`). Full debug info was most of `target/debug`: on a clean
@@ -146,9 +146,16 @@ only exposes it to every later step.
 - **`cargo audit`** (in `ci.yml` and `release.yml`) owns Rust advisories, and
   `src-tauri/.cargo/audit.toml` ignores nothing. An ignore added there carries its justification
   in that file, is re-checked every release, and goes the moment the parent bumps. The allowed
-  *warnings* it prints — unmaintained `unic-*` via `urlpattern`, `proc-macro-error`, unsound `glib`
-  0.18 — arrive through Tauri's own tree, mostly its Linux GTK3 stack. They are not actionable
-  here and are not to be pinned around.
+  *warnings* it prints — unmaintained `proc-macro-error` and `zbus_names` / `zvariant*` (via
+  `notify-rust` and `keyring`'s Secret Service store), unsound `glib` 0.18 — arrive through Tauri's
+  own tree and its plugins, mostly the Linux GTK3 and D-Bus stacks. They are not actionable here
+  and are not to be pinned around.
+- **The updater is built without its `zip` feature**, which is how `zip` (RUSTSEC-2026-0368,
+  patched only in 9.x while every updater release pins `zip ^4`) left the tree instead of entering
+  the ignore list. The feature only unpacks v1-style `.zip` / `.tar.gz` wrappers on Windows and
+  Linux; `createUpdaterArtifacts: true` publishes the bare `-setup.exe`, `.msi` and `.AppImage`,
+  and the macOS `.app.tar.gz` path uses `flate2`/`tar` unconditionally. Turning the feature back
+  on, or switching to `"v1Compatible"` artefacts, breaks Windows and Linux updates.
 - **`dependency-review`** gates each PR's *changed* dependencies: it fails on a high-severity
   advisory, and its licence allow-list is the union of `deny.toml`'s and the npm scan's, so it
   refuses nothing the full-tree scan accepts. Copyleft (GPL, LGPL, AGPL, EUPL, SSPL) is refused by
@@ -284,13 +291,12 @@ fails, which is worse than no check. Learning at tag time that a version drifted
 expensive moment to learn it: the work is already merged.
 
 `release.yml` re-runs only part of `check:all`: the Rust checks on all three platforms, and on Linux
-`verify:shell-contracts`, `typecheck:e2e` and `check:i18n`. `check:i18n` is the
-orphaned-translation-key ratchet, and a tag push runs no CI, so this is the only place it can catch
-one before publication. Biome lint, `typecheck:mock`, `verify:event-names`,
+`verify:shell-contracts`, `verify:window-grants`, `typecheck:e2e` and `check:i18n`. `check:i18n` is
+the orphaned-translation-key ratchet, and a tag push runs no CI, so this is the only place it can
+catch one before publication. Its Linux-only steps test `runner.os`, never a runner image name, so
+they survive the next image move. Biome lint, `typecheck:mock`, `verify:event-names`,
 `verify:mock-not-shipped`, `verify:design-tokens` and `verify:untyped-mocks` are not re-run at tag
-time. **Nor, in practice, is `verify:window-grants`**: its release step is conditioned on
-`ubuntu-24.04`, which left the release matrix when Linux moved to 22.04, so it is skipped on every
-tag. It still gates every PR through `check:all`.
+time.
 
 **`CHANGELOG.md` is a reader-facing release note, not an audit log** — the commit history is the
 audit log. Keep a Changelog 1.1.0 headings, plus a house `### Internal` for changes only a
@@ -300,6 +306,14 @@ line per ecosystem (Rust, frontend, GitHub Actions), naming a package only for a
 user-visible effect. Purely internal changes — a removed constant, a moved test — are left out. An
 rc cut folds `[Unreleased]` into the core `## [X.Y.Z]` heading, undated; the stable release adds
 `— YYYY-MM-DD`. Anything still under `[Unreleased]` at tag time is missing from that build's notes.
+
+**The notes are written once, at release time, from the merged PRs — not by each PR.** A PR's body
+carries one `User-visible:` sentence and leaves `CHANGELOG.md` alone; the `release` skill gathers
+those lines since the last tag and folds them into themes. Each bullet says what changed for the
+user in about 25 words, never why — the cause stays in the PR — and a release runs to roughly ten
+to twenty bullets. When every PR wrote its own entry, `[Unreleased]` reached 291 bullets and 21,000
+words by 2026-10-16, most of them narrating the bug behind a fix; the same text lands in the GitHub
+release, the site's changelog page and the in-app update notice.
 
 ## The package manager and its dependency overrides
 
@@ -322,12 +336,14 @@ is strict JSON and cannot carry the reasoning inline, so it lives here — they 
 `pnpm-workspace.yaml` before the move to Bun. Each one exists to clear a GitHub advisory that the
 direct dependency tree cannot resolve on its own:
 
-- **`undici` → `^7.29.0`.** Reached transitively through the WebdriverIO e2e stack (`webdriver`
+- **`undici` → `^7.30.0`.** Reached transitively through the WebdriverIO e2e stack (`webdriver`
   asks for `^6`, `cheerio` for `^7`), so dev-only. Clears the advisories against `undici` < 7.29.0 — SOCKS5 cross-origin routing and TLS
-  certificate validation bypass among them.
-- **`serialize-javascript` → `^7.1.0`.** mocha still pins `^6.0.2`, which both GHSA-5c6j-r48x-rmvq
+  certificate validation bypass among them — and GHSA-2gqq-gqf2-x968 (response truncation in the dump
+  interceptor, fixed in 7.29.1). It stays on the 7 line: `webdriver` already asks for 6, and 8 would
+  move it two majors. The floor is the patched release, not just what the lockfile happens to hold.
+- **`serialize-javascript` → `^7.1.2`.** mocha still pins `^6.0.2`, which both GHSA-5c6j-r48x-rmvq
   (RCE) and GHSA-qj8w-gfj5-8c6v cover. 7.0.5 was the first release clear of the pair.
-- **`@puppeteer/browsers` → `^3.2.0`.** The 2.x line pulls `extract-zip` (GHSA-jmr9-qjv8-65gv),
+- **`@puppeteer/browsers` → `^3.2.4`.** The 2.x line pulls `extract-zip` (GHSA-jmr9-qjv8-65gv),
   which is unmaintained and has no patched release. Bumping the parent is the only exit.
 
 Drop one when its upstream ships a clean release, not before — `cargo audit`'s frontend counterpart
@@ -347,8 +363,8 @@ those downloads. `esbuild` genuinely needs its postinstall to fetch a platform b
 - **Log lines twice: `tauri_plugin_log::Builder::new()` already carries `[Stdout, LogDir { file_name: None }]`, and `.target()` appends.** Two `.target()` calls therefore made four sinks: stdout twice (every line doubled in `bun run tauri dev` and in CI's captured stdout), our named file, and a second file named after the package — `LumaSync.log`. In release that second name and our `lumasync.log` are the same file on macOS and Windows, so the release log carried every line twice; in dev it left a stray `LumaSync.log` next to `lumasync-dev.log`, which is the file the smoke `--log-file` deletion below once destroyed. `.targets([...])` replaces the default set instead of adding to it. A line seen once on stdout and once in the file is the two sinks doing their job; the same line twice in one place is a regression of this.
 - **`launch-smoke.mjs --log-file` scans the file from its size at launch and never deletes it.** A stale log would match the startup marker without the app ever starting, so only bytes appended after the script starts count; a file that is *shorter* than it was at launch was rotated or truncated and is read from the top. It used to delete the file instead, which on a developer machine is the live log — and on macOS's case-insensitive filesystem `lumasync.log` and `LumaSync.log` are the same file, so it once destroyed months of history. `overlay-smoke.mjs` follows the same rule.
 - **No duplicate `## [X.Y.Z]` headings in `CHANGELOG.md`.** `release.yml` extracts notes with `awk` and stops at the first match. It also stops at a bare `---` line, so a horizontal rule inside a section silently truncates the published notes.
-- **`CHANGELOG.md` merges with `merge=union`** (`.gitattributes`). Nearly every PR adds a line under `[Unreleased]`, so with several branches open each merge of `main` into the others used to stop on a conflict that was only two additions side by side. Union keeps both sides. It cannot tell an edit from an addition: two branches rewording the same line keep both versions, and two branches adding the same heading keep it twice — `[Unreleased]` routinely ends up with two `### Added` — so read the section after a merge and merge repeated subsections when folding it, and check the rule above before tagging. GitHub's own merge button ignores the attribute; it applies when `main` is merged into a branch locally.
-- **`chunkSizeWarningLimit` is a ratchet rather than a mute.** Vite's 500 kB default measures download cost over a network; a Tauri bundle is read off local disk and never pays it — what matters here is parse time and memory per webview. Since the per-window split (`ui-and-shell.md`, "Per-window bundles") the largest chunk is the shared entry, React plus i18next at about 265 kB, and the limit sits just above it at 300 kB so real growth still trips it. A warning now most likely means something heavy was imported statically from `main.tsx`, which every window, including each twin overlay, would parse.
+- **`CHANGELOG.md` merges with `merge=union`** (`.gitattributes`). Until 2026-10-16 nearly every PR added a line under `[Unreleased]`, so with several branches open each merge of `main` into the others used to stop on a conflict that was only two additions side by side. Union keeps both sides. It cannot tell an edit from an addition: two branches rewording the same line keep both versions, and two branches adding the same heading keep it twice — `[Unreleased]` routinely ends up with two `### Added` — so read the section after a merge and merge repeated subsections when folding it, and check the rule above before tagging. GitHub's own merge button ignores the attribute; it applies when `main` is merged into a branch locally.
+- **The bundle has a size gate per chunk class, and it fails.** Vite's 500 kB default measures download cost over a network; a Tauri bundle is read off local disk and never pays it — what matters here is parse time and memory per webview. Vite's `chunkSizeWarningLimit` used to be the ratchet, but it is one number for every chunk and only warns, and nothing fails on a warning: by 2026-10-14 the entry had passed it (329 kB against 300) with every build printing the warning. `verify:chunk-budget` (`scripts/verify/chunk-budget.mjs`, in `check:all`) builds into a temporary directory in under a second and checks two classes from Vite's manifest: the **entry** — the HTML entries and their static imports, what every window including each twin overlay parses at start — and every **lazy** chunk, each against its own budget, with a `NAMED` line for a chunk that is allowed to be bigger on purpose. The budgets sit just above today's sizes (entry 341 kB with its static imports, largest lazy chunk 175 kB), so real growth trips them; raising one is a decision, written here with its reason in the same change. The budgets live in one file, `scripts/verify/chunk-budgets.json`, which `vite.config.ts` reads for `chunkSizeWarningLimit` too, so Vite's own warning cannot drift from the gate; the gate reads the spike flag through Vite's `loadEnv`, as the build does, so a flag set in `.env.local` is not reported as a leak. `RoomView3D` is the one named chunk: three.js and the 3D room view, 700 kB against 660.9 kB measured on 2026-10-15 (578 kB before the parametric furniture models, 588 kB with them, 640.5 kB after the materials pass). The lamp-light pass took it from 640.5 to 660.9 kB, nearly all of it three's post-processing (`EffectComposer`, `UnrealBloomPass`, `OutputPass`) for the bulbs' glow; the glow is what makes a lamp read as lit, and the budget rose to 700 kB for it and for the scene moods that come next. It had passed its old 600 kB budget unseen — at 634.7 kB after the room's surfaces, lamp models and wardrobe — because the gate measures it only in a build with the spike flag, and `check:all` runs without it; check it with `VITE_ROOM_VIEW_SPIKE=1 node scripts/verify/chunk-budget.mjs` after any 3D change. The materials pass (fabric, wood, metal and leaf shading, foliage, soft cushions) added 5.4 kB of it; a studio environment map for reflections cost far less in bytes but lit the evening room like daylight at any useful strength, and was left out. It stood at 699.9 kB on 2026-10-16, 52 bytes under, when a byte count by source map showed three's whole curve family (`Shape`, `Path`, every `Curve` class, `ShapeUtils`, earcut — about 24 kB) in it for one thing: the selection's rounded floor outline drawn with `ShapeGeometry`. The outline is now two matching outlines stitched into a strip by hand (`scene/selection.ts`), and the chunk fell to 676.2 kB with nothing drawn differently. Count the bytes before raising the budget: an import from `three` can carry much more than its class. What is left is mostly irreducible — about 420 kB is three's core and renderer; the animation classes (~14 kB) stay because three assigns to their prototypes at module level, and `treeshake.propertyWriteSideEffects: false` won back only 0.5 kB, not worth an app-wide rule. `OrbitControls` (19.8 kB) is the next largest piece a hand-written orbit could replace, at the cost of its touch, damping and key handling. It is its own lazy chunk, fetched only when the view opens and never warmed on idle, and the view hands its WebGL context back when it closes (`ui-and-shell.md`, "Per-window bundles"). While the view is a spike it is built only into dev builds and a build with `VITE_ROOM_VIEW_SPIKE=1`; a `NAMED` line can carry `spikeOnly`, and the gate fails when that chunk appears in a build without the flag, so a change to the import's condition cannot ship three.js unnoticed. The entry budget rose from 345 to 350 kB on 2026-10-15 for copy, not code: both locales live in the entry, and a pass that rewrote the app's notices, settings and room map in plain words and added the room's floor and wall names took it to 345.3 kB. The lazy budget rose from 180 to 190 kB the same day for the room-map editor, its largest lazy chunk (`RoomMapSurface`), which reached 181.8 kB with code it is meant to hold: one drag rule for every handle with Esc to cancel, a free-floor search for new pieces, Hue lights on one spot fanned out, walls drawn over the furniture, and a retry for a failed save. It rose again to 200 kB that evening, at 190.5 kB, for a Hue light's model and facing in the inspector, the facing wedge on the plan and a moved light sitting on the piece under it — the editor half of the room's lights, with strip mounting and more furniture to follow. It rose to 210 kB on 2026-10-16: the release build stood at 199.1 kB and the spike build, which also carries the 3D view's host, at 202.4 kB, after strip height, density and corners, the Templates entry with the Showroom and the room's finishes. Lazy-loading the template picker was the alternative and was turned down: an empty map opens on it, so first run would wait on a fetch behind a blank panel. It rose to 225 kB the same afternoon, at 208.5 kB in the release build and 211.3 kB in the spike build, for the ceiling lights — a fixture that hangs where it is chosen, "Hang from the ceiling" and the plan's overhead ring — and the 3D room's Daylight setting, with the room's walls, beams, windows and doors next. It rose to 240 kB on 2026-10-17, at 230.4 kB in the release build and 230.1 kB in the spike build: a byte count by source map against the branch before showed 5.7 kB of the 8.7 kB growth in the furnished templates (each now laid out with its windows, doors, ceiling lights and the spots its Hue lights suggest), and the rest in a pass of small editor fixes — a ⇧-picked group moving as its members move alone, Esc putting a gesture back, a failed read offering a retry. The templates are data already written tersely; turning their spots into tuples would win back about half a kilobyte. It rose to 250 kB on 2026-10-18, at 242.3 kB: a byte count by source map against the commit that set 240 kB put 8.6 kB of the 11.8 kB growth in the house lights (their inspector, plan object, "Drive with a Hue light" picker and model) and 2.4 kB in Hue zones becoming cubes (`zoneCube.ts`, the size and height fields). No dead code turned up; lazy-loading the shortcuts list (2.2 kB) was turned down, since its button would open on an empty popover the first time. The shell-state migration steps load only for a snapshot older than the current schema (`readSnapshot` in `shell/windowShellState.ts`): statically imported, they and everything they reached — the legacy strip and Hue-position helpers among them — sat in every window's entry for a pass that runs once per upgrade, and the dynamic import took the entry from 351.9 to 333.3 kB on 2026-10-18. A failing entry most likely means something heavy was imported statically from `main.tsx`. For scale, measured the same day: a window's baseline is a 40–190 MB WebContent process, so bundle bytes move parse time by milliseconds and heap by about a megabyte — the gate keeps the entry honest, it is not where the memory goes.
 - **The test environment installs its own `localStorage`** in `src/test/setup.ts`. Node ≥ 24 defines an experimental `localStorage` global that reads back as `undefined` without `--localstorage-file`, and it shadows the one happy-dom provides. CI runs Node 22 and never saw it; on a newer local Node every `HsvColorPicker` recent-colors read and write threw into its own `catch`, so the feature was inert in tests and nothing failed. Anything reached through `window` deserves the same suspicion when local and CI Node versions differ.
 
 - **Never share `CARGO_TARGET_DIR` across worktrees.** The `lumasync` package hashes collide across checkouts, so tauri-build's generated capability ACL from one branch ended up in another branch's binary, which then refused a command at runtime while its probe still passed. Every worktree builds in its own `src-tauri/target`.
@@ -426,8 +442,8 @@ calls, on the main thread it calls it from — waits 1.5 s for the queued `close
 ```
 
 `overlays` counts **visible** windows other than `main`. Visible, not merely present:
-the tray item *hides* the LED control popup rather than closing it, and a hidden
-window covers nothing. Under `--gate` the run fails unless that count is 0 and
+a window can still be listed while its destroy completes, and a hidden window covers
+nothing. Under `--gate` the run fails unless that count is 0 and
 `main_visible=true`; a timeout waiting for the line means `close_all_overlays` never
 returned, which is a wedged main thread rather than a slow one.
 

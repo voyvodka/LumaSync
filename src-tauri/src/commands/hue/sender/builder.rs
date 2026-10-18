@@ -27,7 +27,7 @@ use super::http_fallback::spawn_hue_http_sender;
 /// No-op sender used when the HTTP client cannot be built. Centralised so we
 /// avoid scattering the `tx`/`channel_count` initialiser across the failure
 /// paths of `build_hue_sender`.
-pub(crate) fn no_op_sender() -> HueColorSender {
+fn no_op_sender() -> HueColorSender {
     HueColorSender::with_mailbox(0).0
 }
 
@@ -35,7 +35,7 @@ pub(crate) fn no_op_sender() -> HueColorSender {
 /// because nothing else can fire it — a fresh signal here made every later
 /// `stop_hue_stream` burn the full timeout and report `HUE_STOP_TIMEOUT_PARTIAL`
 /// for a stream that was never running.
-pub(crate) fn settled_shutdown_signal() -> ShutdownSignal {
+fn settled_shutdown_signal() -> ShutdownSignal {
     let signal = new_shutdown_signal();
     signal_shutdown_complete(&signal);
     signal
@@ -121,9 +121,8 @@ pub(crate) fn build_hue_sender(
     if has_client_key {
         match blocking_client_for_key(&resolved_username) {
             Ok(client) => {
-                // Spawn DTLS attempt on a dedicated OS thread with a hard deadline.
-                // DTLS handshake can block indefinitely if the bridge ignores UDP:2100 —
-                // the socket-level read timeout is not honored by OpenSSL's retransmit loop.
+                // A dedicated thread under a hard deadline: nothing the handshake waits on
+                // holds the caller past it.
                 let (tx_result, rx_result) = std::sync::mpsc::channel();
                 let client_clone = client.clone();
                 let bridge_ip_t = request.bridge_ip.clone();

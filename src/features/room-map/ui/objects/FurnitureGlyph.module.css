@@ -1,0 +1,19 @@
+@layer components {
+  /* Strokes stay a hairline at any zoom: the drawing is in metres, the outline in pixels. */
+  .glyph {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+  }
+  .glyph :global(:is(rect, ellipse, line)) {
+    stroke-width: 1px;
+    vector-effect: non-scaling-stroke;
+  }
+
+  @media (forced-colors: active) {
+    .glyph :global(:is(rect, ellipse)) { fill: Canvas; stroke: CanvasText; }
+    .glyph :global(line) { stroke: CanvasText; }
+  }
+}

@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Manager, Runtime};
 
-use crate::commands::calibration::{list_displays, open_display_overlay, OverlayState};
+use crate::commands::calibration::{list_displays, open_display_overlay_now, OverlayState};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(250);
 const MAX_WAIT: Duration = Duration::from_secs(180);
@@ -112,13 +112,14 @@ fn open_and_report<R: Runtime>(app: &AppHandle<R>, close_trigger: PathBuf) {
         return;
     };
 
-    let result = match open_display_overlay(app.clone(), overlay_state, display_id.clone(), None) {
-        Ok(result) => result,
-        Err(error) => {
-            log::error!("[smoke-overlay] open failed: {error}");
-            return;
-        }
-    };
+    let result =
+        match open_display_overlay_now(app.clone(), overlay_state, display_id.clone(), None) {
+            Ok(result) => result,
+            Err(error) => {
+                log::error!("[smoke-overlay] open failed: {error}");
+                return;
+            }
+        };
     if !result.ok {
         log::error!(
             "[smoke-overlay] open failed: {} {}",
@@ -185,9 +186,9 @@ fn schedule_rect_report<R: Runtime>(
     }
 }
 
-/// R29's other half. The overlay opening is only half the report: the tray's
-/// "Close Overlays" item is the one surface left when an overlay swallows the
-/// desktop, and nothing outside a Windows desktop can prove it still works.
+/// The overlay opening is only half the report: the tray's "Close Overlays"
+/// item is the one surface left when an overlay swallows the desktop, and
+/// nothing outside a Windows desktop can prove it still works.
 /// Runs on the rect thread, which has done its job by the time this is called.
 fn watch_for_rescue<R: Runtime>(app: AppHandle<R>, close_trigger: PathBuf) {
     let deadline = Instant::now() + MAX_WAIT;
@@ -224,7 +225,7 @@ fn watch_for_rescue<R: Runtime>(app: AppHandle<R>, close_trigger: PathBuf) {
 
 /// Counts *visible* non-main windows, not every non-main window: the tray item
 /// hides the LED control popup rather than closing it, and a hidden window
-/// covers nothing. What R29 is about is what is left on the screen.
+/// covers nothing. What matters is what is left on the screen.
 fn report_rescue<R: Runtime>(app: &AppHandle<R>) {
     let still_open = app
         .webview_windows()

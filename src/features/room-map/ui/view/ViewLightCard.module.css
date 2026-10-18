@@ -1,0 +1,53 @@
+@layer components {
+  .back,
+  .action {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    color: var(--lm-ink-dim);
+  }
+  .back:hover,
+  .action:hover:not([aria-disabled]) {
+    color: var(--lm-ink);
+    background: rgb(255 255 255 / 4%);
+  }
+  .action[aria-disabled] { color: var(--lm-ink-faint); cursor: default; }
+  .back:focus-visible,
+  .action:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .busy,
+  .busy[aria-disabled] { color: var(--lm-amber); }
+
+  .name {
+    flex: 1 1 0;
+    min-width: 72px;
+    overflow: hidden;
+    color: var(--lm-ink);
+    font: 600 12px/1 var(--lm-sans);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The facts give way to a brightness bar once a light can be dimmed from here. */
+  /* Under the light's mark, past the back button: the facts belong to the light, not to Back. */
+  .facts {
+    display: flex;
+    flex: 1 1 0;
+    align-items: center;
+    min-width: 0;
+    padding-left: 38px;
+  }
+  /* The inspector's status is a fixed column; here it has the row to itself. */
+  .facts > :first-child { width: auto; }
+  /* Held for the light's power switch. */
+  .slot {
+    flex-shrink: 0;
+    width: 32px;
+  }
+
+  @media (forced-colors: active) {
+    .back:focus-visible,
+    .action:focus-visible { outline: 2px solid Highlight; }
+    .busy { outline: 1px solid Highlight; }
+  }
+}

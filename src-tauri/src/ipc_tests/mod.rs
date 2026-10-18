@@ -21,6 +21,7 @@ mod serial_firmware;
 mod shell_state_commands;
 mod telemetry_commands;
 mod tray_labels;
+mod window_drag_commands;
 mod window_visibility_commands;
 mod wled_commands;
 
@@ -33,8 +34,8 @@ use tauri::{App, AppHandle, Manager, WebviewWindow, WebviewWindowBuilder};
 use crate::commands::calibration::OverlayState;
 use crate::commands::device_connection::SerialPortAccess;
 use crate::commands::hue::state_store::HueRuntimeStateStore;
-use crate::commands::led_preview::LedTwinState;
 use crate::commands::lighting_mode::LightingRuntimeState;
+use crate::commands::preview::PreviewSessionState;
 use crate::commands::runtime_telemetry::RuntimeTelemetryState;
 use crate::commands::shell_state::ShellStateStore;
 use crate::commands::window_visibility::MainWindowVisibilityState;
@@ -68,7 +69,7 @@ where
     app.manage(crate::commands::local_outputs::LocalOutputRegistry::default());
     app.manage(serial_ports);
     app.manage(LightingRuntimeState::default());
-    app.manage(LedTwinState::default());
+    app.manage(PreviewSessionState::default());
     app.manage(OverlayState::default());
     app.manage(HueRuntimeStateStore::default());
     app.manage(RuntimeTelemetryState::default());

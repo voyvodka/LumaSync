@@ -1,9 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SECTION_IDS, SECTION_ORDER } from "@/shared/contracts/shell";
 
-import { TitleBar } from "../TitleBar";
+import { SECTION_PANEL_ID, TitleBar } from "../TitleBar";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -18,6 +18,67 @@ vi.mock("@tauri-apps/api/window", () => ({
     close: () => Promise.resolve(),
   }),
 }));
+
+const invokeMock = vi.fn((..._args: unknown[]) => Promise.resolve(null));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => invokeMock(...args) }));
+const dragCalls = () => invokeMock.mock.calls.filter(([command]) => command === "start_window_drag").length;
+
+describe("TitleBar drag on macOS", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    invokeMock.mockClear();
+  });
+
+  /** Mounted as on a Mac; `seen` is what Tauri's drag script, a document listener, receives. */
+  function renderOnMac(platform = "Macintosh") {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(`Mozilla/5.0 (${platform})`);
+    const seen: number[] = [];
+    const listener = (event: MouseEvent) => seen.push(event.detail);
+    document.addEventListener("mousedown", listener);
+    const view = render(
+      <TitleBar uiMode="full" onSwitchUIMode={() => {}} activeSection={SECTION_IDS.LIGHTS} onSectionChange={() => {}} />,
+    );
+    const bar = view.container.querySelector<HTMLElement>("[data-tauri-drag-region]")!;
+    return { bar, seen, done: () => document.removeEventListener("mousedown", listener) };
+  }
+
+  // Tauri's drag anchored on whatever event AppKit saw last, and the window jumped on a click.
+  it("drags from the pointer on a press, and Tauri's script never sees it", () => {
+    const { bar, seen, done } = renderOnMac();
+    fireEvent.mouseDown(bar, { button: 0, detail: 1 });
+    done();
+
+    expect(dragCalls()).toBe(1);
+    expect(seen).toEqual([]);
+  });
+
+  it("passes a double-click on to Tauri's script for the zoom", () => {
+    const { bar, seen, done } = renderOnMac();
+    fireEvent.mouseDown(bar, { button: 0, detail: 2 });
+    done();
+
+    expect(dragCalls()).toBe(0);
+    expect(seen).toEqual([2]);
+  });
+
+  it("leaves a press on a tab to the tab", () => {
+    const { seen, done } = renderOnMac();
+    fireEvent.mouseDown(screen.getByTestId(`section-tab-${SECTION_IDS.DEVICES}`), { button: 0, detail: 1 });
+    done();
+
+    expect(dragCalls()).toBe(0);
+    expect(seen).toEqual([1]);
+  });
+
+  it("leaves Windows and Linux to Tauri's own drag", () => {
+    const { bar, seen, done } = renderOnMac("Windows NT 10.0");
+    fireEvent.mouseDown(bar, { button: 0, detail: 1 });
+    done();
+
+    expect(dragCalls()).toBe(0);
+    expect(seen).toEqual([1]);
+  });
+});
 
 describe("TitleBar section tabs", () => {
   // A nameless tablist is announced as just "tab list" — the user hears the
@@ -44,6 +105,10 @@ describe("TitleBar section tabs", () => {
     );
     const tabs = screen.getAllByRole("tab");
     expect(tabs.filter((tab) => tab.tabIndex === 0)).toEqual([screen.getByTestId(`section-tab-${SECTION_IDS.LIGHTS}`)]);
+    // The open tab names the page it controls; the others control nothing on screen.
+    expect(tabs.filter((tab) => tab.hasAttribute("aria-controls")).map((tab) => tab.getAttribute("aria-controls"))).toEqual([
+      SECTION_PANEL_ID,
+    ]);
 
     tabs[0]!.focus();
     fireEvent.keyDown(tabs[0]!, { key: "ArrowRight" });
@@ -56,5 +121,45 @@ describe("TitleBar section tabs", () => {
 
     fireEvent.click(tabs[1]!);
     expect(onSectionChange).toHaveBeenCalledWith(SECTION_ORDER[1]);
+  });
+});
+
+describe("TitleBar window controls on Windows", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("drops the zoom button in compact and keeps it in full", () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Windows NT 10.0)");
+    const view = render(<TitleBar uiMode="compact" onSwitchUIMode={() => {}} />);
+    expect(screen.queryByLabelText("shell:titleBar.maximize")).toBeNull();
+    expect(screen.getByLabelText("shell:titleBar.minimize")).toBeTruthy();
+    expect(screen.getByLabelText("shell:titleBar.close")).toBeTruthy();
+
+    view.rerender(
+      <TitleBar uiMode="full" onSwitchUIMode={() => {}} activeSection={SECTION_IDS.LIGHTS} onSectionChange={() => {}} />,
+    );
+    expect(screen.getByLabelText("shell:titleBar.maximize")).toBeTruthy();
+  });
+});
+
+describe("TitleBar double-click in compact", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // tao answers Linux's maximizable flag with true whatever it is set to.
+  it("never reaches Tauri's script, which would zoom the window", () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (X11; Linux x86_64)");
+    const seen: number[] = [];
+    const listener = (event: MouseEvent) => seen.push(event.detail);
+    document.addEventListener("mousedown", listener);
+    const view = render(<TitleBar uiMode="compact" onSwitchUIMode={() => {}} />);
+    const bar = view.container.querySelector<HTMLElement>("[data-tauri-drag-region]")!;
+    fireEvent.mouseDown(bar, { button: 0, detail: 1 });
+    fireEvent.mouseDown(bar, { button: 0, detail: 2 });
+    document.removeEventListener("mousedown", listener);
+
+    expect(seen).toEqual([1]);
   });
 });

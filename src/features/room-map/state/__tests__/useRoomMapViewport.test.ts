@@ -27,6 +27,17 @@ describe("computeFit", () => {
     expect(fit.panOffset.y).toBeCloseTo((400 - roomH) / 2, 5);
   });
 
+  it("keeps the room clear of what floats over the top and bottom, centred in what is left", () => {
+    // 840×560 with a 48 px top and a 112 px bottom inset leaves 400 px of height: as the plain
+    // 840×400 canvas, shifted down by the top inset.
+    const plain = computeFit(840, 400, 5, 4, 20);
+    const inset = computeFit(840, 560, 5, 4, 20, { top: 48, bottom: 112 });
+
+    expect(inset.zoom).toBeCloseTo(plain.zoom, 5);
+    expect(inset.panOffset.x).toBeCloseTo(plain.panOffset.x, 5);
+    expect(inset.panOffset.y).toBeCloseTo(plain.panOffset.y + 48, 5);
+  });
+
   it("respects the padding by shrinking the usable box on both sides", () => {
     const tight = computeFit(840, 400, 5, 4, 0);
     const padded = computeFit(840, 400, 5, 4, 20);

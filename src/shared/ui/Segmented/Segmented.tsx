@@ -12,6 +12,8 @@ export interface SegmentedOption<T extends string> {
   ariaLabel?: string;
   lang?: string;
   testId?: string;
+  /** Its `data-flip-id`, for a `useFlip` around the group. */
+  flipId?: string;
   className?: string;
   style?: CSSProperties;
 }
@@ -69,6 +71,7 @@ export function Segmented<T extends string>({
           aria-label={option.ariaLabel}
           lang={option.lang}
           data-testid={option.testId}
+          data-flip-id={option.flipId}
         >
           {option.label}
         </button>

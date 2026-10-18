@@ -4,7 +4,9 @@ import { SECTION_IDS } from "../../src/shared/contracts/shell";
 import { LIGHTING_MODE_KIND } from "../../src/shared/contracts/mode";
 import type { UIMode } from "../../src/shared/contracts/shell";
 import {
+  activeModeKind,
   attribute,
+  chooseMode,
   clickTestId,
   currentUiMode,
   drainErrors,
@@ -49,32 +51,30 @@ describe("app shell", () => {
     }
   });
 
-  it("marks exactly one mode as active", async () => {
+  it("shows exactly one mode as running", async () => {
     await switchUiMode("compact");
 
-    const pressed = await Promise.all(
-      MODE_KINDS.map((kind) =>
+    const lit = await Promise.all(
+      MODE_KINDS.filter((kind) => kind !== LIGHTING_MODE_KIND.OFF).map((kind) =>
         attribute(`[data-testid="mode-button-${kind}"]`, "aria-checked"),
       ),
     );
-
-    expect(pressed.filter((value) => value === "true")).toHaveLength(1);
+    const on = (await attribute(`[data-testid="mode-button-${LIGHTING_MODE_KIND.OFF}"]`, "aria-checked")) === "true";
+    // Off is the power switch unchecked, with no lit mode checked; on, exactly one lit mode is.
+    expect(lit.filter((value) => value === "true")).toHaveLength(on ? 1 : 0);
   });
 
   // Off is the one transition driveable on a machine with no LED controller and
   // no bridge; Ambilight and Solid are gated on a reachable output target.
-  it("drives the state machine through the Off button", async () => {
+  it("drives the state machine through the power switch", async () => {
     await switchUiMode("compact");
-    await clickTestId(`mode-button-${LIGHTING_MODE_KIND.OFF}`);
+    await chooseMode(LIGHTING_MODE_KIND.OFF);
 
-    await browser.waitUntil(
-      async () =>
-        (await attribute(
-          `[data-testid="mode-button-${LIGHTING_MODE_KIND.OFF}"]`,
-          "aria-checked",
-        )) === "true",
-      { timeout: 15_000, interval: 100, timeoutMsg: "Off never became active" },
-    );
+    await browser.waitUntil(async () => (await activeModeKind()) === LIGHTING_MODE_KIND.OFF, {
+      timeout: 15_000,
+      interval: 100,
+      timeoutMsg: "Off never became active",
+    });
   });
 
   it("round-trips compact → full → compact", async () => {

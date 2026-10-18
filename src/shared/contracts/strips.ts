@@ -11,7 +11,9 @@ import type {
   WledUdpSinkConfig,
 } from "./device";
 
-/** Opaque and stable. A strip that already has a room-map placement keeps that placement's id. */
+/** Opaque and stable. A first strip borrows the id of the room-map placement on its port, but the
+ *  borrowed id is a name, not a link: a connect can move the strip to another port while the
+ *  placement stays on its own. Which placement draws which strip is matched by port. */
 export type StripId = string;
 
 /** The id a strip gets when no room-map placement names one. */

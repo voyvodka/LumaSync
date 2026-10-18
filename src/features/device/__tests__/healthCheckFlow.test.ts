@@ -2,21 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import { FIRMWARE_PIXEL_LAYOUT, FIRMWARE_PROFILE } from "@/shared/contracts/device";
 import { withRegistry } from "./support/fakeRegistry";
-import type { HealthCheckResult, SerialPortListResponse } from "../deviceConnectionApi";
+import { listResponse } from "./support/portList";
+import type { HealthCheckResult } from "../deviceConnectionApi";
 import type { FirmwareProfileEventBus } from "../firmwareProfileEvents";
 import { createDeviceConnectionController } from "../state/deviceConnectionController";
 import type { DeviceConnectionControllerDeps } from "@/features/device/state/connectionTypes";
-
-function listResponse(ports: SerialPortListResponse["ports"]): SerialPortListResponse {
-  return {
-    status: {
-      code: "LIST_PORTS_OK",
-      message: "ok",
-      details: null,
-    },
-    ports,
-  };
-}
 
 function healthResult(pass: boolean): HealthCheckResult {
   return {

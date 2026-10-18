@@ -18,8 +18,8 @@ mod sink;
 mod wire;
 
 pub use correction::{
-    apply_color_correction_rgb, apply_saturation_to_pixel, scale_brightness, ColorCorrectionConfig,
-    EncoderPlan,
+    apply_color_correction_rgb, apply_saturation_to_pixel, kelvin_to_rgb_multipliers,
+    scale_brightness, ColorCorrectionConfig, EncoderPlan,
 };
 pub use encode::encode_packet_for_output;
 pub use serial::LedOutputBridge;

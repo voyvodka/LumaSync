@@ -5,9 +5,9 @@
  * are shared with the backend rather than re-derived here:
  *
  *   - strip order: `buildLedSequence` (calibration/model/indexMapping), the
- *     mirror of `build_led_sequence` in led_calibration.rs. The enriched
- *     `EdgeSignalPayload.leds` buffer is emitted in that order, so the array
- *     position here IS the strip index into `leds`.
+ *     mirror of `build_led_sequence` in led_calibration.rs. A twin frame's
+ *     LEDs come in that order, so the array position here IS the strip index
+ *     into `leds`.
  *   - screen position: `ledScreenPosition`, the mirror of `led_to_screen_pos`,
  *     where the worker centres each LED's sampling window.
  *
@@ -22,18 +22,17 @@
  *   - Bottom edge: local 0 = RIGHT,  p-1 = LEFT   (R → L)
  *   - Left edge:   local 0 = BOTTOM, q-1 = TOP    (B → T)
  *
- * The sampler ignores `bottomMissing` — bottom LEDs spread across the whole
- * bottom edge — so the twin does too. The calibration editor still draws the
- * physical gap: that is a picture of the strip, this is a picture of what each
- * LED shows.
+ * Each edge's LED pitches spread end to end; the bottom counts the stand gap
+ * (`bottomMissing`) among its pitches, so its LEDs sit either side of the gap
+ * where LED Setup draws them — and sample the screen above where they are.
  */
 
 import { buildLedSequence, type LedSequenceItem } from "../calibration/model/indexMapping";
-import type {
-  LedCalibrationConfig,
-  LedSegmentCounts,
-  LedSegmentKey,
-} from "../calibration/model/contracts";
+import type { LedCalibrationConfig, LedSegmentKey } from "../calibration/model/contracts";
+import { gapRightCount } from "../calibration/model/startPoint";
+
+/** What an LED's place depends on: the edge counts and the stand gap. */
+export type StripPlacement = Pick<LedCalibrationConfig, "counts" | "bottomMissing">;
 
 /** How far the dot row sits in from the viewport edge (fraction of W/H). */
 const EDGE_INSET = 0.022;
@@ -42,8 +41,8 @@ const CORNER_INSET = 0.05;
 
 export interface TwinLedPosition {
   /**
-   * Strip index — `twin LED #N === strip LED #N`. Indexes directly into the
-   * enriched `EdgeSignalPayload.leds` buffer.
+   * Strip index — `twin LED #N === strip LED #N`. Indexes directly into a
+   * twin frame's `leds`.
    */
   index: number;
   /** Which calibrated edge this LED lives on. */
@@ -56,14 +55,19 @@ export interface TwinLedPosition {
 
 /**
  * Normalized centre of the screen window an LED samples, `(0, 0)` top-left.
- * A one-LED edge sits at its local-0 corner, as it does in the backend.
+ * A one-LED edge sits at its middle, as it does in the backend and in LED Setup.
  */
 export function ledScreenPosition(
   item: Pick<LedSequenceItem, "segment" | "localIndex">,
-  counts: LedSegmentCounts,
+  { counts, bottomMissing }: StripPlacement,
 ): { x: number; y: number } {
   const count = counts[item.segment];
-  const frac = item.localIndex === 0 || count <= 1 ? 0 : item.localIndex / (count - 1);
+  // A gap needs an LED on each side; the bottom runs right to left, and the
+  // LEDs past the right-hand run sit beyond it.
+  const gap = item.segment === "bottom" && count >= 2 ? bottomMissing : 0;
+  const pitches = count + gap;
+  const pitch = gap > 0 && item.localIndex >= gapRightCount(count) ? item.localIndex + gap : item.localIndex;
+  const frac = pitches <= 1 ? 0.5 : pitch === 0 ? 0 : pitch / (pitches - 1);
   switch (item.segment) {
     case "top":
       return { x: frac, y: 0 };
@@ -92,9 +96,8 @@ function acrossEdge(value: number): number {
  * `result[N]` is the screen position of strip LED #N.
  */
 export function computeTwinLedPositions(config: LedCalibrationConfig): TwinLedPosition[] {
-  const { counts } = config;
   return buildLedSequence(config).map((item, stripIndex) => {
-    const { x, y } = ledScreenPosition(item, counts);
+    const { x, y } = ledScreenPosition(item, config);
     const horizontal = item.segment === "top" || item.segment === "bottom";
     return {
       index: stripIndex,

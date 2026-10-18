@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  decorLightObjectId,
   furnitureObjectId,
   hueChannelObjectId,
   imageLayerObjectId,
@@ -27,6 +28,7 @@ describe("parseObjectId", () => {
     expect(parseObjectId(usbStripObjectId("s1"))).toEqual({ kind: "usb", stripId: "s1" });
     expect(parseObjectId(hueChannelObjectId(3))).toEqual({ kind: "hue", channelIndex: 3 });
     expect(parseObjectId(imageLayerObjectId("i1"))).toEqual({ kind: "image", layerId: "i1" });
+    expect(parseObjectId(decorLightObjectId("living"))).toEqual({ kind: "decor", structureId: "living" });
     expect(parseObjectId(TV_ANCHOR_OBJECT_ID)).toEqual({ kind: "tv" });
   });
 

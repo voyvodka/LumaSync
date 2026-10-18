@@ -22,7 +22,7 @@ export type ChoiceAnswer = Pick<ApplyOutputsResult, "status" | "outcome">;
  * gate refused outright borrows the output bucket's copy, while a strip it
  * kept out beside Hue is `usbLeftOut`'s to name, since the mode runs; a failed
  * Solid start is named only for an output reason, because every other
- * bucket's copy is about screen capture.
+ * bucket's copy is about screen capture. A failed effect start is read the same way.
  */
 export function startFailureNotice(result: ChoiceAnswer): CaptureFailureNotice | null {
   const apply = result.outcome.applyStatus;
@@ -30,6 +30,8 @@ export function startFailureNotice(result: ChoiceAnswer): CaptureFailureNotice |
   switch (apply.code) {
     case LIGHTING_MODE_STATUS.AMBILIGHT_MODE_START_FAILED:
       return describeCaptureFailure(apply.details);
+    // An effect captures nothing, so like Solid only an output reason is its to name.
+    case LIGHTING_MODE_STATUS.EFFECT_MODE_START_FAILED:
     case LIGHTING_MODE_STATUS.SOLID_MODE_APPLY_FAILED: {
       const notice = describeCaptureFailure(apply.details);
       return notice.bucket === CAPTURE_FAILURE_BUCKET.OUTPUT ? notice : null;

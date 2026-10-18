@@ -1,0 +1,52 @@
+@layer components {
+  /* A value at rest that looks like one you can open: no frame, a quiet chevron. */
+  .button {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    min-width: 0;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--lm-ink);
+    font: 500 12px/1 var(--lm-sans);
+    transition: background var(--lm-dur-quick);
+  }
+  .button:hover:not(:disabled),
+  .open { background: rgb(255 255 255 / 4%); }
+  .button:focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--lm-focus-ring-inset);
+  }
+  .button:disabled { color: var(--lm-ink-faint); cursor: not-allowed; }
+
+  .mark { display: grid; flex-shrink: 0; place-items: center; }
+  .value {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chevron {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    color: var(--lm-ink-faint);
+    transform: rotate(180deg);
+    transition: transform var(--lm-dur-base) var(--lm-ease-out), color var(--lm-dur-quick);
+  }
+  .button:hover:not(:disabled) .chevron { color: var(--lm-ink-dim); }
+  .open .chevron { transform: none; color: var(--lm-ink-dim); }
+
+  :global(:root[data-reduced-motion]) .button,
+  :global(:root[data-reduced-motion]) .chevron { transition: none; }
+
+  @media (forced-colors: active) {
+    .open { outline: 1px solid Highlight; }
+  }
+}

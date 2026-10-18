@@ -73,6 +73,7 @@ export interface DevicesPageProps {
   onVisibleCategoryChange?: (category: DeviceCategory | null) => void;
   /** A bridge is paired and Hue is streaming: the bridge row's dot. */
   hueActive?: boolean;
+  onWledConnected?: () => void;
 }
 
 export function DevicesPage({
@@ -86,6 +87,7 @@ export function DevicesPage({
   categoryRequest = null,
   onVisibleCategoryChange,
   hueActive = false,
+  onWledConnected,
 }: DevicesPageProps) {
   const { t } = useTranslation();
 
@@ -97,11 +99,11 @@ export function DevicesPage({
   const { selectedAreaId } = hue;
   // The controller scans what is plugged in as it starts, and the port watcher keeps the list in step.
   const { connectedPort } = device;
-  const wled = useActiveWledSink();
+  const wled = useActiveWledSink({ onUserConnected: onWledConnected });
   const { activeWledIp } = wled;
 
   // -------------------------------------------------------------------------
-  // Channel placement persistence (D-05a)
+  // Channel placement persistence
   // -------------------------------------------------------------------------
 
   const [channelPlacements, setChannelPlacements] = useState<HueChannelPlacement[]>([]);
@@ -238,15 +240,15 @@ export function DevicesPage({
       : updated;
     setChannelPlacements(scoped);
     try {
-      const current = await shellStore.load();
-      const currentRoomMap = current.roomMap;
-      const updatedRoomMap: RoomMapConfig = {
-        ...(currentRoomMap ?? DEFAULT_ROOM_MAP),
-        hueChannels: mergeHueChannels(currentRoomMap?.hueChannels ?? [], scoped),
-      };
-      await shellStore.save({
-        roomMap: updatedRoomMap,
-        roomMapVersion: (current.roomMapVersion ?? 0) + 1,
+      // Through `update`, not load-then-save: a save replaces the whole
+      // `roomMap` key, so a USB strip or LED count written between the read
+      // and the save would be reverted.
+      await shellStore.update((current) => {
+        const roomMap: RoomMapConfig = {
+          ...(current.roomMap ?? DEFAULT_ROOM_MAP),
+          hueChannels: mergeHueChannels(current.roomMap?.hueChannels ?? [], scoped),
+        };
+        return { roomMap };
       });
       hueChannelPersistError.clear();
     } catch (e) {
@@ -271,13 +273,12 @@ export function DevicesPage({
       const areaId = selectedAreaId;
       setSyncedPositions(snapshot);
       try {
-        const current = await shellStore.load();
-        await shellStore.save({
+        await shellStore.update((current) => ({
           hueBridgeSyncedPositions: {
             ...(current.hueBridgeSyncedPositions ?? {}),
             [areaId]: snapshot,
           },
-        });
+        }));
       } catch (e) {
         console.error("[LumaSync] handleSyncedPositionsChange failed", e);
       }
@@ -406,6 +407,7 @@ export function DevicesPage({
                 otherPorts={otherPorts}
                 device={device}
                 onWledBound={wled.markConnected}
+                boundWledIp={activeWledIp}
                 replaces={null}
                 onAdded={setArriving}
               />
@@ -433,6 +435,7 @@ export function DevicesPage({
                 otherPorts={otherPorts}
                 device={device}
                 onWledBound={wled.markConnected}
+                boundWledIp={activeWledIp}
                 replaces={replaces}
                 onAdded={setArriving}
               />

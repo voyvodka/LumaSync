@@ -3,6 +3,8 @@ import { shellStore } from "@/features/persistence/shellStore";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 import { parseCommandError } from "@/shared/contracts/status";
+import { mergeEditorSave } from "../model/roomMapMerge";
+import { cubeZones } from "../model/zoneCube";
 import { applyRoomTemplate } from "../model/roomTemplate";
 import {
   GESTURE_COALESCE_MS,
@@ -33,10 +35,17 @@ export interface UseRoomMapStateReturn {
   redo: () => void;
   select: (objectId: string | null) => void;
   selectHueZone: (hueZoneId: string | null) => void;
+  /** Neither an object nor a zone: back to the palette. */
+  clearSelection: () => void;
   canUndo: boolean;
   canRedo: boolean;
   loading: boolean;
   error: string | null;
+  /** The stored map could not be read: nothing may be written over it until a reload reads it. */
+  loadFailed: boolean;
+  reload: () => void;
+  /** Writes the map as it is now again, after a save failed. */
+  retrySave: () => void;
 }
 
 /** Config, undo history and selection for the room-map editor, in one reducer.
@@ -46,8 +55,16 @@ export function useRoomMapState(): UseRoomMapStateReturn {
   const [state, dispatch] = useReducer(roomMapReducer, undefined, initialRoomMapState);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const versionRef = useRef(0);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadTry, setLoadTry] = useState(0);
+  // The map as the editor last loaded or wrote it: a save writes only what changed since, so a
+  // strip, LED count or channel another writer stored meanwhile survives (`mergeEditorSave`).
+  // Read when a save runs, not when it is asked for: a save queued behind one that fails must
+  // write whole, or the failed one's edit never reaches the file.
+  const writtenRef = useRef<RoomMapConfig | null>(DEFAULT_ROOM_MAP);
+  const savingRef = useRef<Promise<void> | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a reload is the trigger.
   useEffect(() => {
     let cancelled = false;
     shellStore
@@ -74,8 +91,11 @@ export function useRoomMapState(): UseRoomMapStateReturn {
             delete loaded.backgroundOffsetY;
             delete loaded.backgroundScale;
           }
-          dispatch({ type: "hydrate", config: loaded });
-          versionRef.current = stored.roomMapVersion ?? 0;
+          // A file written while zones were cubes in Hue units, or by an older build after 11 → 12, can
+          // hold zones that are not cubes in metres.
+          dispatch({ type: "hydrate", config: cubeZones(loaded) });
+          // The stored map as it is, not the converted copy, so the conversion reaches the file.
+          writtenRef.current = stored.roomMap;
         }
         setLoading(false);
       })
@@ -83,25 +103,52 @@ export function useRoomMapState(): UseRoomMapStateReturn {
         if (cancelled) return;
         const reason = parseCommandError(err).message;
         console.error(`[LumaSync] Room map load failed: ${reason}`);
-        setError(reason);
+        setLoadFailed(true);
         setLoading(false);
       });
     return () => {
       cancelled = true;
     };
+  }, [loadTry]);
+
+  const reload = useCallback(() => {
+    setLoadFailed(false);
+    setLoading(true);
+    setLoadTry((n) => n + 1);
   }, []);
 
-  const persist = useCallback(async (next: RoomMapConfig) => {
-    try {
-      versionRef.current += 1;
-      await shellStore.save({ roomMap: next, roomMapVersion: versionRef.current });
-      setError(null);
-    } catch (err) {
-      const reason = parseCommandError(err).message;
-      console.error(`[LumaSync] Room map save failed: ${reason}`);
-      setError(reason);
-    }
+  const persist = useCallback((next: RoomMapConfig) => {
+    const run = async () => {
+      const base = writtenRef.current;
+      try {
+        await shellStore.update((current) => ({
+          roomMap: mergeEditorSave(current.roomMap ?? DEFAULT_ROOM_MAP, base, next),
+        }));
+        writtenRef.current = next;
+        setError(null);
+      } catch (err) {
+        writtenRef.current = null;
+        const reason = parseCommandError(err).message;
+        console.error(`[LumaSync] Room map save failed: ${reason}`);
+        setError(reason);
+      }
+    };
+    // One after another, so a later save never lands before an earlier one; the first starts at
+    // once, so the unmount flush is under way before the editor is gone.
+    const queued = savingRef.current;
+    const saving = queued === null ? run() : queued.then(run);
+    savingRef.current = saving;
+    void saving.finally(() => {
+      if (savingRef.current === saving) savingRef.current = null;
+    });
+    return saving;
   }, []);
+
+  const configRef = useRef(state.config);
+  configRef.current = state.config;
+  const retrySave = useCallback(() => {
+    void persist(configRef.current);
+  }, [persist]);
 
   const pendingRef = useRef<RoomMapConfig | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -170,6 +217,7 @@ export function useRoomMapState(): UseRoomMapStateReturn {
     (hueZoneId: string | null) => dispatch({ type: "selectHueZone", hueZoneId }),
     [],
   );
+  const clearSelection = useCallback(() => dispatch({ type: "clearSelection" }), []);
 
   return {
     config: state.config,
@@ -183,9 +231,13 @@ export function useRoomMapState(): UseRoomMapStateReturn {
     redo,
     select,
     selectHueZone,
+    clearSelection,
     canUndo: state.past.length > 0,
     canRedo: state.future.length > 0,
     loading,
     error,
+    loadFailed,
+    reload,
+    retrySave,
   };
 }

@@ -1,0 +1,35 @@
+@layer components {
+  /* The twin is decorative and click-through; it keeps exact LED colour even
+     under forced colours, since mirroring the strip is its whole job. */
+  .root {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    background: transparent;
+    pointer-events: none;
+    forced-color-adjust: none;
+  }
+
+  .layer {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Centred on the point the layout gives; a lamp sampling the very edge stays whole on screen.
+     Square where an LED is round, and ringed like one so any picture behind it leaves it readable.
+     No transition on its colour: the twin snaps to each frame. */
+  .hueChip {
+    position: absolute;
+    left: clamp(13px, var(--lamp-x), calc(100% - 13px));
+    top: clamp(13px, var(--lamp-y), calc(100% - 13px));
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 0.12),
+      0 0 0 4px rgb(11 13 17 / 0.92);
+    transform: translate(-50%, -50%);
+  }
+}

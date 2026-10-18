@@ -1,0 +1,100 @@
+@layer components {
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+
+  .tile {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+    padding: 5px 5px 6px;
+    border-radius: 8px;
+    border: 1px solid var(--lm-line-2);
+    background: var(--lm-panel);
+    color: var(--lm-ink-dim);
+    font: inherit;
+    cursor: pointer;
+    transition: color var(--lm-dur-quick) var(--lm-ease-out), border-color var(--lm-dur-quick) var(--lm-ease-out);
+  }
+  .tile:hover { color: var(--lm-ink); }
+  .tile:focus-visible { outline: 2px solid transparent; box-shadow: var(--lm-focus-ring); }
+  /* An amber edge, like a chosen effect: the mode strip below holds the one amber fill. */
+  .tile[aria-pressed="true"] {
+    color: var(--lm-ink);
+    border-color: rgba(255, 176, 32, 0.5);
+  }
+
+  /* A still of the scene, drawn in CSS: the tile says what plays without words. */
+  .swatch {
+    position: relative;
+    display: block;
+    height: 34px;
+    border-radius: 5px;
+    background: rgb(0 0 0);
+    forced-color-adjust: none;
+  }
+  .swatch[data-scene="edgeTour"] {
+    background:
+      linear-gradient(rgb(255 42 42) 0 0) 12% 0 / 36% 16% no-repeat,
+      linear-gradient(rgb(42 255 74) 0 0) 100% 28% / 9% 38% no-repeat,
+      linear-gradient(rgb(42 107 255) 0 0) 72% 100% / 36% 16% no-repeat,
+      linear-gradient(rgb(255 194 26) 0 0) 0 74% / 9% 38% no-repeat,
+      rgb(0 0 0);
+  }
+  .swatch[data-scene="spiral"] {
+    background: conic-gradient(from 0deg, rgb(255 42 42), rgb(255 210 26), rgb(42 255 74), rgb(26 230 255), rgb(42 107 255), rgb(230 42 255), rgb(255 42 42));
+  }
+  .swatch[data-scene="sunset"] {
+    background:
+      radial-gradient(circle at 42% 58%, rgb(255 233 168) 0 9%, transparent 10%),
+      linear-gradient(rgb(31 43 92), rgb(184 87 58) 55%, rgb(243 155 82) 66%, rgb(58 32 38) 68%, rgb(11 11 20));
+  }
+  .swatch[data-scene="colorFields"] {
+    background:
+      radial-gradient(circle at 24% 32%, rgb(255 42 58), transparent 48%),
+      radial-gradient(circle at 76% 38%, rgb(42 107 255), transparent 48%),
+      radial-gradient(circle at 52% 84%, rgb(42 255 106), transparent 52%),
+      rgb(6 6 10);
+  }
+  .swatch[data-scene="letterbox"] {
+    background:
+      linear-gradient(rgb(0 0 0) 0 20%, transparent 20% 80%, rgb(0 0 0) 80%),
+      radial-gradient(circle at 30% 50%, rgb(255 122 42), transparent 45%),
+      radial-gradient(circle at 70% 50%, rgb(42 139 255), transparent 45%),
+      rgb(6 6 10);
+  }
+  .swatch[data-scene="latency"] {
+    background: linear-gradient(90deg, rgb(0 0 0) 0 50%, rgb(240 240 240) 50%);
+  }
+  /* The playing tile's swatch carries a stop square: its press ends the scene. */
+  .tile[aria-pressed="true"] .swatch::after {
+    content: "";
+    position: absolute;
+    inset: 50% auto auto 50%;
+    width: 18px;
+    height: 18px;
+    margin: -9px 0 0 -9px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.6) linear-gradient(var(--lm-ink) 0 0) center / 7px 7px no-repeat;
+  }
+
+  .name {
+    font-size: 11.5px;
+    line-height: 1.25;
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+
+  :global(:root[data-reduced-motion]) .tile {
+    transition: none;
+  }
+
+  @media (forced-colors: active) {
+    .tile { border-color: CanvasText; }
+    .tile[aria-pressed="true"] { outline: 2px solid Highlight; }
+    .tile:focus-visible { outline-color: Highlight; outline-offset: 2px; }
+  }
+}

@@ -160,7 +160,7 @@ pub struct HealthCheckResult {
     ///
     /// Distinct from `ShellState.firmwareProfile` (user-selected encoder).
     /// The Settings UI compares the two so the dropdown can disable the
-    /// incompatible option (Bug H4 — v1.5).
+    /// incompatible option.
     /// Populated only on a successful handshake.
     pub advertised_firmware_profile: Option<FirmwareProfile>,
     /// The whole accepted PONG, pixel layout included.
@@ -932,6 +932,8 @@ fn handshake_error_ui_message(err: &HandshakeError) -> (String, String) {
     }
 }
 
+// Not `CommandStatus::new`: `verify:shell-contracts` harvests the serial wire
+// union from `command_status("CODE"` literals here and in `local_outputs.rs`.
 pub fn command_status(code: &str, message: &str, details: Option<String>) -> CommandStatus {
     CommandStatus {
         code: code.to_string(),

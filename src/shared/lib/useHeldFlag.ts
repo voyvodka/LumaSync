@@ -25,6 +25,18 @@ export function useHeldFlag(active: boolean, minMs: number = BUSY_MIN_MS): boole
   return active || holding;
 }
 
+/** `active`, but only once it has stayed true for `delayMs`: a state that clears quickly never shows. */
+export function useLateFlag(active: boolean, delayMs: number): boolean {
+  const [late, setLate] = useState(false);
+  if (!active && late) setLate(false);
+  useEffect(() => {
+    if (!active) return;
+    const timer = setTimeout(() => setLate(true), delayMs);
+    return () => clearTimeout(timer);
+  }, [active, delayMs]);
+  return active && late;
+}
+
 /** `value`, frozen while `hold` is true: what was shown stays put through a retry instead of closing and reopening. */
 export function useHeldValue<T>(value: T, hold: boolean): T {
   const [kept, setKept] = useState(value);

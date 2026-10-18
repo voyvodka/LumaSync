@@ -81,10 +81,43 @@ once, closes the port before reporting the writer gone, and waits at most `OUTPU
 once its two ping-pong buffers have grown; the allocation guard runs the production writer to prove
 it (`capture-and-pipeline.md`).
 
+**Which strips are driven is resolved once per apply: `resolve_strips` → `StripSet`
+(`lighting_mode/strip_set.rs`).** It matches the registry's connected outputs, in connect order, to
+the saved `ledStrips` — a port by name, a WLED device by its address alone, as binding the same
+device again keeps its place whatever port or LED count its saved sink carries. Every connected
+output is driven, with its strip or with none (a port connected before a strip was saved for it is
+driven as it always was); a saved strip that matches no connected output is left out as
+`NotConnected`, and a second one on a port already taken as `DuplicateTransport`. The mode is for
+one of them (`payload_index`): the saved primary — the first enabled saved strip, the one every
+setting with no strip named applies to — when it is connected, else the earliest connected, so a
+setup whose primary is unplugged still lights the strip that is there. `plan_args` is that strip's
+channel arguments. Before, the earliest connected took the mode whatever was saved, and with two
+connected the first port in could be sent the other strip's layout. An Ambilight run also drives the
+strips `fan_out` lets beside it: saved, enabled, laid out with more than one LED, on a serial port
+like the mode's own — checked in that order and named when one is left out (`Disabled`, `NoLayout`,
+`InvalidLayout`, `OtherTransport`); a connected port no strip names is not driven beside it. Each runs
+from its own saved layout, profile, chip and colour order, and the one top-level colour correction;
+a strip's own copy of the correction is not read yet. An effect, a test pattern, a preview scene and
+a latency run stay on the mode's strip alone, an effect until its engine draws per strip, and a WLED
+device beside another waits until it can be switched off when let go. A caller that names its own
+output (`for_plan`: a stop, a test calling the transition directly) gets that output alone. The
+runtime owner keeps what each run actually started (`active_strips`, `active_ports`), not what it
+asked for: a strip beside the mode's that would not open or take its first frame is left out with a
+warning and the run goes on, while the mode's own strip failing still fails the run. A retune keeps
+the worker only when the next apply would ask for the same strips beside it, in the same order. A strip
+that was asked for but dropped at start therefore stays out through a plain refresh — a reconnect of
+the same port included — until the strip or the mode changes; toggling the mode brings it back. A run
+on the mode's strip alone by its kind (an effect, a test pattern, a scene, a latency run) paints the
+strips beside it black but keeps their sessions, so the Ambilight it hands back to finds them warm
+instead of reopening each port and resetting its board; a Solid lets them go. Known gap, older than
+the fan-out: a switch from a serial strip to a WLED device or to Hue alone keeps the old serial
+sessions held.
+
 **One registry holds what is connected: `LocalOutputRegistry` (`local_outputs.rs`).** It keeps a
 status per serial port that passed admission (connected, failed, lost, let go of) and the bound WLED
-device, and `driven()` is the one place the "earliest connected" rule lives — the mode plan, the Off
-blank, a retune, the test pattern and the launch's wait for a strip all ask it.
+device, and the connect order lives there alone: `connected_outputs()` lists every connected output
+earliest first, and `driven()` is its first — the Off blank, a retune and the launch's wait for a
+strip ask that.
 It replaced a single serial status that every connect attempt overwrote and a sink slot that stored a
 `Box<dyn LedSink>` nothing ever wrote to. That split had three faults: a failed serial attempt emptied
 the slot and unbound a working WLED device the UI still showed, binding WLED never marked the serial
@@ -97,9 +130,9 @@ the snapshot in one store (`features/device/state/localOutputsStore.ts`) that li
 read — a change between the two is then in the read or in a later event — and keeps the newest
 revision it has seen, since events are sent outside the lock and can arrive out of order. A failed
 attempt on a port that is connected leaves it connected: two reconnects of one port race on the
-open, and the loser must not mark the strip that lights as off. Several outputs can be connected, but
-one is driven until the worker drives several: the earliest connected (a connect stamps its place;
-connecting a connected port again keeps it). A connect never moves the drive — a strip lighting a
+open, and the loser must not mark the strip that lights as off. Several outputs can be connected; the
+registry's own `driven` is the earliest connected (a connect stamps its place; connecting a connected
+port again keeps it), and what a mode drives is the strip set above. A connect never moves the drive — a strip lighting a
 running mode keeps lighting it when a WLED device is bound beside it — only a leave does, and every
 leave (`let_go` in `local_outputs.rs`: a disconnect, a WLED forget, an unplug the watcher sees) runs
 the same way: if the running mode wrote to what left, it re-applies onto the earliest that remains
@@ -222,8 +255,9 @@ Identify flow (`useColorOrderIdentify.ts`) runs one `channelProbe` per slot and 
 answers as read. It applies in a fixed order: save, then stop the probe, then retune. Stopping
 restores the prior mode with its stamps re-read from disk, so the save must land first; the retune
 must wait for the stop, or it would reach the test rather than the restored mode. It only sends a
-stop after a start reported itself active — a stop with no test running restores nothing and turns
-the lights off.
+stop after a start reported itself active. A stop with no test running used to restore nothing and
+turn the lights off; it now answers and leaves the lights alone (`lighting-transaction.md`, "A test
+pattern is not the mode").
 
 **Nothing makes the frame length and the panel's length agree, so the sink says so once.** The
 frame is sized by the LED calibration and the panel by its own configuration, and the two are
@@ -252,9 +286,12 @@ nothing else: `SerialSink::stop` writes nothing, so the strip kept the last fram
 unless its firmware blanks on its own after a quiet spell, and a Solid colour stayed up
 indefinitely. A WLED device held the last frame until it left realtime mode (the DRGB packet asks
 for 2 s; DDP uses the device's own timeout), then went back to its own effect or preset — lit.
-Now, once the mode has stopped, `blank_usb_after_off` sends one all-black frame through the same
-Solid path (`SolidUsbOutput::blank`), so profile, chip type, colour order and length all apply and
-the cached serial session is reused rather than reopened. Black pixels at full brightness rather
+Now, once the mode has stopped, `blank_usb_after_off` sends one all-black frame to every strip the
+run drove through the same Solid path (`SolidUsbOutput::blank`), each from the record the run left
+(`ended_run`), so its own profile, chip type, colour order and length apply and its cached serial
+session is reused rather than reopened. A port let go of while lit, by a switch or an unplug, is
+blanked the same way from its record; a Solid after a run of several strips blanks and releases the
+ones beside its own. Black pixels at full brightness rather
 than a zero brightness byte: a firmware may read brightness 0 as "unchanged", never a black pixel as
 anything but off. For WLED the black frame covers the realtime window and
 `power_off_wled` (`wled_discovery.rs`) then sends `POST /json/state {"on":false}`, so the device
@@ -265,6 +302,23 @@ redirects never followed, the same address guard (`parse_ipv4`) — with its own
 (`WLED_POWER_OFF_TIMEOUT`), and accepts only WLED's `{"success":true}`. A failure is logged with
 its `WledPowerOffError` variant and changes nothing else: the stream has stopped either way, and a
 device that missed the write only returns to its own effect.
+
+**A Solid colour on WLED is resent, because one frame lasted only until the realtime timeout.** Solid
+used to write one frame and stop, which suits a serial strip — it holds its last frame — but a WLED
+device leaves realtime mode once no frame has come within its timeout (2 s on DRGB, the device's own
+setting on DDP) and goes back to its own effect, so a Solid colour, and every Solid scene, reverted
+after about two seconds. Measured with a stand-in device counting datagrams: one frame on apply, then
+nothing. While Solid runs on a WLED sink, `SolidHold` (`lighting_mode/usb_output.rs`) resends the
+same frame every 500 ms from a thread that keeps one socket, through the same `CorrectedWledSink`
+correction and brightness as the first write; 500 ms rather than 1 s so a lost datagram on Wi-Fi
+does not open a gap past a 2 s window. A colour retune publishes to the hold under its lock before it
+writes, so a resend can never follow it with the old colour. The hold is created only for a WLED
+plan and only after the first write succeeded, so a serial strip pays nothing; `stop_previous` drops
+it first, joining the thread before whatever the next mode writes (see Off above). It sits outside
+the worker, so the per-frame budget does not apply to it. JSON's `/json/state` colour was the
+alternative and was not taken: it bypasses the host-side correction, is per segment where realtime
+is not, and overwrites the device's own effect and brightness. If LumaSync quits or crashes the
+device reverts within its timeout, as it does after streaming.
 
 **Forgetting a WLED device is an unplug that also forgets.** There was no way to let go of a WLED
 device at all, and once the discovery list was gone the page showed only the launch's restore note.
@@ -282,12 +336,12 @@ address.
 ## Gotchas
 
 - **Opening a serial port toggles DTR, which resets many boards.** Reconnecting on every mode change makes an Arduino-class controller reboot each time, so a cached session is deliberately preserved across mode changes — the log line `cached serial session preserved to avoid DTR-reset cycle` is that working as intended, not a leak. That preservation is scoped to the *same* port only: `set_active_port` (`lighting_mode/transition.rs`) releases the previous port's cached session via `output_bridge.disconnect_session` the moment the active port actually changes, so switching away from a port does not hold its OS handle open until the app quits. Driving several strips at once (the worker fan-out after `LocalOutputRegistry`) must carry this same release-on-switch rule, not just the DTR-preserving cache.
-- **The output path settles too, because connect drops its handle.** `connect_serial_port` opens, waits `BOOTLOADER_SETTLE_DELAY_MS`, PINGs on that same handle (`serial-protocol.md` §1.5), and drops it (`drop(handle)` in `connect_serial_port_blocking`). So the first frame reopens the port through `SerialLedPacketSender`'s factory, which is a *second* DTR assert and a second auto-reset; the session cache above only protects frame 2 onward. Frame 1 is the one the user is watching, so the same settle runs after any newly opened output handle — once per session, never per frame; per frame it would put the capture-to-output path forty times over budget. The open stays on the caller, so a port that will not open still fails that send with `LED_OUTPUT_PORT_OPEN_FAILED`, but the settle is the writer's: the session's `ready_at` holds its first byte back, and the caller returns at once. It used to be a `sleep` run by the caller under the sessions lock, which froze every other port's sends for 2 s while one opened — fatal with more than one strip — and charged the worker's first frame 2 s of send cost. Frames queued meanwhile collapse into the latest-wins slot; `send_and_wait` starts its time budget at `ready_at`; dropping the session cuts the wait short and lets the port go at once. Two consequences to read a report against: the worker's first frame now costs microseconds, so the quality controller starts at its base interval instead of seeding its average with 2 s and throttling the first frames; and the open itself is still on the caller under the sessions lock, so a driver whose `open()` hangs still holds every port for as long as that call takes — bounded by the OS, not by the settle. Latest-wins also means two `send_and_wait` calls on one port inside one settle both resolve `Ok` with only the second packet written; mode transitions stop the previous output before a Solid write, so nothing issues two today.
+- **The output path settles too, because connect drops its handle.** `connect_serial_port` opens, waits `BOOTLOADER_SETTLE_DELAY_MS`, PINGs on that same handle (`serial-protocol.md` §1.5), and drops it (`drop(handle)` in `connect_serial_port_blocking`). So the first frame reopens the port through `SerialLedPacketSender`'s factory, which is a *second* DTR assert and a second auto-reset; the session cache above only protects frame 2 onward. Frame 1 is the one the user is watching, so the same settle runs after any newly opened output handle — once per session, never per frame; per frame it would put the capture-to-output path forty times over budget. The open stays on the caller, so a port that will not open still fails that send with `LED_OUTPUT_PORT_OPEN_FAILED`, but the settle is the writer's: the session's `ready_at` holds its first byte back, and the caller returns at once. It used to be a `sleep` run by the caller under the sessions lock, which froze every other port's sends for 2 s while one opened — fatal with more than one strip — and charged the worker's first frame 2 s of send cost. Frames queued meanwhile collapse into the latest-wins slot; `send_and_wait` starts its time budget at `ready_at`; dropping the session cuts the wait short and lets the port go at once. Two consequences to read a report against: the worker's first frame now costs microseconds, so the quality controller starts at its base interval instead of seeding its average with 2 s and throttling the first frames; and the open itself is still on the caller, but no longer under the sessions lock: the caller marks the port as opening, lets go, opens, and takes the lock back to file the writer (`ensure_open` in `led_output/serial.rs`). A CH340 or FTDI open takes over 100 ms, and with two strips the other port's frames used to wait behind it on every reconnect; now only callers for the same port wait, on a condvar, and they share the one open. A disconnect that lands mid-open is remembered, and what the open returns is closed instead of filed. Latest-wins also means two `send_and_wait` calls on one port inside one settle both resolve `Ok` with only the second packet written; mode transitions stop the previous output before a Solid write, so nothing issues two today.
 - **macOS phantom serial endpoints accept `open()` and `write()` and go nowhere.** `/dev/cu.Bluetooth-Incoming-Port` and similar route to nothing — every frame "succeeds" at 20 Hz while the strip stays dark, which a user reads as a crash. This is why the allowlist rejects up front instead of trying and failing.
 - **A failed connect must not leave its port name in the connection status.** `SerialConnectionStatus.portName` is the port that was opened, and is `null` whenever `connected` is false. The refused name goes in `status.details` (`port="…"`). It used to be echoed back, and that did two kinds of damage. `apply_mode_change` (`lighting_mode/transition.rs`) planned USB output from `port_name` even while `connected` was false, so the next Solid or Ambilight start opened and wrote to a port that had just been refused `PORT_UNSUPPORTED`, which bypassed the allowlist. It also fed the room map's connection read, so it showed a refused or unplugged port as ONLINE. `failed_connect_status` in `device_connection.rs` builds every failure status and has no way to set a port name, and `apply_mode_change` now requires `connected` as well, so neither side alone can reopen the hole. The LED test pattern needed the second guard most: with no output available it sends `targets: []`, which the legacy rule reads as "USB required", and a test skips the USB gate — so only the plan stood between a stale name and the worker.
 - **macOS exposes every USB adapter under two paths, and only one of them works.** `/dev/cu.*` is the call-out device and is correct; its `/dev/tty.*` sibling is a blocking terminal device that waits on DCD, and CH340/FTDI/CP2102/Arduino boards never assert it — so the `tty.*` port opens successfully and then stalls, producing "Connect and verify: Pass" followed by a handshake timeout. Real incident, 2026-04-26. All `/dev/tty.*` paths are filtered, including `usbmodem*`, because the `cu.*` sibling always exists. The filter used to cover only the listing: connect looked names up in the raw inventory, where the `tty.*` sibling carries the same allowlisted VID:PID, so a stale or directly invoked name still opened it. Connect and the health check now refuse an enumerated `tty.*` path with `PORT_UNSUPPORTED` and name the `cu.*` path in `details`, rather than silently opening the sibling — the caller asked for a path, and quietly substituting another would hide the stale value instead of surfacing it. The filter stays macOS-only; no other platform names a serial device `/dev/tty.<name>`.
 - **A test pattern must use the same output settings as everything else** — chip type, firmware profile, colour correction, and colour order. Bypassing them means the test lights nothing, or the wrong colours, on exactly the hardware it exists to verify. This shipped broken once.
-  There is one test engine, `start_led_test_pattern`, and LED Setup and the popup both use it. LED Setup once called a separate calibration command that read a cached "connected" flag and returned "started" without building a frame, while the page showed output as active. An "output active" indicator must come from a sink that actually sent.
+  There is one test engine, `start_led_test_pattern`, and LED Setup is its one caller. LED Setup once called a separate calibration command that read a cached "connected" flag and returned "started" without building a frame, while the page showed output as active. An "output active" indicator must come from a sink that actually sent.
   **One exception: `channelProbe` pins the identity colour order.** It lights a single wire slot pure red, green or blue so the user can report which colour that slot shows, and the answer is only meaningful when nothing reorders the slots — under a saved order the probe would confirm the saved order instead of measuring the firmware. Only the order is overridden (set on the test config, and hydration is caller-wins); chip type, profile and correction still apply. A slot above 2 is refused with `LED_TEST_PATTERN_INVALID_PARAMS`.
 - **Every serial encoder corrects pixels through one `EncoderPlan`** (`led_output/correction.rs`), built from the colour correction when a `SerialSink` is constructed and once per Solid write — never per frame, because a gamma other than 2.2 costs 768 `powf`s to tabulate. A colour correction change restarts the worker, so a running sink never needs to rebuild it. The colour order is the one field patched in place (`SerialSink::set_color_order`), which touches nothing else in the plan. Before the plan existed each encoder derived its own corrections, and the default one (LumaSync v1 + WS2812B) quietly hardcoded gamma 2.2, so the gamma sliders did nothing on the most common setup. A new per-pixel stage belongs in the plan, not in one encoder.
 - **Adalight carries no brightness, so the host scales the pixels.** Third-party Adalight firmware has no brightness input, so the Adalight encoder multiplies the corrected pixels by brightness, the same way `CorrectedWledSink` does. Only LumaSync v1 frames carry a brightness byte. The slider used to do nothing under Adalight.

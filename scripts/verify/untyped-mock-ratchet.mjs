@@ -15,28 +15,18 @@
  *
  *   node scripts/verify/untyped-mock-ratchet.mjs
  */
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { stripComments, walkFiles } from "./lib/source.mjs";
+
+const walk = (dir) => walkFiles(dir, (name) => /\.tsx?$/.test(name));
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(here, "../..");
 const BASELINE_FILE = join(here, "untyped-mock-baseline.txt");
 const PATTERN = /\bvi\.fn\(\)/g;
-
-// A comment naming `vi.fn()` is not a double.
-const stripComments = (text) =>
-  text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/[^\n]*/g, "$1");
-
-function walk(dir, out = []) {
-  for (const name of readdirSync(dir)) {
-    if (name === "node_modules") continue;
-    const full = join(dir, name);
-    if (statSync(full).isDirectory()) walk(full, out);
-    else if (/\.tsx?$/.test(name)) out.push(full);
-  }
-  return out;
-}
 
 const baselineLine = readFileSync(BASELINE_FILE, "utf8")
   .split("\n")
@@ -52,6 +42,7 @@ const byFile = [];
 let count = 0;
 for (const dir of ["src", "mock", "e2e"]) {
   for (const file of walk(join(ROOT, dir))) {
+    // A comment naming `vi.fn()` is not a double.
     const hits = (stripComments(readFileSync(file, "utf8")).match(PATTERN) ?? []).length;
     if (hits > 0) {
       count += hits;

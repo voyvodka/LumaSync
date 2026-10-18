@@ -272,6 +272,23 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
 
     try {
       const response = await listHueEntertainmentAreas(bridge.ip, credentials.username);
+      // A failure comes back with the same empty list as a bridge with no
+      // areas. Reconciling it would delete the saved area and turn Start off,
+      // so only a real answer moves the selection.
+      const answered =
+        response.status.code === HUE_STATUS.AREA_LIST_OK || response.status.code === HUE_STATUS.AREA_LIST_EMPTY;
+      if (!answered) {
+        patchState((prev) => ({
+          ...prev,
+          isLoadingAreas: false,
+          credentialState:
+            response.status.code === HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED
+              ? HUE_CREDENTIAL_STATUS.NEEDS_REPAIR
+              : prev.credentialState,
+          status: response.status,
+        }));
+        return;
+      }
       const normalizedGroups = normalizeAreas(response.areas, readinessById);
 
       patchState((prev) => {

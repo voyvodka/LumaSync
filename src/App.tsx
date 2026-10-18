@@ -10,13 +10,15 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsLayout } from "./features/settings/SettingsLayout";
-import { TitleBar, TITLE_BAR_HEIGHT_PX } from "./features/shell/TitleBar";
+import { TitleBar } from "./features/shell/TitleBar";
 import { StatusBar, statusBarHeightPx } from "./features/shell/StatusBar";
 import { useTrayIntegration, type TrayOutput } from "./features/shell/useTrayIntegration";
 import { useTrayFailureNotification } from "./features/shell/useTrayFailureNotification";
 import { useShellBootstrap } from "./features/shell/useShellBootstrap";
 import { openScreenCaptureSettings } from "./features/mode/captureApi";
 import { useCaptureStallNotice } from "./features/telemetry/hooks/useCaptureStallNotice";
+import { useRuntimeHealth } from "./features/telemetry/runtimeHealthSource";
+import type { RuntimeHealth } from "./shared/contracts/telemetry";
 import { useHueSolidColorNotice } from "./features/mode/state/useHueSolidColorNotice";
 import { useHueTargetAutoAdd } from "./features/mode/state/useHueTargetAutoAdd";
 import { usePreviewOpenNotice } from "./features/preview/state/usePreviewOpenNotice";
@@ -57,7 +59,7 @@ import { isUpdateModalStatus } from "./features/updater/updateModalStatus";
 import { outputAvailability } from "./features/mode/model/outputAvailability";
 import { useCapturePermissionRecheck } from "./features/mode/state/useCapturePermissionRecheck";
 import type { DeviceCategory } from "@/features/device/model/deviceCategories";
-import { useHeldFlag } from "@/shared/lib/useHeldFlag";
+import { useHeldFlag, useLateFlag } from "@/shared/lib/useHeldFlag";
 import { CAPTURE_FAILURE_BUCKET } from "./shared/contracts/capture";
 import { HUE_RUNTIME_TRIGGER_SOURCE } from "./shared/contracts/hue";
 import { useLedSetupPrompt } from "./features/calibration/state/useLedSetupPrompt";
@@ -109,6 +111,10 @@ const selectActiveSection = (state: NavigationState) => state.activeSection;
 const selectLedSetupOpen = (state: NavigationState) => state.ledSetup !== null;
 const selectNoticeView = (state: NavigationState) => currentNoticeView(state);
 const selectUpdaterStatus = (snapshot: UpdaterSnapshot) => snapshot.state.status;
+const selectOutputHealth = (health: RuntimeHealth) => ({
+  outputFailureCode: health.outputFailureCode,
+  workerStopped: health.workerStopped,
+});
 const selectUpdateCheckFailedNotice = (snapshot: UpdaterSnapshot) => snapshot.checkFailedNotice;
 const selectUpdateModalShown = (snapshot: UpdaterSnapshot) =>
   snapshot.isModalOpen && isUpdateModalStatus(snapshot.state);
@@ -128,6 +134,7 @@ function Shell() {
     isContentVisible,
     contentRef,
     switchUIMode,
+    applyUiZoom,
     setCurrentMode,
   } = useUIMode();
   const [navigation] = useState(createNavigationStore);
@@ -165,9 +172,12 @@ function Shell() {
     }),
     shallowEqual,
   );
+  const wledReachable = useLocalOutputs(
+    (state) => state.snapshot?.outputs.find((output) => output.kind === "wled")?.reachable !== false,
+  );
   const localSink = useMemo(
-    () => localSinkOf(driven, ports),
-    [driven, ports],
+    () => localSinkOf(driven, ports, wledReachable),
+    [driven, ports, wledReachable],
   );
   // Latched: a strip unplugged this session is an outage, not "never set up".
   const [localSinkSeen, setLocalSinkSeen] = useState(false);
@@ -366,6 +376,8 @@ function Shell() {
   const captureStalledNotice = useCaptureStallNotice(
     lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT,
   );
+  // Sends failing and a stopped worker hold for any lit mode; both clear on the next start or stop.
+  const outputHealth = useRuntimeHealth(selectOutputHealth, shallowEqual);
 
   // What the mode controls read, published to the sections through the
   // lighting store. Each section selects its own slice of it.
@@ -380,6 +392,7 @@ function Shell() {
     calibration: savedCalibration,
     localSink,
     bootstrapDone,
+    lightingRestored,
   };
   // Fresh closures are fine: the provider hands the sections stable wrappers.
   const lightingControlActions = {
@@ -450,6 +463,7 @@ function Shell() {
     hueProbeVerdict: hueProbe.verdict,
     bootstrapDone,
   });
+  const outputCheckingDue = useLateFlag(availability === "checking", 800);
 
   // Global keyboard shortcuts — the behaviour behind every `<kbd>` badge in
   // `KEYBIND_REGISTRY`. The hook is disabled during a UI-mode fade: firing
@@ -478,7 +492,7 @@ function Shell() {
   };
   // The update prompt owns the keyboard: ⌥1–3 used to change the mode behind it.
   useGlobalKeybinds(keybindHandlers, { disabled: !isContentVisible || updateModalShown });
-  useUiZoom({ disabled: !isContentVisible || updateModalShown });
+  useUiZoom({ disabled: !isContentVisible || updateModalShown, onZoom: applyUiZoom });
 
   useCapturePermissionRecheck(
     mode.startFailedNotice?.bucket === CAPTURE_FAILURE_BUCKET.PERMISSION,
@@ -526,12 +540,16 @@ function Shell() {
           activeSection,
           ledSetupOpen,
           availability,
+          outputCheckingDue,
           hueProbeGaveUp: hueProbe.gaveUp,
           hueProbeChecking,
           // Before boot the saved calibration is simply unread, not missing.
           calibrationRequired: bootstrapDone && modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED,
           startFailure: mode.startFailedNotice,
           captureStalled: captureStalledNotice,
+          outputFailing: outputHealth.outputFailureCode,
+          workerStopped: outputHealth.workerStopped,
+          wledLengthMismatch: mode.wledLengthMismatchNotice,
           stopFailedTargets: mode.stopFailedNotice,
           previewOpenFailure: previewOpenNotice,
           hueLeftOut: mode.hueLeftOutNotice,
@@ -562,12 +580,15 @@ function Shell() {
       activeSection,
       ledSetupOpen,
       availability,
+      outputCheckingDue,
       hueProbe.gaveUp,
       hueProbeChecking,
       bootstrapDone,
       modeGuard.reason,
       mode.startFailedNotice,
       captureStalledNotice,
+      outputHealth,
+      mode.wledLengthMismatchNotice,
       mode.stopFailedNotice,
       previewOpenNotice,
       mode.hueLeftOutNotice,
@@ -649,7 +670,7 @@ function Shell() {
         <div
           className="fixed right-0 left-0 overflow-hidden"
           style={{
-            top: `${TITLE_BAR_HEIGHT_PX}px`,
+            top: "var(--lm-titlebar-h)",
             bottom: `${statusBarHeight}px`,
             background: "var(--lm-bg)",
           }}

@@ -16,8 +16,8 @@ use super::snapshot::OutputTarget::{self, Hue, Usb};
 use super::test_support::{Rig, RigSetup};
 use super::{AmbilightPayload, LightingModeConfig, LightingModeKind, SolidColorPayload};
 use crate::commands::hue::state_store::HueRuntimeStateStore;
-use crate::commands::led_preview::LedTwinState;
 use crate::commands::local_outputs::LocalOutputRegistry;
+use crate::commands::preview::PreviewSessionState;
 use crate::commands::runtime_telemetry::RuntimeTelemetryState;
 use crate::commands::test_pattern::{TestPatternConfig, TestPatternKind, TestPatternSpeed};
 use tauri::Manager;
@@ -62,6 +62,7 @@ fn solid(r: u8) -> LightingModeConfig {
             g: 20,
             b: 30,
             brightness: 1.0,
+            kelvin: None,
         }),
         ..LightingModeConfig::default()
     }
@@ -276,21 +277,26 @@ fn the_tray_mode_group_checks_what_runs_and_greys_what_the_window_greys() {
             (TrayLighting::Off, false, true),
             (TrayLighting::Ambilight, true, true),
             (TrayLighting::Solid, false, true),
+            (TrayLighting::Effect, false, true),
         ]
     );
 
-    // No layout for a bound strip: the window greys both lit modes, never Off.
-    let locked = [LightingModeKind::Ambilight, LightingModeKind::Solid];
+    // No layout for a bound strip: the window greys every lit mode, never Off.
+    let locked = [
+        LightingModeKind::Ambilight,
+        LightingModeKind::Solid,
+        LightingModeKind::Effect,
+    ];
     let items = tray_mode_items(LightingModeKind::Off, false, &locked);
     assert_eq!(
         items.map(|i| (i.checked, i.enabled)),
-        [(true, true), (false, false), (false, false)]
+        [(true, true), (false, false), (false, false), (false, false)]
     );
 
     let items = tray_mode_items(LightingModeKind::Solid, true, &[]);
     assert!(
         items.iter().all(|i| !i.enabled),
-        "a transaction greys all three"
+        "a transaction greys every item"
     );
     assert!(items[2].checked);
 }
@@ -617,12 +623,15 @@ fn start_test(rig: &Rig) {
         &handle,
         mode,
         rig.state().inner(),
-        rig.app.state::<LocalOutputRegistry>().driven().as_ref(),
+        &super::strip_set::resolve_strips(
+            &[],
+            rig.app.state::<LocalOutputRegistry>().connected_outputs(),
+        ),
         rig.app.state::<HueRuntimeStateStore>().inner(),
         rig.app.state::<RuntimeTelemetryState>().inner(),
-        rig.app.state::<LedTwinState>().inner(),
+        rig.app.state::<PreviewSessionState>().inner(),
         Some(TestPatternConfig {
-            kind: TestPatternKind::Gamut,
+            kind: TestPatternKind::Guide,
             brightness: 0.5,
             speed: TestPatternSpeed::default(),
             display_aspect: 16.0 / 9.0,
@@ -653,6 +662,172 @@ fn a_test_pattern_is_left_alone_by_a_refresh_and_never_shown_as_the_mode() {
     block_on(refresh_running_with(&rig.handle())).unwrap();
     assert_eq!(mode_applies(&rig), 0, "{:?}", rig.log.events());
     assert!(rig.worker_running(), "the refresh stopped the test");
+}
+
+fn test_prior(rig: &Rig) -> Option<LightingModeConfig> {
+    rig.state()
+        .runtime
+        .lock()
+        .unwrap()
+        .preview
+        .test_prior
+        .clone()
+}
+
+/// A user's mode change over a running test drops the mode the test's stop
+/// would restore, inside the lock the change itself holds — so a Stop that
+/// lands after it cannot put the pre-test mode back over the user's choice.
+#[test]
+fn a_mode_change_over_a_test_drops_the_mode_its_stop_would_restore() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5), &["usb"]);
+    start_test(&rig);
+    rig.state().runtime.lock().unwrap().preview.test_prior = Some(solid(5));
+
+    running(&rig, solid(7), &["usb"]);
+    assert_eq!(test_prior(&rig), None);
+}
+
+#[test]
+fn stopping_all_lighting_over_a_test_drops_the_mode_its_stop_would_restore() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5), &["usb"]);
+    start_test(&rig);
+    rig.state().runtime.lock().unwrap().preview.test_prior = Some(solid(5));
+
+    super::transition::stop_lighting_blocking(&rig.handle()).unwrap();
+    assert_eq!(test_prior(&rig), None);
+}
+
+/// `start_test` plus the prior the real start records from the running mode.
+fn start_test_over_running(rig: &Rig) {
+    let prior = rig.running();
+    start_test(rig);
+    rig.state().runtime.lock().unwrap().preview.test_prior = Some(prior);
+}
+
+fn stop_test(rig: &Rig) -> super::LedTestPatternResult {
+    block_on(super::led_test_pattern::stop_led_test_pattern(rig.handle()))
+        .expect("the stop answers")
+}
+
+fn retune(rig: &Rig, tuning: super::tuning::LightingTuning) -> String {
+    block_on(super::tuning::retune_lighting(rig.handle(), tuning))
+        .expect("retune resolves")
+        .status
+        .code
+}
+
+/// A retune reaches the outputs and the store, never the running mode's copy
+/// the test records as its prior: the stop restores what the store holds.
+#[test]
+fn a_test_stop_brings_back_the_colour_and_brightness_retuned_before_it() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5), &["usb"]);
+    let blue = SolidColorPayload {
+        r: 0,
+        g: 0,
+        b: 200,
+        brightness: 0.3,
+        kelvin: None,
+    };
+    let tuning = super::tuning::LightingTuning {
+        solid: Some(blue),
+        ..Default::default()
+    };
+    assert_eq!(retune(&rig, tuning), "RETUNE_APPLIED");
+    start_test_over_running(&rig);
+
+    stop_test(&rig);
+
+    let restored = rig.running().solid.expect("Solid is back");
+    assert_eq!((restored.r, restored.b), (0, 200));
+    assert_eq!(restored.brightness, 0.3);
+    let snapshot = rig.state().snapshot.read();
+    assert_eq!(snapshot.brightness, 0.3);
+    assert_eq!(snapshot.mode.solid.map(|solid| solid.b), Some(200));
+}
+
+/// The user's choice superseded the test and dropped its prior; the test's
+/// own stop still comes (LED Setup's dispose, a Flash's timer) and must not
+/// apply Off around the transaction.
+#[test]
+fn a_stop_with_no_test_running_leaves_the_running_mode_alone() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5), &["usb"]);
+    start_test_over_running(&rig);
+    running(&rig, solid(7), &["usb"]);
+
+    let answer = stop_test(&rig);
+
+    assert_eq!(answer.status.code, "LED_TEST_PATTERN_STOPPED");
+    assert_eq!(mode_applies(&rig), 0, "{:?}", rig.log.events());
+    assert_eq!(rig.running().solid.map(|solid| solid.r), Some(7));
+    assert_eq!(
+        rig.state().snapshot.read().mode.kind,
+        LightingModeKind::Solid
+    );
+}
+
+/// The restore is the end of a transaction for retunes: what runs takes them.
+#[test]
+fn retunes_reach_the_mode_a_test_stop_brought_back() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight(), &["usb"]);
+    start_test_over_running(&rig);
+    stop_test(&rig);
+    assert_eq!(rig.running().kind, LightingModeKind::Ambilight);
+
+    let tuning = super::tuning::LightingTuning {
+        ambilight: Some(AmbilightPayload {
+            brightness: 0.4,
+            ..AmbilightPayload::default()
+        }),
+        ..Default::default()
+    };
+    assert_eq!(retune(&rig, tuning), "RETUNE_APPLIED");
+    assert_eq!(rig.state().tuning.accepting_brightness(), Some(0.4));
+}
+
+/// The twin draws the layout the strip runs, so a layout being tested before
+/// it is saved shows as the strip shows it — not the saved one beside it.
+#[test]
+fn the_twin_draws_the_layout_the_running_mode_uses_not_the_saved_one() {
+    let rig = Rig::new(RigSetup::default());
+    let session = rig.app.state::<PreviewSessionState>();
+    session.open_for_test("display-1", "led-twin-overlay-1", "led-control-popup-1");
+    session.subscribe_for_test("led-twin-overlay-1", tauri::ipc::Channel::new(|_| Ok(())));
+
+    let mut unsaved = super::calibration_for_tests();
+    unsaved["counts"]["top"] = json!(32);
+    unsaved["totalLeds"] = json!(61);
+    let mut mode = ambilight();
+    mode.targets = Some(vec!["usb".to_string()]);
+    mode.led_calibration = Some(serde_json::from_value(unsaved).unwrap());
+    super::led_test_pattern::apply_and_broadcast(
+        &rig.handle(),
+        mode,
+        rig.state().inner(),
+        &super::strip_set::resolve_strips(
+            &[],
+            rig.app.state::<LocalOutputRegistry>().connected_outputs(),
+        ),
+        rig.app.state::<HueRuntimeStateStore>().inner(),
+        rig.app.state::<RuntimeTelemetryState>().inner(),
+        session.inner(),
+        Some(TestPatternConfig {
+            kind: TestPatternKind::Guide,
+            brightness: 0.5,
+            speed: TestPatternSpeed::default(),
+            display_aspect: 16.0 / 9.0,
+        }),
+    )
+    .unwrap();
+
+    let layout = session
+        .twin_layout_for_test()
+        .expect("a subscribed twin has a layout");
+    assert_eq!(layout.leds.map(|leds| leds.total_leds), Some(61));
 }
 
 // ---------------------------------------------------------------------------
@@ -728,4 +903,138 @@ fn a_saved_calibration_that_does_not_add_up_refuses_the_start_and_keeps_what_run
     );
     assert_eq!(rig.running().kind, LightingModeKind::Solid);
     assert!(!rig.worker_running());
+}
+
+/// An effect chosen in a window is saved with its payload, and the tray's
+/// Effect item — which sends the kind alone — brings back that same effect.
+#[test]
+fn an_effect_is_saved_and_the_tray_brings_the_same_one_back() {
+    let rig = Rig::new(RigSetup::default());
+    let breathe = super::EffectPayload {
+        id: super::config::EffectId::Breathe,
+        speed: 0.8,
+        brightness: 0.6,
+        ..super::config::DEFAULT_EFFECT
+    };
+    running(
+        &rig,
+        LightingModeConfig {
+            kind: LightingModeKind::Effect,
+            effect: Some(breathe.clone()),
+            ..LightingModeConfig::default()
+        },
+        &["usb"],
+    );
+    let saved = rig.saved("lightingMode").expect("the mode was saved");
+    assert_eq!(saved["kind"], json!("effect"));
+    assert_eq!(saved["effect"]["id"], json!("breathe"));
+
+    apply(&rig, tray_request(TrayLighting::Off));
+    let result = apply(&rig, tray_request(TrayLighting::Effect));
+    assert_eq!(result.snapshot.mode.kind, LightingModeKind::Effect);
+    assert_eq!(result.snapshot.mode.effect, Some(breathe));
+}
+
+fn sunrise_started(at: u64) -> LightingModeConfig {
+    LightingModeConfig {
+        kind: LightingModeKind::Effect,
+        effect: Some(super::EffectPayload {
+            id: super::config::EffectId::Sunrise,
+            duration_minutes: Some(30),
+            started_at_ms: Some(at),
+            ..super::config::DEFAULT_EFFECT
+        }),
+        ..LightingModeConfig::default()
+    }
+}
+
+fn running_start(result: &ApplyOutputsResult) -> u64 {
+    result
+        .snapshot
+        .mode
+        .effect
+        .as_ref()
+        .and_then(|effect| effect.started_at_ms)
+        .expect("a stamped sunrise")
+}
+
+/// Off at night, Effect in the morning: the sunrise starts over, not at the
+/// daylight it had reached.
+#[test]
+fn choosing_a_sunrise_again_starts_it_over() {
+    let rig = Rig::new(RigSetup::default());
+    let an_hour_ago = super::config::unix_ms_now() - 3_600_000;
+    running(&rig, sunrise_started(an_hour_ago), &["usb"]);
+    apply(&rig, tray_request(TrayLighting::Off));
+
+    let before = super::config::unix_ms_now();
+    let again = apply(&rig, tray_request(TrayLighting::Effect));
+    assert!(running_start(&again) >= before, "{again:?}");
+    let saved = rig.saved("lightingMode").expect("saved");
+    assert_eq!(saved["effect"]["startedAtMs"], json!(running_start(&again)));
+}
+
+/// A launch restore resumes the sunrise from its saved start.
+#[test]
+fn a_launch_carries_a_sunrise_on_from_its_saved_start() {
+    let rig = Rig::new(RigSetup::default());
+    let an_hour_ago = super::config::unix_ms_now() - 3_600_000;
+    rig.seed(
+        json!({ "lightingMode": serde_json::to_value(sunrise_started(an_hour_ago)).unwrap() }),
+    );
+
+    let boot = apply(&rig, request(LightingOrigin::Boot, None, None));
+    assert_eq!(
+        boot.snapshot.mode.kind,
+        LightingModeKind::Effect,
+        "{boot:?}"
+    );
+    assert_eq!(running_start(&boot), an_hour_ago);
+}
+
+/// A retune that names a sunrise without its start keeps the running one.
+#[test]
+fn a_retune_without_the_start_keeps_the_running_sunrise() {
+    let rig = Rig::new(RigSetup::default());
+    running(
+        &rig,
+        sunrise_started(super::config::unix_ms_now()),
+        &["usb"],
+    );
+    let start = running_start(&apply(&rig, request(LightingOrigin::User, None, None)));
+
+    let mut longer = sunrise_started(0).effect.unwrap();
+    longer.started_at_ms = None;
+    longer.duration_minutes = Some(45);
+    block_on(super::tuning::retune_lighting(
+        rig.handle(),
+        super::tuning::LightingTuning {
+            effect: Some(longer),
+            ..Default::default()
+        },
+    ))
+    .expect("retunes");
+    let tuned = rig.state().tuning.stored().effect.expect("stored");
+    assert_eq!(tuned.started_at_ms, Some(start));
+    assert_eq!(tuned.duration_minutes, Some(45));
+}
+
+/// Nothing stored this session (a launch that restored another mode): the
+/// saved sunrise is what the tray's Effect brings back, and it starts over too.
+#[test]
+fn a_saved_sunrise_the_tray_brings_back_starts_over() {
+    let rig = Rig::new(RigSetup::default());
+    let an_hour_ago = super::config::unix_ms_now() - 3_600_000;
+    let mut saved = serde_json::to_value(sunrise_started(an_hour_ago)).unwrap();
+    saved["kind"] = json!("off");
+    rig.seed(json!({ "lightingMode": saved }));
+
+    let before = super::config::unix_ms_now();
+    let chosen = apply(&rig, tray_request(TrayLighting::Effect));
+    assert_eq!(
+        chosen.snapshot.mode.kind,
+        LightingModeKind::Effect,
+        "{chosen:?}"
+    );
+    assert!(running_start(&chosen) >= before);
 }

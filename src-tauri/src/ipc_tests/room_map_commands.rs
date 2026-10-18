@@ -72,6 +72,36 @@ fn a_refused_write_returns_the_zones_it_was_given() {
     assert_eq!(response["zones"][0]["id"], json!("z1"));
 }
 
+/// A cube in metres has a different scale on each axis, so Rust takes unequal
+/// scales; it still refuses a zone that leaves the cube in height.
+#[test]
+fn a_zone_is_held_inside_the_cube_on_every_axis() {
+    let app = app();
+    let webview = main_webview(&app);
+
+    let mut tall = zone("z1");
+    tall["scaleZ"] = json!(1.0);
+    let mut floating = zone("z2");
+    floating["centerZ"] = json!(0.8);
+
+    for (draft, code, kept) in [
+        (tall, "HUE_ZONE_CREATED", 1),
+        (floating, "HUE_ZONE_CHANNEL_OUT_OF_BOUNDS", 0),
+    ] {
+        let response = invoke(
+            &webview,
+            "create_hue_zone",
+            json!({ "request": { "zone": draft, "existingZones": [] } }),
+        )
+        .expect("create_hue_zone must resolve, never reject");
+        assert_eq!(status_code(&response), code);
+        assert_eq!(
+            response["zones"].as_array().expect("zones array").len(),
+            kept
+        );
+    }
+}
+
 #[test]
 fn updating_a_zone_that_is_not_there_is_a_coded_refusal() {
     let app = app();
@@ -122,6 +152,38 @@ fn deleting_a_zone_detaches_its_channels_rather_than_dropping_them() {
     assert_eq!(channels.len(), 1, "the channel must survive its zone");
     assert_eq!(channels[0]["zoneId"], json!(null));
     assert_camel_case_keys(&channels[0]);
+}
+
+/// The zone commands echo the channel list back and the frontend re-applies it
+/// wholesale, so a field the Rust mirror does not carry is erased by them.
+#[test]
+fn a_zone_command_keeps_a_channels_facing_and_fixture() {
+    let app = app();
+    let webview = main_webview(&app);
+
+    let channel = json!({
+        "channelIndex": 3,
+        "x": 0.2, "y": 0.1, "z": 0.0,
+        "zoneId": "z1",
+        "zoneRelativePosition": { "x": 0.5, "y": 0.0, "z": 0.0 },
+        "facing": 270.0,
+        "fixture": "playBar",
+    });
+
+    let response = invoke(
+        &webview,
+        "delete_hue_zone",
+        json!({ "request": {
+            "zoneId": "z1",
+            "existingZones": [zone("z1")],
+            "channels": [channel],
+        } }),
+    )
+    .expect("delete_hue_zone must resolve");
+
+    let channels = response["channels"].as_array().expect("channels array");
+    assert_eq!(channels[0]["facing"], json!(270.0));
+    assert_eq!(channels[0]["fixture"], json!("playBar"));
 }
 
 /// A zone lives inside one entertainment area. Letting a channel from another

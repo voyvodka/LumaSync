@@ -1,0 +1,39 @@
+@layer components {
+  .slot {
+    position: absolute;
+    top: 52px;
+    left: 50%;
+    z-index: 30;
+    transform: translateX(-50%);
+    pointer-events: none;
+  }
+  .line {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--lm-panel);
+    box-shadow: inset 0 0 0 1px var(--lm-line-2);
+    color: var(--lm-ink-dim);
+    font-size: 11.5px;
+    white-space: nowrap;
+  }
+  .key {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .key kbd {
+    padding: 2px 5px;
+    border-radius: 4px;
+    background: rgb(255 255 255 / 6%);
+    color: var(--lm-ink);
+    font: 10.5px var(--lm-mono);
+  }
+
+  @media (forced-colors: active) {
+    .line { border: 1px solid CanvasText; background: Canvas; color: CanvasText; }
+    .key kbd { border: 1px solid CanvasText; }
+  }
+}

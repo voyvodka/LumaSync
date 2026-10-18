@@ -37,6 +37,9 @@ function normalize(raw: RuntimeHealth): RuntimeHealth {
     linkConstrained: raw.linkConstrained === true,
     linkMaxFps:
       typeof raw.linkMaxFps === "number" && raw.linkMaxFps > 0 ? raw.linkMaxFps : LINK_MAX_FPS_ABSENT,
+    outputFailureCode:
+      typeof raw.outputFailureCode === "string" && raw.outputFailureCode.length > 0 ? raw.outputFailureCode : null,
+    workerStopped: raw.workerStopped === true,
   };
 }
 
@@ -45,7 +48,9 @@ function publish(next: RuntimeHealth): void {
   if (
     current.captureFailureCode === next.captureFailureCode &&
     current.linkConstrained === next.linkConstrained &&
-    current.linkMaxFps === next.linkMaxFps
+    current.linkMaxFps === next.linkMaxFps &&
+    current.outputFailureCode === next.outputFailureCode &&
+    current.workerStopped === next.workerStopped
   ) {
     return;
   }

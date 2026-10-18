@@ -117,7 +117,6 @@ impl crate::commands::led_sink::LedSink for SerialSink {
     fn stop(&mut self) -> Result<(), String> {
         // Do NOT call `disconnect_session` here — reopening the port toggles
         // DTR and resets the MCU. See docs/architecture/device-output.md (DTR reset).
-        let _ = self.port_name.as_deref();
         Ok(())
     }
 }

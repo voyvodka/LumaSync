@@ -5,6 +5,7 @@ import { LIGHTING_MODE_KIND } from "../../src/shared/contracts/mode";
 import {
   activeModeKind,
   attribute,
+  chooseMode,
   clickTestId,
   currentUiMode,
   hueConfigured,
@@ -16,17 +17,22 @@ import {
 const MODE_KINDS = Object.values(LIGHTING_MODE_KIND);
 
 async function waitForModePressed(kind: string): Promise<void> {
-  await browser.waitUntil(
-    async () => (await attribute(`[data-testid="mode-button-${kind}"]`, "aria-checked")) === "true",
-    { timeout: 15_000, interval: 100, timeoutMsg: `${kind} never became active` },
-  );
+  await browser.waitUntil(async () => (await activeModeKind()) === kind, {
+    timeout: 15_000,
+    interval: 100,
+    timeoutMsg: `${kind} never became active`,
+  });
 }
 
+/** Off is the power switch unchecked with no lit mode checked; on, exactly one lit mode is. */
 async function expectExactlyOnePressed(): Promise<void> {
-  const pressed = await Promise.all(
-    MODE_KINDS.map((kind) => attribute(`[data-testid="mode-button-${kind}"]`, "aria-checked")),
+  const lit = await Promise.all(
+    MODE_KINDS.filter((kind) => kind !== LIGHTING_MODE_KIND.OFF).map((kind) =>
+      attribute(`[data-testid="mode-button-${kind}"]`, "aria-checked"),
+    ),
   );
-  expect(pressed.filter((value) => value === "true")).toHaveLength(1);
+  const on = (await attribute(`[data-testid="mode-button-${LIGHTING_MODE_KIND.OFF}"]`, "aria-checked")) === "true";
+  expect(lit.filter((value) => value === "true")).toHaveLength(on ? 1 : 0);
 }
 
 /**
@@ -66,14 +72,14 @@ describe("lighting mode switch", () => {
 
   after(async () => {
     if (startModeKind !== null && (await activeModeKind()) !== startModeKind) {
-      await clickTestId(`mode-button-${startModeKind}`);
+      await chooseMode(startModeKind);
       await waitForModePressed(startModeKind);
     }
     await switchUiMode(startUiMode);
   });
 
-  it("drives Off from the mode strip and reads it back through aria-checked", async () => {
-    await clickTestId(`mode-button-${LIGHTING_MODE_KIND.OFF}`);
+  it("drives Off from the power switch and reads it back through aria-checked", async () => {
+    await chooseMode(LIGHTING_MODE_KIND.OFF);
     await waitForModePressed(LIGHTING_MODE_KIND.OFF);
     await expectExactlyOnePressed();
   });

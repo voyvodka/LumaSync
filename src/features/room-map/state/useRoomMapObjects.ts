@@ -1,12 +1,16 @@
 import { useCallback } from "react";
-import { useTranslation } from "react-i18next";
 import type {
   FurniturePlacement,
   RoomMapConfig,
   TvAnchorPlacement,
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
-import { parseObjectId } from "../model/objectId";
+import { resolveFurnitureType, resolveRoomFootprint } from "@/shared/contracts/roomMap";
+import { FURNITURE_DEFAULT_SIZE } from "../model/furnitureKinds";
+import { TV_DEFAULT_FOOTPRINT } from "../model/libraryDrop";
+import { freeSpotFor } from "../model/pieceGeometry";
+import { outsideOutline } from "../model/roomFootprint";
+import { furnitureObjectId, parseObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "../model/objectId";
 import { roomObjectAdapter, type NudgeDirection } from "../model/roomObjectKinds";
 import type { ApplyOptions } from "./useRoomMapState";
 import type { RoomMapPatch } from "./roomMapReducer";
@@ -28,8 +32,9 @@ export interface UseRoomMapObjectsArgs {
 }
 
 export interface UseRoomMapObjectsReturn {
-  handleAddTv: () => void;
-  handleAddFurniture: (type: FurniturePlacement["type"]) => void;
+  /** `at` is the top-left a drop names; absent, the default place. */
+  handleAddTv: (at?: { x: number; y: number }) => void;
+  handleAddFurniture: (type: FurniturePlacement["type"], at?: { x: number; y: number }) => void;
   handleAddUsb: () => void;
   isLocked: (id: string) => boolean;
   deleteById: (id: string) => void;
@@ -37,10 +42,9 @@ export interface UseRoomMapObjectsReturn {
   handleRotate: () => void;
   handleDuplicate: (id: string) => void;
   handleArrowNudge: (e: React.KeyboardEvent<HTMLDivElement>) => void;
-  handleUpdatePosition: (id: string, x: number, y: number) => void;
-  handleUpdateSize: (id: string, w: number, h: number) => void;
-  handleUpdateRotation: (id: string, rotation: number) => void;
-  handleRenameFurniture: (id: string, label: string) => void;
+  handleUpdatePosition: (id: string, x: number, y: number, options?: ApplyOptions) => void;
+  /** Renames any kind that takes a name, the viewed area's Hue light included. */
+  handleRename: (id: string, label: string) => void;
 }
 
 /** Create, delete, duplicate and transform handlers for every non-image object kind. */
@@ -51,34 +55,56 @@ export function useRoomMapObjects({
   selectedId,
   select,
 }: UseRoomMapObjectsArgs): UseRoomMapObjectsReturn {
-  const { t } = useTranslation();
   const { widthMeters, depthMeters } = config.dimensions;
 
-  const handleAddTv = useCallback(() => {
-    const newTv: TvAnchorPlacement = {
-      x: widthMeters / 2 - 0.5,
-      y: 0.3,
-      width: 1.0,
-      height: 0.1,
-    };
-    apply({ tvAnchor: newTv });
-  }, [widthMeters, apply]);
+  const handleAddTv = useCallback(
+    (at?: { x: number; y: number }) => {
+      const newTv: TvAnchorPlacement = {
+        x: at?.x ?? widthMeters / 2 - TV_DEFAULT_FOOTPRINT.width / 2,
+        y: at?.y ?? 0.3,
+        width: TV_DEFAULT_FOOTPRINT.width,
+        height: TV_DEFAULT_FOOTPRINT.depth,
+      };
+      apply({ tvAnchor: newTv });
+      select(TV_ANCHOR_OBJECT_ID);
+    },
+    [widthMeters, apply, select],
+  );
 
   const handleAddFurniture = useCallback(
-    (type: FurniturePlacement["type"]) => {
+    (type: FurniturePlacement["type"], at?: { x: number; y: number }) => {
       const id = `furniture-${crypto.randomUUID()}`;
+      const size = FURNITURE_DEFAULT_SIZE[type];
+      // The free place nearest the room's middle: a rug may go under furniture, so it keeps clear of
+      // other rugs only; anything else keeps clear of every piece but the rugs, and of the TV.
+      const rug = type === "rug";
+      const around = [
+        ...config.furniture.filter((f) => (resolveFurnitureType(f.type) === "rug") === rug),
+        ...(config.tvAnchor && !rug ? [config.tvAnchor] : []),
+      ];
+      const outline = resolveRoomFootprint(config);
+      // A drop names its own place; overlap is the user's to judge, as a carry's is.
+      const spot = at ?? freeSpotFor(size.width, size.depth, { width: widthMeters, depth: depthMeters }, around, (px, py) => !outsideOutline(px, py, outline));
+      let x = spot?.x ?? widthMeters / 2 - size.width / 2;
+      let y = spot?.y ?? depthMeters / 2 - size.depth / 2;
+      // A full room: the middle, stepped 30 cm down-right past every piece already sitting there, so
+      // a second one added does not land exactly on the first and hide it.
+      for (let tries = 0; !spot && tries < 8 && config.furniture.some((f) => Math.abs(f.x - x) < 0.05 && Math.abs(f.y - y) < 0.05); tries++) {
+        x = Math.min(x + 0.3, Math.max(0, widthMeters - size.width));
+        y = Math.min(y + 0.3, Math.max(0, depthMeters - size.depth));
+      }
       const newItem: FurniturePlacement = {
         id,
         type,
-        x: widthMeters / 2 - 0.3,
-        y: depthMeters / 2 - 0.3,
-        width: 0.6,
-        height: 0.6,
-        label: t(`roomMap:furniture.type.${type}`),
+        x,
+        y,
+        width: size.width,
+        height: size.depth,
       };
       apply({ furniture: [...config.furniture, newItem] });
+      select(furnitureObjectId(id));
     },
-    [widthMeters, depthMeters, config.furniture, apply, t],
+    [widthMeters, depthMeters, config, apply, select],
   );
 
   const handleAddUsb = useCallback(() => {
@@ -92,7 +118,8 @@ export function useRoomMapObjects({
       ledCount: 60,
     };
     apply({ usbStrips: [...config.usbStrips, newStrip] });
-  }, [widthMeters, config.usbStrips, apply]);
+    select(usbStripObjectId(stripId));
+  }, [widthMeters, config.usbStrips, apply, select]);
 
   const isLocked = useCallback(
     (id: string): boolean => {
@@ -160,40 +187,21 @@ export function useRoomMapObjects({
   );
 
   const handleUpdatePosition = useCallback(
-    (id: string, x: number, y: number) => {
+    (id: string, x: number, y: number, options?: ApplyOptions) => {
       const ref = parseObjectId(id);
       const patch = ref ? roomObjectAdapter(ref).moveTo(config, ref, x, y, { hueAreaId }) : null;
-      if (patch) apply(patch);
+      if (patch) apply(patch, options);
     },
     [config, hueAreaId, apply],
   );
 
-  const handleUpdateSize = useCallback(
-    (id: string, w: number, h: number) => {
-      const ref = parseObjectId(id);
-      const resize = ref ? roomObjectAdapter(ref).resize : null;
-      const patch = ref && resize ? resize(config, ref, w, h) : null;
-      if (patch) apply(patch);
-    },
-    [config, apply],
-  );
-
-  const handleUpdateRotation = useCallback(
-    (id: string, rotation: number) => {
-      const ref = parseObjectId(id);
-      const rotateTo = ref ? roomObjectAdapter(ref).rotateTo : null;
-      if (ref && rotateTo) apply(rotateTo(config, ref, rotation));
-    },
-    [config, apply],
-  );
-
-  const handleRenameFurniture = useCallback(
+  const handleRename = useCallback(
     (id: string, label: string) => {
-      apply({
-        furniture: config.furniture.map((f) => (f.id === id ? { ...f, label } : f)),
-      });
+      const ref = parseObjectId(id);
+      const rename = ref ? roomObjectAdapter(ref).rename : null;
+      if (ref && rename) apply(rename(config, ref, label, { hueAreaId }));
     },
-    [config.furniture, apply],
+    [config, hueAreaId, apply],
   );
 
   return {
@@ -207,8 +215,6 @@ export function useRoomMapObjects({
     handleDuplicate,
     handleArrowNudge,
     handleUpdatePosition,
-    handleUpdateSize,
-    handleUpdateRotation,
-    handleRenameFurniture,
+    handleRename,
   };
 }

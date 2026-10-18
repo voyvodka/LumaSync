@@ -15,7 +15,7 @@ use super::super::hue::transport::{
 };
 use super::super::hue_http::{classify_hue_response, HueHttpFault};
 use super::super::status::CommandStatus;
-use super::{command_status, NO_APP_KEY_DETAILS};
+use super::NO_APP_KEY_DETAILS;
 
 /// One bridge-side Entertainment Area, as shown in the frontend area picker.
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -83,7 +83,7 @@ pub(crate) fn clear_own_stream(
 async fn list_areas(bridge_ip: &str, username: String) -> HueEntertainmentAreaListResponse {
     if !is_valid_bridge_addr(bridge_ip) {
         return HueEntertainmentAreaListResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "HUE_IP_INVALID",
                 "Bridge IP is not a local-network IPv4 address.",
                 Some("Use a value like 192.168.1.50".to_string()),
@@ -95,7 +95,7 @@ async fn list_areas(bridge_ip: &str, username: String) -> HueEntertainmentAreaLi
     let username = effective_hue_app_key(&username);
     if username.is_empty() {
         return HueEntertainmentAreaListResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "AUTH_INVALID_RE_PAIR_REQUIRED",
                 "Hue bridge rejected our credentials. Re-pair the bridge to continue.",
                 Some(NO_APP_KEY_DETAILS.to_string()),
@@ -108,7 +108,7 @@ async fn list_areas(bridge_ip: &str, username: String) -> HueEntertainmentAreaLi
     // freshly created Entertainment Area shows up immediately.
     match load_hue_entertainment_areas(bridge_ip, &username, HueReadFreshness::Force).await {
         Ok(areas) if areas.is_empty() => HueEntertainmentAreaListResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "HUE_AREA_LIST_EMPTY",
                 "No Hue entertainment areas found on this bridge.",
                 Some(
@@ -120,7 +120,7 @@ async fn list_areas(bridge_ip: &str, username: String) -> HueEntertainmentAreaLi
         Ok(areas) => {
             info!("Loaded {} Hue entertainment areas", areas.len());
             HueEntertainmentAreaListResponse {
-                status: command_status(
+                status: CommandStatus::new(
                     "HUE_AREA_LIST_OK",
                     "Hue entertainment areas loaded successfully.",
                     None,
@@ -131,7 +131,7 @@ async fn list_areas(bridge_ip: &str, username: String) -> HueEntertainmentAreaLi
         Err(AreaListError::AuthInvalid) => {
             warn!("Hue area list rejected with 403 type=1 — re-pair required");
             HueEntertainmentAreaListResponse {
-                status: command_status(
+                status: CommandStatus::new(
                     "AUTH_INVALID_RE_PAIR_REQUIRED",
                     "Hue bridge rejected our credentials. Re-pair the bridge to continue.",
                     Some("Bridge returned HTTP 403 with unauthorized-user error.".to_string()),
@@ -144,7 +144,7 @@ async fn list_areas(bridge_ip: &str, username: String) -> HueEntertainmentAreaLi
         Err(AreaListError::Other(message) | AreaListError::Unreachable(message)) => {
             warn!("Failed to list Hue entertainment areas: {message}");
             HueEntertainmentAreaListResponse {
-                status: command_status(
+                status: CommandStatus::new(
                     "HUE_AREA_LIST_FAILED",
                     "Could not list Hue entertainment areas with current credentials.",
                     Some(message),
@@ -167,7 +167,8 @@ pub(crate) const ACTIVE_STREAMER_REASON: &str = "HUE_STREAM_NOT_READY_ACTIVE_STR
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ActiveStreamerView {
     /// Any active streamer blocks. Every gate that is about to start a session
-    /// passes this — ours has been stopped by then, so a holder is foreign.
+    /// passes this — ours has been stopped by then, so a holder is foreign,
+    /// unless that stop's deactivate never landed (a reconnect checks that).
     Foreign,
     /// Our running session holds this area; its `active_streamer` is us and
     /// is not a reason the area is unready.
@@ -214,7 +215,7 @@ pub(crate) async fn check_hue_stream_readiness_with_freshness(
 ) -> HueStreamReadinessResponse {
     if !is_valid_bridge_addr(&bridge_ip) {
         return HueStreamReadinessResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "HUE_IP_INVALID",
                 "Bridge IP is not a local-network IPv4 address.",
                 Some("Use a value like 192.168.1.50".to_string()),
@@ -229,7 +230,7 @@ pub(crate) async fn check_hue_stream_readiness_with_freshness(
     let username = effective_hue_app_key(&username);
     if username.is_empty() {
         return HueStreamReadinessResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "AUTH_INVALID_RE_PAIR_REQUIRED",
                 "Hue bridge rejected our credentials. Re-pair the bridge to continue.",
                 Some(NO_APP_KEY_DETAILS.to_string()),
@@ -246,7 +247,7 @@ pub(crate) async fn check_hue_stream_readiness_with_freshness(
         Err(AreaListError::AuthInvalid) => {
             warn!("Hue readiness: the bridge refused the application key — re-pair required");
             HueStreamReadinessResponse {
-                status: command_status(
+                status: CommandStatus::new(
                     "AUTH_INVALID_RE_PAIR_REQUIRED",
                     "Hue bridge rejected our credentials. Re-pair the bridge to continue.",
                     Some("Bridge returned HTTP 403 with unauthorized-user error.".to_string()),
@@ -260,7 +261,7 @@ pub(crate) async fn check_hue_stream_readiness_with_freshness(
         Err(AreaListError::Other(message) | AreaListError::Unreachable(message)) => {
             warn!("Hue stream readiness check failed: {message}");
             HueStreamReadinessResponse {
-                status: command_status(
+                status: CommandStatus::new(
                     "HUE_STREAM_READINESS_FAILED",
                     "Could not evaluate Hue stream readiness.",
                     Some(message),
@@ -285,7 +286,7 @@ pub(super) fn evaluate_area_readiness(
 ) -> HueStreamReadinessResponse {
     let Some(area) = areas.iter().find(|area| area.id == area_id) else {
         return HueStreamReadinessResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "HUE_STREAM_NOT_READY",
                 "Selected Hue area was not found. Re-select an area and retry.",
                 Some(format!("Missing areaId={area_id}")),
@@ -319,13 +320,13 @@ pub(super) fn evaluate_area_readiness(
         info!("Hue stream readiness gate failed for area {area_id}: {reasons:?}");
     }
     let status = if ready {
-        command_status(
+        CommandStatus::new(
             "HUE_STREAM_READY",
             "Selected Hue area is ready for streaming.",
             None,
         )
     } else {
-        command_status(
+        CommandStatus::new(
             "HUE_STREAM_NOT_READY",
             "Selected Hue area is not stream-ready yet.",
             Some("Adjust Hue Entertainment Area configuration and revalidate.".to_string()),

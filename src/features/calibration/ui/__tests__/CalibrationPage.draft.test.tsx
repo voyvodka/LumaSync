@@ -216,6 +216,38 @@ describe("CalibrationPage — saving and Cancel", () => {
     expect(page.guard()(vi.fn<() => void>())).toBe(false);
   });
 
+  // The save snapshots the layout before its write; landing that snapshot
+  // afterwards threw away an edit made while the write was in flight.
+  it("keeps an edit made while the save is still writing, as unsaved", async () => {
+    const user = userEvent.setup();
+    let release: () => void = () => {};
+    saveMock.mockImplementationOnce(() => new Promise<void>((resolve) => { release = resolve; }));
+    const page = await renderPage({ initialConfig: SAVED });
+    const values = () => screen.getAllByRole("button", { name: "calibration:page.aria.countInput" }).map((b) => b.textContent);
+
+    await user.click(increaseTop()[0]);
+    await user.click(screen.getByRole("button", { name: "calibration:overlay.save" }));
+    await user.click(increaseTop()[0]);
+    const edited = values();
+
+    await act(async () => {
+      release();
+    });
+
+    await waitFor(() => expect(page.onSaved).toHaveBeenCalledTimes(1));
+    expect(page.onSaved.mock.calls[0][0].counts.top).toBe(41);
+    expect(values()).toEqual(edited);
+    expect(screen.getByRole("button", { name: "calibration:overlay.save" })).toHaveAttribute(
+      "title",
+      "calibration:setup.unsaved",
+    );
+    let held = false;
+    act(() => {
+      held = page.guard()(vi.fn<() => void>());
+    });
+    expect(held).toBe(true);
+  });
+
   it("puts the saved layout back on Cancel, without leaving", async () => {
     const user = userEvent.setup();
     const page = await renderPage({ initialConfig: SAVED });

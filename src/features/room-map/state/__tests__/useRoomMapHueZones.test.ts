@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
@@ -57,9 +57,10 @@ const ZONE_A: HueZone = {
   centerX: 0,
   centerY: 0,
   centerZ: 0,
+  // A 1.5 m cube in the 5 × 4 × 2.5 m default room.
   scaleX: 0.3,
-  scaleY: 0.3,
-  scaleZ: 0.3,
+  scaleY: 0.375,
+  scaleZ: 0.6,
   channelIndices: [],
   borderColor: "#3b82f6",
 };
@@ -88,7 +89,7 @@ function renderZones(config: Partial<RoomMapConfig> = {}) {
       adopt,
       activeHueZoneId: null,
       selectHueZone: vi.fn(),
-      setObjectPanelOpen: vi.fn(),
+      hueAreaId: SHELL.lastHueAreaId,
     }),
   );
   return { ...hook, apply, adopt };
@@ -108,7 +109,7 @@ function renderZonesWithStore(stored: Partial<RoomMapConfig>) {
       adopt: store.adopt,
       activeHueZoneId: store.activeHueZoneId,
       selectHueZone: store.selectHueZone,
-      setObjectPanelOpen: vi.fn(),
+      hueAreaId: SHELL.lastHueAreaId,
     });
     return { store, zones };
   });
@@ -124,6 +125,50 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 // The pre-image contract
 // ---------------------------------------------------------------------------
+
+describe("useRoomMapHueZones — a light let out of its zone", () => {
+  // The zone moved since the light joined it: its absolute pair is where the light stood back then.
+  const moved = { ...ZONE_A, centerX: 0.5, centerY: -0.5 };
+  const bound: HueChannelPlacement = {
+    ...CHANNEL_0,
+    entertainmentAreaId: "area-1",
+    x: -0.9,
+    y: 0.9,
+    zoneId: "zone-a",
+    zoneRelativePosition: { x: 1, y: 0, z: 0 },
+  };
+
+  it("stays where the zone had it when the zone is deleted, or it is taken out", () => {
+    mockDelete.mockResolvedValue(applied([], []));
+    mockAssign.mockResolvedValue(applied([moved], []));
+    for (const run of [
+      (r: ReturnType<typeof renderZones>["result"]) => r.current.handleDeleteHueZone("zone-a"),
+      (r: ReturnType<typeof renderZones>["result"]) => r.current.handleAssignChannelToZone(0, null),
+    ]) {
+      const { result, apply } = renderZones({ zones: [{ ...moved, channelIndices: [0] }], hueChannels: [bound] });
+      act(() => run(result));
+      const light = apply.mock.calls[0][0].hueChannels[0];
+      expect(light.zoneId).toBeUndefined();
+      expect(light.x).toBeCloseTo(0.8);
+      expect(light.y).toBeCloseTo(-0.5);
+      cleanup();
+    }
+  });
+});
+
+describe("useRoomMapHueZones — a zone centre stepped by key", () => {
+  it("is one gesture for the run, and a drag's drop is its own step", () => {
+    mockUpdate.mockResolvedValue(applied([ZONE_A]));
+    const { result, apply } = renderZones();
+    act(() => result.current.handleHueZoneCenterChange("zone-a", 0.1, 0, true));
+    act(() => result.current.handleHueZoneCenterChange("zone-a", 0.2, 0, true));
+    act(() => result.current.handleHueZoneCenterChange("zone-a", 0.4, 0));
+    const [first, second, dropped] = apply.mock.calls.map((call) => call[1]);
+    expect(first?.gesture).toBeTruthy();
+    expect(second?.gesture).toBe(first?.gesture);
+    expect(dropped).toBeUndefined();
+  });
+});
 
 describe("useRoomMapHueZones — pre-mutation payloads", () => {
   it("sends the untouched zone list on update, not the optimistic one", async () => {
@@ -155,6 +200,21 @@ describe("useRoomMapHueZones — pre-mutation payloads", () => {
   });
 });
 
+describe("useRoomMapHueZones — a light dropped into a zone", () => {
+  it("joins it where it was put down, sending that spot, and keeps what the drop changed", async () => {
+    mockAssign.mockResolvedValue(applied([ZONE_A], [CHANNEL_0]));
+    const { result, apply } = renderZones();
+    const dropped = { ...CHANNEL_0, zOrigin: "user" as const };
+
+    act(() => result.current.handleAssignChannelToZone(0, "zone-a", { channel: dropped, at: { x: 0.5, y: -0.25, z: 0.1 } }));
+
+    const written = apply.mock.calls[0][0];
+    expect(written.hueChannels[0]).toMatchObject({ zoneId: "zone-a", zOrigin: "user", zoneRelativePosition: { x: 0.5, y: -0.25, z: 0.1 } });
+    await waitFor(() => expect(mockAssign).toHaveBeenCalledTimes(1));
+    expect(mockAssign.mock.calls[0][0].zoneRelativePosition).toEqual({ x: 0.5, y: -0.25, z: 0.1 });
+  });
+});
+
 // Channel 0 of another area is a different light; the index alone matched it.
 describe("useRoomMapHueZones — assignment stays inside the viewed area", () => {
   it("binds the viewed area's channel and leaves the other area's channel and zones alone", async () => {
@@ -174,7 +234,6 @@ describe("useRoomMapHueZones — assignment stays inside the viewed area", () =>
       zones: [otherZone, ZONE_A],
       hueChannels: [otherChannel, ownChannel],
     });
-    await waitFor(() => expect(result.current.hueAreaId).toBe("area-1"));
 
     act(() => result.current.handleAssignChannelToZone(0, "zone-a"));
 
@@ -183,6 +242,18 @@ describe("useRoomMapHueZones — assignment stays inside the viewed area", () =>
     expect(written.hueChannels[1]).toMatchObject({ entertainmentAreaId: "area-1", zoneId: "zone-a" });
     expect(written.zones[0].channelIndices).toEqual([0]);
     expect(written.zones[1].channelIndices).toEqual([0]);
+  });
+
+  // The light would name the zone while the zone's list, synced per area, never took the light.
+  it("refuses to put the viewed area's light in another area's zone", () => {
+    const otherZone: HueZone = { ...ZONE_A, id: "zone-b", entertainmentAreaId: "area-2" };
+    const ownChannel: HueChannelPlacement = { ...CHANNEL_0, entertainmentAreaId: "area-1" };
+    const { result, apply } = renderZones({ zones: [ZONE_A, otherZone], hueChannels: [ownChannel] });
+
+    act(() => result.current.handleAssignChannelToZone(0, "zone-b"));
+
+    expect(apply).not.toHaveBeenCalled();
+    expect(mockAssign).not.toHaveBeenCalled();
   });
 });
 
@@ -200,7 +271,8 @@ describe("useRoomMapHueZones — a refusal is a resolved promise", () => {
     await waitFor(() => expect(result.current.hueZoneRejection).toBe("HUE_ZONE_OVERSIZED"));
     // The optimistic edit is the user's; the reconciliation is not.
     expect(apply).toHaveBeenCalledTimes(1);
-    expect(apply.mock.calls[0][0].zones[0].scaleX).toBe(2);
+    // Made a cube on the way, capped at the ceiling's 2.5 m.
+    expect(apply.mock.calls[0][0].zones[0]).toMatchObject({ scaleX: 0.5, scaleY: 0.625, scaleZ: 1 });
     expect(adopt).toHaveBeenCalledTimes(1);
     expect(adopt.mock.calls[0][0]).toEqual({ zones: [ZONE_A] });
   });
@@ -243,7 +315,6 @@ describe("useRoomMapHueZones — a refusal is a resolved promise", () => {
     mockCreate.mockResolvedValue(refused("HUE_ZONE_OVERSIZED", []));
     const { result } = renderZonesWithStore({});
 
-    await waitFor(() => expect(result.current.zones.hueAreaId).toBe("area-1"));
     await waitFor(() => expect(result.current.store.loading).toBe(false));
     act(() => result.current.zones.handleAddHueZone());
     expect(result.current.store.activeHueZoneId).not.toBeNull();
@@ -291,5 +362,64 @@ describe("useRoomMapHueZones — a refusal is a resolved promise", () => {
     expect(result.current.hueZoneRejection).toBeNull();
     expect(apply).toHaveBeenCalledTimes(1);
     expect(adopt).not.toHaveBeenCalled();
+  });
+});
+
+describe("useRoomMapHueZones — drawn and resized zones", () => {
+  it("makes a drawn zone a cube where it was drawn, at mid-height", async () => {
+    mockCreate.mockResolvedValue(applied([]));
+    const { result, apply } = renderZones();
+
+    act(() => result.current.handleAddHueZone({ centerX: 0.4, centerY: -0.2, edge: 1.5 }));
+
+    const zone = mockCreate.mock.calls[0]![0].zone;
+    expect(zone).toMatchObject({ centerX: 0.4, centerY: -0.2, centerZ: 0, scaleX: 0.3, scaleY: 0.375, scaleZ: 0.6 });
+    expect(apply).toHaveBeenCalledWith({ zones: [ZONE_A, zone] });
+  });
+
+  it("adds half the tallest cube at the room's middle by default, and keeps a drawn one inside the room", async () => {
+    mockCreate.mockResolvedValue(applied([]));
+    const { result } = renderZones();
+
+    act(() => result.current.handleAddHueZone());
+    act(() => result.current.handleAddHueZone({ centerX: 0.9, centerY: 0, edge: 1.5 }));
+
+    // 1.25 m, half the room's height.
+    expect(mockCreate.mock.calls[0]![0].zone).toMatchObject({ centerX: 0, centerY: 0, centerZ: 0, scaleX: 0.25, scaleY: 0.3125, scaleZ: 0.5 });
+    expect(mockCreate.mock.calls[1]![0].zone.centerX).toBeCloseTo(0.7);
+  });
+
+  it("moves a zone up and down, its cube kept under the ceiling", async () => {
+    mockUpdate.mockResolvedValue(applied([ZONE_A]));
+    const { result } = renderZonesWithStore({ zones: [ZONE_A] });
+    await waitFor(() => expect(result.current.store.loading).toBe(false));
+
+    act(() => result.current.zones.handleHueZoneCenterChange("zone-a", ZONE_A.centerX, ZONE_A.centerY, false, 2));
+
+    const zone = result.current.store.config.zones[0]!;
+    expect(zone.centerZ).toBeCloseTo(1 - zone.scaleZ);
+  });
+
+  it("resizes from the bottom, its top coming down to it", async () => {
+    mockUpdate.mockResolvedValue(applied([ZONE_A]));
+    const { result } = renderZonesWithStore({ zones: [{ ...ZONE_A, scaleX: 0.25, scaleY: 0.3125, scaleZ: 0.5 }] });
+    await waitFor(() => expect(result.current.store.loading).toBe(false));
+
+    // From 1.25 m to 0.75 m, its bottom kept at -0.5.
+    act(() => result.current.zones.handleHueZoneResize("zone-a", { centerX: 0, centerY: 0, edge: 0.75 }));
+    expect(result.current.store.config.zones[0]!.centerZ).toBeCloseTo(-0.2);
+  });
+
+  it("writes each resize as its own undo step", async () => {
+    mockUpdate.mockResolvedValue(applied([ZONE_A]));
+    const { result } = renderZonesWithStore({ zones: [ZONE_A] });
+    await waitFor(() => expect(result.current.store.loading).toBe(false));
+
+    act(() => result.current.zones.handleHueZoneResize("zone-a", { centerX: 0.1, centerY: 0, edge: 2 }));
+    act(() => result.current.zones.handleHueZoneResize("zone-a", { centerX: 0.2, centerY: 0, edge: 2.5 }));
+    expect(result.current.store.config.zones[0]).toMatchObject({ scaleX: 0.5, scaleY: 0.625, scaleZ: 1 });
+
+    await act(async () => result.current.store.undo());
+    expect(result.current.store.config.zones[0]!.scaleX).toBe(0.4);
   });
 });

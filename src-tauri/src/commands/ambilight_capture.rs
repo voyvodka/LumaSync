@@ -26,6 +26,20 @@ fn downscaled_dimensions(width: u32, height: u32, stride: usize) -> (u32, u32) {
     )
 }
 
+/// Once per source size, not per frame: the capture callback runs at display rate.
+#[cfg(any(target_os = "windows", test))]
+fn downscale_log_due(
+    last: &mut Option<(u32, u32)>,
+    width: u32,
+    height: u32,
+    stride: usize,
+) -> bool {
+    let size = (stride > 1).then_some((width, height));
+    let due = size.is_some() && size != *last;
+    *last = size;
+    due
+}
+
 /// Drop the fourth byte of every source pixel, keeping every `stride`-th
 /// pixel on both axes.
 ///
@@ -86,6 +100,13 @@ impl CapturedFrame {
             captured_at: Instant::now(),
         }
     }
+
+    /// The same pixels as a new frame: a fresh `seq` and capture time, for a
+    /// source that reuses its buffer instead of allocating one per frame.
+    pub(crate) fn restamp(&mut self) {
+        self.seq = NEXT_FRAME_SEQ.fetch_add(1, Ordering::Relaxed);
+        self.captured_at = Instant::now();
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -110,8 +131,8 @@ impl AmbilightCaptureError {
     }
 }
 
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 pub trait AmbilightFrameSource: Send {
@@ -259,6 +280,87 @@ pub fn create_live_frame_source_at(
     interval: Duration,
 ) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
     platform::create_live_frame_source(display_id, interval)
+        .map(|source| Box::new(Counted::new(source)) as Box<dyn AmbilightFrameSource>)
+}
+
+// ---------------------------------------------------------------------------
+// The app's own windows and the capture
+// ---------------------------------------------------------------------------
+
+/// Live capture sources running now. Where the preview cannot keep its twin
+/// out of the capture (Linux, Windows before 10 2004), it hides the twin while
+/// this is above zero, or Ambilight would light the strip from the twin.
+static LIVE_SOURCES: AtomicUsize = AtomicUsize::new(0);
+
+type CaptureListener = Box<dyn Fn(bool) + Send + Sync>;
+static CAPTURE_LISTENER: OnceLock<CaptureListener> = OnceLock::new();
+
+pub fn capture_active() -> bool {
+    LIVE_SOURCES.load(Ordering::SeqCst) > 0
+}
+
+/// Called with `true` when the first live source starts and `false` when the
+/// last one stops, on the thread that started or dropped it. Set once.
+pub fn on_capture_active_changed(listener: CaptureListener) {
+    let _ = CAPTURE_LISTENER.set(listener);
+}
+
+fn notify_capture_active(active: bool) {
+    if let Some(listener) = CAPTURE_LISTENER.get() {
+        listener(active);
+    }
+}
+
+struct Counted(Box<dyn AmbilightFrameSource>);
+
+impl Counted {
+    fn new(inner: Box<dyn AmbilightFrameSource>) -> Self {
+        if LIVE_SOURCES.fetch_add(1, Ordering::SeqCst) == 0 {
+            notify_capture_active(true);
+        }
+        Self(inner)
+    }
+}
+
+impl Drop for Counted {
+    fn drop(&mut self) {
+        if LIVE_SOURCES.fetch_sub(1, Ordering::SeqCst) == 1 {
+            notify_capture_active(false);
+        }
+    }
+}
+
+impl AmbilightFrameSource for Counted {
+    fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError> {
+        self.0.capture_frame()
+    }
+
+    fn frame_signal(&self) -> Option<Arc<LatestFrame>> {
+        self.0.frame_signal()
+    }
+}
+
+/// Keep every window of this app out of the live capture, or let them back
+/// in. The preview session turns it on while it is open, so its twin and
+/// popup never light the strip. Only macOS filters by application; Windows
+/// keeps the preview windows out per window (`preview::windows`), and Linux
+/// cannot.
+pub fn set_own_windows_excluded(excluded: bool) {
+    #[cfg(target_os = "macos")]
+    platform::set_own_windows_excluded(excluded);
+    #[cfg(not(target_os = "macos"))]
+    let _ = excluded;
+}
+
+/// The one window of this app the capture still sees while the app is left
+/// out: the preview's scene, which Ambilight is there to light. A window
+/// number (`CGWindowID`); the window must be on screen, or ScreenCaptureKit
+/// does not list it. macOS only — elsewhere nothing leaves the app out.
+pub fn set_capture_excepted_window(window: Option<u32>) {
+    #[cfg(target_os = "macos")]
+    platform::set_capture_excepted_window(window);
+    #[cfg(not(target_os = "macos"))]
+    let _ = window;
 }
 
 #[cfg(target_os = "windows")]
@@ -270,7 +372,9 @@ mod platform {
         CaptureControl, GraphicsCaptureApiError, GraphicsCaptureApiHandler,
     };
     use windows_capture::frame::Frame;
-    use windows_capture::graphics_capture_api::InternalCaptureControl;
+    use windows_capture::graphics_capture_api::{
+        Error as CaptureApiError, GraphicsCaptureApi, InternalCaptureControl,
+    };
     use windows_capture::monitor::Monitor;
     use windows_capture::settings::{
         ColorFormat, CursorCaptureSettings, DirtyRegionSettings, DrawBorderSettings,
@@ -365,19 +469,38 @@ mod platform {
         // the frame budget while being by far the largest thing in it. On a
         // 144 Hz display this is roughly a sevenfold reduction in readback for
         // byte-identical output.
-        let settings = Settings::new(
-            monitor,
-            CursorCaptureSettings::Default,
-            DrawBorderSettings::Default,
-            SecondaryWindowSettings::Default,
-            MinimumUpdateIntervalSettings::Custom(interval),
-            DirtyRegionSettings::Default,
-            ColorFormat::Rgba8,
-            Arc::clone(&latest_frame),
-        );
+        let start = |border| {
+            WindowsLiveCaptureHandler::start_free_threaded(Settings::new(
+                monitor,
+                CursorCaptureSettings::Default,
+                border,
+                SecondaryWindowSettings::Default,
+                MinimumUpdateIntervalSettings::Custom(interval),
+                DirtyRegionSettings::Default,
+                ColorFormat::Rgba8,
+                Arc::clone(&latest_frame),
+            ))
+        };
 
-        let capture_control =
-            WindowsLiveCaptureHandler::start_free_threaded(settings).map_err(map_start_error)?;
+        // A build denying the Borderless access windows-capture never requests keeps the frame
+        // without an error. See docs/architecture/capture-and-pipeline.md.
+        let border = if GraphicsCaptureApi::is_border_settings_supported().unwrap_or(false) {
+            DrawBorderSettings::WithoutBorder
+        } else {
+            DrawBorderSettings::Default
+        };
+        let capture_control = match start(border) {
+            Err(GraphicsCaptureApiError::GraphicsCaptureApiError(
+                CaptureApiError::BorderConfigUnsupported,
+            )) => {
+                log::warn!(
+                    "[ambilight-capture/windows] this build cannot drop the capture frame; capturing with it"
+                );
+                start(DrawBorderSettings::Default)
+            }
+            started => started,
+        }
+        .map_err(map_start_error)?;
 
         Ok(Box::new(WindowsLiveFrameSource {
             latest_frame,
@@ -449,6 +572,7 @@ mod platform {
 
     struct WindowsLiveCaptureHandler {
         latest_frame: SharedFrame,
+        logged_downscale: Option<(u32, u32)>,
     }
 
     impl GraphicsCaptureApiHandler for WindowsLiveCaptureHandler {
@@ -458,6 +582,7 @@ mod platform {
         fn new(ctx: windows_capture::capture::Context<Self::Flags>) -> Result<Self, Self::Error> {
             Ok(Self {
                 latest_frame: ctx.flags,
+                logged_downscale: None,
             })
         }
 
@@ -492,9 +617,9 @@ mod platform {
             // See docs/architecture/capture-and-pipeline.md.
             let stride = super::downscale_stride(width, height);
             let (out_w, out_h) = super::downscaled_dimensions(width, height, stride);
-            if stride > 1 {
+            if super::downscale_log_due(&mut self.logged_downscale, width, height, stride) {
                 log::debug!(
-                    "[ambilight-capture/windows] 4K downscale active: src={}x{} stride={} → ~{}x{}",
+                    "[ambilight-capture/windows] downscale active: src={}x{} stride={} → ~{}x{}",
                     width,
                     height,
                     stride,
@@ -520,8 +645,9 @@ mod platform {
 
 #[cfg(target_os = "macos")]
 mod platform {
-    use std::sync::Arc;
-    use std::time::Duration;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
 
     use screencapturekit::cv::CVPixelBufferLockFlags;
     use screencapturekit::prelude::*;
@@ -533,6 +659,36 @@ mod platform {
     };
 
     type SharedFrame = Arc<LatestFrame>;
+
+    #[repr(C)]
+    struct MachTimebaseInfo {
+        numer: u32,
+        denom: u32,
+    }
+
+    extern "C" {
+        fn mach_absolute_time() -> u64;
+        fn mach_timebase_info(info: *mut MachTimebaseInfo) -> i32;
+    }
+
+    /// How long ago a host-clock time (`mach_absolute_time` ticks, as
+    /// `SCStreamFrameInfo.displayTime` is) was. `None` for a time not in the
+    /// past, or one too far back to be a frame's (a clock the frame does not
+    /// share would read as seconds).
+    fn host_time_age(then: u64) -> Option<Duration> {
+        static TIMEBASE: std::sync::OnceLock<(u64, u64)> = std::sync::OnceLock::new();
+        let &(numer, denom) = TIMEBASE.get_or_init(|| {
+            let mut info = MachTimebaseInfo { numer: 0, denom: 0 };
+            // SAFETY: fills the struct it is given; it cannot fail on macOS.
+            unsafe { mach_timebase_info(&mut info) };
+            (u64::from(info.numer.max(1)), u64::from(info.denom.max(1)))
+        });
+        // SAFETY: reads the host clock.
+        let now = unsafe { mach_absolute_time() };
+        let ticks = now.checked_sub(then)?;
+        let age = Duration::from_nanos(ticks.saturating_mul(numer) / denom);
+        (age < Duration::from_millis(500)).then_some(age)
+    }
 
     /// Resolve the SCDisplay matching the persisted `display_id` hint,
     /// falling back to the primary (main) display on any mismatch.
@@ -633,11 +789,14 @@ mod platform {
         let start_failed =
             |_| AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_SESSION_START_FAILED");
 
-        let filter = SCContentFilter::create()
-            .with_display(&display)
-            .with_excluding_windows(&[])
-            .build()
-            .map_err(start_failed)?;
+        // Read, not held: a start can take seconds, and the main thread waits
+        // on this lock when a preview opens or closes. A flag that changes
+        // while the stream starts is reconciled when it registers.
+        let wanted = FILTER_STATE
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .wanted;
+        let (filter, applied) = build_filter(&display, wanted).map_err(start_failed)?;
 
         // Downscale to ~640px max dimension for ambilight color sampling.
         // SCStream performs hardware-accelerated scaling on the GPU — zero extra CPU cost.
@@ -673,6 +832,15 @@ mod platform {
                 if of_type != SCStreamOutputType::Screen {
                     return;
                 }
+                // Stamped before the conversion below, which takes a few
+                // milliseconds, and moved back to when the display showed the
+                // frame where ScreenCaptureKit says.
+                let arrived = Instant::now();
+                let captured_at = sample
+                    .display_time()
+                    .and_then(host_time_age)
+                    .and_then(|age| arrived.checked_sub(age))
+                    .unwrap_or(arrived);
 
                 let buffer = match sample.pixel_buffer() {
                     Some(buf) => buf,
@@ -717,7 +885,9 @@ mod platform {
                     }
                 }
 
-                frame_writer.publish(CapturedFrame::new(width, height, pixels_rgb));
+                let mut frame = CapturedFrame::new(width, height, pixels_rgb);
+                frame.captured_at = captured_at;
+                frame_writer.publish(frame);
             },
             SCStreamOutputType::Screen,
         );
@@ -726,19 +896,167 @@ mod platform {
 
         stream.start_capture().map_err(start_failed)?;
 
+        let id = NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed);
+        let mut state = FILTER_STATE.lock().unwrap_or_else(|e| e.into_inner());
+        state.live = Some(LiveStream {
+            id,
+            stream: stream.clone(),
+            display,
+            applied,
+        });
+        let wanted = state.wanted;
+        reconcile(&mut state, wanted);
+        drop(state);
+
         Ok(Box::new(MacOSLiveFrameSource {
             latest_frame,
             stream,
+            id,
         }))
+    }
+
+    /// The running stream and what it should leave out of the display. An
+    /// update never reaches a stream its source has let go of: both go through
+    /// this lock.
+    struct FilterState {
+        wanted: OwnWindows,
+        live: Option<LiveStream>,
+    }
+
+    /// Whether this app's windows are left out, and the one still captured.
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+    struct OwnWindows {
+        exclude: bool,
+        except: Option<u32>,
+    }
+
+    struct LiveStream {
+        id: u64,
+        stream: SCStream,
+        display: SCDisplay,
+        /// What the stream's filter actually does, which can fall short of
+        /// `wanted` when the app or the window was not found.
+        applied: OwnWindows,
+    }
+
+    static FILTER_STATE: Mutex<FilterState> = Mutex::new(FilterState {
+        wanted: OwnWindows {
+            exclude: false,
+            except: None,
+        },
+        live: None,
+    });
+    static NEXT_STREAM_ID: AtomicU64 = AtomicU64::new(1);
+
+    /// The whole display, or the whole display less this app's windows, and
+    /// whether it left the app out. The app is looked up among off-screen
+    /// windows too, since the main window may be hidden; whether a windowless
+    /// moment still lists it is unverified, so the caller retries once the
+    /// twin exists.
+    fn build_filter(
+        display: &SCDisplay,
+        wanted: OwnWindows,
+    ) -> Result<(SCContentFilter, OwnWindows), SCError> {
+        if wanted.exclude {
+            let own_pid = std::process::id() as i32;
+            let content = SCShareableContent::create()
+                .with_on_screen_windows_only(false)
+                .get()?;
+            if let Some(app) = content
+                .applications()
+                .into_iter()
+                .find(|app| app.process_id() == own_pid)
+            {
+                let excepted = wanted.except.and_then(|id| {
+                    let found = content.windows().into_iter().find(|w| w.window_id() == id);
+                    if found.is_none() {
+                        log::warn!("[capture] window {id} is not shareable yet; it stays out of the capture");
+                    }
+                    found
+                });
+                let filter = SCContentFilter::create()
+                    .with_display(display)
+                    .with_excluding_applications(&[&app], &excepted.iter().collect::<Vec<_>>())
+                    .build()?;
+                let applied = OwnWindows {
+                    exclude: true,
+                    except: excepted.as_ref().map(|w| w.window_id()),
+                };
+                log::info!(
+                    "[capture] filter leaves out this app's windows (pid {own_pid}) except {:?}",
+                    applied.except
+                );
+                return Ok((filter, applied));
+            }
+            log::warn!(
+                "[capture] this app is not among the shareable applications; its windows stay in the capture"
+            );
+        }
+        let filter = SCContentFilter::create()
+            .with_display(display)
+            .with_excluding_windows(&[])
+            .build()?;
+        Ok((filter, OwnWindows::default()))
+    }
+
+    /// Bring the running stream's filter to `wanted`, if it is not there.
+    fn reconcile(state: &mut FilterState, wanted: OwnWindows) {
+        let Some(live) = state.live.as_mut() else {
+            return;
+        };
+        if live.applied == wanted {
+            return;
+        }
+        let applied = build_filter(&live.display, wanted).and_then(|(filter, applied)| {
+            live.stream.update_content_filter(&filter)?;
+            Ok(applied)
+        });
+        match applied {
+            Ok(applied) => {
+                live.applied = applied;
+                log::info!("[capture] own windows {applied:?} on the running stream");
+            }
+            Err(error) => {
+                log::warn!("[capture] own windows {wanted:?} not applied: {error:?}")
+            }
+        }
+    }
+
+    /// Applied to the running stream at once, blocking until ScreenCaptureKit
+    /// confirms, so a window shown after this returns is never in a frame.
+    /// With no stream running nothing is asked of ScreenCaptureKit: listing
+    /// the shareable content is what raises the Screen Recording prompt, which
+    /// only a capture start may do. Calling it again with the same value
+    /// retries a filter that could not leave the app out.
+    pub(super) fn set_own_windows_excluded(excluded: bool) {
+        let mut state = FILTER_STATE.lock().unwrap_or_else(|e| e.into_inner());
+        state.wanted.exclude = excluded;
+        let wanted = state.wanted;
+        reconcile(&mut state, wanted);
+    }
+
+    /// Applied like `set_own_windows_excluded`, blocking until it is.
+    pub(super) fn set_capture_excepted_window(window: Option<u32>) {
+        let mut state = FILTER_STATE.lock().unwrap_or_else(|e| e.into_inner());
+        state.wanted.except = window;
+        let wanted = state.wanted;
+        reconcile(&mut state, wanted);
     }
 
     struct MacOSLiveFrameSource {
         latest_frame: SharedFrame,
         stream: SCStream,
+        id: u64,
     }
 
     impl Drop for MacOSLiveFrameSource {
         fn drop(&mut self) {
+            {
+                let mut state = FILTER_STATE.lock().unwrap_or_else(|e| e.into_inner());
+                if state.live.as_ref().is_some_and(|live| live.id == self.id) {
+                    state.live = None;
+                }
+            }
             // SCStream::Drop only calls sc_stream_release (not sc_stream_stop_capture).
             // Releasing a capturing stream without stopping it first causes a macOS crash.
             //
@@ -964,13 +1282,13 @@ impl BlackBorderInsets {
         width: usize,
         height: usize,
     ) -> (std::ops::Range<usize>, std::ops::Range<usize>) {
-        let top = (height as f32 * self.top) as usize;
+        let top = (height as f32 * self.top).round() as usize;
         let bottom = height
-            .saturating_sub((height as f32 * self.bottom) as usize)
+            .saturating_sub((height as f32 * self.bottom).round() as usize)
             .max(top + 1);
-        let left = (width as f32 * self.left) as usize;
+        let left = (width as f32 * self.left).round() as usize;
         let right = width
-            .saturating_sub((width as f32 * self.right) as usize)
+            .saturating_sub((width as f32 * self.right).round() as usize)
             .max(left + 1);
         (top..bottom, left..right)
     }
@@ -979,100 +1297,191 @@ impl BlackBorderInsets {
 const BORDER_SCAN_STEP: usize = 8;
 const BORDER_MAX_INSET: f32 = 0.40;
 
-/// Brightness above which a pixel counts as content rather than letterbox.
-/// Lives here, next to the detector, because the live worker and the debug
-/// capture probe have to read the same number for their answers to be
-/// comparable — a probe measuring a different threshold measures nothing.
+/// Brightness above which a pixel counts as content rather than letterbox, on
+/// a frame whose bars are true black. Lives here, next to the detector,
+/// because the live worker and the debug capture probe have to read the same
+/// number for their answers to be comparable — a probe measuring a different
+/// threshold measures nothing.
 pub const BLACK_BORDER_THRESHOLD: u8 = 15;
 
-fn row_has_content(pixels: &[[u8; 3]], w: usize, row: usize, threshold: u8) -> bool {
+/// The brightest a bar can be. A player that leaves video in limited range
+/// draws its bars at 16, not 0, so the threshold follows the darkest edge's
+/// own black up to here — and only for a flat edge: a dim picture or a dark
+/// interface is uneven, and raising the threshold under it would crop it.
+const BORDER_BLACK_CEILING: u8 = 24;
+/// How much a bar's edge may vary and still be read as one flat black.
+const BORDER_BLACK_FLATNESS: u8 = 4;
+/// How far above that black a pixel must be to count as picture.
+const BORDER_BLACK_MARGIN: u8 = 8;
+/// A line is picture only with this many samples above the threshold, so a
+/// cursor, a stray bright pixel or compression noise in a bar is not.
+const BORDER_MIN_HITS: usize = 2;
+/// Opposite bars further apart than this, in scan steps, are not one bar
+/// drawn twice: something in one of them is not bar.
+const BORDER_SYMMETRY_STEPS: usize = 2;
+/// Bottom-bar content that stays inside this middle share of the width reads
+/// as subtitles over the bar, not as picture.
+const BORDER_SUBTITLE_SPAN: f32 = 0.85;
+
+/// Samples above `threshold` along one row: how many, and the first and last
+/// column they were found at.
+fn row_hits(pixels: &[[u8; 3]], w: usize, row: usize, threshold: u8) -> (usize, usize, usize) {
+    let mut hits = 0;
+    let (mut first, mut last) = (usize::MAX, 0);
     for col in (0..w).step_by(BORDER_SCAN_STEP) {
         if let Some(pixel) = pixels.get(row * w + col) {
             if pixel[0].max(pixel[1]).max(pixel[2]) > threshold {
-                return true;
+                hits += 1;
+                first = first.min(col);
+                last = col;
+            }
+        }
+    }
+    (hits, first, last)
+}
+
+fn row_has_content(pixels: &[[u8; 3]], w: usize, row: usize, threshold: u8) -> bool {
+    row_hits(pixels, w, row, threshold).0 >= BORDER_MIN_HITS
+}
+
+fn col_has_content(pixels: &[[u8; 3]], w: usize, h: usize, col: usize, threshold: u8) -> bool {
+    let mut hits = 0;
+    for row in (0..h).step_by(BORDER_SCAN_STEP) {
+        if let Some(pixel) = pixels.get(row * w + col) {
+            if pixel[0].max(pixel[1]).max(pixel[2]) > threshold {
+                hits += 1;
+                if hits >= BORDER_MIN_HITS {
+                    return true;
+                }
             }
         }
     }
     false
 }
 
-fn col_has_content(pixels: &[[u8; 3]], w: usize, h: usize, col: usize, threshold: u8) -> bool {
-    for row in (0..h).step_by(BORDER_SCAN_STEP) {
-        if let Some(pixel) = pixels.get(row * w + col) {
-            if pixel[0].max(pixel[1]).max(pixel[2]) > threshold {
-                return true;
-            }
+/// The darkest and brightest sample along each of the frame's outermost rows
+/// and columns.
+fn edge_ranges(pixels: &[[u8; 3]], w: usize, h: usize) -> [(u8, u8); 4] {
+    let range = |cells: &mut dyn Iterator<Item = usize>| {
+        cells
+            .filter_map(|i| pixels.get(i))
+            .map(|p| p[0].max(p[1]).max(p[2]))
+            .fold((u8::MAX, 0), |(lo, hi), v| (lo.min(v), hi.max(v)))
+    };
+    [
+        range(&mut (0..w).step_by(BORDER_SCAN_STEP)),
+        range(&mut (0..w).step_by(BORDER_SCAN_STEP).map(|c| (h - 1) * w + c)),
+        range(&mut (0..h).step_by(BORDER_SCAN_STEP).map(|r| r * w)),
+        range(&mut (0..h).step_by(BORDER_SCAN_STEP).map(|r| r * w + w - 1)),
+    ]
+}
+
+/// Depth of the bar on each edge, in pixels: the first scanned line with
+/// picture on it, or `None` when no line has any.
+fn edge_depths(px: &[[u8; 3]], w: usize, h: usize, threshold: u8) -> Option<[usize; 4]> {
+    let top = (0..h)
+        .step_by(BORDER_SCAN_STEP)
+        .find(|&row| row_has_content(px, w, row, threshold))?;
+    let bottom = (0..h)
+        .step_by(BORDER_SCAN_STEP)
+        .find(|&depth| row_has_content(px, w, h - 1 - depth, threshold))?;
+    let left = (0..w)
+        .step_by(BORDER_SCAN_STEP)
+        .find(|&col| col_has_content(px, w, h, col, threshold))?;
+    let right = (0..w)
+        .step_by(BORDER_SCAN_STEP)
+        .find(|&depth| col_has_content(px, w, h, w - 1 - depth, threshold))?;
+    Some([top, bottom, left, right])
+}
+
+/// One bar depth for two opposite edges. A bar on one side only is dark
+/// picture, not a bar: players centre the picture, so real bars come in pairs.
+/// A pair that disagrees takes the shallower depth, so no picture is cropped —
+/// except where `subtitles` says the bottom's extra content is a subtitle line
+/// over the bar, when the top's depth holds for both.
+fn paired_depth(near: usize, far: usize, subtitles: impl FnOnce() -> bool) -> usize {
+    if near == 0 || far == 0 {
+        return 0;
+    }
+    if near.abs_diff(far) <= BORDER_SYMMETRY_STEPS * BORDER_SCAN_STEP {
+        return near.min(far);
+    }
+    if far < near && subtitles() {
+        return near;
+    }
+    near.min(far)
+}
+
+/// Whether the content the bottom scan met between `depths` (from the bottom
+/// edge) is a subtitle over the bar: every line of it inside the middle of the
+/// width, and bar again between it and the picture. A lit object at the
+/// bottom of a picture whose top is dark runs on into the picture instead.
+fn band_is_subtitles(
+    px: &[[u8; 3]],
+    w: usize,
+    h: usize,
+    depths: std::ops::Range<usize>,
+    threshold: u8,
+) -> bool {
+    let margin = ((1.0 - BORDER_SUBTITLE_SPAN) / 2.0 * w as f32) as usize;
+    let (mut text, mut gap) = (false, false);
+    for depth in depths.step_by(BORDER_SCAN_STEP) {
+        let (hits, first, last) = row_hits(px, w, h - 1 - depth, threshold);
+        if hits < BORDER_MIN_HITS {
+            gap |= text;
+        } else if gap || first < margin || last + margin >= w {
+            return false;
+        } else {
+            text = true;
         }
     }
-    false
+    text && gap
 }
 
 /// Detect letterbox / pillarbox black borders in `frame`.
 ///
 /// Scans inward from each edge (every `BORDER_SCAN_STEP` pixels for speed)
-/// until a pixel brighter than `threshold` is found. Returns the resulting
-/// insets as fractions of the frame dimensions, capped at `BORDER_MAX_INSET`.
-pub fn detect_black_borders(frame: &CapturedFrame, threshold: u8) -> BlackBorderInsets {
+/// until a line with picture on it is found, then pairs opposite edges (see
+/// [`paired_depth`]). Returns the insets as fractions of the frame dimensions,
+/// capped at `BORDER_MAX_INSET`, or `None` for a frame with nothing to measure
+/// against — black, or too dark to tell — so the caller keeps its last answer
+/// instead of dropping the crop through a fade.
+pub fn detect_black_borders(frame: &CapturedFrame, threshold: u8) -> Option<BlackBorderInsets> {
     let w = frame.width as usize;
     let h = frame.height as usize;
-    if w == 0 || h == 0 || frame.pixels_rgb.is_empty() {
-        return BlackBorderInsets::default();
+    if w == 0 || h == 0 || frame.pixels_rgb.len() < w * h {
+        return None;
     }
-
     let px = frame.pixels_rgb.as_slice();
 
-    // Top
-    let mut top_rows = 0usize;
-    for row in (0..h).step_by(BORDER_SCAN_STEP) {
-        if row_has_content(px, w, row, threshold) {
-            top_rows = row;
-            break;
-        }
+    let (darkest_lo, darkest_hi) = edge_ranges(px, w, h)
+        .into_iter()
+        .min_by_key(|&(_, hi)| hi)
+        .unwrap_or((0, 0));
+    if darkest_hi > BORDER_BLACK_CEILING {
+        // Picture on all four edges: no bars.
+        return Some(BlackBorderInsets::default());
     }
+    let flat = darkest_hi - darkest_lo <= BORDER_BLACK_FLATNESS;
+    let threshold = if flat {
+        threshold.max(darkest_hi.saturating_add(BORDER_BLACK_MARGIN))
+    } else {
+        threshold
+    };
+    let [top, bottom, left, right] = edge_depths(px, w, h, threshold)?;
 
-    // Bottom
-    let mut bottom_rows = 0usize;
-    let mut row = h.saturating_sub(1);
-    loop {
-        if row_has_content(px, w, row, threshold) {
-            bottom_rows = h.saturating_sub(row + 1);
-            break;
-        }
-        if row < BORDER_SCAN_STEP {
-            break;
-        }
-        row -= BORDER_SCAN_STEP;
-    }
-
-    // Left
-    let mut left_cols = 0usize;
-    for col in (0..w).step_by(BORDER_SCAN_STEP) {
-        if col_has_content(px, w, h, col, threshold) {
-            left_cols = col;
-            break;
-        }
-    }
-
-    // Right
-    let mut right_cols = 0usize;
-    let mut col = w.saturating_sub(1);
-    loop {
-        if col_has_content(px, w, h, col, threshold) {
-            right_cols = w.saturating_sub(col + 1);
-            break;
-        }
-        if col < BORDER_SCAN_STEP {
-            break;
-        }
-        col -= BORDER_SCAN_STEP;
-    }
-
-    BlackBorderInsets {
-        top: (top_rows as f32 / h as f32).min(BORDER_MAX_INSET),
-        bottom: (bottom_rows as f32 / h as f32).min(BORDER_MAX_INSET),
-        left: (left_cols as f32 / w as f32).min(BORDER_MAX_INSET),
-        right: (right_cols as f32 / w as f32).min(BORDER_MAX_INSET),
-    }
+    let letterbox = paired_depth(top, bottom, || {
+        band_is_subtitles(px, w, h, bottom..top, threshold)
+    });
+    let pillarbox = paired_depth(left, right, || false);
+    let rows = (letterbox as f32 / h as f32).min(BORDER_MAX_INSET);
+    let cols = (pillarbox as f32 / w as f32).min(BORDER_MAX_INSET);
+    Some(BlackBorderInsets {
+        top: rows,
+        bottom: rows,
+        left: cols,
+        right: cols,
+    })
 }
 
 #[cfg(test)]
@@ -1080,9 +1489,33 @@ mod tests {
     #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     use super::{create_live_frame_source, AmbilightCaptureError};
     use super::{
-        downscale_stride, downscaled_dimensions, select_display_index, subsample_rgb,
-        DisplayCandidate, MAX_CAPTURE_DIM,
+        downscale_log_due, downscale_stride, downscaled_dimensions, select_display_index,
+        subsample_rgb, DisplayCandidate, MAX_CAPTURE_DIM,
     };
+
+    /// Where the twin cannot be excluded it hides while capture runs, so the
+    /// count must cover a source's whole life and two sources must not end
+    /// it early.
+    #[test]
+    fn capture_is_active_while_any_live_source_lives() {
+        struct Idle;
+        impl super::AmbilightFrameSource for Idle {
+            fn capture_frame(
+                &mut self,
+            ) -> Result<std::sync::Arc<super::CapturedFrame>, super::AmbilightCaptureError>
+            {
+                Err(super::AmbilightCaptureError::FrameUnavailable)
+            }
+        }
+
+        assert!(!super::capture_active());
+        let first = super::Counted::new(Box::new(Idle));
+        let second = super::Counted::new(Box::new(Idle));
+        drop(first);
+        assert!(super::capture_active());
+        drop(second);
+        assert!(!super::capture_active());
+    }
 
     #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     #[test]
@@ -1131,6 +1564,20 @@ mod tests {
         assert_eq!(downscale_stride(2560, 1080), 4);
         // Portrait: the longest edge drives the stride regardless of axis.
         assert_eq!(downscale_stride(1080, 3840), 6);
+    }
+
+    #[test]
+    fn downscale_log_is_due_once_per_source_size() {
+        let mut last = None;
+        let mut due = |w, h| downscale_log_due(&mut last, w, h, downscale_stride(w, h));
+        assert!(due(1920, 1080));
+        assert!(
+            !due(1920, 1080),
+            "a second frame of the same size logs nothing"
+        );
+        assert!(due(3840, 2160), "a resolution change logs again");
+        assert!(!due(640, 480), "a frame under the cap is not downscaled");
+        assert!(due(3840, 2160), "coming back over the cap logs again");
     }
 
     #[test]
@@ -1282,5 +1729,257 @@ mod tests {
         ];
         let index = select_display_index(Some("missing"), &candidates).expect("candidate expected");
         assert_eq!(candidates[index].id, "a");
+    }
+
+    // ── Black-border detection ──────────────────────────────────────────────
+
+    use super::{detect_black_borders, BlackBorderInsets, CapturedFrame, BLACK_BORDER_THRESHOLD};
+
+    const W: u32 = 640;
+    const H: u32 = 360;
+    /// A 2.39:1 film on a 16:9 frame: 46 rows of bar above and below.
+    const BAR: u32 = 46;
+
+    fn frame(paint: impl Fn(u32, u32) -> [u8; 3]) -> CapturedFrame {
+        frame_sized(W, H, paint)
+    }
+
+    fn frame_sized(w: u32, h: u32, paint: impl Fn(u32, u32) -> [u8; 3]) -> CapturedFrame {
+        let pixels = (0..h)
+            .flat_map(|y| (0..w).map(move |x| (x, y)))
+            .map(|(x, y)| paint(x, y))
+            .collect();
+        CapturedFrame::new(w, h, pixels)
+    }
+
+    /// A busy picture: bright everywhere, varied enough to never read as bar.
+    fn picture(x: u32, y: u32) -> [u8; 3] {
+        [80 + (x % 120) as u8, 90 + (y % 100) as u8, 120]
+    }
+
+    fn letterboxed(bar: [u8; 3]) -> impl Fn(u32, u32) -> [u8; 3] {
+        move |x, y| {
+            if !(BAR..H - BAR).contains(&y) {
+                bar
+            } else {
+                picture(x, y)
+            }
+        }
+    }
+
+    fn rows_cropped(insets: &BlackBorderInsets) -> (usize, usize) {
+        let (rows, _) = insets.content_bounds(W as usize, H as usize);
+        (rows.start, H as usize - rows.end)
+    }
+
+    fn detect(frame: &CapturedFrame) -> Option<BlackBorderInsets> {
+        detect_black_borders(frame, BLACK_BORDER_THRESHOLD)
+    }
+
+    /// The crop lands on the bars, never more than one scan step into the picture.
+    fn assert_crops_the_bars(insets: &BlackBorderInsets) {
+        let (top, bottom) = rows_cropped(insets);
+        for crop in [top, bottom] {
+            assert!(
+                (BAR as usize..BAR as usize + 8).contains(&crop),
+                "crop {crop} rows, bars {BAR}"
+            );
+        }
+        assert_eq!(insets.left, 0.0);
+        assert_eq!(insets.right, 0.0);
+    }
+
+    #[test]
+    fn a_letterboxed_film_is_cropped_to_its_picture() {
+        assert_crops_the_bars(&detect(&frame(letterboxed([0, 0, 0]))).unwrap());
+    }
+
+    #[test]
+    fn a_picture_to_every_edge_has_no_bars() {
+        assert_eq!(detect(&frame(picture)), Some(BlackBorderInsets::default()));
+    }
+
+    // A fade or a cut through black says nothing about the bars: the caller keeps its crop.
+    #[test]
+    fn a_black_frame_measures_nothing() {
+        assert_eq!(detect(&frame(|_, _| [0, 0, 0])), None);
+        assert_eq!(detect(&frame(|_, _| [12, 12, 12])), None);
+    }
+
+    // Limited-range video draws its black at 16, above the true-black threshold.
+    #[test]
+    fn grey_bars_from_limited_range_video_are_bars() {
+        assert_crops_the_bars(&detect(&frame(letterboxed([16, 16, 16]))).unwrap());
+    }
+
+    #[test]
+    fn a_stray_bright_pixel_in_a_bar_is_not_picture() {
+        let film = letterboxed([0, 0, 0]);
+        let insets = detect(&frame(|x, y| {
+            if (x, y) == (320, 8) {
+                [255, 255, 255]
+            } else {
+                film(x, y)
+            }
+        }))
+        .unwrap();
+        assert_crops_the_bars(&insets);
+    }
+
+    #[test]
+    fn subtitles_over_the_bottom_bar_keep_the_crop() {
+        let film = letterboxed([0, 0, 0]);
+        let insets = detect(&frame(|x, y| {
+            let text = (H - 30..H - 18).contains(&y) && (200..440).contains(&x) && x % 5 < 3;
+            if text {
+                [235, 235, 235]
+            } else {
+                film(x, y)
+            }
+        }))
+        .unwrap();
+        assert_crops_the_bars(&insets);
+    }
+
+    // Players centre the picture: a dark band on one side only is a dark shot, not a bar.
+    #[test]
+    fn a_dark_sky_on_a_full_frame_is_not_a_bar() {
+        let insets = detect(&frame(|x, y| {
+            if y < H * 3 / 10 {
+                [4, 4, 8]
+            } else {
+                picture(x, y)
+            }
+        }))
+        .unwrap();
+        assert_eq!(insets, BlackBorderInsets::default());
+    }
+
+    #[test]
+    fn a_dark_shot_inside_a_letterbox_is_not_cropped_with_the_bar() {
+        let film = letterboxed([0, 0, 0]);
+        let insets = detect(&frame(|x, y| {
+            if (BAR..BAR + 40).contains(&y) {
+                [3, 3, 6]
+            } else {
+                film(x, y)
+            }
+        }))
+        .unwrap();
+        assert_crops_the_bars(&insets);
+    }
+
+    // A dark interface or a dim game is not bars, however even its edges look.
+    #[test]
+    fn a_dim_picture_is_not_cropped() {
+        let dark_ui = |x: u32, y: u32| {
+            if (120..520).contains(&x) && (140..220).contains(&y) {
+                [200, 200, 200]
+            } else {
+                [30, 30, 30]
+            }
+        };
+        assert_eq!(detect(&frame(dark_ui)), Some(BlackBorderInsets::default()));
+        let dim_game = |x: u32, y: u32| {
+            if (120..520).contains(&x) && (140..220).contains(&y) {
+                [200, 200, 200]
+            } else {
+                [(x % 13) as u8 + 10, 10, (y % 11) as u8 + 10]
+            }
+        };
+        assert_eq!(detect(&frame(dim_game)), Some(BlackBorderInsets::default()));
+    }
+
+    #[test]
+    fn noisy_limited_range_bars_are_still_bars() {
+        let film = letterboxed([0, 0, 0]);
+        let insets = detect(&frame(|x, y| {
+            if !(BAR..H - BAR).contains(&y) {
+                [16 + (x % 5) as u8, 16, 16 + (y % 3) as u8]
+            } else {
+                film(x, y)
+            }
+        }))
+        .unwrap();
+        assert_crops_the_bars(&insets);
+    }
+
+    // A dark-topped picture with a lit object at its bottom: the object is picture, not a subtitle.
+    #[test]
+    fn a_centred_object_at_the_bottom_of_a_dark_shot_is_not_cropped() {
+        let film = letterboxed([0, 0, 0]);
+        let insets = detect(&frame(|x, y| {
+            let dark_top = (BAR..BAR + 40).contains(&y);
+            let dark_sides = (BAR + 40..H - BAR).contains(&y) && !(160..480).contains(&x);
+            if dark_top || dark_sides {
+                [3, 3, 6]
+            } else {
+                film(x, y)
+            }
+        }))
+        .unwrap();
+        let (top, bottom) = rows_cropped(&insets);
+        assert_eq!(top, bottom);
+        assert!(
+            bottom <= BAR as usize + 8,
+            "cropped {bottom} rows of a {BAR}-row bar"
+        );
+    }
+
+    #[test]
+    fn a_pillarboxed_picture_is_cropped_at_the_sides() {
+        let side = 80;
+        let insets = detect(&frame(|x, y| {
+            if x < side || x >= W - side {
+                [0, 0, 0]
+            } else {
+                picture(x, y)
+            }
+        }))
+        .unwrap();
+        let (_, cols) = insets.content_bounds(W as usize, H as usize);
+        assert!(
+            (side as usize..side as usize + 8).contains(&cols.start),
+            "{cols:?}"
+        );
+        assert_eq!(cols.end, W as usize - cols.start);
+        assert_eq!((insets.top, insets.bottom), (0.0, 0.0));
+    }
+
+    #[test]
+    fn the_crop_never_takes_more_than_the_cap() {
+        let insets = detect(&frame(|x, y| {
+            if (170..190).contains(&y) {
+                picture(x, y)
+            } else {
+                [0, 0, 0]
+            }
+        }))
+        .unwrap();
+        assert!(insets.top <= 0.40 && insets.bottom <= 0.40, "{insets:?}");
+    }
+
+    #[test]
+    fn a_frame_smaller_than_a_scan_step_is_read_whole() {
+        let insets = detect(&frame_sized(5, 3, |_, _| [200, 200, 200]));
+        assert_eq!(insets, Some(BlackBorderInsets::default()));
+        assert_eq!(detect(&frame_sized(0, 0, |_, _| [0, 0, 0])), None);
+    }
+
+    #[test]
+    fn content_bounds_keep_every_row_the_insets_name() {
+        for h in 1..400usize {
+            for rows in 0..=(h * 2 / 5) {
+                let insets = BlackBorderInsets {
+                    top: rows as f32 / h as f32,
+                    ..Default::default()
+                };
+                assert_eq!(
+                    insets.content_bounds(4, h).0.start,
+                    rows,
+                    "h={h} rows={rows}"
+                );
+            }
+        }
     }
 }

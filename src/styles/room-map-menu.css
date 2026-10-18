@@ -35,7 +35,17 @@
   gap: 16px;
   font-size: 11.5px;
   color: var(--lm-ink-dim);
-  transition: background 100ms ease, color 100ms ease;
+  transition: background var(--lm-dur-quick) var(--lm-ease-out), color var(--lm-dur-quick) var(--lm-ease-out);
+}
+/* Shown once it is placed: it rises the few pixels a popover does instead of appearing whole. */
+.lm-context-menu[data-placed] {
+  animation: lm-context-menu-in var(--lm-dur-quick) var(--lm-ease-out) backwards;
+}
+@keyframes lm-context-menu-in {
+  from {
+    opacity: 0;
+    translate: 0 -3px;
+  }
 }
 .lm-context-menu-item:hover {
   background: rgba(255, 176, 32, 0.08);
@@ -80,6 +90,9 @@
   color: var(--lm-ink-faint);
   text-transform: uppercase;
   flex-shrink: 0;
+}
+:root[data-reduced-motion] .lm-context-menu[data-placed] {
+  animation: none;
 }
 :root[data-reduced-motion] .lm-context-menu-item {
   transition: none;

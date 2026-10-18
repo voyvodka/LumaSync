@@ -82,7 +82,7 @@ impl PersistedShellState {
     }
 
     pub fn led_calibration(&self) -> Option<LedCalibrationConfig> {
-        read_value(self.primary_strip()?.layout.as_ref()?, "ledCalibration")
+        decode_strip(&self.primary_strip()?).layout
     }
 
     /// `lightingMode.ambilight` — the last Ambilight settings the user saved.
@@ -102,27 +102,15 @@ impl PersistedShellState {
     }
 
     pub fn firmware_profile(&self) -> Option<FirmwareProfile> {
-        read_value(
-            self.primary_strip()?.hardware.firmware_profile.as_ref()?,
-            "firmwareProfile",
-        )
+        decode_strip(&self.primary_strip()?).firmware_profile
     }
 
-    /// The chip picker persists under `selectedChipType`; the IPC field name
-    /// `chipType` is not a shell-state key.
     pub fn chip_type(&self) -> Option<LedChipType> {
-        read_value(
-            self.primary_strip()?.hardware.chip_type.as_ref()?,
-            "selectedChipType",
-        )
+        decode_strip(&self.primary_strip()?).chip_type
     }
 
-    /// Persisted as `ledColorOrder`; `colorOrder` is only the IPC field name.
     pub fn color_order(&self) -> Option<LedColorOrder> {
-        read_value(
-            self.primary_strip()?.hardware.color_order.as_ref()?,
-            "ledColorOrder",
-        )
+        decode_strip(&self.primary_strip()?).color_order
     }
 
     pub fn selected_display_id(&self) -> Option<String> {
@@ -133,20 +121,41 @@ impl PersistedShellState {
         self.read("updateChannel")
     }
 
-    /// Every image path the room map references: `imageLayers[].path` plus the
-    /// legacy `backgroundImagePath`. `None` when `roomMap.imageLayers` is not an
-    /// array, so a store without a room map never reads as "no image is used".
+    /// Every image path a room references: `imageLayers[].path` plus the legacy
+    /// `backgroundImagePath`, of `roomMap` and of each room kept in
+    /// `roomLayouts`. `None` when `roomMap.imageLayers` is not an array, or
+    /// `roomLayouts` is there but unreadable, so a store this build cannot read
+    /// whole never reads as "no image is used".
     pub fn room_map_image_paths(&self) -> Option<Vec<String>> {
+        fn paths_of(room: &Value, layers: &[Value], out: &mut Vec<String>) {
+            out.extend(
+                layers
+                    .iter()
+                    .filter_map(|layer| layer.get("path")?.as_str())
+                    .chain(room.get("backgroundImagePath").and_then(Value::as_str))
+                    .map(str::to_owned),
+            );
+        }
         let room_map = self.0.get("roomMap")?;
-        let layers = room_map.get("imageLayers")?.as_array()?;
-        Some(
-            layers
-                .iter()
-                .filter_map(|layer| layer.get("path")?.as_str())
-                .chain(room_map.get("backgroundImagePath").and_then(Value::as_str))
-                .map(str::to_owned)
-                .collect(),
-        )
+        let mut paths = Vec::new();
+        paths_of(
+            room_map,
+            room_map.get("imageLayers")?.as_array()?,
+            &mut paths,
+        );
+        if let Some(layouts) = self.0.get("roomLayouts") {
+            for room in layouts.get("rooms")?.as_array()? {
+                let Some(config) = room.get("config") else {
+                    continue;
+                };
+                let layers = match config.get("imageLayers") {
+                    None => &[][..],
+                    Some(layers) => layers.as_array()?.as_slice(),
+                };
+                paths_of(config, layers, &mut paths);
+            }
+        }
+        Some(paths)
     }
 
     /// The LED control popup's centre, in logical px.
@@ -161,6 +170,37 @@ impl PersistedShellState {
     /// `last_output_targets` is.
     pub fn lighting_mode(&self) -> Option<LightingModeConfig> {
         self.read("lightingMode")
+    }
+
+    /// The one brightness every mode runs at. A file from a build that kept one
+    /// per mode reads as the last lit mode's: `lastLitKind`, else the saved
+    /// `lightingMode.kind` when it is lit and has one — no released build wrote
+    /// `lastLitKind`, so an upgraded file's last lit mode is the one it ran —
+    /// else Ambilight's. A file with none reads as full.
+    pub fn lighting_brightness(&self) -> f32 {
+        let is_lit = |kind: &&str| matches!(*kind, "ambilight" | "solid" | "effect");
+        let mode = self.0.get("lightingMode");
+        let brightness_of = |kind: &str| {
+            mode.and_then(|mode| mode.get(kind))
+                .and_then(|payload| payload.get("brightness"))
+                .and_then(Value::as_f64)
+                .filter(|brightness| brightness.is_finite())
+        };
+        let last_lit = self
+            .0
+            .get("lastLitKind")
+            .and_then(Value::as_str)
+            .filter(is_lit);
+        let brightness = match last_lit {
+            Some(kind) => brightness_of(kind),
+            None => mode
+                .and_then(|mode| mode.get("kind"))
+                .and_then(Value::as_str)
+                .filter(is_lit)
+                .and_then(brightness_of)
+                .or_else(|| brightness_of("ambilight")),
+        };
+        brightness.map_or(1.0, |brightness| brightness.clamp(0.0, 1.0) as f32)
     }
 
     /// `lightingMode` as stored, for a write that changes some fields and
@@ -273,6 +313,42 @@ impl PersistedShellState {
                 .get("dimensions")
                 .and_then(|dims| read_value::<RoomDimensions>(dims, "roomMap.dimensions")),
         })
+    }
+}
+
+/// A saved strip's own layout and hardware, each `None` when absent or in a shape this build
+/// cannot read (logged). The primary strip's readers above and the fan-out read through this.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct DecodedStrip {
+    pub layout: Option<LedCalibrationConfig>,
+    pub firmware_profile: Option<FirmwareProfile>,
+    /// The chip picker persists under `selectedChipType`; `chipType` is only the IPC field name.
+    pub chip_type: Option<LedChipType>,
+    /// Persisted as `ledColorOrder`; `colorOrder` is only the IPC field name.
+    pub color_order: Option<LedColorOrder>,
+}
+
+pub fn decode_strip(strip: &LedStrip) -> DecodedStrip {
+    DecodedStrip {
+        layout: strip
+            .layout
+            .as_ref()
+            .and_then(|v| read_value(v, "ledCalibration")),
+        firmware_profile: strip
+            .hardware
+            .firmware_profile
+            .as_ref()
+            .and_then(|v| read_value(v, "firmwareProfile")),
+        chip_type: strip
+            .hardware
+            .chip_type
+            .as_ref()
+            .and_then(|v| read_value(v, "selectedChipType")),
+        color_order: strip
+            .hardware
+            .color_order
+            .as_ref()
+            .and_then(|v| read_value(v, "ledColorOrder")),
     }
 }
 
@@ -830,7 +906,7 @@ fn window_wrote<R: Runtime>(
     super::lighting_mode::outputs::note_settings_saved(app, keys());
     super::hue::health::note_settings_saved(app, keys());
     if changed.set.contains_key("uiZoom") || changed.remove.iter().any(|key| key == "uiZoom") {
-        super::led_preview::apply_ui_zoom_later(app);
+        super::preview::apply_ui_zoom_later(app);
     }
 }
 
@@ -1316,6 +1392,59 @@ mod tests {
 
     fn persisted(raw: &str) -> Option<PersistedShellState> {
         PersistedShellState::from_file_json(raw)
+    }
+
+    /// A file from a build that kept a brightness per mode reads as the last
+    /// lit mode's, and one with none as full.
+    #[test]
+    fn the_shared_brightness_reads_as_the_last_lit_modes() {
+        let read = |value: &str| {
+            persisted(&format!(r#"{{"shell-state": {{ {value} }} }}"#))
+                .unwrap()
+                .lighting_brightness()
+        };
+        let modes = r#""lightingMode": {
+            "kind": "off",
+            "solid": { "r": 1, "g": 2, "b": 3, "brightness": 0.2 },
+            "ambilight": { "brightness": 0.5 },
+            "effect": { "id": "wave", "brightness": 0.8 }
+        }"#;
+        assert_eq!(read(&format!(r#"{modes}, "lastLitKind": "solid""#)), 0.2);
+        assert_eq!(read(&format!(r#"{modes}, "lastLitKind": "effect""#)), 0.8);
+        assert_eq!(read(modes), 0.5, "absent is Ambilight");
+        assert_eq!(read(&format!(r#"{modes}, "lastLitKind": "disco""#)), 0.5);
+        assert_eq!(read(r#""lastLitKind": "solid""#), 1.0);
+    }
+
+    /// No released build wrote `lastLitKind`, so an upgraded file's last lit
+    /// mode is the one it was running.
+    #[test]
+    fn an_upgraded_file_reads_as_the_running_modes_brightness() {
+        let read = |kind: &str| {
+            persisted(&format!(
+                r#"{{"shell-state": {{ "lightingMode": {{
+                    "kind": "{kind}",
+                    "solid": {{ "r": 1, "g": 2, "b": 3, "brightness": 0.2 }},
+                    "ambilight": {{ "brightness": 0.5 }},
+                    "effect": {{ "id": "wave", "brightness": 0.8 }}
+                }} }} }}"#
+            ))
+            .unwrap()
+            .lighting_brightness()
+        };
+        assert_eq!(read("solid"), 0.2);
+        assert_eq!(read("effect"), 0.8);
+        assert_eq!(read("ambilight"), 0.5);
+        assert_eq!(read("off"), 0.5, "Off has none of its own");
+
+        let solid_without_payload = persisted(
+            r#"{"shell-state": { "lightingMode": {
+                "kind": "solid", "ambilight": { "brightness": 0.5 }
+            } } }"#,
+        )
+        .unwrap()
+        .lighting_brightness();
+        assert_eq!(solid_without_payload, 0.5);
     }
 
     /// Off switching the Hue lights off is the default for every install,

@@ -5,6 +5,7 @@ import type { HueStartConfig } from "../../model/hueStartConfig";
 import { __resetHueHealthStoreForTests } from "../hueHealthStore";
 import { useHueBridgeReachability } from "../useHueBridgeReachability";
 import { fakeHueHealthApi, publishHealth, resetHealth, setHealth } from "../../__tests__/fakeHueHealth";
+import { flush } from "../../__tests__/support/flushTimers";
 
 vi.mock("../../hueHealthApi", async () => (await import("../../__tests__/fakeHueHealth")).fakeHueHealthApi);
 
@@ -13,12 +14,6 @@ const config: HueStartConfig = {
   username: "app-user",
   clientKey: "AABBCCDD",
   areaId: "area-1",
-};
-
-const flush = async () => {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(0);
-  });
 };
 
 // The probe itself, its 30 s cadence, its give-up budget and the retry's

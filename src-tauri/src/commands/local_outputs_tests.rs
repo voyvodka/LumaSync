@@ -1,6 +1,6 @@
 use std::net::Ipv4Addr;
 
-use super::{DrivenLocal, LocalOutputRegistry, LocalOutputStatus};
+use super::{DrivenLocal, LocalOutputRegistry, LocalOutputStatus, LocalOutputsSnapshot};
 use crate::commands::device_connection::{command_status, SerialConnectionStatus};
 use crate::commands::wled_sink::{WledProtocol, WledSinkConfig};
 
@@ -44,6 +44,43 @@ fn serial_entry(registry: &LocalOutputRegistry, port: &str) -> Option<(bool, Str
             }
             _ => None,
         })
+}
+
+fn wled_reachable(snapshot: &LocalOutputsSnapshot) -> Option<bool> {
+    snapshot.outputs.iter().find_map(|output| match output {
+        LocalOutputStatus::Wled(wled) => Some(wled.reachable),
+        LocalOutputStatus::Serial(_) => None,
+    })
+}
+
+#[test]
+fn a_wled_device_reads_unreachable_only_for_its_own_binding_and_keeps_driving() {
+    let registry = LocalOutputRegistry::default();
+    let bound = registry.wled_bound(wled(10));
+    assert_eq!(wled_reachable(&bound), Some(true));
+    let (ip, generation) = registry.wled_probe_target().expect("bound");
+
+    let down = registry
+        .wled_reachability(ip, generation, false)
+        .expect("a change is announced");
+    assert_eq!(wled_reachable(&down), Some(false));
+    // Showing only: the "usb" channel still drives it.
+    assert!(matches!(registry.driven(), Some(DrivenLocal::Wled(_))));
+    // No change, nothing to announce.
+    assert!(registry.wled_reachability(ip, generation, false).is_none());
+
+    // Bound again (a reconnect): a probe of the earlier binding says nothing, and it reads reachable.
+    let again = registry.wled_bound(wled(10));
+    assert_eq!(wled_reachable(&again), Some(true));
+    assert!(registry.wled_reachability(ip, generation, false).is_none());
+
+    // A refused forget puts back a device that still does not answer: it does not turn green.
+    let (ip, generation) = registry.wled_probe_target().expect("bound");
+    registry.wled_reachability(ip, generation, false);
+    let at = registry.wled_connected_at();
+    registry.wled_forgotten(ip).expect("bound");
+    let restored = registry.restore_wled(wled(10), at).expect("restored");
+    assert_eq!(wled_reachable(&restored), Some(false));
 }
 
 #[test]
@@ -300,6 +337,7 @@ fn the_snapshot_serialises_as_the_contract_says() {
     assert_eq!(json["outputs"][1]["ip"], "192.168.1.42");
     assert_eq!(json["outputs"][1]["ledCount"], 60);
     assert_eq!(json["outputs"][1]["connected"], true);
+    assert_eq!(json["outputs"][1]["reachable"], true);
 }
 
 // Two boot reconnects of one port: the second fails on the open, and the strip that lights stays on.
@@ -370,6 +408,7 @@ mod disconnect {
                         g: 20,
                         b: 30,
                         brightness: 1.0,
+                        kelvin: None,
                     }),
                     ..LightingModeConfig::default()
                 }),
@@ -479,6 +518,7 @@ mod leave {
                         g: 20,
                         b: 30,
                         brightness: 1.0,
+                        kelvin: None,
                     }),
                     ..LightingModeConfig::default()
                 }),

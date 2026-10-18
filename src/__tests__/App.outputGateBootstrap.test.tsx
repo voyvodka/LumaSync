@@ -171,7 +171,8 @@ describe("output gate during shell boot", () => {
       shellState = pairedState(uiMode);
       await bootHeldAtRegistryRead(uiMode);
 
-      expect(screen.getByTestId("output-checking")).toBeInTheDocument();
+      // Said once the check has run past the launch blink, which a held registry read outlasts.
+      expect(await screen.findByTestId("output-checking", {}, { timeout: 2000 })).toBeInTheDocument();
       expect(screen.queryByText(OFFLINE_TITLE)).not.toBeInTheDocument();
 
       await act(async () => {

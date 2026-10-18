@@ -1,0 +1,35 @@
+@layer components {
+  /* Grey at rest and warming on hover; holding the proportions is the usual state, so it reads as
+     ink rather than taking the one amber accent. */
+  .action {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--lm-ink-faint);
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+  }
+  .action svg { width: 13px; height: 13px; }
+  .action:hover:not(:disabled) {
+    color: var(--lm-ink);
+    background: rgb(255 255 255 / 4%);
+  }
+  .action[aria-pressed="true"] { color: var(--lm-ink); }
+  .action:focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--lm-focus-ring-inset);
+  }
+  .action:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  :global(:root[data-reduced-motion]) .action { transition: none; }
+
+  @media (forced-colors: active) {
+    .action[aria-pressed="true"] { outline: 1px solid Highlight; }
+    .action:focus-visible { outline: 2px solid Highlight; }
+  }
+}

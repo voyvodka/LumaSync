@@ -28,6 +28,7 @@ import { useHueRuntimeStatus } from "@/features/hue/state/useHueRuntimeStatus";
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
 import { HuePage } from "../HuePage";
 import { shownByTestId } from "./hueFixture";
+import { flush } from "../../__tests__/support/flushTimers";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -128,12 +129,6 @@ function Harness() {
     />
   );
 }
-
-const flush = async (ms = 0) => {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(ms);
-  });
-};
 
 function commandResult(status: BackendStatus) {
   return {

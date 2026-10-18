@@ -2,9 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefCallback } from "react";
 import type { RoomDimensions } from "@/shared/contracts/roomMap";
 import { isEditableTarget } from "@/shared/lib/editableTarget";
+import { clamp } from "@/shared/lib/math";
 
 /** Fixed physical scale — objects always render at this size regardless of canvas. */
 export const ROOM_MAP_PX_PER_METER = 80;
+
+/** One zoom range for the wheel, the zoom buttons and fit-to-view. */
+export const ZOOM_MIN = 0.3;
+export const ZOOM_MAX = 3;
+export const ZOOM_STEP = 0.1;
 
 export interface UseRoomMapViewportReturn {
   canvasContainerRef: React.RefObject<HTMLDivElement | null>;
@@ -28,7 +34,20 @@ export interface UseRoomMapViewportReturn {
 export const PAN_STEP_PX = 32;
 export const PAN_STEP_LARGE_PX = 160;
 
-export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewportReturn {
+/**
+ * Where the plan was looking, kept for the session: switching to the 3D view and back, or to
+ * another section and back, reopens the plan there instead of fitting it again. Only for the same
+ * room size; a resized room is framed afresh.
+ */
+let sessionView: { zoom: number; pan: { x: number; y: number }; room: string } | null = null;
+const roomKey = (d: RoomDimensions) => `${d.widthMeters}x${d.depthMeters}`;
+
+/** Test-only: forget the session's view. */
+export function __resetSessionViewForTests(): void {
+  sessionView = null;
+}
+
+export function useRoomMapViewport(dimensions: RoomDimensions, fitInsets: FitInsets = NO_INSETS): UseRoomMapViewportReturn {
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const [canvasEl, setCanvasEl] = useState<HTMLDivElement | null>(null);
@@ -42,30 +61,38 @@ export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewpo
   }, []);
 
   // Space held is pan mode, for the editor and its canvas alike. A space typed
-  // into a field is text, not a pan.
+  // into a field is text, and a space on a button presses it — taking it left
+  // every control in the window dead to the keyboard while the editor was open.
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (e.key !== " " || isEditableTarget(e.target)) return;
+      if (e.key !== " " || isEditableTarget(e.target) || isPressableTarget(e.target)) return;
       // Keeps the page from scrolling under a pan.
       e.preventDefault();
       if (!e.repeat) setSpaceHeld(true);
     };
     const up = (e: KeyboardEvent) => { if (e.key === " ") setSpaceHeld(false); };
+    // A key let go in another window sends no keyup here.
+    const blur = () => setSpaceHeld(false);
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
-    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
+    window.addEventListener("blur", blur);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", blur);
+    };
   }, []);
 
   const { widthMeters, depthMeters } = dimensions;
 
   const fitToView = useCallback(
     (pad: number) => {
-      const fit = computeFit(canvasSize.w, canvasSize.h, widthMeters, depthMeters, pad);
+      const fit = computeFit(canvasSize.w, canvasSize.h, widthMeters, depthMeters, pad, fitInsets);
       setZoom(fit.zoom);
       setPanOffset(fit.panOffset);
       resetViewportScroll(canvasContainerRef.current);
     },
-    [canvasSize, widthMeters, depthMeters],
+    [canvasSize, widthMeters, depthMeters, fitInsets],
   );
 
   // Arrows move the camera, not the map — ArrowRight reveals what is to the
@@ -93,6 +120,8 @@ export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewpo
   // `initialFitDone` is what stops a re-fit, not a stale ref.
   const liveDimensionsRef = useRef(dimensions);
   liveDimensionsRef.current = dimensions;
+  const liveInsetsRef = useRef(fitInsets);
+  liveInsetsRef.current = fitInsets;
 
   // Keyed on the element, not on mount: the editor renders a loading placeholder
   // first, so the container appears a commit or two late and a mount-only effect
@@ -107,8 +136,14 @@ export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewpo
 
         if (!initialFitDone.current) {
           initialFitDone.current = true;
+          const kept = sessionView;
+          if (kept && kept.room === roomKey(liveDimensionsRef.current)) {
+            setZoom(kept.zoom);
+            setPanOffset(kept.pan);
+            continue;
+          }
           const { widthMeters: wm, depthMeters: dm } = liveDimensionsRef.current;
-          const fit = computeFit(width, height, wm, dm, 24);
+          const fit = computeFit(width, height, wm, dm, 24, liveInsetsRef.current);
           setZoom(fit.zoom);
           setPanOffset(fit.panOffset);
         }
@@ -117,6 +152,10 @@ export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewpo
     ro.observe(canvasEl);
     return () => ro.disconnect();
   }, [canvasEl]);
+
+  useEffect(() => {
+    if (initialFitDone.current) sessionView = { zoom, pan: panOffset, room: roomKey(dimensions) };
+  }, [zoom, panOffset, dimensions]);
 
   return {
     canvasContainerRef,
@@ -132,7 +171,15 @@ export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewpo
   };
 }
 
-/** Marks the canvas's clipping root, which `fitToView` scrolls back to zero. */
+const PRESSABLE_SELECTOR =
+  'button, a[href], summary, [role="button"], [role="tab"], [role="radio"], [role="checkbox"], [role="switch"], [role="menuitem"], [role="option"]';
+
+function isPressableTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && target.matches(PRESSABLE_SELECTOR);
+}
+
+/** Marks the canvas's clipping root, which `fitToView` scrolls back to zero and
+ *  the editor's bare keys (arrows, Delete, R, F, Escape) are scoped to. */
 export const ROOM_MAP_VIEWPORT_ATTR = "data-room-map-viewport";
 
 /**
@@ -150,6 +197,14 @@ export function resetViewportScroll(container: HTMLElement | null): void {
   }
 }
 
+/** What floats over the top and bottom of the canvas, which a fit keeps the room clear of. */
+export interface FitInsets {
+  top: number;
+  bottom: number;
+}
+
+const NO_INSETS: FitInsets = { top: 0, bottom: 0 };
+
 /** Exported for tests: measuring the canvas needs a layout engine, computing the
  *  fit from a measurement does not, and this is where the proportion is decided. */
 export function computeFit(
@@ -158,13 +213,15 @@ export function computeFit(
   widthMeters: number,
   depthMeters: number,
   pad: number,
+  insets: FitInsets = NO_INSETS,
 ): { zoom: number; panOffset: { x: number; y: number } } {
+  const availH = canvasH - insets.top - insets.bottom;
   const fitZoom = Math.min(
     (canvasW - pad * 2) / (widthMeters * ROOM_MAP_PX_PER_METER),
-    (canvasH - pad * 2) / (depthMeters * ROOM_MAP_PX_PER_METER),
+    (availH - pad * 2) / (depthMeters * ROOM_MAP_PX_PER_METER),
   );
-  const zoom = Math.max(0.3, Math.min(3, fitZoom));
+  const zoom = clamp(fitZoom, ZOOM_MIN, ZOOM_MAX);
   const roomW = widthMeters * ROOM_MAP_PX_PER_METER * zoom;
   const roomH = depthMeters * ROOM_MAP_PX_PER_METER * zoom;
-  return { zoom, panOffset: { x: (canvasW - roomW) / 2, y: (canvasH - roomH) / 2 } };
+  return { zoom, panOffset: { x: (canvasW - roomW) / 2, y: insets.top + (availH - roomH) / 2 } };
 }

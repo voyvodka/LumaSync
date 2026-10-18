@@ -1,0 +1,46 @@
+@layer components {
+  .dot {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border: 1px solid var(--lm-ink-faint);
+    border-radius: 50%;
+    forced-color-adjust: none;
+  }
+  .dot {
+    transition: background-color var(--lm-dur-base) var(--lm-ease-out), border-color var(--lm-dur-base) var(--lm-ease-out);
+  }
+  .dot[data-lit] {
+    border-color: transparent;
+    background: var(--lm-amber);
+  }
+
+  /* A new mode's label fades in over the last one, in place; hidden only once it has faded. */
+  .labels { display: grid; }
+  .labels > * {
+    grid-area: 1 / 1;
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity var(--lm-dur-quick) var(--lm-ease-out), visibility 0s var(--lm-dur-quick);
+  }
+  .labels > [data-shown] {
+    visibility: visible;
+    opacity: 1;
+    transition: opacity var(--lm-dur-quick) var(--lm-ease-out), visibility 0s;
+  }
+  :global(:root[data-reduced-motion]) .dot,
+  :global(:root[data-reduced-motion]) .labels > * { transition: none; }
+
+  .panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 4px 0;
+  }
+  .panel > * { flex-shrink: 0; }
+
+  @media (forced-colors: active) {
+    .dot { border-color: CanvasText; }
+    .dot[data-lit] { border-color: Highlight; background: Highlight; }
+  }
+}

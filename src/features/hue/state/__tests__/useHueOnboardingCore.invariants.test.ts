@@ -300,3 +300,92 @@ describe("useHueOnboardingCore — an area choice whose save fails", () => {
     errorSpy.mockRestore();
   });
 });
+
+describe("useHueOnboardingCore — an area listing that fails", () => {
+  const AREA = {
+    id: "area-1",
+    name: "Living room",
+    roomName: null,
+    channelCount: 2,
+    activeStreamer: false,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    __resetHueHealthStoreForTests();
+    shellLoadMock.mockResolvedValue({ lastHueBridge: BRIDGE, hueAppKey: "app-key", lastHueAreaId: "area-1" });
+    shellSaveMock.mockResolvedValue(undefined);
+    validateCredentialsMock.mockResolvedValue({
+      status: { code: "HUE_CREDENTIAL_VALID", message: "ok", details: null },
+      valid: true,
+    });
+    listAreasMock.mockResolvedValue({
+      status: { code: "HUE_AREA_LIST_OK", message: "ok", details: null },
+      areas: [AREA],
+    });
+  });
+
+  async function bootedWithSavedArea() {
+    const { result } = renderHook(() => useHueOnboardingCore());
+    await waitFor(() => expect(result.current.state.selectedAreaId).toBe("area-1"));
+    await waitFor(() => expect(result.current.state.areaGroups).not.toHaveLength(0));
+    shellSaveMock.mockClear();
+    return result;
+  }
+
+  // The command answers a failure with the same empty list a bridge with no
+  // areas gives; reading it as "no areas" deleted the saved one and greyed Start.
+  it.each(["HUE_AREA_LIST_FAILED", "HUE_IP_INVALID"] as const)(
+    "keeps the saved area and its row on %s, and shows the failure",
+    async (code) => {
+      const result = await bootedWithSavedArea();
+      const seen: string[] = [];
+      const unsubscribe = hueCredentialEvents.subscribe((event) => seen.push(event.reason));
+      listAreasMock.mockResolvedValue({ status: { code, message: code, details: null }, areas: [] });
+
+      await act(async () => {
+        await result.current.refreshAreas();
+      });
+
+      expect(result.current.state.selectedAreaId).toBe("area-1");
+      expect(result.current.state.areaGroups).not.toHaveLength(0);
+      expect(result.current.state.isLoadingAreas).toBe(false);
+      expect(result.current.state.status?.code).toBe(code);
+      expect(result.current.state.credentialState).toBe(HUE_CREDENTIAL_STATUS.VALID);
+      expect(shellSaveMock).not.toHaveBeenCalledWith(expect.objectContaining({ lastHueAreaId: undefined }));
+      expect(seen).not.toContain("area-selected");
+      unsubscribe();
+    },
+  );
+
+  it("moves the card to re-pair on a refused key, keeping the saved area", async () => {
+    const result = await bootedWithSavedArea();
+    listAreasMock.mockResolvedValue({
+      status: { code: "AUTH_INVALID_RE_PAIR_REQUIRED", message: "refused", details: null },
+      areas: [],
+    });
+
+    await act(async () => {
+      await result.current.refreshAreas();
+    });
+
+    expect(result.current.state.credentialState).toBe(HUE_CREDENTIAL_STATUS.NEEDS_REPAIR);
+    expect(result.current.state.selectedAreaId).toBe("area-1");
+    expect(shellSaveMock).not.toHaveBeenCalledWith(expect.objectContaining({ lastHueAreaId: undefined }));
+  });
+
+  it("still clears the area when the bridge answers that it has none", async () => {
+    const result = await bootedWithSavedArea();
+    listAreasMock.mockResolvedValue({
+      status: { code: "HUE_AREA_LIST_EMPTY", message: "none", details: null },
+      areas: [],
+    });
+
+    await act(async () => {
+      await result.current.refreshAreas();
+    });
+
+    expect(result.current.state.selectedAreaId).toBeNull();
+    expect(shellSaveMock).toHaveBeenCalledWith(expect.objectContaining({ lastHueAreaId: undefined }));
+  });
+});

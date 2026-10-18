@@ -1,0 +1,60 @@
+@layer components {
+  .palette {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+  }
+
+  .action {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 10px 0 8px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    font: 500 12px/1 var(--lm-sans);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+  }
+  .action:hover {
+    color: var(--lm-ink);
+    background: rgb(255 255 255 / 4%);
+  }
+  .open,
+  .open:hover {
+    color: var(--lm-amber);
+    background: rgb(255 255 255 / 4%);
+  }
+  .action:focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--lm-focus-ring-inset);
+  }
+
+  .glyph {
+    display: grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+  }
+
+  .note {
+    display: flex;
+    min-width: 0;
+    margin-left: auto;
+  }
+
+  :global(:root[data-reduced-motion]) .action { transition: none; }
+
+  @media (forced-colors: active) {
+    .open { outline: 1px solid Highlight; }
+    .action:focus-visible { outline: 2px solid Highlight; }
+  }
+}

@@ -10,6 +10,7 @@ import {
 import { __resetHueHealthStoreForTests } from "../hueHealthStore";
 import { useHueOnboardingCore } from "../useHueOnboardingCore";
 import type * as hueOnboardingApiModule from "../../hueOnboardingApi";
+import { flush } from "../../__tests__/support/flushTimers";
 
 const shellLoadMock = vi.fn();
 const shellSaveMock = vi.fn();
@@ -46,12 +47,6 @@ const PAIRED: HuePairBridgeResponse = {
   credentials: { username: "app-user", clientKey: "AABBCCDD" },
   credentialStorageBackend: "keychain",
 };
-
-async function flush(ms = 0) {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(ms);
-  });
-}
 
 async function mountWithBridges() {
   const hook = renderHook(() => useHueOnboardingCore());

@@ -5,7 +5,6 @@ import {
   type DeviceStatus,
   type SerialOutputStatus,
 } from "@/shared/contracts/device";
-import { canConnectSelectedPort } from "../portSelection";
 import type { SerialConnectionStatus, SerialPortListResponse } from "../deviceConnectionApi";
 import type { DevicePort } from "../types";
 import type { DeviceConnectionControllerState, DeviceStatusCard } from "./connectionTypes";
@@ -16,7 +15,6 @@ export const DEFAULT_STATE: DeviceConnectionControllerState = {
   selectedPort: null,
   connectedPort: null,
   statusCard: null,
-  canConnect: false,
   isScanning: false,
   isConnecting: false,
   isReconnecting: false,
@@ -81,12 +79,5 @@ export function toOutputCard(entry: SerialOutputStatus): DeviceStatusCard {
     code: entry.status.code,
     message: entry.status.message,
     details: entry.status.details ?? undefined,
-  };
-}
-
-export function withDerivedFlags(state: DeviceConnectionControllerState): DeviceConnectionControllerState {
-  return {
-    ...state,
-    canConnect: canConnectSelectedPort(state.selectedPort, state.isScanning) && !state.isConnecting,
   };
 }

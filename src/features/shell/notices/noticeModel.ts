@@ -45,6 +45,9 @@ export type NoticeTier = (typeof NOTICE_TIER)[keyof typeof NOTICE_TIER];
 export const SHELL_NOTICE_IDS = {
   CAPTURE_PERMISSION: "capture-permission",
   CAPTURE_STALLED: "capture-stalled",
+  OUTPUT_FAILING: "output-failing",
+  WORKER_STOPPED: "worker-stopped",
+  WLED_LENGTH_MISMATCH: "wled-length-mismatch",
   OUTPUT_NONE: "output-none",
   CALIBRATION_REQUIRED: "calibration-required",
   START_FAILED: "start-failed",

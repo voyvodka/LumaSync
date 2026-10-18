@@ -22,8 +22,8 @@ export default {
     description: "“Go back” puts them back as they were before lighting started. Quitting LumaSync always does that.",
   },
   pair: {
-    linkButtonHint: "Press the button on top of your Hue bridge. LumaSync keeps checking for it, so there is nothing else to click.",
-    timedOutHint: "Select Try again, then press the button on top of your Hue bridge within a minute.",
+    linkButtonHint: "Press the button on top of your Hue Bridge. LumaSync keeps checking for it, so there is nothing else to click.",
+    timedOutHint: "Select Try again, then press the button on top of your Hue Bridge within a minute.",
     tryAgain: "Try again",
     promptHint: "Select Pair, then press the button on top of the bridge within a minute. LumaSync notices the press on its own.",
   },
@@ -52,6 +52,7 @@ export default {
   },
   areas: {
     selectLabel: "Select entertainment area",
+    hint: "An entertainment area is a group of Hue lights made in the Hue app, under Settings → Entertainment areas. LumaSync lights the one chosen here.",
     empty: "No entertainment areas found. Create one in the Hue app first.",
     channels: "{{count}} channels",
     activeStreamer: "Active",
@@ -65,18 +66,18 @@ export default {
     oneLight: "1 light",
     lights: "{{count}} lights",
     moreLights: "{{names}} +{{count}}",
-    identify: "Identify",
+    identify: "Blink",
     identifying: "Blinking…",
-    identifyAriaLabel: "Identify channel {{index}}: blink its light for a few seconds",
-    identifyBlocked: "Stop Hue first. A light cannot be identified while Hue streams to it.",
+    identifyAriaLabel: "Blink channel {{index}}'s light for a few seconds",
+    identifyBlocked: "Stop Hue first. A light cannot blink while Hue streams to it.",
     identifyPartial: "Some of the lights did not blink.",
     identifyFailed: "The light did not blink. Check that the bridge is reachable and try again.",
     saveError: "Placement not saved — store error. Try it again.",
     saveToBridge: "Save positions to bridge",
     saveToBridgeMenu: "Save to bridge (beta)",
     pulling: "Taking…",
-    more: "More for channels",
-    streamingNote: "Stop Hue to save or take positions, or to identify a light. The bridge does not change positions while it streams.",
+    more: "More for the lights",
+    streamingNote: "Turn Hue off in Lights to save or take positions, or to blink a light. The bridge does not change positions while it streams.",
     saving: "Saving...",
     savedToBridge: "Positions saved to bridge.",
     saveToBridgeError: "Failed to write positions: {{reason}}",
@@ -94,7 +95,7 @@ export default {
     sync: {
       inSyncShort: "Same on the bridge",
       localAheadShort: "Different on the bridge",
-      unknownShort: "Bridge not read yet",
+      unknownShort: "Not compared with the bridge",
       localAhead: "Your lights follow this arrangement. The bridge holds a different one; save yours to the bridge if the Hue app should show the same.",
       heldByZone: "Some channels sit outside their zone on the room map, so they stay at its edge. That is the whole difference from the bridge.",
     },
@@ -102,7 +103,7 @@ export default {
       emptyHeading: "No channels",
       emptyBody: "This entertainment area has no channels. Add lights to it in the Hue app.",
       unreachableHeading: "Bridge did not answer",
-      unreachableBody: "The bridge could not be reached, so its channel list is unknown.",
+      unreachableBody: "The bridge could not be reached. Check that it is powered and on the same network as this computer.",
       staleBody: "Showing the last known channels — the bridge is not answering right now.",
       failedHeading: "Channels could not be read",
       failedBody: "The bridge answered with something unexpected. Validate the area and try again.",
@@ -118,8 +119,6 @@ export default {
     },
   },
   runtime: {
-    idleTitle: "Runtime is idle",
-    idleBody: "Start from mode controls after readiness is current.",
     states: {
       Idle: "Idle",
       Starting: "Starting",
@@ -145,19 +144,13 @@ export default {
       HUE_START_NOOP_ALREADY_ACTIVE: "Hue stream is already running.",
       HUE_STREAM_IDLE: "Hue runtime is idle.",
       HUE_STREAM_RUNNING_NO_LIGHTS:
-        "Hue stream started, but no color-addressable lights were found in the selected area.",
+        "Hue stream started, but no colour-addressable lights were found in the selected area.",
       HUE_STREAM_START_ABORTED: "Hue stream start was aborted before it could be established.",
       HUE_STOPPED_BY_USER: "Reconnect was stopped by user action.",
       undefined: "Status code unavailable. Waiting for runtime update.",
     },
     retry: {
       progress: "Retries left: {{remaining}} | Next attempt: {{nextMs}} ms",
-    },
-    triggerSource: {
-      mode_control: "Triggered from mode controls",
-      device_surface: "Triggered from device surface",
-      system: "Triggered by system recovery",
-      undefined: "Trigger source unavailable",
     },
     checklist: {
       revalidate: "The last check is too old. Revalidate before starting.",
@@ -171,7 +164,7 @@ export default {
     partialStop: {
       body: "Hue did not fully stop. Stop Hue again to finish the cleanup.",
     },
-    reconnectingTitle: "Reconnecting to Hue bridge",
+    reconnectingTitle: "Reconnecting to Hue Bridge",
     statusUnavailable: {
       body: "Could not read the Hue stream's state. Checking again automatically.",
     },
@@ -191,7 +184,7 @@ export default {
     },
   },
   page: {
-    title: "Hue bridge",
+    title: "Hue Bridge",
     scanNetwork: "Search",
     forgotBridge: "Forget",
     forceForget: "Force forget",

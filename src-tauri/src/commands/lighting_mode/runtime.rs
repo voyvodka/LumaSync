@@ -2,24 +2,28 @@
 //! built from, and the locks a transition takes.
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use log::info;
+use log::{error, info};
 
 use super::config::LightingModeConfig;
+use super::effect_source::{create_effect_frame_source, EffectLiveSlot};
+use super::effects::EffectClockSlot;
 use super::live::{AmbilightLiveSettings, RoomGeometryLive};
 use super::outputs;
 use super::preview::PreviewRuntime;
 use super::snapshot::LightingSnapshotCell;
+use super::strip_set::StripSet;
 use super::tuning::TuningCell;
-use super::usb_output::UsbOutputPlan;
+use super::usb_output::{ActiveStrip, SolidHold, UsbOutputPlan};
 use crate::commands::ambilight_capture::{
     create_live_frame_source_at, AmbilightCaptureError, AmbilightFrameSource,
 };
 use crate::commands::led_calibration::LedCalibrationConfig;
 use crate::commands::led_output::LedOutputBridge;
+use crate::commands::runtime_telemetry::{clear_worker_stopped, SharedRuntimeTelemetry};
 use crate::commands::test_pattern::{
     create_synthetic_frame_source, TestPatternConfig, TestPatternLiveSlot,
 };
@@ -34,7 +38,7 @@ pub struct AmbilightCaptureRequest {
     /// source; the live worker takes its calibration from
     /// `LightingModeConfig` directly.
     pub led_calibration: Option<LedCalibrationConfig>,
-    /// v1.6 LED Preview — when `Some`, the frame-source factory builds a
+    /// The LED preview's test: when `Some`, the frame-source factory builds a
     /// `SyntheticFrameSource` (test mode) instead of live screen capture.
     pub test_pattern: Option<TestPatternConfig>,
     /// Animation phase carried across the worker rebuild a pattern tweak forces.
@@ -43,6 +47,9 @@ pub struct AmbilightCaptureRequest {
     pub pattern_live: Option<TestPatternLiveSlot>,
     /// Shortest gap the OS is asked to leave between frames: `capture_interval_for`.
     pub frame_interval: Duration,
+    /// The Effect mode's payload cell: when `Some`, the factory draws the
+    /// effect instead of capturing, and the display id is ignored.
+    pub effect: Option<EffectLiveSlot>,
 }
 
 type AmbilightFrameSourceFactory = dyn Fn(AmbilightCaptureRequest) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError>
@@ -52,6 +59,8 @@ type AmbilightFrameSourceFactory = dyn Fn(AmbilightCaptureRequest) -> Result<Box
 pub(super) struct LightingWorkerRuntime {
     pub(super) cancel: Arc<AtomicBool>,
     pub(super) handle: JoinHandle<()>,
+    /// The strips whose outputs started, by their place in the strips the worker was given.
+    pub(super) started: Vec<usize>,
     /// Holds the frame source alongside the worker thread.
     ///
     /// The worker thread captures a clone of this Arc. When the thread exits it
@@ -60,13 +69,23 @@ pub(super) struct LightingWorkerRuntime {
     /// thread. This ensures `SCStream::stop_capture` is never called from the
     /// worker thread, preventing a macOS crash on rapid mode switches.
     pub(super) _frame_source: Arc<Mutex<Box<dyn AmbilightFrameSource>>>,
+    /// Where the worker reported a panic, cleared once it is let go.
+    pub(super) telemetry: SharedRuntimeTelemetry,
 }
 
 impl LightingWorkerRuntime {
     pub(super) fn stop(self) {
         let t0 = std::time::Instant::now();
         self.cancel.store(true, Ordering::Relaxed);
-        let _ = self.handle.join();
+        if let Err(panic) = self.handle.join() {
+            let message = panic
+                .downcast_ref::<&str>()
+                .map(|s| (*s).to_string())
+                .or_else(|| panic.downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "a panic with no message".to_string());
+            error!("[stop-worker] the worker had stopped on a panic: {message}");
+            clear_worker_stopped(&self.telemetry);
+        }
         let join_ms = t0.elapsed().as_millis();
         info!("[stop-worker] join completed in {join_ms}ms");
         // `_frame_source` drops here — from the calling (command) thread,
@@ -78,23 +97,43 @@ impl LightingWorkerRuntime {
 
 pub(crate) struct LightingRuntimeOwner {
     pub(super) active_mode: LightingModeConfig,
-    /// Port name for the currently active LED session. Cleared in
-    /// `stop_previous`, which deliberately leaves the cached serial handle
-    /// open — reopening the port toggles DTR and resets the MCU.
-    pub(super) active_port: Option<String>,
+    /// The serial ports whose cached sessions the runtime holds, the mode's strip first. Kept by
+    /// `stop_previous`, which deliberately leaves the cached serial handles open — reopening a port
+    /// toggles DTR and resets the MCU; `set_active_ports` lets go of the ones a new run drops.
+    pub(super) active_ports: Vec<String>,
     /// The output the running mode writes the "usb" channel to, `None` when it writes none. The
     /// Ambilight fast path compares against it: a retune must not keep a worker on an output that is
     /// no longer the driven one.
     pub(super) active_usb_plan: Option<UsbOutputPlan>,
+    /// The strips the last apply was planned with.
+    pub(super) strips: StripSet,
+    /// Every strip the running mode writes, the mode's strip first — what actually started, not
+    /// what was asked for.
+    pub(super) active_strips: Vec<ActiveStrip>,
+    /// The strips the running Ambilight asked for beside the mode's strip, whether or not each
+    /// started: a retune keeps the run only when the next apply would ask for the same.
+    pub(super) requested_extras: Vec<ActiveStrip>,
+    /// The strips the last run wrote — empty when it drove none — kept past its stop so an Off can
+    /// paint each of them black; taken by the Off that does.
+    pub(super) ended_run: Vec<ActiveStrip>,
+    /// Ports a run on the mode's strip alone keeps warm beside it, with the records they ran with.
+    pub(super) held_strips: Vec<ActiveStrip>,
+    /// Resends a Solid colour to a WLED device while Solid runs there (`SolidHold`).
+    pub(super) solid_hold: Option<SolidHold>,
     pub(super) worker: Option<LightingWorkerRuntime>,
     /// Shared settings for the currently running ambilight worker.
     /// Updated in-place when only ambilight settings change, avoiding worker restart.
     pub(super) ambilight_live: Option<Arc<AmbilightLiveSettings>>,
     /// Room geometry cell of the running ambilight worker; fresh per worker.
     pub(super) room_geometry_live: Option<Arc<RoomGeometryLive>>,
+    /// The running effect's payload cell, which its source re-reads per frame.
+    pub(super) effect_live: Option<EffectLiveSlot>,
+    /// Where the effect has got to, kept across a worker rebuild so a change of
+    /// layout or output does not restart the animation.
+    pub(super) effect_clock: EffectClockSlot,
     pub(super) output_bridge: LedOutputBridge,
     pub(super) frame_source_factory: Arc<AmbilightFrameSourceFactory>,
-    /// v1.6 LED Preview — synthetic test request + shared enrichment gate.
+    /// The LED preview: synthetic test request + shared enrichment gate.
     pub(super) preview: PreviewRuntime,
     /// `LightingRuntimeState::closing`, read under the runtime lock.
     pub(super) closing: Arc<AtomicBool>,
@@ -107,15 +146,25 @@ impl Default for LightingRuntimeOwner {
     fn default() -> Self {
         Self {
             active_mode: LightingModeConfig::default(),
-            active_port: None,
+            active_ports: Vec::new(),
             active_usb_plan: None,
+            strips: StripSet::default(),
+            active_strips: Vec::new(),
+            requested_extras: Vec::new(),
+            ended_run: Vec::new(),
+            held_strips: Vec::new(),
+            solid_hold: None,
             worker: None,
             ambilight_live: None,
             room_geometry_live: None,
+            effect_live: None,
+            effect_clock: EffectClockSlot::default(),
             output_bridge: LedOutputBridge::default(),
             preview: Default::default(),
             frame_source_factory: Arc::new(|req: AmbilightCaptureRequest| {
-                if let Some(test) = req.test_pattern {
+                if req.effect.is_some() {
+                    Ok(create_effect_frame_source())
+                } else if let Some(test) = req.test_pattern {
                     Ok(create_synthetic_frame_source(
                         test,
                         req.led_calibration,
@@ -176,42 +225,53 @@ impl LightingRuntimeState {
         self.closing.load(Ordering::SeqCst)
     }
 
-    /// Drops `port_name`'s cached serial writer, for a strip that was unplugged: the next write
-    /// opens the port afresh instead of failing on a dead handle. The bridge is cloned under the
-    /// runtime lock and the drop — which may wait for the writer to exit — runs after it.
-    /// The running mode writes the "usb" channel to this serial port.
-    pub fn drives_serial(&self, port_name: &str) -> bool {
-        matches!(
-            &self.runtime.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).active_usb_plan,
-            Some(UsbOutputPlan::Serial(port)) if port == port_name
-        )
+    /// The runtime lock for a command, a poisoned one answered as a coded error.
+    pub(super) fn lock_owner(&self) -> Result<MutexGuard<'_, LightingRuntimeOwner>, String> {
+        self.runtime
+            .lock()
+            .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))
     }
 
-    /// The running mode writes the "usb" channel to the WLED device at `ip`.
-    pub fn drives_wled(&self, ip: std::net::Ipv4Addr) -> bool {
-        matches!(
-            &self.runtime.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).active_usb_plan,
-            Some(UsbOutputPlan::Wled(config)) if config.ip == ip
-        )
-    }
-
-    /// `port_name` is the port whose cached writer the runtime holds as its active one.
-    pub fn holds_port(&self, port_name: &str) -> bool {
+    /// The runtime lock, a poisoned one recovered: for readers that must still
+    /// learn what runs.
+    pub(super) fn lock_owner_recovered(&self) -> MutexGuard<'_, LightingRuntimeOwner> {
         self.runtime
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .active_port
-            .as_deref()
-            == Some(port_name)
     }
 
+    /// The running mode writes the "usb" channel, or one of the strips beside it, to this port.
+    pub fn drives_serial(&self, port_name: &str) -> bool {
+        let owner = self.lock_owner_recovered();
+        let names =
+            |plan: &UsbOutputPlan| matches!(plan, UsbOutputPlan::Serial(port) if port == port_name);
+        owner.active_usb_plan.as_ref().is_some_and(names)
+            || owner.active_strips.iter().any(|strip| names(&strip.plan))
+    }
+
+    /// The running mode writes the "usb" channel, or one of the strips beside it, to the WLED
+    /// device at `ip`.
+    pub fn drives_wled(&self, ip: std::net::Ipv4Addr) -> bool {
+        let owner = self.lock_owner_recovered();
+        let names =
+            |plan: &UsbOutputPlan| matches!(plan, UsbOutputPlan::Wled(config) if config.ip == ip);
+        owner.active_usb_plan.as_ref().is_some_and(names)
+            || owner.active_strips.iter().any(|strip| names(&strip.plan))
+    }
+
+    /// `port_name` is one of the ports whose cached writers the runtime holds.
+    pub fn holds_port(&self, port_name: &str) -> bool {
+        self.lock_owner_recovered()
+            .active_ports
+            .iter()
+            .any(|port| port == port_name)
+    }
+
+    /// Drops `port_name`'s cached serial writer, for a strip that was unplugged: the next write
+    /// opens the port afresh instead of failing on a dead handle. The bridge is cloned under the
+    /// runtime lock and the drop — which may wait for the writer to exit — runs after it.
     pub fn forget_serial_session(&self, port_name: &str) {
-        let bridge = self
-            .runtime
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .output_bridge
-            .clone();
+        let bridge = self.lock_owner_recovered().output_bridge.clone();
         bridge.disconnect_session(port_name);
     }
 }
@@ -239,8 +299,6 @@ impl LightingRuntimeState {
 
     /// Holds the runtime lock, as a worker join mid-transition does.
     pub(crate) fn hold_runtime_for_tests(&self) -> std::sync::MutexGuard<'_, LightingRuntimeOwner> {
-        self.runtime
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.lock_owner_recovered()
     }
 }

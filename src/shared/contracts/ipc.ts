@@ -79,14 +79,18 @@ import type {
 } from "./lightingRuntime";
 import type { NotificationPayload, NotificationResult, PLATFORM_COMMANDS } from "./platform";
 import type {
-  CloseLedTwinOverlayPayload,
-  ControlPopupResult,
-  LedPreviewStatus,
   LedTestPatternResult,
-  OpenLedTwinOverlayPayload,
   PREVIEW_COMMANDS,
+  PreviewSession,
+  PreviewSessionResult,
+  SetPreviewPopupHiddenPayload,
+  SetPreviewSceneBlackBordersPayload,
+  SetPreviewSceneBrightnessPayload,
+  SetPreviewTwinHiddenPayload,
+  StartPreviewScenePayload,
   StartLedTestPatternPayload,
-  TwinOverlayResult,
+  TwinFrameChannel,
+  TwinSubscribeResult,
 } from "./preview";
 import type {
   AssignChannelRequest,
@@ -145,6 +149,7 @@ export interface CommandMap {
 
   // --- device: WLED (every handler takes one struct named `request`) -------
   discover_wled_devices: Command<{ request: { ip: string } }, WledDiscoveryResponse>;
+  browse_wled_devices: NoArgs<WledDiscoveryResponse>;
   connect_wled_sink: Command<
     { request: { device: WledDeviceInfo; port?: number; protocol?: WledProtocol } },
     WledConnectResponse
@@ -226,18 +231,22 @@ export interface CommandMap {
   // --- preview ------------------------------------------------------------
   start_led_test_pattern: Command<{ payload: StartLedTestPatternPayload }, LedTestPatternResult>;
   stop_led_test_pattern: NoArgs<LedTestPatternResult>;
-  get_led_preview_status: NoArgs<LedPreviewStatus>;
-  open_led_twin_overlay: Command<{ payload: OpenLedTwinOverlayPayload }, TwinOverlayResult>;
-  /** `payload` is required even when empty: Rust's argument is not optional. */
-  close_led_twin_overlay: Command<{ payload: CloseLedTwinOverlayPayload }, TwinOverlayResult>;
-  open_led_control_popup: NoArgs<ControlPopupResult>;
-  show_led_control_popup: NoArgs<ControlPopupResult>;
-  hide_led_control_popup: NoArgs<ControlPopupResult>;
+  open_preview: NoArgs<PreviewSessionResult>;
+  close_preview: NoArgs<PreviewSessionResult>;
+  set_preview_popup_hidden: Command<{ payload: SetPreviewPopupHiddenPayload }, PreviewSessionResult>;
+  get_preview_session: NoArgs<PreviewSession>;
+  set_preview_twin_hidden: Command<{ payload: SetPreviewTwinHiddenPayload }, PreviewSessionResult>;
+  start_preview_scene: Command<{ payload: StartPreviewScenePayload }, PreviewSessionResult>;
+  stop_preview_scene: NoArgs<PreviewSessionResult>;
+  set_preview_scene_brightness: Command<{ payload: SetPreviewSceneBrightnessPayload }, PreviewSessionResult>;
+  set_preview_scene_black_borders: Command<{ payload: SetPreviewSceneBlackBordersPayload }, PreviewSessionResult>;
+  subscribe_twin_frames: Command<{ onFrame: TwinFrameChannel }, TwinSubscribeResult>;
 
   // --- shell --------------------------------------------------------------
   update_tray_labels: Command<{ labels: TrayLabels }, null>;
   get_launch_context: NoArgs<LaunchContext>;
   get_main_window_visibility: NoArgs<MainWindowVisibility>;
+  start_window_drag: NoArgs<null>;
   get_shell_state: NoArgs<ShellStateSnapshot>;
   patch_shell_state: Command<{ patch: ShellStatePatchRequest }, ShellStateWriteResult>;
   replace_shell_state: Command<{ request: ShellStateReplaceRequest }, ShellStateWriteResult>;

@@ -17,8 +17,10 @@ use super::super::hue_http::{classify_hue_response, HueHttpFault};
 use super::super::status::CommandStatus;
 use super::credential_store::effective_hue_app_key;
 use super::sender::{RequestPacer, HUE_HTTP_FALLBACK_MAX_REQUESTS_PER_SEC};
-use super::state_store::{acquire_hue_runtime, HueRuntimeState, HueRuntimeStateStore};
-use super::transport::{async_client_for_key, is_valid_bridge_addr, read_body, send_error_text};
+use super::state_store::{acquire_hue_runtime, HueRuntimeStateStore};
+use super::transport::{
+    async_client_for_key, is_safe_resource_id, is_valid_bridge_addr, read_body, send_error_text,
+};
 
 /// More ids than any entertainment area holds; a longer list is refused
 /// rather than walked, so the webview cannot queue minutes of bridge writes.
@@ -30,6 +32,9 @@ pub(crate) const HUE_LIGHT_REQUEST_MAX_IDS: usize = 64;
 pub struct HueLightName {
     pub id: String,
     pub name: String,
+    /// CLIP v2 `metadata.archetype`, the bridge's spelling — an open set the frontend maps to a
+    /// lamp's shape, never a code Rust acts on.
+    pub archetype: Option<String>,
 }
 
 /// Result of `get_hue_light_names`. `lights` is empty on every failure arm.
@@ -59,10 +64,6 @@ fn identify_status(code: &str, message: &str, details: Option<String>) -> Comman
     }
 }
 
-fn is_safe_resource_id(id: &str) -> bool {
-    !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
-}
-
 /// Why the bulk read gave nothing back.
 #[derive(Debug)]
 pub(crate) enum LightsReadError {
@@ -71,7 +72,7 @@ pub(crate) enum LightsReadError {
 }
 
 /// Every light on the bridge in one request — no light budget spent.
-pub(crate) async fn read_bridge_lights(
+async fn read_bridge_lights(
     bridge_ip: &str,
     username: &str,
 ) -> Result<Vec<Value>, LightsReadError> {
@@ -104,7 +105,7 @@ fn light_id(item: &Value) -> Option<&str> {
 
 /// The names of `wanted`, in the order asked for. A light the bridge does not
 /// list, or lists without a name, is left out rather than named by its id.
-pub(crate) fn names_for(lights: &[Value], wanted: &[String]) -> Vec<HueLightName> {
+fn names_for(lights: &[Value], wanted: &[String]) -> Vec<HueLightName> {
     let by_id: HashMap<&str, &Value> = lights
         .iter()
         .filter_map(|item| Some((light_id(item)?, item)))
@@ -114,16 +115,23 @@ pub(crate) fn names_for(lights: &[Value], wanted: &[String]) -> Vec<HueLightName
         if out.iter().any(|named| &named.id == id) {
             continue;
         }
-        let name = by_id
-            .get(id.as_str())
+        let item = by_id.get(id.as_str());
+        let name = item
             .and_then(|item| item.pointer("/metadata/name"))
             .and_then(Value::as_str)
             .map(str::trim)
             .filter(|name| !name.is_empty());
         if let Some(name) = name {
+            let archetype = item
+                .and_then(|item| item.pointer("/metadata/archetype"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|archetype| !archetype.is_empty())
+                .map(str::to_string);
             out.push(HueLightName {
                 id: id.clone(),
                 name: name.to_string(),
+                archetype,
             });
         }
     }
@@ -131,7 +139,7 @@ pub(crate) fn names_for(lights: &[Value], wanted: &[String]) -> Vec<HueLightName
 }
 
 /// The owning devices of `wanted`, deduplicated in the order asked for.
-pub(crate) fn owner_devices(lights: &[Value], wanted: &[String]) -> Vec<String> {
+fn owner_devices(lights: &[Value], wanted: &[String]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for item in lights {
         let Some(id) = light_id(item) else { continue };
@@ -178,7 +186,7 @@ fn checked_ids(light_ids: Vec<String>) -> Result<Vec<String>, String> {
 }
 
 /// The names body, bridge address already checked.
-pub(crate) async fn light_names_from_bridge(
+async fn light_names_from_bridge(
     bridge_ip: &str,
     username: &str,
     light_ids: Vec<String>,
@@ -265,10 +273,7 @@ fn identify_pacer() -> &'static tokio::sync::Mutex<RequestPacer> {
 /// lost or fights the frames.
 fn lights_are_streamed(store: &HueRuntimeStateStore) -> bool {
     let owner = acquire_hue_runtime(&store.runtime);
-    matches!(
-        owner.state,
-        HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
-    ) || owner.active_stream.is_some()
+    owner.state.is_active() || owner.active_stream.is_some()
 }
 
 enum IdentifyPut {
@@ -373,7 +378,7 @@ async fn put_identify(
 }
 
 /// The identify body, bridge address already checked.
-pub(crate) async fn identify_lights_on_bridge(
+async fn identify_lights_on_bridge(
     bridge_ip: &str,
     username: &str,
     light_ids: Vec<String>,
@@ -537,7 +542,7 @@ pub async fn identify_hue_lights(
 mod tests {
     use serde_json::json;
 
-    use super::super::state_store::acquire_hue_runtime;
+    use super::super::state_store::{acquire_hue_runtime, HueRuntimeState};
     use super::super::test_bridge::{light_json, FakeHue, Reply};
     use super::*;
 
@@ -554,12 +559,20 @@ mod tests {
     }
 
     fn bridge() -> FakeHue {
+        let mut play = named("  TV left ");
+        play["metadata"]["archetype"] = json!("hue_play");
+        let mut shelf = named("Shelf");
+        shelf["metadata"]
+            .as_object_mut()
+            .expect("metadata")
+            .remove("archetype");
         FakeHue::start(
-            &[(AREA, &["light-1", "light-2", "light-3"])],
+            &[(AREA, &["light-1", "light-2", "light-3", "light-4"])],
             &[
                 ("light-1", named("Sofa lamp")),
-                ("light-2", named("  TV left ")),
+                ("light-2", play),
                 ("light-3", light_json(true, 50.0, None, (0.3, 0.3))),
+                ("light-4", shelf),
             ],
             |_| Reply::ok(),
         )
@@ -581,11 +594,13 @@ mod tests {
             vec![
                 HueLightName {
                     id: "light-2".into(),
-                    name: "TV left".into()
+                    name: "TV left".into(),
+                    archetype: Some("hue_play".into()),
                 },
                 HueLightName {
                     id: "light-1".into(),
-                    name: "Sofa lamp".into()
+                    name: "Sofa lamp".into(),
+                    archetype: Some("sultan_bulb".into()),
                 },
             ],
             "asked-for order, trimmed, unnamed and unknown lights left out"
@@ -594,6 +609,34 @@ mod tests {
         assert_eq!(requests.len(), 1, "one request for the whole area");
         assert_eq!(requests[0].method, "GET");
         assert_eq!(requests[0].path, "/clip/v2/resource/light");
+    }
+
+    #[tokio::test]
+    async fn each_name_carries_the_bridge_archetype_or_none() {
+        let hue = bridge();
+        let response = light_names_from_bridge(
+            &hue.bridge.authority,
+            "app-key",
+            ids(&["light-4", "light-2"]),
+        )
+        .await;
+
+        let archetypes: Vec<_> = response
+            .lights
+            .iter()
+            .map(|light| (light.id.as_str(), light.archetype.as_deref()))
+            .collect();
+        assert_eq!(
+            archetypes,
+            vec![("light-4", None), ("light-2", Some("hue_play"))],
+            "a light with no archetype still has its name"
+        );
+        let wire = serde_json::to_value(&response.lights[0]).expect("serialise");
+        assert_eq!(
+            wire["archetype"],
+            Value::Null,
+            "none goes on the wire as null, not absent"
+        );
     }
 
     #[tokio::test]

@@ -1,9 +1,12 @@
-/* The primitives layer sits under components, so a feature's own class on the button (the room-map
-   toolbar's 28 px row) still adjusts it whatever order the sheets load in.
+/* The primitives layer sits under components, so a feature's own class on the button (the room
+   map's corner capsule and dock rail) still adjusts it whatever order the sheets load in.
    docs/architecture/ui-and-shell.md, "Stylesheet layers". */
 @layer primitives {
-  /* The look is the caller's; this only guarantees the hit area. */
+  /* The look is the caller's; this guarantees the hit area, and the icon in its middle: a button with
+     no padding left the icon against its left edge, off-centre in its own hover plate. */
   .icon {
+    display: inline-grid;
+    place-items: center;
     min-width: 32px;
     min-height: 32px;
   }

@@ -10,6 +10,7 @@ export function runtimeSnapshot(overrides: Partial<LightingRuntimeSnapshot> = {}
   return {
     revision: 1,
     mode: { kind: "off" },
+    brightness: 1,
     active: false,
     activeTargets: [],
     selectedTargets: ["usb"],
@@ -40,6 +41,7 @@ export function outputsResult(
       stopFailed: [],
       droppedTargets: [],
       modeEnded: false,
+      wledAdvisory: null,
       ...outcome,
     },
   };

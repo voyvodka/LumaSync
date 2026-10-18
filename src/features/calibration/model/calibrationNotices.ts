@@ -20,6 +20,7 @@ export const CALIBRATION_NOTICE_KEYS = {
   testPatternNoCalibration: "calibration:overlay.errors.testPatternNoCalibration",
   testPatternInvalidLayout: "calibration:overlay.errors.testPatternInvalidLayout",
   testPatternRefused: "calibration:overlay.errors.testPatternRefused",
+  testPatternSceneActive: "calibration:overlay.errors.testPatternSceneActive",
   testPatternToggleFailed: "calibration:overlay.errors.testPatternToggleFailed",
   displaySwitchBlocked: "calibration:overlay.errors.displaySwitchBlocked",
   displaySwitchFailed: "calibration:overlay.errors.displaySwitchFailed",
@@ -56,6 +57,9 @@ export function testPatternRefusalNotice(code: LedTestStatusCode | null): Calibr
   }
   if (code === LED_TEST_STATUS.PATTERN_INVALID_PARAMS) {
     return { key: CALIBRATION_NOTICE_KEYS.testPatternInvalidLayout, detail: code };
+  }
+  if (code === LED_TEST_STATUS.PATTERN_SCENE_ACTIVE) {
+    return { key: CALIBRATION_NOTICE_KEYS.testPatternSceneActive, detail: null };
   }
   return { key: CALIBRATION_NOTICE_KEYS.testPatternRefused, detail: code };
 }

@@ -1,6 +1,8 @@
 import { type RefObject, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Reveal } from "@/shared/ui/Reveal/Reveal";
+
 import { NOTICE_SEVERITY_LABEL } from "./noticeModel";
 import { NoticeRow } from "./NoticeRow";
 import type { QueuedNotice, ShellNoticeQueue } from "./useShellNoticeQueue";
@@ -82,7 +84,9 @@ export function ShellNoticeSlot({
   useLineOverflow(messageRef, !shownExpanded, top ? `${top.key}\u0001${top.notice.message}` : "", setOverflowing);
 
   const reserve = top === undefined && holdSpace && occupied;
-  if (top === undefined && !reserve) return null;
+  // It grows in above the content and closes with its last notice still inside, so the page below
+  // slides instead of jumping when the strip comes and goes.
+  const visible = top !== undefined || reserve;
 
   const toggle = {
     count: rest.length,
@@ -100,6 +104,8 @@ export function ShellNoticeSlot({
   };
 
   return (
+    <Reveal open={visible} appear className={styles.reveal}>
+      {visible ? (
     <section
       ref={sectionRef}
       tabIndex={-1}
@@ -142,6 +148,8 @@ export function ShellNoticeSlot({
           />
         ))}
     </section>
+      ) : null}
+    </Reveal>
   );
 }
 

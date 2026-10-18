@@ -1,0 +1,493 @@
+//! A preview scene borrows the lights: Ambilight on the user's settings while
+//! it plays, the interrupted mode back after, and a user's own choice ending it
+//! for good.
+
+use serde_json::json;
+use tauri::async_runtime::block_on;
+
+use super::outputs::{
+    apply_outputs_with, refresh_running_with, ApplyOutputsRequest, LightingOrigin,
+};
+use super::preview_scene::{
+    set_scene_black_borders, set_scene_brightness, start_scene_lighting, stop_scene_lighting,
+    SceneLighting, SceneRestore,
+};
+use super::test_support::{Rig, RigSetup};
+use super::{LightingModeConfig, LightingModeKind, SolidColorPayload};
+use crate::commands::hue_intensity::LightingSmoothingPreset;
+use crate::commands::preview::SceneKind;
+
+fn solid(r: u8) -> LightingModeConfig {
+    LightingModeConfig {
+        kind: LightingModeKind::Solid,
+        solid: Some(SolidColorPayload {
+            r,
+            g: 20,
+            b: 30,
+            brightness: 1.0,
+            kelvin: None,
+        }),
+        ..LightingModeConfig::default()
+    }
+}
+
+fn running(rig: &Rig, mode: LightingModeConfig) {
+    let started = block_on(apply_outputs_with(
+        &rig.handle(),
+        ApplyOutputsRequest {
+            mode: Some(mode),
+            targets: Some(vec!["usb".to_string()]),
+            origin: LightingOrigin::User,
+        },
+    ))
+    .expect("apply_outputs resolves");
+    assert_eq!(started.status.code, "OUTPUTS_APPLIED", "setup: {started:?}");
+    rig.log.clear();
+}
+
+fn start(rig: &Rig, kind: SceneKind) -> f32 {
+    match start_scene_lighting(&rig.handle(), kind).expect("the start answers") {
+        SceneLighting::Running { brightness, .. } => brightness,
+        _ => panic!("the scene did not start"),
+    }
+}
+
+/// What the scene's worker crops with, and what the scene's mode copy says.
+fn black_borders(rig: &Rig) -> (bool, bool) {
+    let state = rig.state();
+    let owner = state.runtime.lock().unwrap();
+    let live = owner
+        .ambilight_live
+        .as_ref()
+        .expect("a scene runs Ambilight")
+        .read_black_border_detection();
+    let running = owner
+        .active_mode
+        .ambilight
+        .as_ref()
+        .is_some_and(|ambilight| ambilight.black_border_detection);
+    (live, running)
+}
+
+fn scene(rig: &Rig) -> Option<SceneKind> {
+    rig.state().runtime.lock().unwrap().preview.scene
+}
+
+fn prior_kind(rig: &Rig) -> Option<LightingModeKind> {
+    rig.state()
+        .runtime
+        .lock()
+        .unwrap()
+        .preview
+        .session_prior
+        .as_ref()
+        .map(|prior| prior.kind)
+}
+
+#[test]
+fn a_scene_runs_ambilight_and_the_mirror_keeps_the_mode_it_interrupted() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5));
+
+    start(&rig, SceneKind::Spiral);
+
+    assert_eq!(rig.running().kind, LightingModeKind::Ambilight);
+    assert_eq!(rig.running().targets, Some(vec!["usb".to_string()]));
+    assert_eq!(scene(&rig), Some(SceneKind::Spiral));
+    assert_eq!(prior_kind(&rig), Some(LightingModeKind::Solid));
+    assert_eq!(
+        rig.state().snapshot.read().mode.kind,
+        LightingModeKind::Solid,
+        "the scene is not the user's mode"
+    );
+}
+
+#[test]
+fn stopping_the_scene_brings_back_the_mode_it_interrupted() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5));
+    start(&rig, SceneKind::Spiral);
+
+    let restored = stop_scene_lighting(&rig.handle()).unwrap();
+
+    assert!(matches!(restored, SceneRestore::Restored));
+    assert_eq!(rig.running().kind, LightingModeKind::Solid);
+    assert_eq!(rig.running().solid.map(|s| s.r), Some(5));
+    assert_eq!(scene(&rig), None);
+    assert_eq!(prior_kind(&rig), None);
+}
+
+fn retune_ambilight(rig: &Rig, brightness: f32) -> String {
+    let tuning = super::tuning::LightingTuning {
+        ambilight: Some(super::AmbilightPayload {
+            brightness,
+            ..super::AmbilightPayload::default()
+        }),
+        ..Default::default()
+    };
+    block_on(super::tuning::retune_lighting(rig.handle(), tuning))
+        .expect("retune resolves")
+        .status
+        .code
+}
+
+fn ambilight() -> LightingModeConfig {
+    LightingModeConfig {
+        kind: LightingModeKind::Ambilight,
+        ..LightingModeConfig::default()
+    }
+}
+
+/// The interrupted mode comes back with the settings as saved now: a
+/// brightness drag before the scene is not undone by its stop.
+#[test]
+fn a_scene_stop_keeps_the_brightness_retuned_before_it() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight());
+    assert_eq!(retune_ambilight(&rig, 0.4), "RETUNE_APPLIED");
+    start(&rig, SceneKind::Spiral);
+
+    stop_scene_lighting(&rig.handle()).unwrap();
+
+    assert_eq!(rig.running().ambilight.map(|a| a.brightness), Some(0.4));
+    assert_eq!(rig.state().snapshot.read().brightness, 0.4);
+}
+
+#[test]
+fn retunes_reach_the_mode_a_scene_stop_brought_back() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, ambilight());
+    start(&rig, SceneKind::Spiral);
+    stop_scene_lighting(&rig.handle()).unwrap();
+
+    assert_eq!(retune_ambilight(&rig, 0.4), "RETUNE_APPLIED");
+    assert_eq!(rig.state().tuning.accepting_brightness(), Some(0.4));
+}
+
+/// Switching scenes moves the running one in place: the mode to come back to
+/// is still the user's, not the first scene's Ambilight.
+#[test]
+fn a_second_scene_keeps_the_mode_the_first_one_interrupted() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5));
+    start(&rig, SceneKind::Spiral);
+
+    start(&rig, SceneKind::Sunset);
+
+    assert_eq!(scene(&rig), Some(SceneKind::Sunset));
+    assert_eq!(prior_kind(&rig), Some(LightingModeKind::Solid));
+}
+
+/// A mode chosen anywhere during a scene ends it in the critical section of
+/// the change, so the scene's stop cannot put the old mode back over it.
+#[test]
+fn a_mode_change_ends_the_scene_and_is_not_undone() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5));
+    start(&rig, SceneKind::EdgeTour);
+
+    running(&rig, solid(7));
+    assert_eq!(scene(&rig), None);
+    assert_eq!(prior_kind(&rig), None);
+
+    let late_stop = stop_scene_lighting(&rig.handle()).unwrap();
+    assert!(matches!(late_stop, SceneRestore::NotRunning));
+    assert_eq!(rig.running().solid.map(|s| s.r), Some(7));
+}
+
+/// A user's Ambilight during a scene is a plain one: its worker is not the
+/// scene's, so it keeps its place in the runtime history.
+#[test]
+fn ambilight_chosen_during_a_scene_starts_a_worker_of_its_own() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5));
+    start(&rig, SceneKind::EdgeTour);
+    assert!(rig.state().runtime.lock().unwrap().preview.scene_worker);
+
+    running(
+        &rig,
+        LightingModeConfig {
+            kind: LightingModeKind::Ambilight,
+            ..LightingModeConfig::default()
+        },
+    );
+
+    assert_eq!(rig.running().kind, LightingModeKind::Ambilight);
+    assert!(!rig.state().runtime.lock().unwrap().preview.scene_worker);
+}
+
+/// The brightness the user gave one scene carries to the next.
+#[test]
+fn a_second_scene_keeps_the_brightness_the_first_was_given() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5));
+    start(&rig, SceneKind::Spiral);
+    assert!(set_scene_brightness(&rig.state(), 0.3));
+
+    assert_eq!(start(&rig, SceneKind::Sunset), 0.3);
+    assert_eq!(rig.running().ambilight.map(|a| a.brightness), Some(0.3));
+}
+
+#[test]
+fn a_scene_that_cannot_capture_gives_the_lights_back() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5));
+    rig.fail_capture(Some("AMBILIGHT_CAPTURE_PERMISSION_DENIED"));
+
+    let outcome = start_scene_lighting(&rig.handle(), SceneKind::Spiral).unwrap();
+
+    let SceneLighting::Failed(status) = outcome else {
+        panic!("a failed capture must fail the scene");
+    };
+    assert_eq!(status.code, "AMBILIGHT_MODE_START_FAILED");
+    assert_eq!(rig.running().kind, LightingModeKind::Solid);
+    assert_eq!(scene(&rig), None);
+}
+
+#[test]
+fn with_nothing_to_light_no_scene_starts() {
+    let rig = Rig::new(RigSetup {
+        serial_connected: false,
+        hue_paired: false,
+        ..RigSetup::default()
+    });
+
+    let outcome = start_scene_lighting(&rig.handle(), SceneKind::Spiral).unwrap();
+
+    assert!(matches!(outcome, SceneLighting::NoOutput));
+    assert_eq!(scene(&rig), None);
+}
+
+#[test]
+fn a_settings_refresh_leaves_a_scene_alone() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5));
+    start(&rig, SceneKind::Spiral);
+    rig.seed(json!({ "selectedDisplayId": "DISPLAY2:1920:0" }));
+    rig.log.clear();
+
+    block_on(refresh_running_with(&rig.handle())).unwrap();
+
+    assert!(
+        !rig.log.events().iter().any(|e| e.starts_with("mode:")),
+        "{:?}",
+        rig.log.events()
+    );
+    assert_eq!(scene(&rig), Some(SceneKind::Spiral));
+}
+
+/// The scene's brightness is live and never saved: the user's Ambilight
+/// brightness is theirs.
+#[test]
+fn the_scene_brightness_reaches_the_worker_and_is_never_saved() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5));
+    start(&rig, SceneKind::Spiral);
+    let writes_before = rig.written_keys().len();
+
+    assert!(set_scene_brightness(&rig.state(), 0.25));
+    super::outputs::persist_running_choice(&rig.handle());
+
+    assert_eq!(rig.running().ambilight.map(|a| a.brightness), Some(0.25));
+    assert_eq!(
+        rig.written_keys().len(),
+        writes_before,
+        "{:?}",
+        rig.written_keys()
+    );
+    assert_eq!(
+        rig.state().tuning.brightness(),
+        Some(1.0),
+        "the modes' shared brightness is not the scene's"
+    );
+}
+
+#[test]
+fn without_a_scene_its_brightness_changes_nothing() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5));
+
+    assert!(!set_scene_brightness(&rig.state(), 0.25));
+    assert_eq!(rig.running().kind, LightingModeKind::Solid);
+}
+
+/// The latency scene measures on a worker of its own, with nothing between
+/// the flip and the output; a switch back hands the worker its settings back.
+#[test]
+fn the_latency_scene_measures_on_an_unsmoothed_worker_of_its_own() {
+    let rig = Rig::new(RigSetup::default());
+    // A saved preset wins over an alpha in the worker's live settings.
+    rig.seed(json!({
+        "lightingMode": {
+            "kind": "ambilight",
+            "ambilight": { "brightness": 0.8, "lightingSmoothingPreset": "subtle" }
+        }
+    }));
+    running(&rig, solid(5));
+    start(&rig, SceneKind::Spiral);
+
+    start(&rig, SceneKind::Latency);
+    let state = rig.state();
+    {
+        let owner = state.runtime.lock().unwrap();
+        assert!(owner.preview.latency_sink.is_some());
+        assert!(
+            owner.preview.latency_worker,
+            "the switch rebuilt the worker"
+        );
+        let live = owner.ambilight_live.as_ref().expect("a running worker");
+        assert_eq!(live.read_smoothing_alpha(), 1.0, "what the worker reads");
+        assert!(!live.read_black_border_detection());
+    }
+
+    start(&rig, SceneKind::Sunset);
+    let owner = state.runtime.lock().unwrap();
+    assert!(owner.preview.latency_sink.is_none());
+    assert!(!owner.preview.latency_worker);
+}
+
+/// A scene runs the user's Ambilight as a choice of it would: the intensity
+/// preset and the room map come with it, not only the brightness.
+#[test]
+fn a_scene_runs_the_users_ambilight_with_its_preset() {
+    let rig = Rig::new(RigSetup {
+        state: json!({
+            "lightingIntensityPreset": "subtle",
+            "roomMap": {
+                "dimensions": { "widthMeters": 4, "depthMeters": 5, "heightMeters": 2.5 },
+                "tvAnchor": { "x": 1, "y": 0, "width": 1.2, "height": 0.1 },
+                "hueChannels": [{
+                    "channelIndex": 0, "channelId": 4, "entertainmentAreaId": "area-1",
+                    "x": 0.5, "y": 1, "z": 0.3
+                }],
+                "zones": []
+            }
+        }),
+        ..RigSetup::default()
+    });
+    running(&rig, solid(5));
+
+    start(&rig, SceneKind::Spiral);
+
+    let running = rig.running();
+    let preset = running
+        .ambilight
+        .and_then(|ambilight| ambilight.lighting_smoothing_preset);
+    assert_eq!(preset, Some(LightingSmoothingPreset::Subtle));
+    assert!(running.room_geometry.is_some(), "the room map was dropped");
+}
+
+/// A stop that cannot plan the restore still ends the scene's Ambilight: the
+/// marker and prior are gone by then, and nothing else would stop it.
+#[test]
+fn a_restore_that_cannot_run_turns_the_lights_off() {
+    use crate::commands::local_outputs::LocalOutputRegistry;
+    use tauri::Manager;
+
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5));
+    start(&rig, SceneKind::Spiral);
+    rig.app.state::<LocalOutputRegistry>().poison_for_tests();
+
+    let stopped = stop_scene_lighting(&rig.handle());
+
+    assert!(stopped.is_err(), "the stop reports the failure");
+    assert_eq!(scene(&rig), None);
+    assert_eq!(rig.running().kind, LightingModeKind::Off);
+    assert!(!rig.state().runtime.lock().unwrap().preview.scene_worker);
+}
+
+/// The strip unplugged mid-scene: the interrupted mode cannot come back on
+/// it, and the scene's worker must not be the one left running.
+#[test]
+fn a_gated_restore_turns_the_lights_off_and_says_so() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5));
+    start(&rig, SceneKind::Spiral);
+    rig.set_serial_connected(false);
+
+    let stopped = stop_scene_lighting(&rig.handle()).expect("the stop answers");
+
+    assert!(
+        matches!(stopped, SceneRestore::Off(_)),
+        "{:?}",
+        rig.running().kind
+    );
+    assert_eq!(rig.running().kind, LightingModeKind::Off);
+    assert!(!rig.state().runtime.lock().unwrap().preview.scene_worker);
+    assert!(!rig.worker_running());
+}
+
+/// The scene's black-bar switch is live and never saved: the user's
+/// Ambilight setting is theirs, and the mode the scene interrupted comes back
+/// without it.
+#[test]
+fn the_scene_black_bar_switch_reaches_the_worker_and_is_never_saved() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5));
+    start(&rig, SceneKind::Letterbox);
+    assert_eq!(black_borders(&rig), (false, false));
+    let writes_before = rig.written_keys().len();
+
+    assert_eq!(set_scene_black_borders(&rig.state(), true), Some(true));
+    super::outputs::persist_running_choice(&rig.handle());
+
+    assert_eq!(black_borders(&rig), (true, true));
+    assert_eq!(
+        rig.written_keys().len(),
+        writes_before,
+        "{:?}",
+        rig.written_keys()
+    );
+    assert!(!rig
+        .state()
+        .tuning
+        .stored()
+        .ambilight
+        .is_some_and(|ambilight| ambilight.black_border_detection));
+
+    stop_scene_lighting(&rig.handle()).unwrap();
+    assert_eq!(rig.running().kind, LightingModeKind::Solid);
+}
+
+#[test]
+fn without_a_scene_its_black_bar_switch_changes_nothing() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5));
+
+    assert_eq!(set_scene_black_borders(&rig.state(), true), None);
+    assert_eq!(rig.running().kind, LightingModeKind::Solid);
+}
+
+/// The latency scene's flips must reach the output uncropped.
+#[test]
+fn the_latency_scene_keeps_black_bars_off() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5));
+    start(&rig, SceneKind::Latency);
+
+    assert_eq!(set_scene_black_borders(&rig.state(), true), Some(false));
+    assert_eq!(black_borders(&rig), (false, false));
+}
+
+/// The switch the user gave one scene carries to the next, as its brightness
+/// does — but not out of the latency scene, which forced it off.
+#[test]
+fn a_second_scene_keeps_the_black_bar_switch_but_not_the_latency_scenes() {
+    let rig = Rig::new(RigSetup::default());
+    running(&rig, solid(5));
+    start(&rig, SceneKind::Letterbox);
+    set_scene_black_borders(&rig.state(), true);
+
+    start(&rig, SceneKind::Spiral);
+    assert_eq!(black_borders(&rig), (true, true));
+
+    start(&rig, SceneKind::Latency);
+    assert_eq!(black_borders(&rig), (false, false));
+    start(&rig, SceneKind::Letterbox);
+    assert_eq!(
+        black_borders(&rig),
+        (false, false),
+        "back to the saved setting, off"
+    );
+}

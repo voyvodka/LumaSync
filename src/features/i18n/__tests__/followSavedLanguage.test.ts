@@ -22,6 +22,8 @@ vi.mock("@/features/persistence/shellStore", () => ({
 }));
 
 vi.mock("../i18n", () => ({
+  I18N_SUPPORTED_LANGUAGES: ["en", "tr"],
+  I18N_DEFAULT_LANGUAGE: "en",
   changeLanguage: (lang: string) => changeLanguageMock(lang),
   i18next: i18nState,
 }));

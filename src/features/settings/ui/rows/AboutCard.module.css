@@ -96,4 +96,6 @@
     .links a { color: LinkText; }
     .ok { color: CanvasText; }
   }
+
+  :global(:root[data-reduced-motion]) :is(.version, .glyph, .links a, .links a span[aria-hidden]) { transition: none; }
 }

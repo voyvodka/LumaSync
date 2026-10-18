@@ -13,7 +13,7 @@ import { firmwareProfileEvents as defaultFirmwareProfileEvents } from "./firmwar
 import { createDeviceConnectionController } from "./state/deviceConnectionController";
 import { localOutputs } from "./state/localOutputsStore";
 import { releaseOthersInApp } from "./state/releaseOthers";
-import { DEFAULT_STATE, withDerivedFlags } from "./state/connectionStateHelpers";
+import { DEFAULT_STATE } from "./state/connectionStateHelpers";
 import type { DeviceConnectionController, DeviceConnectionControllerState } from "./state/connectionTypes";
 import { primaryStripOf, savedSerialPort } from "@/features/strips/model/stripSelectors";
 
@@ -84,9 +84,10 @@ export function useDeviceConnection({ ownsReconnects = false }: UseDeviceConnect
   // dev the shell's copy stopped hearing its siblings and read "USB OFF"
   // beside a connected strip.
   const controllerRef = useRef<DeviceConnectionController | null>(null);
-  const [state, setState] = useState<DeviceConnectionControllerState>(() =>
-    withDerivedFlags({ ...DEFAULT_STATE, lastSuccessfulPort: initialLastSuccessfulPort }),
-  );
+  const [state, setState] = useState<DeviceConnectionControllerState>(() => ({
+    ...DEFAULT_STATE,
+    lastSuccessfulPort: initialLastSuccessfulPort,
+  }));
 
   useEffect(() => {
     if (initialStore === null) return undefined;

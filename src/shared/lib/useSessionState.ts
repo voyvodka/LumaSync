@@ -22,10 +22,6 @@ export function useSessionState<T>(key: string, initial: T | (() => T)): [T, (ne
   return [value, set];
 }
 
-export function peekSessionState<T>(key: string): T | undefined {
-  return memory.get(key) as T | undefined;
-}
-
 /** Test-only. */
 export function __resetSessionStateForTests(): void {
   memory.clear();

@@ -1,20 +1,18 @@
-//! The LED twin overlay's feed: the preview state a worker carries, the
-//! edge-signal event it emits while a twin is open, and the preview status.
+//! The LED twin's feed on the worker side: the preview state a worker carries
+//! and the frames it hands the preview session while a twin is subscribed.
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 
-use serde::Serialize;
-use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime, State};
+use tauri::{AppHandle, Runtime};
 
-use super::config::LightingModeKind;
+use super::config::LightingModeConfig;
+use super::latency::LatencySink;
 use super::runtime::LightingRuntimeState;
-use crate::commands::led_preview::{
-    build_preview_status, LedPreviewStatus, LedTwinState, PreviewModeSnapshot,
-};
+use crate::commands::preview::SceneKind;
 use crate::commands::test_pattern::{TestPatternConfig, TestPatternLiveSlot};
 
-/// v1.6 LED Preview runtime state carried alongside the lighting worker.
+/// LED preview runtime state carried alongside the lighting worker.
 #[derive(Default)]
 pub(super) struct PreviewRuntime {
     /// Synthetic test-pattern request consumed by the frame-source factory on
@@ -22,10 +20,14 @@ pub(super) struct PreviewRuntime {
     pub(super) pending_test_pattern: Option<TestPatternConfig>,
     /// The synthetic pattern currently driving the worker (status reporting).
     pub(super) active_test_pattern: Option<TestPatternConfig>,
-    /// Shared `LedTwinState` preview-active flag. Cloned into each LIVE worker
-    /// so a twin overlay opened *after* the worker starts can flip enrichment
-    /// on without a worker restart.
+    /// The session's `twin_open` flag. Cloned into each worker so a twin
+    /// opened *after* the worker starts turns the feed on without a restart.
     pub(super) preview_gate: Option<Arc<AtomicBool>>,
+    /// The mode a running test pattern interrupted, for its stop to restore.
+    /// Written and cleared under the runtime lock: a user's mode change drops
+    /// it in the same critical section that replaces the test, so a stop that
+    /// races it cannot revive the pre-test mode over the user's choice.
+    pub(super) test_prior: Option<LightingModeConfig>,
     /// Animation phase (f32 bits) shared with the running `SyntheticFrameSource`.
     /// Carried across the rebuilds that a calibration or geometry change still
     /// forces, so the animation never restarts from zero.
@@ -33,157 +35,140 @@ pub(super) struct PreviewRuntime {
     /// Pattern + speed of the running synthetic source. Writing it retunes the
     /// test in place; `None` means no synthetic worker is up.
     pub(super) pattern_live: Option<TestPatternLiveSlot>,
+    /// The preview scene Ambilight runs for. Set and cleared with
+    /// `session_prior` under the runtime lock, like `test_prior`: a user's mode
+    /// change clears both in the critical section that replaces the scene.
+    pub(super) scene: Option<SceneKind>,
+    /// The mode the scene interrupted, for its stop to restore.
+    pub(super) session_prior: Option<LightingModeConfig>,
+    /// The running worker was started for a scene. Entering or leaving one
+    /// rebuilds the worker rather than retuning it, so the history skip it was
+    /// started with matches what it captures.
+    pub(super) scene_worker: bool,
+    /// Where the latency scene's measurement goes; `Some` only while it plays.
+    pub(super) latency_sink: Option<LatencySink>,
+    /// The running worker measures for the latency scene, so a switch to or
+    /// from it rebuilds the worker rather than retuning it.
+    pub(super) latency_worker: bool,
 }
 
-/// Per-worker twin-feed context — decides whether the worker builds and emits
-/// the edge-signal this tick, and what it stamps on it.
+/// Per-worker twin-feed gate: whether the worker builds a twin frame this tick.
 #[derive(Clone)]
 pub struct PreviewEmitContext {
-    pub gate: PreviewGate,
-    /// `"test"` (synthetic) or `"live"` (real capture).
-    pub source: &'static str,
-    /// Active synthetic pattern tag when `source == "test"`.
-    pub pattern: Option<&'static str>,
-    /// Display the frame belongs to (live only; synthetic is display-agnostic).
-    pub display_id: Option<String>,
-}
-
-/// Gate deciding whether the worker emits the edge-signal each tick.
-#[derive(Clone)]
-pub enum PreviewGate {
-    /// Always enrich — the synthetic test pattern is itself the preview.
-    Always,
-    /// Enrich only while the shared flag is set (live twin opened/closed at
-    /// runtime).
-    Shared(Arc<AtomicBool>),
+    gate: Arc<AtomicBool>,
 }
 
 impl PreviewEmitContext {
     pub(super) fn should_enrich(&self) -> bool {
-        match &self.gate {
-            PreviewGate::Always => true,
-            PreviewGate::Shared(flag) => flag.load(Ordering::Relaxed),
-        }
+        self.gate.load(Ordering::Relaxed)
     }
 }
 
-// ---------------------------------------------------------------------------
-// Edge signal — per-LED feed for the LED twin overlay
-// ---------------------------------------------------------------------------
-//
-// The twin overlay is the only listener, so the worker builds and emits this
-// only while a twin is open (`LedTwinState::preview_active`).
+/// At most one twin frame per display refresh: the twin cannot draw faster.
+pub const TWIN_FRAME_INTERVAL_MS: u64 = 16;
 
-/// `PREVIEW_EVENTS.EDGE_SIGNAL` in `src/shared/contracts/preview.ts`. Defined
-/// in `crate::events`; re-exported here since this is the emit site.
-pub use crate::events::EDGE_SIGNAL_EVENT;
-/// ~30 Hz: at the top pattern speed a slower cadence lets the comet head travel
-/// further per frame than its own tail, leaving visible gaps in the twin.
-pub const EDGE_SIGNAL_PREVIEW_INTERVAL_MS: u64 = 33;
+/// Hands the worker's frame — strip LEDs, then Hue lamps, as the twin draws
+/// them — to the preview session. Without the Tauri runtime type parameter, so
+/// the worker does not depend on it.
+pub type TwinFrameSink = Arc<dyn Fn(&[[u8; 3]], &[[u8; 3]]) + Send + Sync>;
 
-/// Payload for the `ambilight://edge-signal` event — the per-LED strip buffer
-/// the twin overlay mirrors, plus the sparse Hue channel colours.
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EdgeSignalPayload {
-    pub leds: Vec<[u8; 3]>,
-    pub led_count: usize,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub hue_channels: Option<Vec<[u8; 3]>>,
-    pub source: &'static str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub pattern: Option<&'static str>,
-    pub seq: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub display_id: Option<String>,
-}
-
-/// Thread-safe emitter the worker hands each twin frame to, so the worker
-/// doesn't depend on the Tauri runtime type parameter.
-pub type EdgeSignalEmitter = Arc<dyn Fn(EdgeSignalPayload) + Send + Sync>;
-
-/// Build the edge-signal emitter. Sends to the open twin-overlay windows only
-/// (read from `LedTwinState` each tick, so a twin opened mid-run starts
-/// receiving without a worker restart); the main window has no listener.
-pub(super) fn build_edge_emitter<R: Runtime>(app: &AppHandle<R>) -> EdgeSignalEmitter {
+pub(super) fn build_twin_sink<R: Runtime>(app: &AppHandle<R>) -> TwinFrameSink {
     let app_handle = app.clone();
-    Arc::new(move |payload: EdgeSignalPayload| {
-        let Some(twin_state) = app_handle.try_state::<LedTwinState>() else {
-            return;
-        };
-        for label in twin_state.twin_labels_snapshot() {
-            let _ = app_handle.emit_to(
-                EventTarget::webview_window(label.as_str()),
-                EDGE_SIGNAL_EVENT,
-                payload.clone(),
-            );
-        }
+    Arc::new(move |leds: &[[u8; 3]], lamps: &[[u8; 3]]| {
+        crate::commands::preview::feed::send_frame(&app_handle, leds, lamps);
     })
 }
 
-/// Decide whether — and how — the worker feeds the twin overlay.
+/// `None` without a session gate wired (the worker then builds no twin frame).
 pub(super) fn build_preview_emit_context(
-    is_test: bool,
-    test_pattern: Option<&TestPatternConfig>,
     preview_gate: Option<Arc<AtomicBool>>,
-    display_id: Option<String>,
 ) -> Option<PreviewEmitContext> {
-    if is_test {
-        Some(PreviewEmitContext {
-            // Only twin overlays read the buffer, so a test with no twin open
-            // must not pay for an N-LED Vec + JSON every tick.
-            gate: match preview_gate {
-                Some(flag) => PreviewGate::Shared(flag),
-                None => PreviewGate::Always,
-            },
-            source: "test",
-            pattern: test_pattern.map(|cfg| cfg.kind.tag()),
-            // Synthetic frames are display-agnostic — no per-display filter.
-            display_id: None,
-        })
-    } else {
-        preview_gate.map(|flag| PreviewEmitContext {
-            gate: PreviewGate::Shared(flag),
-            source: "live",
-            pattern: None,
-            display_id,
-        })
-    }
+    preview_gate.map(|gate| PreviewEmitContext { gate })
+}
+
+/// What the twin needs from the running mode: the layout it runs, and the mode
+/// itself when no worker runs to send frames (Solid, Off).
+pub struct TwinModeView {
+    pub layout: Option<crate::commands::led_calibration::LedCalibrationConfig>,
+    pub still: Option<LightingModeConfig>,
+    /// The running mode drives Hue, so the twin has lamps to place.
+    pub drives_hue: bool,
+    pub room_geometry: Option<crate::models::room_map::RoomGeometry>,
+}
+
+/// Where each Hue channel samples the screen, `(0, 0)` top-left, in `channels`
+/// order — the room map's placements over the stream's channels, as the
+/// worker's sample table puts them. `None` without a room map that places them.
+pub fn hue_lamp_screen_points(
+    channels: &[crate::commands::hue::frame::HueAreaChannel],
+    geometry: Option<&crate::models::room_map::RoomGeometry>,
+) -> Option<Vec<(f32, f32)>> {
+    let geometry = geometry?;
+    let mut placed = channels.to_vec();
+    crate::commands::hue::sender::apply_channel_placements(&mut placed, &geometry.hue_placements);
+    let samples = crate::commands::room_affinity::room_aware_hue_samples(geometry, &placed)?;
+    Some(
+        samples
+            .iter()
+            .map(|s| {
+                (
+                    ((s.sample_x + 1.0) / 2.0).clamp(0.0, 1.0),
+                    ((1.0 - s.sample_y) / 2.0).clamp(0.0, 1.0),
+                )
+            })
+            .collect(),
+    )
 }
 
 impl LightingRuntimeState {
-    /// Snapshot the lighting-side preview status. Recovers from a poisoned
-    /// lock rather than propagating (status reads must not fail).
-    pub fn preview_snapshot(&self) -> PreviewModeSnapshot {
-        let owner = self.runtime.lock().unwrap_or_else(|e| e.into_inner());
-        let active_pattern = owner
-            .preview
-            .active_test_pattern
-            .as_ref()
-            .map(|cfg| cfg.kind.clone());
-        let test_active = active_pattern.is_some();
-        let source = if test_active {
-            "test"
-        } else if owner.active_mode.kind == LightingModeKind::Ambilight && owner.worker.is_some() {
-            "live"
-        } else {
-            "idle"
+    pub fn twin_view(&self) -> TwinModeView {
+        let mut view = {
+            let owner = self.lock_owner_recovered();
+            let targets = owner.active_mode.targets.as_deref().unwrap_or_default();
+            TwinModeView {
+                layout: owner.active_mode.led_calibration.clone(),
+                still: owner.worker.is_none().then(|| owner.active_mode.clone()),
+                drives_hue: owner.active_mode.kind != super::LightingModeKind::Off
+                    && targets.iter().any(|t| t == "hue"),
+                room_geometry: owner.active_mode.room_geometry.clone(),
+            }
         };
-        PreviewModeSnapshot {
-            test_active,
-            source,
-            active_pattern,
+        // A Solid retune reaches the outputs and the store, never the running
+        // mode's copy, which would draw the colour from before it.
+        if let Some(still) = view
+            .still
+            .as_mut()
+            .filter(|still| still.kind == super::LightingModeKind::Solid)
+        {
+            if let Some(solid) = self.tuning.stored().solid {
+                still.solid = Some(solid);
+            }
         }
+        view
     }
-}
 
-/// Combined snapshot for the LED Preview UI — whether a test pattern or live
-/// ambilight is the current preview source, plus twin-overlay window state.
-#[tauri::command]
-pub fn get_led_preview_status(
-    runtime_state: State<'_, LightingRuntimeState>,
-    led_twin_state: State<'_, LedTwinState>,
-) -> Result<LedPreviewStatus, String> {
-    let snapshot = runtime_state.preview_snapshot();
-    Ok(build_preview_status(snapshot, led_twin_state.inner()))
+    /// Whether a preview scene owns the lights.
+    pub fn scene_active(&self) -> bool {
+        let owner = self.lock_owner_recovered();
+        owner.preview.scene.is_some()
+    }
+
+    /// A scene's marker without its lights, for a test of what it refuses.
+    #[cfg(test)]
+    pub(crate) fn mark_scene_for_tests(&self, kind: SceneKind) {
+        self.lock_owner_recovered().preview.scene = Some(kind);
+    }
+
+    /// A test pattern's marker without its worker, likewise.
+    #[cfg(test)]
+    pub(crate) fn mark_test_pattern_for_tests(&self, test: TestPatternConfig) {
+        self.lock_owner_recovered().preview.active_test_pattern = Some(test);
+    }
+
+    /// Whether a synthetic test pattern drives the worker. Recovers from a
+    /// poisoned lock rather than propagating: a stop must still learn it.
+    pub fn test_pattern_active(&self) -> bool {
+        let owner = self.lock_owner_recovered();
+        owner.preview.active_test_pattern.is_some()
+    }
 }

@@ -1,7 +1,7 @@
 /**
- * View preferences kept in `ShellState`: one store for all of them, read once per window and kept
- * in step with every window's writes, so a change applies everywhere with no restart. Adding one is
- * a row in `PREFERENCES`.
+ * View preferences kept in `ShellState` — and `lastLitKind`, which Rust writes and the windows only
+ * read: one store for all of them, read once per window and kept in step with every window's
+ * writes, so a change applies everywhere with no restart. Adding one is a row in `PREFERENCES`.
  *
  * Each is a flat top-level key: a save replaces a top-level key whole, so two windows writing
  * different parts of one nested object would overwrite each other. Absent or unrecognised reads
@@ -18,11 +18,21 @@ import {
   resolveLaunchLights,
   resolveMotionPreference,
   resolveNotificationsPreference,
+  resolveRoomAmbient,
+  resolveRoomMapScreenUnit,
   resolveUiZoom,
   resolveUpdateChannel,
   type ShellState,
 } from "@/shared/contracts/shell";
+import { DEFAULT_LIGHTING_SMOOTHING_PRESET, type LightingSmoothingPreset } from "@/shared/contracts/lighting";
+import { resolveLitModeKind } from "@/shared/contracts/mode";
 import { createStore, useStoreSelector } from "@/shared/lib/store";
+
+function resolveSmoothingPreset(stored: unknown): LightingSmoothingPreset {
+  return stored === "subtle" || stored === "moderate" || stored === "intense"
+    ? stored
+    : DEFAULT_LIGHTING_SMOOTHING_PRESET;
+}
 
 const PREFERENCES = {
   showNerdStats: (stored: unknown): boolean => stored === true,
@@ -33,13 +43,18 @@ const PREFERENCES = {
   notifications: resolveNotificationsPreference,
   launchLights: resolveLaunchLights,
   awayLights: resolveAwayLights,
+  lightingIntensityPreset: resolveSmoothingPreset,
+  roomMapAmbient: resolveRoomAmbient,
+  roomMapScreenUnit: resolveRoomMapScreenUnit,
+  // Read only: Rust writes it with every lit choice.
+  lastLitKind: resolveLitModeKind,
 } satisfies { [K in keyof ShellState]?: (stored: unknown) => NonNullable<ShellState[K]> };
 
 export type PreferenceKey = keyof typeof PREFERENCES;
 
 /**
  * Rust reads these off disk to decide something (the update feed, the webview zoom, what the close
- * button does, notifications, the launch restore, the lights while away). A failed save reverts them: showing a choice
+ * button does, notifications, the launch restore, the lights while away, Ambilight's smoothing). A failed save reverts them: showing a choice
  * Rust never saw would say one thing while the app did another.
  */
 const READ_BY_RUST: ReadonlySet<PreferenceKey> = new Set<PreferenceKey>([
@@ -49,6 +64,7 @@ const READ_BY_RUST: ReadonlySet<PreferenceKey> = new Set<PreferenceKey>([
   "notifications",
   "launchLights",
   "awayLights",
+  "lightingIntensityPreset",
 ]);
 export type PreferenceValue<K extends PreferenceKey> = ReturnType<(typeof PREFERENCES)[K]>;
 type Preferences = { [K in PreferenceKey]: PreferenceValue<K> };
@@ -132,10 +148,9 @@ export function followPreference<K extends PreferenceKey>(key: K, listener: (val
 }
 
 /**
- * Applies at once. A view preference holds for the session even when the save fails: the shell's
- * "settings can't be saved" notice says a change lasts until quit, and a switch that snapped back
- * would contradict it. One Rust reads off disk (`READ_BY_RUST`) reverts instead, since showing a
- * choice that was never stored would lie.
+ * Applies at once. A view preference holds for the session even when the save fails. One Rust reads
+ * off disk (`READ_BY_RUST`) reverts instead, since showing a choice that was never stored would lie;
+ * the shell's "settings can't be saved" notice says some changes won't stick, which covers both.
  */
 export async function setPreference<K extends PreferenceKey>(
   key: K,
@@ -151,6 +166,11 @@ export async function setPreference<K extends PreferenceKey>(
     console.error(`[LumaSync] shellStore.save(${key}) failed:`, err);
     if (revertOnFailure) store.set({ ...store.get(), [key]: previous });
   }
+}
+
+/** Shows `value` in this window without saving it: a slider's live value, saved when let go. */
+export function previewPreference<K extends PreferenceKey>(key: K, value: PreferenceValue<K>): void {
+  store.set({ ...store.get(), [key]: value });
 }
 
 /** Test-only: seed a value without touching the persisted state. */

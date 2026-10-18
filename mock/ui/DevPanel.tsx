@@ -28,22 +28,22 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 
 import { OFFERED_CODES } from "../handlers/codes";
 import {
-  EDGE_SIGNAL_INTERVAL_MS,
+  TWIN_FRAME_INTERVAL_MS,
   SHELL_EVENTS,
   TRAY_EVENTS,
   emitMockEvent,
   emitRuntimeHealth,
   emitUpdateDownload,
-  getEdgeSignalStream,
-  startEdgeSignalStream,
-  stopEdgeSignalStream,
-  subscribeToEdgeSignalStream,
+  getTwinFrameStream,
+  startTwinFrameStream,
+  stopTwinFrameStream,
+  subscribeToTwinFrameStream,
 } from "../events";
 import { dispatch } from "../dispatch";
 import { plugPort, rejectSerialPort, setSerialConnected, setWledBound } from "../hotplug";
 import { ROOM_MAP_PRESETS, ROOM_MAP_PRESET_IDS, type RoomMapPresetId } from "../roomMaps";
-import { PICKER_PATTERN_KINDS } from "../../src/features/preview/ui/PatternPicker";
 import { LIGHTING_ORIGIN, LIGHTING_RUNTIME_COMMANDS } from "../../src/shared/contracts/lightingRuntime";
+import { LED_TEST_PATTERN_KIND, type LedTestPatternKind } from "../../src/shared/contracts/preview";
 import { MOCK_HAS_REAL_IPC } from "../runtime";
 import { FURNISHED_LAYOUT, SCENARIOS, SCENARIO_IDS, type ScenarioId } from "../scenarios";
 import type { LedCalibrationConfig } from "../../src/shared/contracts/calibration";
@@ -52,9 +52,14 @@ import { primaryStripOf } from "../../src/features/strips/model/stripSelectors";
 import { clearStoredWorld, getWorld, mutate, setWorld, subscribe } from "../state";
 import type { MockWorld } from "../state";
 
+/** The synthetic patterns the twin frame stream can stand in for. */
+const STREAM_PATTERN_KINDS = LED_TEST_PATTERN_KIND.filter(
+  (kind): kind is Exclude<LedTestPatternKind, "channelProbe"> => kind !== "channelProbe",
+);
+
 /**
  * The tray's lighting items run the transaction in Rust and never reach a
- * window, so the panel sends what `tray_request` in `outputs.rs` would. Resume
+ * window, so the panel sends what `tray_request` in `outputs/away_tray.rs` would. Resume
  * reads the saved mode, as Rust does before anything has run this session.
  */
 async function runTrayLighting(item: "off" | "resume" | "solid"): Promise<void> {
@@ -281,7 +286,7 @@ export function DevPanel({ onReloadApp }: PanelProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const world = useSyncExternalStore(subscribe, getWorld);
-  const stream = useSyncExternalStore(subscribeToEdgeSignalStream, getEdgeSignalStream);
+  const stream = useSyncExternalStore(subscribeToTwinFrameStream, getTwinFrameStream);
   // Not derived from the world: a preset is a one-way drop into `shellState`,
   // and the editor writes back over it immediately. Reading the selection back
   // out of the map would make the picker jump to "none" on the first drag.
@@ -291,7 +296,7 @@ export function DevPanel({ onReloadApp }: PanelProps) {
 
   // A stream left running past a reload would keep emitting into a tree that
   // no longer has the listeners it was started for.
-  useEffect(() => stopEdgeSignalStream, []);
+  useEffect(() => stopTwinFrameStream, []);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -1100,15 +1105,15 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                 onChange={(v) => {
                   mutate((w) => {
                     if (v === "healthy") {
-                      w.telemetry = { captureFps: 29.6, sendFps: 29.4, queueHealth: "healthy", frameLatencyMs: 4.2, linkConstrained: false, linkMaxFps: 74, lastCaptureErrorCode: null, lastCaptureErrorAtSecs: null, captureTargetFps: 30.3 };
+                      w.telemetry = { captureFps: 29.6, sendFps: 29.4, queueHealth: "healthy", frameLatencyMs: 4.2, linkConstrained: false, linkMaxFps: 74, lastCaptureErrorCode: null, lastCaptureErrorAtSecs: null, captureTargetFps: 30.3, lastOutputErrorCode: null, lastOutputErrorAtSecs: null, workerStopped: false };
                     } else if (v === "degraded") {
                       // Materially degrading, which the contract is explicit is
                       // not the same as merely being at capacity.
-                      w.telemetry = { captureFps: 29.6, sendFps: 26.0, queueHealth: "warning", frameLatencyMs: 22.5, linkConstrained: true, linkMaxFps: 26, lastCaptureErrorCode: null, lastCaptureErrorAtSecs: null, captureTargetFps: 30.3 };
+                      w.telemetry = { captureFps: 29.6, sendFps: 26.0, queueHealth: "warning", frameLatencyMs: 22.5, linkConstrained: true, linkMaxFps: 26, lastCaptureErrorCode: null, lastCaptureErrorAtSecs: null, captureTargetFps: 30.3, lastOutputErrorCode: null, lastOutputErrorAtSecs: null, workerStopped: false };
                     } else if (v === "stalled") {
-                      w.telemetry = { captureFps: 0, sendFps: 0, queueHealth: "critical", frameLatencyMs: 0, linkConstrained: false, linkMaxFps: 0, lastCaptureErrorCode: "AMBILIGHT_CAPTURE_PERMISSION_DENIED", lastCaptureErrorAtSecs: 2, captureTargetFps: 30.3 };
+                      w.telemetry = { captureFps: 0, sendFps: 0, queueHealth: "critical", frameLatencyMs: 0, linkConstrained: false, linkMaxFps: 0, lastCaptureErrorCode: "AMBILIGHT_CAPTURE_PERMISSION_DENIED", lastCaptureErrorAtSecs: 2, captureTargetFps: 30.3, lastOutputErrorCode: null, lastOutputErrorAtSecs: null, workerStopped: false };
                     } else if (v === "zero") {
-                      w.telemetry = { captureFps: 0, sendFps: 0, queueHealth: "healthy", frameLatencyMs: 0, linkConstrained: false, linkMaxFps: 0, lastCaptureErrorCode: null, lastCaptureErrorAtSecs: null, captureTargetFps: 30.3 };
+                      w.telemetry = { captureFps: 0, sendFps: 0, queueHealth: "healthy", frameLatencyMs: 0, linkConstrained: false, linkMaxFps: 0, lastCaptureErrorCode: null, lastCaptureErrorAtSecs: null, captureTargetFps: 30.3, lastOutputErrorCode: null, lastOutputErrorAtSecs: null, workerStopped: false };
                     }
                   });
                   // The stall notice and the link note follow the push, not the poll.
@@ -1153,34 +1158,26 @@ export function DevPanel({ onReloadApp }: PanelProps) {
               inert no matter which scenario is loaded. */}
           <Section title={`EVENTS${stream.running ? ` · streaming #${stream.frame}` : ""}`} query={q}>
             <Ctl
-              label="Edge signal stream"
-              keywords="ambilight edge-signal event twin preview frame seq pattern live test"
+              label="Twin frame stream"
+              keywords="ambilight twin channel preview frame seq pattern"
               reach="live"
               query={q}
             >
               <Toggle
                 on={stream.running}
-                label={stream.running ? `Emitting at ${1000 / EDGE_SIGNAL_INTERVAL_MS} Hz` : "Stopped"}
+                label={stream.running ? `Emitting at ${1000 / TWIN_FRAME_INTERVAL_MS} Hz` : "Stopped"}
                 onClick={() =>
                   stream.running
-                    ? stopEdgeSignalStream()
-                    : startEdgeSignalStream({ pattern: stream.pattern, source: stream.source })
+                    ? stopTwinFrameStream()
+                    : startTwinFrameStream({ pattern: stream.pattern })
                 }
               />
               <Row>
                 <span style={{ color: DIM, fontSize: 10, width: 52 }}>pattern</span>
                 <Pick
                   value={stream.pattern}
-                  options={PICKER_PATTERN_KINDS}
-                  onChange={(v) => startEdgeSignalStream({ pattern: v, source: stream.source })}
-                />
-              </Row>
-              <Row>
-                <span style={{ color: DIM, fontSize: 10, width: 52 }}>source</span>
-                <Pick
-                  value={stream.source}
-                  options={["live", "test"] as const}
-                  onChange={(v) => startEdgeSignalStream({ pattern: stream.pattern, source: v })}
+                  options={STREAM_PATTERN_KINDS}
+                  onChange={(v) => startTwinFrameStream({ pattern: v })}
                 />
               </Row>
               <Row>
@@ -1189,9 +1186,8 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                   value={String(stream.dropEveryNthFrame) as "0" | "2" | "3" | "5"}
                   options={["0", "2", "3", "5"] as const}
                   onChange={(v) =>
-                    startEdgeSignalStream({
+                    startTwinFrameStream({
                       pattern: stream.pattern,
-                      source: stream.source,
                       dropEveryNthFrame: Number(v),
                     })
                   }
