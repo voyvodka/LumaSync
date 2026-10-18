@@ -203,7 +203,8 @@ export const SECTION_ORDER: SectionId[] = [
  *  `ledTwinEnabledTest`, `lastLedTestPattern` and `ledPreviewHintShown`.
  *  `9 → 10` drops `roomMapVersion`, which every room-map writer bumped and none read.
  *  `10 → 11` makes every zone span floor to ceiling, its bound lights' heights kept.
- *  `11 → 12` makes every zone a cube in metres, its bound lights kept where they are. */
+ *  `11 → 12` makes every zone a cube in metres, its bound lights kept where they are or, past what
+ *  the ceiling-capped cube holds, out of the zone where they stood. */
 export const SHELL_STATE_SCHEMA_VERSION = 12 as const;
 
 /** Shape of shell state persisted to `shell-state.json` */

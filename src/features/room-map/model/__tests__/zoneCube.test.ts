@@ -100,6 +100,21 @@ describe("zoneCube", () => {
     expect(isCubeZone(out, grown)).toBe(true);
   });
 
+  it("keeps the edge through a room grown evenly, which leaves a cube a cube", () => {
+    const doubled = { widthMeters: 10, depthMeters: 8, heightMeters: 5 };
+    const out = cubeZones({ zones: [cube(2)], hueChannels: [], dimensions: doubled }, dimensions).zones[0]!;
+    expect(zoneEdge(out, doubled)).toBeCloseTo(2);
+  });
+
+  it("holds a room too long for any cube to the band, and settles there", () => {
+    const hall = { widthMeters: 30, depthMeters: 1, heightMeters: 2.5 };
+    const once = cubeZones({ zones: [zone()], hueChannels: [], dimensions: hall });
+    const z = once.zones[0]!;
+    for (const s of [z.scaleX, z.scaleY, z.scaleZ]) expect(s).toBeGreaterThanOrEqual(0.05);
+    for (const s of [z.scaleX, z.scaleY, z.scaleZ]) expect(s).toBeLessThanOrEqual(1);
+    expect(cubeZones(once)).toBe(once);
+  });
+
   it("leaves a room with no real dimensions alone", () => {
     const room = { zones: [zone()], hueChannels: [], dimensions: { ...dimensions, heightMeters: 0 } };
     expect(cubeZones(room)).toBe(room);

@@ -11,7 +11,9 @@ import {
   type UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
 
+import { resolveHueChannelWorld } from "../hueChannelPosition";
 import { applyRoomTemplate, isRoomMapEmpty } from "../roomTemplate";
+import { isCubeZone, zoneEdge } from "../zoneCube";
 
 const PORT = "/dev/cu.usbserial-1420";
 
@@ -69,6 +71,17 @@ describe("isRoomMapEmpty", () => {
 });
 
 describe("applyRoomTemplate", () => {
+  it("keeps a Hue zone a cube of its edge in the template's room, its light where the bridge has it", () => {
+    // A 2 m cube in the 5 × 4 × 2.5 m default room, its light half way to its east side.
+    const zone = { id: "z", name: "Sofa", entertainmentAreaId: "a", centerX: 0, centerY: 0, centerZ: 0, scaleX: 0.4, scaleY: 0.5, scaleZ: 0.8, channelIndices: [0] };
+    const channel: HueChannelPlacement = { channelIndex: 0, x: 0.2, y: 0, z: 0, zoneId: "z", zoneRelativePosition: { x: 0.5, y: 0, z: 0 } };
+    const template = map({ dimensions: { widthMeters: 8, depthMeters: 6, heightMeters: 3 } });
+    const out = applyRoomTemplate(map({ zones: [zone], hueChannels: [channel] }), template);
+    expect(isCubeZone(out.zones[0]!, template.dimensions)).toBe(true);
+    expect(zoneEdge(out.zones[0]!, template.dimensions)).toBeCloseTo(2);
+    expect(resolveHueChannelWorld(out.hueChannels[0]!, out.zones).x).toBeCloseTo(0.2);
+  });
+
   it("leaves the room's outline behind, as Reset does", () => {
     const L = [
       { x: 0, y: 0 },

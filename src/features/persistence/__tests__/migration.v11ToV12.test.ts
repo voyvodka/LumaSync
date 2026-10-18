@@ -45,6 +45,21 @@ describe("migrateV11ToV12 — a zone is a cube in metres", () => {
     }
   });
 
+  it("lets a light the ceiling-capped cube cannot hold leave the zone where it stood", () => {
+    // 5 m wide: lights at the west wall and just east of the middle are farther apart than the 2.5 m ceiling allows.
+    const wide: HueZone = { ...zone, centerX: 0, scaleX: 1, channelIndices: [0, 1] };
+    const west: HueChannelPlacement = { ...light, zoneRelativePosition: { x: -1, y: 0, z: 0 } };
+    const near: HueChannelPlacement = { ...light, channelIndex: 1, zoneRelativePosition: { x: 0.1, y: 0, z: 0 } };
+    const before = { ...makeBaseState({ schemaVersion: 11 }), roomMap: { ...DEFAULT_ROOM_MAP, zones: [wide], hueChannels: [west, near] } } as ShellState;
+    const out = migrateShellState(before, 12).roomMap!;
+    expect(cube(out.zones[0]!)).toBe(true);
+    expect(out.hueChannels[0]).toMatchObject({ channelIndex: 0, x: -1, y: -0.1, z: 0 });
+    expect(out.hueChannels[0]!.zoneId).toBeUndefined();
+    expect(out.hueChannels[0]!.zoneRelativePosition).toBeUndefined();
+    expect(out.zones[0]!.channelIndices).toEqual([1]);
+    expect(resolveHueChannelWorld(out.hueChannels[1]!, out.zones).x).toBeCloseTo(resolveHueChannelWorld(near, [wide]).x);
+  });
+
   it("is a no-op the second time and on a state with no room map", () => {
     const once = migrateShellState({ ...makeBaseState({ schemaVersion: 11 }), roomMap: { ...DEFAULT_ROOM_MAP, zones: [zone] } } as ShellState, 12);
     expect(migrateShellState(once, 12)).toBe(once);

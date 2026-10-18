@@ -75,13 +75,15 @@ type Room = Pick<RoomMapConfig, "zones" | "hueChannels" | "dimensions">;
 export function cubeZones<T extends Room>(room: T, measuredIn: Dims = room.dimensions): T {
   const d = room.dimensions;
   const zones = room.zones ?? [];
-  if (!validDims(d) || !validDims(measuredIn) || zones.every((z) => !finiteZone(z) || isCubeZone(z, d))) return room;
+  // A room grown evenly leaves a cube a cube, but not its edge in metres.
+  const settled = (z: HueZone) => isCubeZone(z, d) && Math.abs(zoneEdge(z, d) - zoneEdge(z, measuredIn)) <= SAME_M;
+  if (!validDims(d) || !validDims(measuredIn) || zones.every((z) => !finiteZone(z) || settled(z))) return room;
   const channels = room.hueChannels ?? [];
   const firstWithId = new Map<string, HueZone>();
   for (const zone of zones) if (!firstWithId.has(zone.id)) firstWithId.set(zone.id, zone);
   const cubed = new Map<HueZone, HueZone>();
   for (const zone of firstWithId.values()) {
-    if (!finiteZone(zone) || isCubeZone(zone, d)) continue;
+    if (!finiteZone(zone) || settled(zone)) continue;
     const bound = channels.filter((ch) => ch.zoneId === zone.id && ch.zoneRelativePosition);
     cubed.set(zone, toCube(zone, bound.map((ch) => worldOf(ch, zone)), d, measuredIn));
   }
