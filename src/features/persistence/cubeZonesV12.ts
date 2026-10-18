@@ -34,7 +34,6 @@ function scalesFor(edge: number, d: Dims): Record<Axis, number> {
   return { X: clamp(e / d.widthMeters, ZONE_SCALE_MIN, 1), Y: clamp(e / d.depthMeters, ZONE_SCALE_MIN, 1), Z: clamp(e / d.heightMeters, ZONE_SCALE_MIN, 1) };
 }
 
-/** The cube of `edge` metres at `centre`, its centre kept inside the Hue cube. */
 function withCubeEdge(zone: HueZone, edge: number, d: Dims, centre: { x: number; y: number; z: number } = { x: zone.centerX, y: zone.centerY, z: zone.centerZ }): HueZone {
   const s = scalesFor(edge, d);
   return {

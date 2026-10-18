@@ -41,7 +41,6 @@ export function zoneEdgeBounds(widthM: number, depthM: number, heightM: number):
   return { min, max: Math.max(min, Math.min(widthM, depthM, heightM)) };
 }
 
-/** The cube a square drawn on the plan stands for. `withCubeEdge` keeps it inside the room. */
 export function rectToZone(rect: ZoneRect, widthM: number, depthM: number, heightM: number): CubeFootprint {
   const centre = planMetresToHue((rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2, widthM, depthM);
   const { min, max } = zoneEdgeBounds(widthM, depthM, heightM);
@@ -77,7 +76,6 @@ export function resizeZoneRect(start: ZoneRect, handle: ZoneHandle, dx: number, 
   return { x0: nx0, y0: ny0, x1: nx0 + e, y1: ny0 + e };
 }
 
-/** Drawn from a corner as a square: the pointer's larger reach sets the edge. */
 export function drawnZoneRect(from: { x: number; y: number }, to: { x: number; y: number }, widthM: number, depthM: number, heightM: number): ZoneRect {
   const x = clamp(to.x, 0, widthM);
   const y = clamp(to.y, 0, depthM);
@@ -90,7 +88,6 @@ export function drawnZoneRect(from: { x: number; y: number }, to: { x: number; y
   return { x0: Math.min(from.x, ex), y0: Math.min(from.y, ey), x1: Math.max(from.x, ex), y1: Math.max(from.y, ey) };
 }
 
-/** A click without a drag: the cube Add zone makes, half the tallest one the room holds. */
 export function clickedZoneRect(at: { x: number; y: number }, widthM: number, depthM: number, heightM: number): ZoneRect {
   const e = defaultZoneEdge(widthM, depthM, heightM);
   const x0 = clamp(at.x - e / 2, 0, widthM - e);
