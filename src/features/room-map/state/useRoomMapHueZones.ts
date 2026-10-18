@@ -12,8 +12,8 @@ import { isHueZoneApplied, replaceHueChannel } from "@/shared/contracts/roomMap"
 import { detachHueChannel } from "../model/hueChannelPosition";
 import { findScopedHueChannel } from "../model/hueChannelScope";
 import { zoneToken } from "../model/zoneColor";
-import { bottomKeptCenterZ, withCubeScale } from "../model/zoneCube";
-import type { CubeFootprint } from "../model/zoneRect";
+import { bottomKeptCenterZ, withCubeEdge, zoneEdge } from "../model/zoneCube";
+import { type CubeFootprint, defaultZoneEdge } from "../model/zoneRect";
 import {
   assignChannelToHueZone,
   createHueZone,
@@ -40,7 +40,7 @@ export interface UseRoomMapHueZonesReturn {
   /** Code of the last refused mutation, until dismissed. `null` while nothing is refused. */
   hueZoneRejection: HueZoneStatusCode | null;
   dismissHueZoneRejection: () => void;
-  /** Without `footprint`, the cube of scale 0.5 at the room's middle. */
+  /** Without `footprint`, half the tallest cube the room holds, at its middle. */
   handleAddHueZone: (footprint?: CubeFootprint) => void;
   handleDeleteHueZone: (zoneId: string) => void;
   handleRenameHueZone: (zoneId: string, name: string) => void;
@@ -124,12 +124,13 @@ export function useRoomMapHueZones({
       channelIndices: [],
       borderColor: zoneToken(hueZones.length),
     };
-    const newZone = withCubeScale(draft, footprint?.scale ?? 0.5, { x: footprint?.centerX ?? 0, y: footprint?.centerY ?? 0, z: 0 });
+    const { widthMeters: w, depthMeters: d, heightMeters: h } = config.dimensions;
+    const newZone = withCubeEdge(draft, footprint?.edge ?? defaultZoneEdge(w, d, h), config.dimensions, { x: footprint?.centerX ?? 0, y: footprint?.centerY ?? 0, z: 0 });
     apply({ zones: [...config.zones, newZone] });
     selectHueZone(id);
 
     settle("create_hue_zone", createHueZone({ zone: newZone, existingZones: hueZones }), false);
-  }, [hueAreaId, hueZones, config.zones, apply, t, selectHueZone, settle]);
+  }, [hueAreaId, hueZones, config.zones, config.dimensions, apply, t, selectHueZone, settle]);
 
   const handleDeleteHueZone = useCallback(
     (zoneId: string) => {
@@ -244,7 +245,7 @@ export function useRoomMapHueZones({
       let updated: HueZone | undefined;
       const next = config.zones.map((z) => {
         if (z.id === zoneId) {
-          updated = withCubeScale(z, z.scaleX, { x: centerX, y: centerY, z: centerZ ?? z.centerZ });
+          updated = withCubeEdge(z, zoneEdge(z, config.dimensions), config.dimensions, { x: centerX, y: centerY, z: centerZ ?? z.centerZ });
           return updated;
         }
         return z;
@@ -258,10 +259,10 @@ export function useRoomMapHueZones({
         );
       }
     },
-    [config.zones, apply, settle],
+    [config.zones, config.dimensions, apply, settle],
   );
 
-  // A patch that touches its shape is made a cube again, taking `scaleX` as the size.
+  // A patch that touches its shape is made a cube again, taking `scaleX` as the edge.
   const handleHueZoneUpdate = useCallback(
     (zoneId: string, patch: Partial<HueZone>) => {
       let updated: HueZone | undefined;
@@ -269,7 +270,7 @@ export function useRoomMapHueZones({
         if (z.id === zoneId) {
           const merged = { ...z, ...patch };
           updated = SHAPE_KEYS.some((key) => key in patch)
-            ? withCubeScale(merged, merged.scaleX, { x: merged.centerX, y: merged.centerY, z: merged.centerZ })
+            ? withCubeEdge(merged, zoneEdge(merged, config.dimensions), config.dimensions)
             : merged;
           return updated;
         }
@@ -286,19 +287,19 @@ export function useRoomMapHueZones({
         );
       }
     },
-    [config.zones, apply, settle],
+    [config.zones, config.dimensions, apply, settle],
   );
 
   const handleHueZoneResize = useCallback(
     (zoneId: string, footprint: CubeFootprint & { centerZ?: number }) => {
       const zone = config.zones.find((z) => z.id === zoneId);
       if (!zone) return;
-      const z = footprint.centerZ ?? bottomKeptCenterZ(zone, footprint.scale);
-      const updated = withCubeScale(zone, footprint.scale, { x: footprint.centerX, y: footprint.centerY, z });
+      const z = footprint.centerZ ?? bottomKeptCenterZ(zone, footprint.edge, config.dimensions);
+      const updated = withCubeEdge(zone, footprint.edge, config.dimensions, { x: footprint.centerX, y: footprint.centerY, z });
       apply({ zones: config.zones.map((z) => (z.id === zoneId ? updated : z)) });
       settle("update_hue_zone (resize)", updateHueZone({ zone: updated, existingZones: config.zones }), false);
     },
-    [config.zones, apply, settle],
+    [config.zones, config.dimensions, apply, settle],
   );
 
   return {

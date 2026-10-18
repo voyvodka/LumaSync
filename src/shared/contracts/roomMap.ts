@@ -742,10 +742,11 @@ export interface RoomGeometry {
  * so a bound light moves and grows with its zone.
  *
  * Coordinate system: same Hue native space as `HueChannelPlacement` —
- * `centerX/Y/Z` in `[-1, 1]`. A zone is a cube in that space: `scaleX`,
- * `scaleY` and `scaleZ` are one value in `[0.05, 1]`, and `|center| + scale <= 1`
- * on every axis (Rust refuses anything else). The room map stretches each axis
- * to its own side, so the cube draws in the room's proportions. The bridge
+ * `centerX/Y/Z` in `[-1, 1]`, each scale in `[0.05, 1]` and `|center| + scale
+ * <= 1` on every axis (Rust refuses anything else). The room map keeps a zone a
+ * cube in metres: each axis's scale is one edge over that axis's side of the
+ * room, so the scales differ and the ceiling caps the edge. Rust does not know
+ * the room and checks only the band and the bounds. The bridge
  * stores no zone; only the resolved channel positions reach it. The bridge
  * per-area channel cap (10) applies to `channelIndices`.
  *
@@ -767,11 +768,11 @@ export interface HueZone {
   centerY: number;
   /** Zone center Z in Hue native space ([-1, 1]). */
   centerZ: number;
-  /** Zone-to-world scale, the same on all three axes. `1.0` ⇒ zone covers full Hue space. */
+  /** Zone-to-world scale along X. `1.0` ⇒ the zone spans the room's width. */
   scaleX: number;
-  /** Equal to `scaleX`. */
+  /** Along Y: the same edge in metres as `scaleX`, over the room's depth. */
   scaleY: number;
-  /** Equal to `scaleX`. */
+  /** Along Z: the same edge in metres as `scaleX`, over the room's height. */
   scaleZ: number;
   /**
    * Entertainment-area channel indices (0-based, bounded by the bridge's
@@ -1022,9 +1023,8 @@ export const HUE_ZONE_STATUS_CODES = {
    */
   HUE_ZONE_CHANNEL_NOT_IN_AREA: "HUE_ZONE_CHANNEL_NOT_IN_AREA",
   /**
-   * Zone scale exceeds the room, undershoots the floor (`[0.05, 1.0]`), is
-   * not finite, or is not the same on all three axes: a zone is a cube in
-   * the Hue space.
+   * Zone scale exceeds the room, undershoots the floor (`[0.05, 1.0]`), or
+   * is not finite.
    */
   HUE_ZONE_OVERSIZED: "HUE_ZONE_OVERSIZED",
 } as const;

@@ -61,6 +61,7 @@ describe("HueChannelOverlay — overhead lights", () => {
         pxPerMeter={80}
         roomWidthM={5}
         roomDepthM={4}
+        roomHeightM={2.5}
         selectedId={null}
         onSelect={() => {}}
         onChange={() => {}}
@@ -84,6 +85,7 @@ describe("HueChannelOverlay — names", () => {
         pxPerMeter={80}
         roomWidthM={5}
         roomDepthM={4}
+        roomHeightM={2.5}
         zoom={2}
         selectedId="hue-0"
         onSelect={() => {}}
@@ -107,6 +109,7 @@ describe("HueChannelOverlay — bug #52(a) drag-time zone clamp", () => {
         pxPerMeter={80}
         roomWidthM={5}
         roomDepthM={4}
+        roomHeightM={2.5}
         zoom={1}
         selectedId={null}
         onSelect={() => {}}
@@ -159,6 +162,7 @@ describe("HueChannelOverlay — a drag starts where the dot is drawn", () => {
         pxPerMeter={80}
         roomWidthM={5}
         roomDepthM={4}
+        roomHeightM={2.5}
         zoom={1}
         selectedId={null}
         onSelect={() => {}}
@@ -192,6 +196,7 @@ describe("HueChannelOverlay — a click is not a drag", () => {
         pxPerMeter={80}
         roomWidthM={5}
         roomDepthM={4}
+        roomHeightM={2.5}
         zoom={1}
         selectedId={null}
         onSelect={onSelect}
@@ -246,6 +251,7 @@ describe("HueChannelOverlay — W4-J #3 simultaneous zone visibility", () => {
         pxPerMeter={80}
         roomWidthM={5}
         roomDepthM={4}
+        roomHeightM={2.5}
         zoom={1}
         selectedId={null}
         onSelect={() => {}}
@@ -284,6 +290,7 @@ describe("HueChannelOverlay — W4-J #3 simultaneous zone visibility", () => {
         pxPerMeter={80}
         roomWidthM={5}
         roomDepthM={4}
+        roomHeightM={2.5}
         zoom={1}
         selectedId={null}
         onSelect={() => {}}
@@ -308,6 +315,7 @@ describe("HueChannelOverlay — a zone-centre drag the zone does not outlive", (
       pxPerMeter={80}
       roomWidthM={5}
       roomDepthM={4}
+      roomHeightM={2.5}
       zoom={1}
       selectedId={null}
       onSelect={() => {}}
@@ -338,6 +346,7 @@ describe("HueChannelOverlay — bug #50 + #52(b) zone center drag", () => {
         pxPerMeter={80}
         roomWidthM={5}
         roomDepthM={4}
+        roomHeightM={2.5}
         zoom={1}
         selectedId={null}
         onSelect={() => {}}
@@ -371,6 +380,7 @@ describe("HueChannelOverlay — bug #50 + #52(b) zone center drag", () => {
         pxPerMeter={80}
         roomWidthM={5}
         roomDepthM={4}
+        roomHeightM={2.5}
         zoom={1}
         selectedId={null}
         onSelect={() => {}}
@@ -436,6 +446,7 @@ describe("HueChannelOverlay — keyboard", () => {
           pxPerMeter={80}
           roomWidthM={5}
           roomDepthM={4}
+          roomHeightM={2.5}
           zoom={1}
           selectedId={null}
           onSelect={() => {}}
@@ -479,8 +490,9 @@ describe("HueChannelOverlay — keyboard", () => {
 });
 
 describe("HueChannelOverlay — zone grips", () => {
-  // 5×4 m at 100 px a metre: the zone is x 1.75–3.25 m, y 1.4–2.6 m.
-  function renderGrips(zone: HueZone = ZONE) {
+  // A 1.5 m cube in a 5 × 4 × 2.5 m room at 100 px a metre: x 1.75–3.25 m, y 1.25–2.75 m.
+  const CUBE: HueZone = { ...ZONE, scaleY: 0.375, scaleZ: 0.6 };
+  function renderGrips(zone: HueZone = CUBE) {
     const onHueZoneResize = vi.fn<(zoneId: string, footprint: CubeFootprint) => void>();
     const view = render(
       <HueChannelOverlay
@@ -488,6 +500,7 @@ describe("HueChannelOverlay — zone grips", () => {
         pxPerMeter={100}
         roomWidthM={5}
         roomDepthM={4}
+        roomHeightM={2.5}
         selectedId={null}
         onSelect={() => {}}
         onChange={() => {}}
@@ -512,26 +525,26 @@ describe("HueChannelOverlay — zone grips", () => {
     const lightLeft = parseFloat(light.style.left);
     fireEvent.pointerDown(se, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
     fireEvent.pointerMove(se, { clientX: 150, clientY: 60, pointerId: 1 });
-    // A cube keeps the room's proportions: 3 m wide in a 5 × 4 m room is 2.4 m deep.
-    expect(parseFloat(box.style.width)).toBeCloseTo(300);
-    expect(parseFloat(box.style.height)).toBeCloseTo(240);
+    // Pulled 1.5 m right, it stays square and stops at the ceiling's 2.5 m.
+    expect(parseFloat(box.style.width)).toBeCloseTo(250);
+    expect(parseFloat(box.style.height)).toBeCloseTo(250);
     // The light keeps its place relative to the zone, which grew right from its west wall.
-    expect(parseFloat(light.style.left)).toBeCloseTo(175 + ((lightLeft - 175) / 150) * 300);
+    expect(parseFloat(light.style.left)).toBeCloseTo(175 + ((lightLeft - 175) / 150) * 250);
     expect(onHueZoneResize).not.toHaveBeenCalled();
     fireEvent.pointerUp(se, { pointerId: 1 });
     expect(onHueZoneResize).toHaveBeenCalledTimes(1);
     const [id, footprint] = onHueZoneResize.mock.calls[0]!;
     expect(id).toBe("zone-1");
-    expect(footprint.scale).toBeCloseTo(0.6);
-    expect(footprint.centerX).toBeCloseTo(0.3);
-    expect(footprint.centerY).toBeCloseTo(-0.3);
+    expect(footprint.edge).toBeCloseTo(2.5);
+    expect(footprint.centerX).toBeCloseTo(0.2);
+    expect(footprint.centerY).toBeCloseTo(-0.25);
   });
 
-  it("drops a side's middle grip when the side is too short to hold three", () => {
-    // 0.75 m wide, 0.6 m deep: 75 px and 60 px on screen.
-    renderGrips({ ...ZONE, scaleX: 0.15, scaleY: 0.15, scaleZ: 0.15 });
+  it("drops the middle grips when the sides are too short to hold three", () => {
+    // A 0.6 m cube: 60 px a side on screen.
+    renderGrips({ ...ZONE, scaleX: 0.12, scaleY: 0.15, scaleZ: 0.24 });
     const handles = Array.from(document.querySelectorAll<HTMLElement>("[data-zone-handle]")).map((el) => el.dataset.zoneHandle);
-    expect(handles.sort()).toEqual(["n", "ne", "nw", "s", "se", "sw"]);
+    expect(handles.sort()).toEqual(["ne", "nw", "se", "sw"]);
   });
 
   it("puts everything back on Escape and writes nothing", () => {
@@ -553,6 +566,7 @@ describe("HueChannelOverlay — zone grips", () => {
         pxPerMeter={100}
         roomWidthM={5}
         roomDepthM={4}
+        roomHeightM={2.5}
         selectedId={null}
         onSelect={() => {}}
         onChange={() => {}}
@@ -582,6 +596,7 @@ describe("HueChannelOverlay — guides", () => {
         pxPerMeter={100}
         roomWidthM={4}
         roomDepthM={4}
+        roomHeightM={2.5}
         selectedId={null}
         onSelect={() => {}}
         onChange={onChange}
@@ -626,6 +641,7 @@ describe("HueChannelOverlay — guides", () => {
         pxPerMeter={100}
         roomWidthM={4}
         roomDepthM={4}
+        roomHeightM={2.5}
         selectedId={null}
         onSelect={() => {}}
         onChange={onChange}
@@ -660,6 +676,7 @@ describe("HueChannelOverlay — lit lights", () => {
         pxPerMeter={80}
         roomWidthM={5}
         roomDepthM={4}
+        roomHeightM={2.5}
         selectedId={null}
         onSelect={() => {}}
         onChange={() => {}}
@@ -680,6 +697,7 @@ describe("HueChannelOverlay — lit lights", () => {
         pxPerMeter={80}
         roomWidthM={5}
         roomDepthM={4}
+        roomHeightM={2.5}
         selectedId={null}
         onSelect={() => {}}
         onChange={() => {}}

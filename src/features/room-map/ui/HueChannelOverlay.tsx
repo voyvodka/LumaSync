@@ -22,6 +22,8 @@ interface HueChannelOverlayProps {
   pxPerMeter: number;
   roomWidthM: number;
   roomDepthM: number;
+  /** Caps a resized zone: a cube in metres stops at the ceiling. */
+  roomHeightM: number;
   zoom?: number;
   selectedId: string | null;
   onSelect: (channelIndex: number) => void;
@@ -212,6 +214,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
   pxPerMeter,
   roomWidthM,
   roomDepthM,
+  roomHeightM,
   zoom = 1,
   selectedId,
   onSelect,
@@ -555,6 +558,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
                 zone={activeHueZone}
                 widthM={roomWidthM}
                 depthM={roomDepthM}
+                heightM={roomHeightM}
                 pxPerMeter={pxPerMeter}
                 zoom={zoom}
                 panMode={panMode}

@@ -60,11 +60,11 @@ describe("migrateShellState — schemaVersion 1 → 2 (W4-F2)", () => {
       entertainmentAreaId: "ea-living",
       centerX: 0.1,
       centerY: -0.2,
-      // 11 → 12 makes it a cube of its larger side, at mid-height with no light to cover.
+      // 11 → 12 makes it a 2 m cube in the 5 × 4 × 2.5 m room, at mid-height with no light to cover.
       centerZ: 0,
-      scaleX: 0.5,
+      scaleX: 0.4,
       scaleY: 0.5,
-      scaleZ: 0.5,
+      scaleZ: 0.8,
       channelIndices: [0, 1, 2],
       borderColor: "#ff0",
     });

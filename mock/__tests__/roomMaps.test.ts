@@ -83,7 +83,7 @@ describe("room map presets", () => {
   it("the zone is a cube that holds its lights", () => {
     const map = ROOM_MAP_PRESETS.zoned.build();
     const zone = map?.zones[0];
-    expect(zone && isCubeZone(zone)).toBe(true);
+    expect(zone && map && isCubeZone(zone, map.dimensions)).toBe(true);
     for (const channel of map?.hueChannels ?? []) {
       if (channel.zoneRelativePosition == null) continue;
       for (const v of Object.values(channel.zoneRelativePosition)) expect(Math.abs(v)).toBeLessThanOrEqual(1);

@@ -114,7 +114,7 @@ hidden after, so picking a zone rebuilds nothing. A drawn zone is picked in 3D u
 only where the press finds nothing but its floor (`model/zoneGesture.ts`), because its box stands round
 the furniture inside it and a nearest-hit rule gave it the sofa's clicks. It is carried from its floor
 and resized from eight grips only when it is itself the selection (`ZoneMarks.held`), not when it is
-shown for a selected light, whose drag carries the light. The grips keep the room's proportions and,
+shown for a selected light, whose drag carries the light. The grips keep it a cube and,
 sitting on the floor, the cube's bottom: it grows or shrinks from there rather than about its centre, and
 ⇧ while carrying raises or lowers it along the upright plane facing the camera, as a raised light
 rises, held between the floor and the ceiling. While held it is drawn as its whole cube; at rest the
@@ -250,36 +250,45 @@ bridge position, never re-route a light.
 
 **The one-shot fit has to read the dimensions live, not the ones present at first render.** `useRoomMapState` seeds `DEFAULT_ROOM_MAP` and swaps in the stored room a commit later, and the canvas container only mounts once loading ends — so a ref captured at first render always held the 5×4 placeholder, and *every* map was framed as if it were 5×4. A larger room then opened zoomed too far in, overflowing the canvas instead of sitting centred in it. The guard against re-fitting under a user who is editing the room size is `initialFitDone`, not a stale ref; the two were conflated, and a test had pinned the stale read as intentional with the reasoning that "a dimension change arriving before the container mounts must not become the basis of the fit" — but that change *is* the room finishing loading.
 
-**A zone is a cube in the Hue space: one scale on all three axes.** The Hue frame is unitless:
-every axis runs −1 to 1 and the room is stretched onto it per axis (width to x, depth to y, height
-to z). A zone's `scaleX`, `scaleY` and `scaleZ` are one value, so on the plan and in 3D it draws as
-a box in the room's proportions, the same share of each side. This is the shape the Hue app's own
-entertainment-area editor works in, and the bridge never sees a zone — only the positions resolved
-through it (`hue.md`, "Entertainment positions"). A bound light stores its place relative to the
-zone's centre, so moving or resizing the zone carries its lights with it; a dragged bound light is
-held inside its zone and leaves it only through its zone picker. Loose lights and overlapping zones
-are both allowed. The dock edits the size as a share of the room with the sides in metres beside
-it, and the centre's height; the plan draws one with a drag in the room's proportions ("Add zone"
-arms the draw, a click drops the cube of scale 0.5) and reshapes it from eight grips on the active
-zone's box, which keep the proportions and the cube's bottom (`bottomKeptCenterZ`) and move the box, its centre, its name chip and every bound
-light in place before writing the zone once on release (`model/zoneRect.ts`). Every write goes
-through `withCubeScale` (`model/zoneCube.ts`), which clamps the scale to the band and the centre so
-`|center| + scale ≤ 1` on every axis. Rust validates the same: the `HUE_ZONE_SCALE_MIN` /
-`HUE_ZONE_SCALE_MAX` band on each axis, equal scales (`HUE_ZONE_OVERSIZED` otherwise) and the
-cube-overflow invariant on all three axes (`src-tauri/src/commands/room_map/hue_zone.rs`). The
-frontend's `ZONE_SCALE_MIN` mirrors the band; the two constants have to move together. An earlier
-build kept the two floor sides independent and spanned every zone floor to ceiling; that let one
-zone's lights sit in a box the Hue app could not draw.
+**A zone is a cube in metres, so its Hue scales differ.** The Hue frame is unitless: every axis runs
+−1 to 1 and the room is stretched onto it per axis (width to x, depth to y, height to z). A zone has
+one edge in metres on all three sides, and each axis's scale is that edge over its own side of the
+room; on the plan it is a square and in 3D a cube. An earlier build made the three scales equal, the
+shape the Hue app's editor draws, but in a real room that is a flat box (6.25 × 4 × 1.35 m in a
+12.5 × 8 × 2.7 m one), and the maintainer chose the cube the room shows. The cost is the ceiling: a
+cube cannot be taller than the room, so the edge runs from the band on the longest side (`0.05 ×`
+it) to the shortest side, nearly always the height (`zoneEdgeBounds`); in a room too long for any
+cube the two meet and the scales are held to the band per axis. The bridge never sees a zone — only
+the positions resolved through it (`hue.md`, "Entertainment positions"). A bound light stores its
+place relative to the zone's centre, so moving or resizing the zone carries its lights with it; a
+dragged bound light is held inside its zone and leaves it only through its zone picker. Loose lights
+and overlapping zones are both allowed. The dock edits the edge in metres, grown about the centre and
+capped where the far side meets a wall, the floor or the ceiling (`maxZoneEdgeAt`), and the centre's
+height; the plan draws one as a square ("Add zone" arms the draw, a click drops half the tallest
+cube) and reshapes it from eight grips on the active zone's box, which keep it square and the cube's
+bottom (`bottomKeptCenterZ`) and move the box, its centre, its name chip and every bound light in
+place before writing the zone once on release (`model/zoneRect.ts`). Every write goes through
+`withCubeEdge` (`model/zoneCube.ts`), which clamps the edge and the centre so `|center| + scale ≤ 1`
+on every axis. Rust knows no room size, so it checks only the `HUE_ZONE_SCALE_MIN` /
+`HUE_ZONE_SCALE_MAX` band on each axis (`HUE_ZONE_OVERSIZED`) and the cube-overflow invariant on all
+three (`src-tauri/src/commands/room_map/hue_zone.rs`); a room resize would otherwise make every
+stored zone invalid. The frontend's `ZONE_SCALE_MIN` mirrors the band; the two constants have to
+move together. `isCubeZone` compares in metres within a millimetre: scale × side picks up ~1e-7
+through JSON and f32, and a tighter test rewrote the file on every load.
 
-**A file an older build wrote is made cubic where it is read, and no light moves.** The `11 → 12`
-migration (`cubeZonesV12.ts`, a frozen copy so later changes to the live helper cannot rewrite
-history) gives each zone the larger of its floor scales, grown to cover its bound lights' spread,
-with its centre kept where it fits and its height at the middle of its lights. Each bound light's
-relative position is then rewritten from the new cube, so it resolves where it did. The same
-`cubeZones` runs on every load and room switch, because a v11 build can still write a non-cube zone
-into a v12 file. Before v11, zones were made at `centerZ 0, scaleZ 0.5`, which held every bound
-light to the middle half of the room's height; `10 → 11` opened them floor to ceiling, keeping each
-light's height. Readers keep the general `center + scale · relative` formula on every axis.
+**A file an older build wrote is made a cube where it is read, and a light moves only out of its
+zone.** The `11 → 12` migration (`cubeZonesV12.ts`, a frozen copy) gives each zone the middle of its
+three sides in metres, grown to cover its bound lights' spread and capped at the ceiling, with its
+centre moved only as far as covering them needs. Each bound light's relative position is then
+rewritten from the new cube, so it resolves where it did; one the capped cube still cannot hold
+leaves the zone at the position it had, since clipping it would move it on the bridge. Schema 12
+shipped in no build when the step changed from cubes in Hue units to cubes in metres, so the step
+was rewritten rather than followed by a `12 → 13`; a released step stays frozen. The live
+`cubeZones` runs on every load and room switch, because a file from the Hue-unit build or a v11
+build can hold a zone that is not a cube in metres. Before v11, zones were made at `centerZ 0,
+scaleZ 0.5`, which held every bound light to the middle half of the room's height; `10 → 11` opened
+them floor to ceiling, keeping each light's height. Readers keep the general `center + scale ·
+relative` formula on every axis.
 
 **A large zone's centre marker stops well short of the wall it is pinned against, so the pinned edge lights up.** `|center| + scale ≤ 1` means the centre can only reach `1 - scale`, and at that point the box edge is exactly on the wall — correct, but on a 5 m zone in a 9 m room the marker parks 2.5 m away from the edge holding it, and the drag reads as broken rather than finished. `pinnedZoneEdges` names the flush walls and the drag path writes them to `data-zone-pinned`; four CSS custom-property slots compose the inset shadow so a corner lights both its edges. The cue is a `box-shadow` rather than a `border-*` override because the bounds box sets `border` inline, and it is dropped in forced-colours mode, where a real border stands in. The comparison is tolerant rather than `===`: the drag compares against the bound `clamp` just returned so it would match exactly, but a centre round-tripped through the backend carries float noise and `-1 + 0.6` is not `-0.4`.
 
@@ -464,11 +473,14 @@ Showroom fell from about 60 ms of main-thread work to about 16 ms.
   centre. The one frontend reader that took it for the centre — the since-removed "LED counts from
   the map" — put every derived edge half a TV up and to the left of the drawn one, and a test had
   pinned that. A new reader of the anchor converts from the corner.
-- **Resizing the room moves metre objects, never Hue channels or zones.** TV, furniture, strips and
-  image layers are in metres and shift by half the growth so they keep their place around the
-  centre. Channels and zones live in the bridge's `[-1, 1]` cube, which spans the room, so they
-  already follow the new size; adding the metre shift to them once pushed a channel at `x = 0.5`
-  in a 5 → 7 m resize out to `1.5`, off the cube.
+- **Resizing the room moves metre objects, never Hue channels; a zone is only made a cube again.**
+  TV, furniture, strips and image layers are in metres and shift by half the growth so they keep
+  their place around the centre. Channels and zones live in the bridge's `[-1, 1]` cube, which spans
+  the room, so they already follow the new size; adding the metre shift to them once pushed a
+  channel at `x = 0.5` in a 5 → 7 m resize out to `1.5`, off the cube. Stretched with the room, a
+  zone stops being a cube in metres, so the same patch runs `cubeZones` measured in the room before
+  the change: the edge stays, the centre stays in Hue units, and each bound light keeps its Hue
+  position. A template does the same.
 - **"Reset map" is an empty template, not the empty map.** It goes through `applyRoomTemplate`
   with `DEFAULT_ROOM_MAP`, so the Hue channels and zones (the bridge sync's) and every port-linked
   strip (Devices') survive, the first one keeping its placement. Writing `DEFAULT_ROOM_MAP` over the

@@ -729,10 +729,10 @@ describe("RoomView3D", () => {
   });
 
   describe("a Hue zone", () => {
-    // The cube of scale 0.5 at the middle of a 6 × 4 × 2.5 m room: x 1.5–4.5, y 1–3 on the plan,
-    // 0.625–1.875 m high. A size no other test opens, so the camera kept for the session from one
-    // of them is not reused.
-    const zone: HueZone = { id: "a", name: "Sofa", entertainmentAreaId: "x", centerX: 0, centerY: 0, centerZ: 0, scaleX: 0.5, scaleY: 0.5, scaleZ: 0.5, channelIndices: [] };
+    // A 1 m cube at the middle of a 6 × 4 × 2.5 m room: x 2.5–3.5, y 1.5–2.5 on the plan, 0.75–1.75 m
+    // high. A room size no other test opens, so the camera kept for the session from one of them is
+    // not reused.
+    const zone: HueZone = { id: "a", name: "Sofa", entertainmentAreaId: "x", centerX: 0, centerY: 0, centerZ: 0, scaleX: 1 / 6, scaleY: 0.25, scaleZ: 0.4, channelIndices: [] };
     const config: RoomMapConfig = { ...DEFAULT_ROOM_MAP, dimensions: { widthMeters: 6, depthMeters: 4, heightMeters: 2.5 }, zones: [zone] };
     const HELD: ZoneMarks = { active: "a", held: "a", others: [] };
 
@@ -770,24 +770,25 @@ describe("RoomView3D", () => {
       expect(onChangeZone).toHaveBeenCalledTimes(1);
       const [id, rect, resized] = onChangeZone.mock.calls[0]!;
       expect([id, resized]).toEqual(["a", false]);
-      expect(rect.x0).toBeCloseTo(2);
-      expect(rect.y1).toBeCloseTo(3.5);
-      expect(rect.x1 - rect.x0).toBeCloseTo(3);
+      expect(rect.x0).toBeCloseTo(3);
+      expect(rect.y1).toBeCloseTo(3);
+      expect(rect.x1 - rect.x0).toBeCloseTo(1);
     });
 
     it("is resized from a corner grip", async () => {
       const { onChangeZone, at, press } = await open(HELD);
-      press("pointerdown", at(4.5, 3));
-      press("pointermove", at(5, 3.5));
-      press("pointerup", at(5, 3.5));
+      press("pointerdown", at(3.5, 2.5));
+      press("pointermove", at(4, 3.2));
+      press("pointerup", at(4, 3.2));
       const [, rect, resized] = onChangeZone.mock.calls[0]!;
       expect(resized).toBe(true);
-      expect([rect.x0, rect.y0]).toEqual([1.5, 1]);
-      // A cube keeps the room's 6 : 4: the deeper pull sets the size.
-      expect(rect.x1).toBeCloseTo(5.25);
-      expect(rect.y1).toBeCloseTo(3.5);
-      // Its bottom stays at -0.5 as it grows to 0.625, so the top rises instead.
-      expect(onChangeZone.mock.calls[0]![3]).toBeCloseTo(0.125);
+      expect(rect.x0).toBeCloseTo(2.5);
+      expect(rect.y0).toBeCloseTo(1.5);
+      // It stays square: the deeper pull, 1.7 m, sets the edge.
+      expect(rect.x1).toBeCloseTo(4.2);
+      expect(rect.y1).toBeCloseTo(3.2);
+      // Its bottom stays at -0.4 as it grows to 0.68 of the room's height, so the top rises instead.
+      expect(onChangeZone.mock.calls[0]![3]).toBeCloseTo(0.28);
     });
 
     it("rises with ⇧ from where it was gripped, its floor left where it is", async () => {
@@ -798,7 +799,7 @@ describe("RoomView3D", () => {
       press("pointerup", at(3, 2, 1), true);
       const [, rect, resized, centerZ] = onChangeZone.mock.calls[0]!;
       expect(resized).toBe(false);
-      expect([rect.x0, rect.y0, rect.x1, rect.y1]).toEqual([1.5, 1, 4.5, 3]);
+      expect([rect.x0, rect.y0, rect.x1, rect.y1].map((v) => Number(v.toFixed(6)))).toEqual([2.5, 1.5, 3.5, 2.5]);
       // Half a metre up: its centre from 1.25 m to 1.75 m of 2.5 m.
       expect(centerZ).toBeCloseTo(0.4);
     });
@@ -809,7 +810,7 @@ describe("RoomView3D", () => {
       press("pointermove", at(3, 2, 0.5), true);
       press("pointermove", at(3, 2, 3), true);
       press("pointerup", at(3, 2, 3), true);
-      expect(onChangeZone.mock.calls[0]![3]).toBeCloseTo(0.5);
+      expect(onChangeZone.mock.calls[0]![3]).toBeCloseTo(0.6);
     });
 
     it("goes back where it was on Esc, writing nothing", async () => {
@@ -832,8 +833,8 @@ describe("RoomView3D", () => {
 
     it("is picked where a click finds only its floor, and the room's empty floor picks nothing", async () => {
       const { onPick, onPickZone, at, press } = await open({ active: null, held: null, others: ["a"] });
-      press("pointerdown", at(2, 2));
-      press("pointerup", at(2, 2));
+      press("pointerdown", at(2.75, 2));
+      press("pointerup", at(2.75, 2));
       expect(onPickZone).toHaveBeenCalledWith("a");
       expect(onPick).not.toHaveBeenCalled();
       press("pointerdown", at(0.5, 0.5));

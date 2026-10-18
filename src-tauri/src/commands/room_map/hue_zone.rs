@@ -62,8 +62,8 @@ const STATUS_HUE_ZONE_NOT_FOUND: &str = "HUE_ZONE_NOT_FOUND";
 const STATUS_HUE_ZONE_OUT_OF_BOUNDS: &str = "HUE_ZONE_CHANNEL_OUT_OF_BOUNDS";
 const STATUS_HUE_ZONE_LIMIT_REACHED: &str = "HUE_ZONE_LIMIT_REACHED";
 const STATUS_HUE_ZONE_CHANNEL_NOT_IN_AREA: &str = "HUE_ZONE_CHANNEL_NOT_IN_AREA";
-/// Zone scale is outside `[HUE_ZONE_SCALE_MIN, HUE_ZONE_SCALE_MAX]`,
-/// non-finite, or not one scale on all three axes. Distinct from
+/// Zone scale is outside `[HUE_ZONE_SCALE_MIN, HUE_ZONE_SCALE_MAX]` on
+/// at least one axis, or non-finite. Distinct from
 /// `HUE_ZONE_CHANNEL_OUT_OF_BOUNDS` (per-channel relative drift) because
 /// the cause is a slider the user pulled past the room-equals-zone
 /// ceiling — recovery is "shrink the zone", not "drag the channel back
@@ -165,10 +165,10 @@ fn zone_center_in_bounds(zone: &HueZone) -> bool {
     in_unit_range(zone.center_x) && in_unit_range(zone.center_y) && in_unit_range(zone.center_z)
 }
 
-/// Validate a Hue zone draft: centre inside the cube, one scale on all
-/// three axes within the clamps, and `|center| + scale <= 1.0` per axis.
-/// A zone is a cube in the bridge's space; the room map draws it in the
-/// room's proportions.
+/// Validate a Hue zone draft: centre inside the cube, each axis's scale
+/// within the clamps, and `|center| + scale <= 1.0` per axis. The room map
+/// keeps a zone a cube in metres, so its scales differ by the room's sides;
+/// Rust does not know the room and does not check the shape.
 fn validate_zone_shape(zone: &HueZone) -> Result<(), CommandStatus> {
     if !zone_center_in_bounds(zone) {
         return Err(CommandStatus::new(
@@ -200,15 +200,6 @@ fn validate_zone_shape(zone: &HueZone) -> Result<(), CommandStatus> {
                 "Zone `{axis}` scale must be in [{HUE_ZONE_SCALE_MIN:.2}, {HUE_ZONE_SCALE_MAX:.2}]; \
                  zone cannot be larger than the room."
             ),
-            None,
-        ));
-    }
-    if (zone.scale_y - zone.scale_x).abs() > HUE_ZONE_BOUNDS_TOLERANCE
-        || (zone.scale_z - zone.scale_x).abs() > HUE_ZONE_BOUNDS_TOLERANCE
-    {
-        return Err(CommandStatus::new(
-            STATUS_HUE_ZONE_OVERSIZED,
-            "Zone is not a cube; its scale must be the same on all three axes.",
             None,
         ));
     }
@@ -856,7 +847,7 @@ mod tests {
     }
 
     #[test]
-    fn create_zone_rejects_a_zone_that_is_not_a_cube() {
+    fn create_zone_accepts_unequal_scales_for_a_cube_in_metres() {
         for (sx, sy, sz) in [(0.4, 0.5, 0.4), (0.4, 0.4, 1.0)] {
             let mut zone = make_hue_zone("z1", "area-1", vec![]);
             zone.center_x = 0.0;
@@ -868,8 +859,8 @@ mod tests {
                 zone,
                 existing_zones: Vec::new(),
             });
-            assert_eq!(result.status.code, STATUS_HUE_ZONE_OVERSIZED);
-            assert!(result.zones.is_empty());
+            assert_eq!(result.status.code, STATUS_HUE_ZONE_CREATED);
+            assert_eq!(result.zones.len(), 1);
         }
     }
 

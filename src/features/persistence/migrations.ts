@@ -169,7 +169,7 @@ export function migrateShellState(state: ShellState, upTo: number = SHELL_STATE_
     next = migrateV10ToV11(next);
   }
 
-  // 11 → 12: zones become cubes in the Hue space
+  // 11 → 12: zones become cubes in metres
   if ((next.schemaVersion ?? 1) < 12 && 12 <= upTo) {
     next = migrateV11ToV12(next);
   }
@@ -178,11 +178,12 @@ export function migrateShellState(state: ShellState, upTo: number = SHELL_STATE_
 }
 
 // ---------------------------------------------------------------------------
-// 11 → 12 — a zone is a cube
+// 11 → 12 — a zone is a cube in metres
 // ---------------------------------------------------------------------------
 
-/** One scale on all three axes, each bound light kept where it resolved (`cubeZonesV12`). The
- *  kept rooms carry zones too, and a room switch copies them back into `roomMap`. */
+/** One edge in metres on all three sides, each bound light kept where it resolved or, past what the
+ *  ceiling-capped cube holds, out of the zone where it stood (`cubeZonesV12`). The kept rooms carry
+ *  zones too, and a room switch copies them back into `roomMap`. */
 function migrateV11ToV12(state: ShellState): ShellState {
   const next = { ...state, schemaVersion: 12 } as ShellState;
   if (state.roomMap) next.roomMap = cubeZonesV12(state.roomMap);

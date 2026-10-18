@@ -51,6 +51,7 @@ import { buildObjectList } from "../model/objectList";
 import { dropZones, zoneDrop } from "../model/zoneDrop";
 import { zoneMarks } from "../model/zoneMarks";
 import { zoneToken } from "../model/zoneColor";
+import { cubeZones } from "../model/zoneCube";
 import { rectToZone, type ZoneRect } from "../model/zoneRect";
 import { roomObjectAdapter } from "../model/roomObjectKinds";
 import { useFurnitureModels } from "../state/useFurnitureModels";
@@ -379,7 +380,7 @@ export function RoomMapEditor({
 
   const { handleAddImage, imageError, imageErrorCode } = useRoomMapImageLayers({ apply, select: selectShowingPlan });
 
-  const { widthMeters, depthMeters } = config.dimensions;
+  const { widthMeters, depthMeters, heightMeters } = config.dimensions;
   // One object per size, so the memoised TV and strips do not redraw on every editor render.
   const roomBox = useMemo(() => ({ width: widthMeters, depth: depthMeters }), [widthMeters, depthMeters]);
   const decorNames = useMemo(() => decorLightNames(config, t), [config, t]);
@@ -434,14 +435,14 @@ export function RoomMapEditor({
   const handleRoomZoneChange = useCallback(
     (zoneId: string, rect: ZoneRect, resized: boolean, centerZ: number) => {
       if (resized) {
-        handleHueZoneResize(zoneId, { ...rectToZone(rect, widthMeters, depthMeters), centerZ });
+        handleHueZoneResize(zoneId, { ...rectToZone(rect, widthMeters, depthMeters, heightMeters), centerZ });
         return true;
       }
       const centre = planMetresToHue((rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2, widthMeters, depthMeters);
       handleHueZoneCenterChange(zoneId, centre.x, centre.y, false, centerZ);
       return true;
     },
-    [handleHueZoneResize, handleHueZoneCenterChange, widthMeters, depthMeters],
+    [handleHueZoneResize, handleHueZoneCenterChange, widthMeters, depthMeters, heightMeters],
   );
   const handleUsbStripChange = useCallback(
     (updated: UsbStripPlacement) => {
@@ -696,7 +697,8 @@ export function RoomMapEditor({
   );
 
   /** Everything in the room moved by (`dxM`, `dyM`) metres, as a patch. Hue channels and zones live
-   *  in the bridge's [-1, 1] cube, which spans the room, so they follow its size without a shift. */
+   *  in the bridge's [-1, 1] cube, which spans the room, so they follow its size without a shift; a
+   *  zone is then made a cube in metres again, its lights kept where they are on the bridge. */
   const shiftedContents = useCallback(
     (from: typeof config, dxM: number, dyM: number, to: Pick<typeof config, "dimensions" | "footprint">): Partial<typeof config> => {
       const patch: Partial<typeof config> = {};
@@ -712,6 +714,8 @@ export function RoomMapEditor({
       }
       const structures = moveStructures(from.structures, { x: dxM, y: dyM }, from, to);
       if (structures && structures.length > 0) patch.structures = structures as typeof from.structures;
+      const cubed = cubeZones({ zones: from.zones, hueChannels: from.hueChannels, dimensions: to.dimensions }, from.dimensions);
+      if (cubed.zones !== from.zones) Object.assign(patch, { zones: cubed.zones, hueChannels: cubed.hueChannels });
       return patch;
     },
     [],
@@ -1133,6 +1137,7 @@ export function RoomMapEditor({
                 pxPerMeter={pxPerMeter}
                 roomWidthM={widthMeters}
                 roomDepthM={depthMeters}
+                roomHeightM={heightMeters}
                 zoom={zoom}
                 selectedId={selectedId}
                 onSelect={handleHueChannelSelect}
@@ -1155,13 +1160,14 @@ export function RoomMapEditor({
               <ZoneDrawLayer
                 widthM={widthMeters}
                 depthM={depthMeters}
+                heightM={heightMeters}
                 pxPerMeter={pxPerMeter}
                 zoom={zoom}
                 panMode={spaceHeld}
                 colour={zoneToken(hueZones.length)}
                 onDraw={(rect) => {
                   setDrawingZone(false);
-                  handleAddHueZone(rectToZone(rect, widthMeters, depthMeters));
+                  handleAddHueZone(rectToZone(rect, widthMeters, depthMeters, heightMeters));
                 }}
                 onCancel={() => setDrawingZone(false)}
               />

@@ -72,10 +72,10 @@ fn a_refused_write_returns_the_zones_it_was_given() {
     assert_eq!(response["zones"][0]["id"], json!("z1"));
 }
 
-/// A zone is a cube in the bridge's space: one scale on all three axes, and
-/// inside the cube in height too.
+/// A cube in metres has a different scale on each axis, so Rust takes unequal
+/// scales; it still refuses a zone that leaves the cube in height.
 #[test]
-fn a_zone_that_is_not_a_cube_is_a_coded_refusal() {
+fn a_zone_is_held_inside_the_cube_on_every_axis() {
     let app = app();
     let webview = main_webview(&app);
 
@@ -84,9 +84,9 @@ fn a_zone_that_is_not_a_cube_is_a_coded_refusal() {
     let mut floating = zone("z2");
     floating["centerZ"] = json!(0.8);
 
-    for (draft, code) in [
-        (tall, "HUE_ZONE_OVERSIZED"),
-        (floating, "HUE_ZONE_CHANNEL_OUT_OF_BOUNDS"),
+    for (draft, code, kept) in [
+        (tall, "HUE_ZONE_CREATED", 1),
+        (floating, "HUE_ZONE_CHANNEL_OUT_OF_BOUNDS", 0),
     ] {
         let response = invoke(
             &webview,
@@ -95,10 +95,10 @@ fn a_zone_that_is_not_a_cube_is_a_coded_refusal() {
         )
         .expect("create_hue_zone must resolve, never reject");
         assert_eq!(status_code(&response), code);
-        assert!(response["zones"]
-            .as_array()
-            .expect("zones array")
-            .is_empty());
+        assert_eq!(
+            response["zones"].as_array().expect("zones array").len(),
+            kept
+        );
     }
 }
 

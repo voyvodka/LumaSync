@@ -9,11 +9,11 @@ import { useSideScroll } from "@/shared/lib/useSideScroll";
 import { hueChannelDotText, hueChannelName } from "../../model/hueChannelLabel";
 import { hueToMetres } from "../../model/hueChannelPosition";
 import { getZoneColor } from "../../model/zoneColor";
-import { withCubeScale } from "../../model/zoneCube";
-import { ZONE_SCALE_MIN } from "../../model/zoneRect";
+import { maxZoneEdgeAt, withCubeEdge, zoneEdge } from "../../model/zoneCube";
+import { zoneEdgeBounds } from "../../model/zoneRect";
 import { DecimalField } from "../DecimalField";
 import { ZoneSwatches } from "../dock/DockSwatches";
-import { Actions, Disc, FieldRow, InspectorRows, Mark, Meta, NameField, Spacer } from "../dock/InspectorParts";
+import { Actions, Disc, FieldRow, InspectorRows, Mark, NameField, Spacer } from "../dock/InspectorParts";
 import { GlyphHeight, GlyphWidth } from "./fieldGlyphs";
 import styles from "./HueZoneInspector.module.css";
 
@@ -38,8 +38,8 @@ export function HueZoneInspector({
   zones: readonly HueZone[];
   /** The area's lights: each one a chip that joins or leaves this zone. */
   channels: readonly HueChannelPlacement[];
-  /** Turn the cube's scale into metres for the readout and the height; `0` before the map loads
-   *  disables the fields rather than dividing by it. */
+  /** Turn the cube's scales into its edge and height in metres; `0` before the map loads disables
+   *  the fields rather than dividing by it. */
   roomWidthM: number;
   roomDepthM: number;
   roomHeightM: number;
@@ -59,13 +59,14 @@ export function HueZoneInspector({
   const depthM = Math.max(0, roomDepthM);
   const heightM = Math.max(0, roomHeightM);
   const sized = widthM > 0 && depthM > 0 && heightM > 0;
-  const scale = Math.abs(Number.isFinite(zone.scaleX) ? zone.scaleX : ZONE_SCALE_MIN);
+  const room = { widthMeters: widthM, depthMeters: depthM, heightMeters: heightM };
+  const bounds = sized ? zoneEdgeBounds(widthM, depthM, heightM) : { min: 0, max: 0 };
+  const edge = sized ? zoneEdge(zone, room) : 0;
   // Grown about its centre, so the far side stops at the nearest wall, floor or ceiling: Rust
   // refuses `|center| + scale > 1`.
-  const maxScale = Math.max(ZONE_SCALE_MIN, 1 - Math.max(Math.abs(zone.centerX), Math.abs(zone.centerY), Math.abs(zone.centerZ)));
+  const maxEdge = sized ? maxZoneEdgeAt(zone, room) : 0;
   const centreM = hueToMetres(zone.centerZ, heightM);
-  const halfH = (scale * heightM) / 2;
-  const metres = (m: number) => m.toFixed(2);
+  const halfH = edge / 2;
   const cube = (next: HueZone) => {
     const { centerX, centerY, centerZ, scaleX, scaleY, scaleZ } = next;
     onUpdate({ centerX, centerY, centerZ, scaleX, scaleY, scaleZ });
@@ -96,19 +97,15 @@ export function HueZoneInspector({
             <DecimalField
               label={t("roomMap:inspector.zoneSizeLabel")}
               prefix={<GlyphWidth />}
-              value={scale * 100}
-              decimals={0}
-              // Rounded as shown, so a size on screen can be typed back; the clamp holds the exact range.
-              min={Math.round(ZONE_SCALE_MIN * 100)}
-              max={Math.floor(maxScale * 100)}
-              unit="%"
+              value={edge}
+              // Rounded as shown, so an edge on screen can be typed back; the clamp holds the exact range.
+              min={roundTo(bounds.min, 2)}
+              max={Math.floor(maxEdge * 100) / 100}
+              unit="m"
               disabled={!sized}
               testId="hue-zone-size-input"
-              onCommit={(pct) => cube(withCubeScale(zone, clamp(pct / 100, ZONE_SCALE_MIN, maxScale)))}
+              onCommit={(m) => cube(withCubeEdge(zone, clamp(m, bounds.min, maxEdge), room))}
             />
-            <Meta>
-              {t("roomMap:inspector.zoneSizeReadout", { width: metres(scale * widthM), depth: metres(scale * depthM), height: metres(scale * heightM) })}
-            </Meta>
             <DecimalField
               label={t("roomMap:inspector.zoneHeightLabel")}
               prefix={<GlyphHeight />}
@@ -118,7 +115,7 @@ export function HueZoneInspector({
               unit="m"
               disabled={!sized}
               testId="hue-zone-height-input"
-              onCommit={(m) => cube(withCubeScale(zone, scale, { x: zone.centerX, y: zone.centerY, z: (clamp(m, halfH, heightM - halfH) / heightM) * 2 - 1 }))}
+              onCommit={(m) => cube(withCubeEdge(zone, edge, room, { x: zone.centerX, y: zone.centerY, z: (clamp(m, halfH, heightM - halfH) / heightM) * 2 - 1 }))}
             />
           </FieldRow>
           <span className={styles.caption}>{t("roomMap:inspector.hueLightCountLabel")}</span>

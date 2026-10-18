@@ -9,6 +9,7 @@ import styles from "./ZoneDrawLayer.module.css";
 export function ZoneDrawLayer({
   widthM,
   depthM,
+  heightM,
   pxPerMeter,
   zoom,
   panMode,
@@ -18,6 +19,7 @@ export function ZoneDrawLayer({
 }: {
   widthM: number;
   depthM: number;
+  heightM: number;
   pxPerMeter: number;
   zoom: number;
   /** Space held: the press goes on to the canvas, which pans. */
@@ -69,14 +71,14 @@ export function ZoneDrawLayer({
         if (!p) return;
         if (!p.moved && Math.hypot(e.clientX - p.clientX, e.clientY - p.clientY) < CLICK_SLOP_PX) return;
         p.moved = true;
-        paint(drawnZoneRect(p, metresAt(e), widthM, depthM));
+        paint(drawnZoneRect(p, metresAt(e), widthM, depthM, heightM));
       }}
       onPointerUp={(e) => {
         const p = press.current;
         press.current = null;
         if (!p) return;
         paint(null);
-        onDraw(p.moved ? drawnZoneRect(p, metresAt(e), widthM, depthM) : clickedZoneRect(p, widthM, depthM));
+        onDraw(p.moved ? drawnZoneRect(p, metresAt(e), widthM, depthM, heightM) : clickedZoneRect(p, widthM, depthM, heightM));
       }}
       onPointerCancel={() => {
         press.current = null;

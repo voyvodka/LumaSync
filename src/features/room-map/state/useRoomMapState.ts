@@ -91,7 +91,8 @@ export function useRoomMapState(): UseRoomMapStateReturn {
             delete loaded.backgroundOffsetY;
             delete loaded.backgroundScale;
           }
-          // A file an older build wrote after the 11 → 12 step can hold zones that are not cubes.
+          // A file written while zones were cubes in Hue units, or by an older build after 11 → 12, can
+          // hold zones that are not cubes in metres.
           dispatch({ type: "hydrate", config: cubeZones(loaded) });
           // The stored map as it is, not the converted copy, so the conversion reaches the file.
           writtenRef.current = stored.roomMap;

@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ShellState } from "@/shared/contracts/shell";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
+
+import { isCubeZone } from "../../model/zoneCube";
 import { GESTURE_COALESCE_MS } from "../roomMapReducer";
 import { useRoomMapState } from "../useRoomMapState";
 
@@ -319,7 +321,9 @@ describe("useRoomMapState — reset", () => {
     expect(config.furniture).toEqual([]);
     expect(config.dimensions).toEqual(DEFAULT_ROOM_MAP.dimensions);
     expect(config.hueChannels).toEqual(persisted.hueChannels);
-    expect(config.zones).toEqual(persisted.zones);
+    // Kept, and made a cube in the default room's metres.
+    expect(config.zones.map((z) => [z.id, z.channelIndices])).toEqual([["zone-a", [0]]]);
+    expect(isCubeZone(config.zones[0]!, config.dimensions)).toBe(true);
     expect(config.usbStrips.map((s) => s.stripId)).toEqual(["usb-linked"]);
     expect(config.usbStrips[0].ledCount).toBe(164);
     // Still one undoable step.

@@ -57,9 +57,10 @@ const ZONE_A: HueZone = {
   centerX: 0,
   centerY: 0,
   centerZ: 0,
+  // A 1.5 m cube in the 5 × 4 × 2.5 m default room.
   scaleX: 0.3,
-  scaleY: 0.3,
-  scaleZ: 0.3,
+  scaleY: 0.375,
+  scaleZ: 0.6,
   channelIndices: [],
   borderColor: "#3b82f6",
 };
@@ -270,8 +271,8 @@ describe("useRoomMapHueZones — a refusal is a resolved promise", () => {
     await waitFor(() => expect(result.current.hueZoneRejection).toBe("HUE_ZONE_OVERSIZED"));
     // The optimistic edit is the user's; the reconciliation is not.
     expect(apply).toHaveBeenCalledTimes(1);
-    // Made a cube on the way, held to the band.
-    expect(apply.mock.calls[0][0].zones[0]).toMatchObject({ scaleX: 1, scaleY: 1, scaleZ: 1 });
+    // Made a cube on the way, capped at the ceiling's 2.5 m.
+    expect(apply.mock.calls[0][0].zones[0]).toMatchObject({ scaleX: 0.5, scaleY: 0.625, scaleZ: 1 });
     expect(adopt).toHaveBeenCalledTimes(1);
     expect(adopt.mock.calls[0][0]).toEqual({ zones: [ZONE_A] });
   });
@@ -369,21 +370,22 @@ describe("useRoomMapHueZones — drawn and resized zones", () => {
     mockCreate.mockResolvedValue(applied([]));
     const { result, apply } = renderZones();
 
-    act(() => result.current.handleAddHueZone({ centerX: 0.4, centerY: -0.2, scale: 0.3 }));
+    act(() => result.current.handleAddHueZone({ centerX: 0.4, centerY: -0.2, edge: 1.5 }));
 
     const zone = mockCreate.mock.calls[0]![0].zone;
-    expect(zone).toMatchObject({ centerX: 0.4, centerY: -0.2, centerZ: 0, scaleX: 0.3, scaleY: 0.3, scaleZ: 0.3 });
+    expect(zone).toMatchObject({ centerX: 0.4, centerY: -0.2, centerZ: 0, scaleX: 0.3, scaleY: 0.375, scaleZ: 0.6 });
     expect(apply).toHaveBeenCalledWith({ zones: [ZONE_A, zone] });
   });
 
-  it("adds the cube of scale 0.5 at the room's middle by default, and keeps a drawn one inside the room", async () => {
+  it("adds half the tallest cube at the room's middle by default, and keeps a drawn one inside the room", async () => {
     mockCreate.mockResolvedValue(applied([]));
     const { result } = renderZones();
 
     act(() => result.current.handleAddHueZone());
-    act(() => result.current.handleAddHueZone({ centerX: 0.9, centerY: 0, scale: 0.3 }));
+    act(() => result.current.handleAddHueZone({ centerX: 0.9, centerY: 0, edge: 1.5 }));
 
-    expect(mockCreate.mock.calls[0]![0].zone).toMatchObject({ centerX: 0, centerY: 0, centerZ: 0, scaleX: 0.5, scaleZ: 0.5 });
+    // 1.25 m, half the room's height.
+    expect(mockCreate.mock.calls[0]![0].zone).toMatchObject({ centerX: 0, centerY: 0, centerZ: 0, scaleX: 0.25, scaleY: 0.3125, scaleZ: 0.5 });
     expect(mockCreate.mock.calls[1]![0].zone.centerX).toBeCloseTo(0.7);
   });
 
@@ -400,10 +402,11 @@ describe("useRoomMapHueZones — drawn and resized zones", () => {
 
   it("resizes from the bottom, its top coming down to it", async () => {
     mockUpdate.mockResolvedValue(applied([ZONE_A]));
-    const { result } = renderZonesWithStore({ zones: [{ ...ZONE_A, scaleX: 0.5, scaleY: 0.5, scaleZ: 0.5 }] });
+    const { result } = renderZonesWithStore({ zones: [{ ...ZONE_A, scaleX: 0.25, scaleY: 0.3125, scaleZ: 0.5 }] });
     await waitFor(() => expect(result.current.store.loading).toBe(false));
 
-    act(() => result.current.zones.handleHueZoneResize("zone-a", { centerX: 0, centerY: 0, scale: 0.3 }));
+    // From 1.25 m to 0.75 m, its bottom kept at -0.5.
+    act(() => result.current.zones.handleHueZoneResize("zone-a", { centerX: 0, centerY: 0, edge: 0.75 }));
     expect(result.current.store.config.zones[0]!.centerZ).toBeCloseTo(-0.2);
   });
 
@@ -412,9 +415,9 @@ describe("useRoomMapHueZones — drawn and resized zones", () => {
     const { result } = renderZonesWithStore({ zones: [ZONE_A] });
     await waitFor(() => expect(result.current.store.loading).toBe(false));
 
-    act(() => result.current.zones.handleHueZoneResize("zone-a", { centerX: 0.1, centerY: 0, scale: 0.4 }));
-    act(() => result.current.zones.handleHueZoneResize("zone-a", { centerX: 0.2, centerY: 0, scale: 0.5 }));
-    expect(result.current.store.config.zones[0]).toMatchObject({ scaleX: 0.5, scaleY: 0.5, scaleZ: 0.5 });
+    act(() => result.current.zones.handleHueZoneResize("zone-a", { centerX: 0.1, centerY: 0, edge: 2 }));
+    act(() => result.current.zones.handleHueZoneResize("zone-a", { centerX: 0.2, centerY: 0, edge: 2.5 }));
+    expect(result.current.store.config.zones[0]).toMatchObject({ scaleX: 0.5, scaleY: 0.625, scaleZ: 1 });
 
     await act(async () => result.current.store.undo());
     expect(result.current.store.config.zones[0]!.scaleX).toBe(0.4);

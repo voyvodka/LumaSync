@@ -106,18 +106,25 @@ function simple(): RoomMapConfig {
   };
 }
 
+// A cube in metres as tall as the room: one 2.6 m edge over each side.
+const LIVING_EDGE = DIMENSIONS.heightMeters;
 const LIVING_ZONE: HueZone = {
   id: "zone-living",
   name: "Living room",
   entertainmentAreaId: "area-living",
   centerX: 0,
-  centerY: 0.2,
-  centerZ: 0.2,
-  scaleX: 0.8,
-  scaleY: 0.8,
-  scaleZ: 0.8,
+  centerY: 0,
+  centerZ: 0,
+  scaleX: LIVING_EDGE / DIMENSIONS.widthMeters,
+  scaleY: LIVING_EDGE / DIMENSIONS.depthMeters,
+  scaleZ: LIVING_EDGE / DIMENSIONS.heightMeters,
   channelIndices: [0, 1, 2],
 };
+// The strips stand 4.2 m apart in `simple`, wider than any cube the ceiling allows, so here they flank the middle.
+const LIVING_X: ReadonlyMap<number, number> = new Map([
+  [0, -0.4],
+  [1, 0.4],
+]);
 
 /**
  * Three channels inside a zone, one left outside it.
@@ -132,7 +139,7 @@ function zoned(): RoomMapConfig {
   return {
     ...base,
     zones: [LIVING_ZONE],
-    hueChannels: base.hueChannels.map((placement) =>
+    hueChannels: base.hueChannels.map((p) => ({ ...p, x: LIVING_X.get(p.channelIndex) ?? p.x })).map((placement) =>
       LIVING_ZONE.channelIndices.includes(placement.channelIndex)
         ? {
             ...placement,

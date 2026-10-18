@@ -1,6 +1,7 @@
 import { type RoomMapConfig, resolveRoomFootprint, type UsbStripPlacement } from "@/shared/contracts/roomMap";
 
 import { keepStripInside, roomBoxOf } from "./pieceGeometry";
+import { cubeZones } from "./zoneCube";
 
 /**
  * Whether the room map opens on the template picker: nothing the user placed is
@@ -58,5 +59,6 @@ export function applyRoomTemplate(current: RoomMapConfig, template: RoomMapConfi
   }
 
   // A template lays out the furniture and the room's build; the room's finish is the user's and stays.
-  return { ...template, tvAnchor, usbStrips, hueChannels: current.hueChannels, zones: current.zones, surfaces: current.surfaces };
+  // Hue zones keep their place in the Hue cube and are made cubes again in the template's metres.
+  return cubeZones({ ...template, tvAnchor, usbStrips, hueChannels: current.hueChannels, zones: current.zones, surfaces: current.surfaces }, current.dimensions);
 }

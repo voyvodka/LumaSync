@@ -279,8 +279,7 @@ export function buildZoneBoxes(zones: readonly HueZone[], dims: RoomDimensions):
       const colour = zoneHex(zone.borderColor, zones.indexOf(zone));
       ghostEdges.material.color.set(colour);
       ghostFill.material.color.set(colour);
-      // A cube in Hue units: its height is the same share of the room's as its width is of the room's.
-      const height = ((rect.x1 - rect.x0) / dims.widthMeters) * dims.heightMeters;
+      const height = Math.min(rect.x1 - rect.x0, dims.heightMeters);
       const centreY = hueToMetres(centerZ ?? zone.centerZ, dims.heightMeters);
       const [x, w] = offWalls((rect.x0 + rect.x1) / 2 - dims.widthMeters / 2, rect.x1 - rect.x0, dims.widthMeters);
       const [z, d] = offWalls((rect.y0 + rect.y1) / 2 - dims.depthMeters / 2, rect.y1 - rect.y0, dims.depthMeters);

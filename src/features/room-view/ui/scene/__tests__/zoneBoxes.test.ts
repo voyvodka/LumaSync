@@ -99,14 +99,14 @@ describe("buildZoneBoxes", () => {
     boxes.mark({ active: "a", held: "a", others: [] });
     const { one } = parts(boxes, 0);
     const [grips, ghost] = boxes.group.children.slice(1);
-    expect(boxes.hold("a", { x0: 0, y0: 0, x1: 2.5, y1: 2 })).toBe(true);
+    expect(boxes.hold("a", { x0: 0, y0: 0, x1: 2, y1: 2 })).toBe(true);
     expect([one.visible, grips!.visible, ghost!.visible]).toEqual([false, false, true]);
-    // Half the room's 2.5 m high as it is half its width, and a centimetre off the two walls it touches.
+    // A 2 m cube, as high as it is wide, and a centimetre off the two walls it touches.
     const [gw, gh, gd] = ghost!.scale.toArray();
-    expect([gw, gh, gd].map((v) => Number(v.toFixed(3)))).toEqual([2.49, 1.25, 1.99]);
-    expect(ghost!.position.toArray().map((v) => Number(v.toFixed(3)))).toEqual([-1.245, 1.25, -0.995]);
-    boxes.hold("a", { x0: 0, y0: 0, x1: 2.5, y1: 2 }, 0.5);
-    expect(ghost!.position.y).toBeCloseTo(1.875);
+    expect([gw, gh, gd].map((v) => Number(v.toFixed(3)))).toEqual([1.99, 2, 1.99]);
+    expect(ghost!.position.toArray().map((v) => Number(v.toFixed(3)))).toEqual([-1.495, 1.25, -0.995]);
+    boxes.hold("a", { x0: 0, y0: 0, x1: 2, y1: 2 }, 0.2);
+    expect(ghost!.position.y).toBeCloseTo(1.5);
     boxes.mark({ active: "a", held: "a", others: [] });
     expect(one.visible).toBe(false);
     expect(boxes.hold("a", null)).toBe(true);

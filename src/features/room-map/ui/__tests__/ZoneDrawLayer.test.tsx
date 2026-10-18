@@ -10,11 +10,11 @@ vi.mock("react-i18next", () => ({
 
 afterEach(cleanup);
 
-// A 5×4 m room drawn at 100 px a metre, at the origin of the viewport.
+// A 5 × 4 × 2.5 m room drawn at 100 px a metre, at the origin of the viewport.
 function setup(panMode = false) {
   const onDraw = vi.fn<(rect: ZoneRect) => void>();
   const onCancel = vi.fn<() => void>();
-  render(<ZoneDrawLayer widthM={5} depthM={4} pxPerMeter={100} zoom={1} panMode={panMode} colour="var(--lm-zone-1)" onDraw={onDraw} onCancel={onCancel} />);
+  render(<ZoneDrawLayer widthM={5} depthM={4} heightM={2.5} pxPerMeter={100} zoom={1} panMode={panMode} colour="var(--lm-zone-1)" onDraw={onDraw} onCancel={onCancel} />);
   const layer = screen.getByTestId("zone-draw-layer");
   layer.getBoundingClientRect = () => ({ left: 0, top: 0, width: 500, height: 400, right: 500, bottom: 400, x: 0, y: 0, toJSON: () => ({}) });
   layer.setPointerCapture = () => {};
@@ -22,20 +22,20 @@ function setup(panMode = false) {
 }
 
 describe("ZoneDrawLayer", () => {
-  it("draws a cube in the room's proportions, in metres", () => {
+  it("draws a cube as a square, in metres", () => {
     const { layer, onDraw } = setup();
     fireEvent.pointerDown(layer, { button: 0, clientX: 100, clientY: 100, pointerId: 1 });
     fireEvent.pointerMove(layer, { clientX: 250, clientY: 300, pointerId: 1 });
     fireEvent.pointerUp(layer, { clientX: 300, clientY: 300, pointerId: 1 });
-    // 2 m of 5 and 2 m of 4: the depth's half the room sets the cube, 2.5 × 2 m.
-    expect(onDraw).toHaveBeenCalledWith({ x0: 1, y0: 1, x1: 3.5, y1: 3 });
+    expect(onDraw).toHaveBeenCalledWith({ x0: 1, y0: 1, x1: 3, y1: 3 });
   });
 
   it("drops the default size on a click", () => {
     const { layer, onDraw } = setup();
     fireEvent.pointerDown(layer, { button: 0, clientX: 250, clientY: 200, pointerId: 1 });
     fireEvent.pointerUp(layer, { clientX: 250, clientY: 200, pointerId: 1 });
-    expect(onDraw).toHaveBeenCalledWith({ x0: 1.25, y0: 1, x1: 3.75, y1: 3 });
+    // Half the tallest cube, 1.25 m, centred on the click.
+    expect(onDraw).toHaveBeenCalledWith({ x0: 1.875, y0: 1.375, x1: 3.125, y1: 2.625 });
   });
 
   it("leaves a press with space held to the canvas, which pans", () => {

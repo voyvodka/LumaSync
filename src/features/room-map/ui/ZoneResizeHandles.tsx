@@ -11,6 +11,7 @@ export function ZoneResizeHandles({
   zone,
   widthM,
   depthM,
+  heightM,
   pxPerMeter,
   zoom,
   panMode,
@@ -19,6 +20,7 @@ export function ZoneResizeHandles({
   zone: HueZone;
   widthM: number;
   depthM: number;
+  heightM: number;
   pxPerMeter: number;
   zoom: number;
   panMode: boolean;
@@ -73,7 +75,7 @@ export function ZoneResizeHandles({
       if (!moved && !pastSlop(e.clientX, e.clientY, mv.clientX, mv.clientY)) return;
       moved = true;
       const scale = ppm * zoom;
-      next = resizeZoneRect(start, handle, (mv.clientX - e.clientX) / scale, (mv.clientY - e.clientY) / scale, widthM, depthM);
+      next = resizeZoneRect(start, handle, (mv.clientX - e.clientX) / scale, (mv.clientY - e.clientY) / scale, widthM, depthM, heightM);
       paint();
     };
     const stop = () => {
@@ -92,7 +94,7 @@ export function ZoneResizeHandles({
     };
     const up = () => {
       stop();
-      if (moved) onResize(zone.id, rectToZone(next, widthM, depthM));
+      if (moved) onResize(zone.id, rectToZone(next, widthM, depthM, heightM));
     };
     const cancel = () => {
       stop();

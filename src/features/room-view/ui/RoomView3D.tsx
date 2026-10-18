@@ -668,9 +668,10 @@ function openRoomView(
             const dims = builtConfig.dimensions;
             const [dx, dy] = [at.x - zoneDrag.from.x, at.y - zoneDrag.from.y];
             if (zoneDrag.handle) {
-              zoneDrag.rect = resizeZoneRect(zoneDrag.start, zoneDrag.handle, dx, dy, dims.widthMeters, dims.depthMeters);
-              const size = (r: ZoneRect) => rectToZone(r, dims.widthMeters, dims.depthMeters).scale;
-              zoneDrag.centerZ = bottomKeptCenterZ({ centerZ: zoneDrag.origin.centerZ, scaleX: size(zoneDrag.origin.rect) }, size(zoneDrag.rect));
+              zoneDrag.rect = resizeZoneRect(zoneDrag.start, zoneDrag.handle, dx, dy, dims.widthMeters, dims.depthMeters, dims.heightMeters);
+              const edge = (r: ZoneRect) => rectToZone(r, dims.widthMeters, dims.depthMeters, dims.heightMeters).edge;
+              const origin = { centerZ: zoneDrag.origin.centerZ, scaleZ: edge(zoneDrag.origin.rect) / dims.heightMeters };
+              zoneDrag.centerZ = bottomKeptCenterZ(origin, edge(zoneDrag.rect), dims);
             } else {
               zoneDrag.rect = moveZoneRect(zoneDrag.start, dx, dy, dims);
             }
@@ -714,7 +715,7 @@ function openRoomView(
       upright.constant = -upright.normal.dot(gripPoint);
       if (!ray.intersectPlane(upright, onUpright)) return false;
       if (z.grip === null) z.grip = onUpright.y - hueToMetres(z.centerZ, heightMeters);
-      const s = (z.rect.x1 - z.rect.x0) / widthMeters;
+      const s = Math.min(1, (z.rect.x1 - z.rect.x0) / heightMeters);
       z.centerZ = clamp(((onUpright.y - z.grip) / heightMeters) * 2 - 1, s - 1, 1 - s);
       return true;
     };

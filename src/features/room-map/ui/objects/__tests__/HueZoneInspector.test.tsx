@@ -1,7 +1,7 @@
 /**
- * HueZoneInspector — a zone is a cube in Hue units: one size as a share of the room, its sides in
- * metres beside it, and its centre's height. The size is capped by the headroom Rust leaves a zone
- * near a wall. Its colour is one of the palette's six, and its lights join and leave from their chips.
+ * HueZoneInspector — a zone is a cube in metres: one edge and its centre's height. The edge is capped
+ * by the ceiling and by the headroom Rust leaves a zone near a wall. Its colour is one of the
+ * palette's six, and its lights join and leave from their chips.
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -27,9 +27,9 @@ const BASE_ZONE: HueZone = {
   centerX: 0,
   centerY: 0,
   centerZ: 0,
-  // Half the room: 2.5 m wide, 2.0 m deep and 1.25 m high in a 5 × 4 × 2.5 m room.
-  scaleX: 0.5,
-  scaleY: 0.5,
+  // A 1.25 m cube in a 5 × 4 × 2.5 m room.
+  scaleX: 0.25,
+  scaleY: 0.3125,
   scaleZ: 0.5,
   channelIndices: [],
   borderColor: "var(--lm-zone-1)",
@@ -83,12 +83,11 @@ function commit(input: HTMLInputElement, value: string) {
 }
 
 describe("HueZoneInspector — size and height", () => {
-  it("shows its size as a share of the room with its sides in metres, and writes it to all three axes", () => {
+  it("shows its edge in metres and writes it over each side of the room", () => {
     const { onUpdate, size } = renderZone();
-    expect(size.value).toBe("50");
-    expect(screen.getByText('roomMap:inspector.zoneSizeReadout {"width":"2.50","depth":"2.00","height":"1.25"}')).toBeInTheDocument();
-    commit(size, "30");
-    expect(onUpdate).toHaveBeenLastCalledWith({ centerX: 0, centerY: 0, centerZ: 0, scaleX: 0.3, scaleY: 0.3, scaleZ: 0.3 });
+    expect(size.value).toBe("1.25");
+    commit(size, "0.75");
+    expect(onUpdate).toHaveBeenLastCalledWith({ centerX: 0, centerY: 0, centerZ: 0, scaleX: 0.15, scaleY: 0.1875, scaleZ: 0.3 });
   });
 
   it("shows its centre's height in metres and moves it between the floor and the ceiling", () => {
@@ -111,22 +110,22 @@ describe("HueZoneInspector — size and height", () => {
 // by the room alone let a wall-side zone grow past that, and the refusal was
 // invisible because nothing read `status.code`.
 describe("HueZoneInspector — headroom at the wall", () => {
-  const NEAR_WALL: HueZone = { ...BASE_ZONE, centerX: 0.7, centerY: 0, scaleX: 0.2, scaleY: 0.2, scaleZ: 0.2 };
+  const NEAR_WALL: HueZone = { ...BASE_ZONE, centerX: 0.7, centerY: 0, scaleX: 0.2, scaleY: 0.25, scaleZ: 0.4 };
 
-  it("caps its size at the centre's remaining headroom, not the room's", () => {
-    // centerX 0.7 leaves a scale of at most 0.3.
+  it("caps its edge at the centre's remaining headroom, not the room's", () => {
+    // centerX 0.7 leaves a scale of at most 0.3 of the 5 m width: 1.5 m.
     const { onUpdate, size } = renderZone({ zone: NEAR_WALL });
-    expect(size).toHaveAttribute("aria-valuemax", "30");
-    commit(size, "30");
+    expect(size).toHaveAttribute("aria-valuemax", "1.5");
+    commit(size, "1.5");
     const patch = onUpdate.mock.calls[0]![0];
     expect(Math.abs(NEAR_WALL.centerX) + patch.scaleX!).toBeLessThanOrEqual(1 + 1e-9);
   });
 
-  it("reaches the whole room from its middle and goes no further", () => {
+  it("reaches the ceiling from the middle and goes no further", () => {
     const { onUpdate, size } = renderZone();
-    commit(size, "120");
+    commit(size, "3");
     expect(onUpdate).not.toHaveBeenCalled();
-    commit(size, "100");
+    commit(size, "2.5");
     expect(onUpdate.mock.calls[0]![0].scaleZ).toBeCloseTo(1, 5);
   });
 });

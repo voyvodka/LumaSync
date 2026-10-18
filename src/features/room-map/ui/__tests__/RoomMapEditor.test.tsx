@@ -5,6 +5,11 @@ import type React from "react";
 import { render, act, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
+import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
+
+import { resolveHueChannelWorld } from "../../model/hueChannelPosition";
+import { isCubeZone, zoneEdge } from "../../model/zoneCube";
+
 import { __resetEditStage } from "../RoomMapEditor";
 import { __resetRoomViewFailure, RoomMapSurface, type RoomMapSurfaceProps } from "../RoomMapSurface";
 
@@ -641,6 +646,28 @@ describe("RoomMapEditor — resizing the room", () => {
     // Channels are fractions of the room and follow it with no write; adding
     // the metre shift once pushed x from 0.5 to 1.5, outside [-1, 1].
     expect(patch).not.toHaveProperty("hueChannels");
+  });
+
+  it("keeps a Hue zone a cube of its edge in the grown room, its light where the bridge has it", async () => {
+    // A 2 m cube in a 5 × 4 × 2.5 m room, its light half way to its east side.
+    const zone = { id: "z", name: "Sofa", entertainmentAreaId: "a", centerX: 0, centerY: 0, centerZ: 0, scaleX: 0.4, scaleY: 0.5, scaleZ: 0.8, channelIndices: [0] };
+    persistState.configOverride = {
+      dimensions: { widthMeters: 5, depthMeters: 4, heightMeters: 2.5 },
+      zones: [zone],
+      hueChannels: [{ channelIndex: 0, x: 0.2, y: 0, z: 0, zoneId: "z", zoneRelativePosition: { x: 0.5, y: 0, z: 0 } }],
+    };
+    const view = await act(async () => render(<RoomMapEditor />));
+
+    await act(async () => {
+      view.getByTestId("grow-room").click();
+    });
+
+    const calls = persistState.apply.mock.calls;
+    const patch = calls[calls.length - 1]?.[0] as { zones: HueZone[]; hueChannels: HueChannelPlacement[] };
+    const grown = { widthMeters: 7, depthMeters: 6, heightMeters: 2.5 };
+    expect(isCubeZone(patch.zones[0]!, grown)).toBe(true);
+    expect(zoneEdge(patch.zones[0]!, grown)).toBeCloseTo(2);
+    expect(resolveHueChannelWorld(patch.hueChannels[0]!, patch.zones).x).toBeCloseTo(0.2);
   });
 });
 
