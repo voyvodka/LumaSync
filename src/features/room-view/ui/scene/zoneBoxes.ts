@@ -61,6 +61,13 @@ function offWalls(centre: number, size: number, room: number): [number, number] 
   return [(lo + hi) / 2, Math.max(hi - lo, 0.01)];
 }
 
+// The same fight with the floor: a cube standing on it drew its bottom face in the planks' plane.
+function offFloor(centre: number, size: number): [number, number] {
+  const lo = Math.max(centre - size / 2, FLOOR_LIFT);
+  const hi = Math.max(centre + size / 2, lo + 0.01);
+  return [(lo + hi) / 2, hi - lo];
+}
+
 export interface ZoneBoxes {
   group: Group;
   /** True when what is shown changed. */
@@ -172,7 +179,7 @@ export function buildZoneBoxes(zones: readonly HueZone[], dims: RoomDimensions):
     const [z, d] = offWalls(centre.z, size.z, dims.depthMeters);
     const h = Math.max(size.y, 0.01);
     const wallH = Math.min(h, WALL_M);
-    const bottom = Math.max(centre.y - h / 2, 0);
+    const bottom = Math.max(centre.y - h / 2, FLOOR_LIFT);
     const tint = { color: colour, transparent: true, depthWrite: false, toneMapped: false, vertexColors: true };
     const wall = new Mesh(fadingWall(w, d, wallH), new MeshBasicMaterial({ ...tint, side: BackSide, opacity: WALL_OPACITY }));
     const posts = new LineSegments(cornerPosts(w, d, wallH), new LineBasicMaterial({ ...tint, opacity: POST_OPACITY }));
@@ -283,8 +290,9 @@ export function buildZoneBoxes(zones: readonly HueZone[], dims: RoomDimensions):
       const centreY = hueToMetres(centerZ ?? zone.centerZ, dims.heightMeters);
       const [x, w] = offWalls((rect.x0 + rect.x1) / 2 - dims.widthMeters / 2, rect.x1 - rect.x0, dims.widthMeters);
       const [z, d] = offWalls((rect.y0 + rect.y1) / 2 - dims.depthMeters / 2, rect.y1 - rect.y0, dims.depthMeters);
-      ghost.scale.set(w, Math.max(height, 0.01), d);
-      ghost.position.set(x, centreY, z);
+      const [y, tall] = offFloor(centreY, height);
+      ghost.scale.set(w, tall, d);
+      ghost.position.set(x, y, z);
       ghost.visible = true;
       group.visible = true;
       return true;

@@ -107,6 +107,12 @@ describe("buildZoneBoxes", () => {
     expect(ghost!.position.toArray().map((v) => Number(v.toFixed(3)))).toEqual([-1.495, 1.25, -0.995]);
     boxes.hold("a", { x0: 0, y0: 0, x1: 2, y1: 2 }, 0.2);
     expect(ghost!.position.y).toBeCloseTo(1.5);
+    // Standing on the floor, its bottom face clears the planks rather than sharing their plane.
+    boxes.hold("a", { x0: 0, y0: 0, x1: 2, y1: 2 }, -0.2);
+    const bottom = ghost!.position.y - ghost!.scale.y / 2;
+    expect(bottom).toBeGreaterThan(0.004);
+    expect(bottom).toBeLessThan(0.01);
+    expect(ghost!.position.y + ghost!.scale.y / 2).toBeCloseTo(2);
     boxes.mark({ active: "a", held: "a", others: [] });
     expect(one.visible).toBe(false);
     expect(boxes.hold("a", null)).toBe(true);
@@ -120,6 +126,15 @@ describe("buildZoneBoxes", () => {
     const { wall, posts, foot } = parts(boxes, 0);
     expect([wall.position.y, posts.position.y]).toEqual([1.25, 1.25]);
     expect(foot.position.y).toBeLessThan(0.01);
+  });
+
+  it("stands a zone on the floor just clear of it", () => {
+    const boxes = buildZoneBoxes([{ ...zone("a"), centerZ: -0.5 }], dims);
+    boxes.mark({ active: "a", held: null, others: [] });
+    const { wall, posts } = parts(boxes, 0);
+    expect(wall.position.y).toBeGreaterThan(0.004);
+    expect(wall.position.y).toBeLessThan(0.01);
+    expect(posts.position.y).toBe(wall.position.y);
   });
 
   it("keeps a zone that fills the room a centimetre inside its walls", () => {
