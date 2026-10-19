@@ -86,7 +86,7 @@ export function buildSnapGuides(dims: RoomDimensions): SnapGuides3D {
         }
         tag.position.set(named.x, level + (tag.userData.lift as number), named.z);
       }
-      group.visible = guides.length > 0;
+      group.visible = guides.length > 0 || !!named;
     },
     setPixelsPerMetre(ppm) {
       if (ppm <= 0) return;

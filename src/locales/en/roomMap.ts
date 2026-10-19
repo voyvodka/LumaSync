@@ -430,6 +430,7 @@ export default {
   },
   alignGuide: {
     symmetric: "symmetric",
+    seat: "on top, {{metres}} m",
   },
   shortcuts: {
     title: "Keyboard shortcuts",

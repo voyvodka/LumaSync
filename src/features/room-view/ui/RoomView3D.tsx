@@ -1,13 +1,14 @@
 // Spike: the 3D room, measured in the real app before the room view is built for real. Draws only
 // on a change, and hands back everything — context included — on unmount. The rules it follows are
 // in docs/architecture/ui-and-shell.md, "Per-window bundles".
-import { hueToMetres } from "@/features/room-map/model/hueChannelPosition";
+import { hueToMetres, moveHueChannelToWorld, planMetresToHue } from "@/features/room-map/model/hueChannelPosition";
+import { lightHeightMetres, pieceUnder, seatMovedLight, SITTING_METRES } from "@/features/room-map/model/lightSeat";
 import type { ZoneMarks } from "@/features/room-map/model/zoneMarks";
-import { hueChannelObjectId } from "@/features/room-map/model/objectId";
+import { hueChannelObjectId, parseObjectId } from "@/features/room-map/model/objectId";
 import { bottomKeptCenterZ } from "@/features/room-map/model/zoneCube";
-import { computeSnap, getObjectRects, type ObjectRect, SNAP_ENGAGE_PX, SNAP_RELEASE_PX, type SnapHold, snapReach } from "@/features/room-map/model/snapGeometry";
+import { computeSnap, getObjectRects, type ObjectRect, SNAP_ENGAGE_PX, SNAP_RELEASE_PX, type SnapGuide, type SnapHold, snapReach } from "@/features/room-map/model/snapGeometry";
 import { rectToZone, resizeZoneRect, type ZoneHandle, type ZoneRect, zoneRect } from "@/features/room-map/model/zoneRect";
-import { type MutableRefObject, useEffect, useRef } from "react";
+import { type MutableRefObject, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   BoxGeometry,
@@ -159,8 +160,10 @@ const sameRoom = (a: RoomMapConfig, b: RoomMapConfig) => {
 export interface Snapping {
   on: boolean;
   symmetric: string;
+  /** A light's tag over the piece it will stand on, `top` metres high. */
+  seat: (top: number) => string;
 }
-const NO_SNAPPING: Snapping = { on: false, symmetric: "" };
+const NO_SNAPPING: Snapping = { on: false, symmetric: "", seat: () => "" };
 /** The frame of a piece being carried: the app's amber. */
 const CARRY_COLOUR = 0xffb020;
 const REFUSED_COLOUR = 0xff5a4f;
@@ -468,6 +471,9 @@ function openRoomView(
       foot: { w: number; d: number };
       guides: SnapGuides3D | null;
       hold: SnapHold;
+      /** A Hue light's stored height, and how far the piece under it will lift or lower it on landing. */
+      storedY: number | null;
+      seat: number;
     } | null = null;
     let zoneDrag: {
       id: string;
@@ -523,7 +529,7 @@ function openRoomView(
       if (!c.lifted) return;
       c.lifted.moveTo(c.ghost.position.x, c.ghost.position.z);
       c.lifted.turnTo((c.turn * Math.PI) / 180);
-      if (c.rises) c.lifted.reshape(1, 1, 0, c.rise);
+      if (c.rises) c.lifted.reshape(1, 1, 0, c.rise + c.seat);
       renderer.shadowMap.needsUpdate = shadows;
     };
     // While a piece of furniture is carried, the wheel or R turns it in 15° steps (⇧ the other way);
@@ -652,6 +658,8 @@ function openRoomView(
           foot: { w: hx * 2, d: hz * 2 },
           guides,
           hold: {},
+          storedY: item.kind === "light" && item.stored ? item.stored.y : null,
+          seat: 0,
         };
         orbit.enabled = false;
         if (move !== 0) cancelAnimationFrame(move);
@@ -720,7 +728,10 @@ function openRoomView(
           }
           carry.ghost.position.x = onFloor.x + carry.dx;
           carry.ghost.position.z = onFloor.z + carry.dz;
-          snapCarry(carry, event.altKey);
+          const snapped = snapCarry(carry, event.altKey);
+          const top = seatCarry(carry);
+          const tag = [snapped.mirror ? snapping().symmetric : null, top !== null ? snapping().seat(top) : null].filter(Boolean).join(" · ");
+          carry.guides?.show(snapped.guides, carry.kind === "light" ? carry.ghost.position.y : 0.01, tag ? { text: tag, x: carry.ghost.position.x, z: carry.ghost.position.z } : null);
         }
         if (!carry.tried) lift(carry);
         carry.moved = true;
@@ -759,14 +770,11 @@ function openRoomView(
       return ppm > 0 ? 1 / ppm : 0.01;
     };
     // Caught on what it lines up with, as the plan does: the same targets, reach and hold.
-    const snapCarry = (c: NonNullable<typeof carry>, free: boolean) => {
+    const snapCarry = (c: NonNullable<typeof carry>, free: boolean): { guides: SnapGuide[]; mirror: boolean } => {
       const cfg = builtConfig;
-      if (!cfg || !c.guides) return;
-      const settings = snapping();
-      if (free || !settings.on) {
+      if (!cfg || free || !snapping().on) {
         c.hold = {};
-        c.guides.show([], 0);
-        return;
+        return { guides: [], mirror: false };
       }
       const { widthMeters: w, depthMeters: d } = cfg.dimensions;
       const px = c.ghost.position.x + c.storedDx + w / 2;
@@ -786,12 +794,34 @@ function openRoomView(
       c.hold = c.kind === "tv" ? { ...(result.hold.x ? { x: result.hold.x } : {}) } : result.hold;
       if (result.snapX !== null) c.ghost.position.x += result.snapX - dragged.x;
       if (result.snapY !== null && c.kind !== "tv") c.ghost.position.z += result.snapY - dragged.y;
-      const mirror = guides.find((g) => g.kind === "mirror" && g.at !== undefined);
-      c.guides.show(
-        guides,
-        c.kind === "light" ? c.ghost.position.y : 0.01,
-        mirror ? { text: settings.symmetric, x: c.ghost.position.x, z: c.ghost.position.z } : null,
-      );
+      return { guides, mirror: guides.some((g) => g.kind === "mirror") };
+    };
+    // A Hue light lands on what is under it (`seatMovedLight`): the ghost stands at that height before
+    // the drop, so letting go never jumps. The top it will stand on, or null.
+    const seatCarry = (c: NonNullable<typeof carry>): number | null => {
+      const cfg = builtConfig;
+      const ref = parseObjectId(c.id);
+      const channel = cfg && ref?.kind === "hue" ? cfg.hueChannels.find((ch) => ch.channelIndex === ref.channelIndex) : undefined;
+      if (!cfg || !channel || c.storedY === null) return null;
+      const { widthMeters: w, depthMeters: d } = cfg.dimensions;
+      const px = c.ghost.position.x + c.storedDx + w / 2;
+      const py = c.ghost.position.z + c.storedDz + d / 2;
+      const p = planMetresToHue(px, py, w, d);
+      const moved = moveHueChannelToWorld(channel, cfg.zones, clamp(p.x, -1, 1), clamp(p.y, -1, 1));
+      const landed = seatMovedLight(channel, moved, cfg);
+      const height = landed === moved ? c.storedY : lightHeightMetres(landed, cfg);
+      c.seat = height - c.storedY;
+      standAt(c);
+      const under = pieceUnder(cfg, px, py);
+      return under && height - under.top <= SITTING_METRES ? under.top : null;
+    };
+    const standAt = (c: NonNullable<typeof carry>) => {
+      const y = c.fromY + c.rise + c.seat;
+      c.ghost.position.y = Math.max(y, 0.025);
+      if (!c.plumb) return;
+      c.plumb.group.position.y = -c.ghost.position.y;
+      c.plumb.setTop(y - c.halfY);
+      c.plumb.group.visible = c.rise !== 0 || y - c.halfY >= PLUMB_FROM;
     };
     // Up and down only, along the upright plane through the piece that faces the camera.
     const raise = (c: NonNullable<typeof carry>, ray: Ray) => {
@@ -806,13 +836,8 @@ function openRoomView(
       // A ceiling light's lit part is built at the ceiling, whatever its height says.
       const y = Math.min(Math.max(onUpright.y - c.grip, Math.min(c.halfY, c.fromY)), Math.max(ceiling - c.halfY, c.fromY));
       c.rise = y - c.fromY;
-      c.ghost.position.y = Math.max(y, 0.025);
       floor.constant = -y;
-      if (c.plumb) {
-        c.plumb.group.position.y = -c.ghost.position.y;
-        c.plumb.setTop(y - c.halfY);
-        c.plumb.group.visible = true;
-      }
+      standAt(c);
       return true;
     };
     // Lifted on the first move, not the press: a click on the selected piece leaves the scene as built.
@@ -1546,10 +1571,15 @@ export default function RoomView3D({
   zonesRef.current = zones;
   const moodRef = useRef(mood);
   moodRef.current = mood;
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const snapOn = usePreference("roomMapSnapToObjects");
   const snappingRef = useRef<Snapping>(NO_SNAPPING);
-  snappingRef.current = { on: snapOn, symmetric: t("roomMap:alignGuide.symmetric") };
+  const metres = useMemo(() => new Intl.NumberFormat(i18n.language, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), [i18n.language]);
+  snappingRef.current = {
+    on: snapOn,
+    symmetric: t("roomMap:alignGuide.symmetric"),
+    seat: (top) => t("roomMap:alignGuide.seat", { metres: metres.format(top) }),
+  };
 
   useEffect(() => {
     const host = hostRef.current;

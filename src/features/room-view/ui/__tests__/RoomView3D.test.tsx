@@ -2,6 +2,8 @@ import { act, cleanup, render } from "@testing-library/react";
 import { type Camera, type Mesh, type Object3D, Vector3 } from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { planMetresToHue } from "@/features/room-map/model/hueChannelPosition";
+import { pieceUnder } from "@/features/room-map/model/lightSeat";
 import { hueChannelObjectId } from "@/features/room-map/model/objectId";
 import type { ZoneMarks } from "@/features/room-map/model/zoneMarks";
 import type { ZoneRect } from "@/features/room-map/model/zoneRect";
@@ -887,6 +889,42 @@ describe("RoomView3D", () => {
       press("pointerup", at(4.97, 1.8, 0.2), true);
       expect(onMovePiece.mock.calls[0]![1]).toBeCloseTo(2.22, 1);
       expect(onMovePiece.mock.calls[0]![1]).toBeLessThan(2.24);
+    });
+  });
+
+  describe("a carried light", () => {
+    // A bulb on the floor 5 cm up, and a desk it is carried onto.
+    const desk = { id: "desk", type: "table" as const, variant: "desk", x: 1, y: 1, width: 1.2, height: 0.6 };
+    const dims = { widthMeters: 5.5, depthMeters: 3.5, heightMeters: 2.5 };
+    const bulb = { channelIndex: 0, ...planMetresToHue(3, 2.5, 5.5, 3.5), z: (0.05 / 2.5) * 2 - 1, zOrigin: "bridge" as const };
+    const config: RoomMapConfig = { ...DEFAULT_ROOM_MAP, dimensions: dims, furniture: [desk], tvAnchor: undefined, hueChannels: [bulb] };
+
+    afterEach(() => vi.restoreAllMocks());
+
+    it("stands on the desk it is carried over before it is let go, and is named standing there", async () => {
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 400, 400));
+      render(<RoomView3D config={config} label="Room" selectedId={hueChannelObjectId(0)} onPick={() => {}} onMovePiece={() => true} onFail={() => {}} />);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+      const canvas = gl.renderers[0]?.domElement as HTMLCanvasElement;
+      const camera = gl.orbits[0]!.object as unknown as Camera;
+      const scene = builds.scene!;
+      const lit = scene.getObjectsByProperty("type", "LineSegments").length;
+      const at = (x: number, y: number) => {
+        camera.updateMatrixWorld();
+        const p = new Vector3(x - 2.75, 0.05, y - 1.75).project(camera);
+        return { clientX: ((p.x + 1) / 2) * 400, clientY: ((1 - p.y) / 2) * 400, button: 0, pointerId: 1, bubbles: true };
+      };
+      canvas.dispatchEvent(new PointerEvent("pointerdown", at(3, 2.5)));
+      canvas.dispatchEvent(new PointerEvent("pointermove", at(2.5, 2)));
+      const ghost = scene.getObjectsByProperty("type", "LineSegments")[lit]!;
+      const floorY = ghost.position.y;
+      canvas.dispatchEvent(new PointerEvent("pointermove", at(1.6, 1.3)));
+      expect(ghost.position.y - floorY).toBeCloseTo(pieceUnder(config, 1.6, 1.3)!.top);
+      expect(scene.getObjectByName("snap-guides")?.visible).toBe(true);
+      canvas.dispatchEvent(new PointerEvent("pointermove", at(2.5, 2)));
+      expect(ghost.position.y).toBeCloseTo(floorY);
     });
   });
 });

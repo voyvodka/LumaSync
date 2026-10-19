@@ -1,13 +1,13 @@
 // A Hue light set down on the plan sits on what is there: moved onto a desk it stands on the desk,
 // moved off it, back on the floor. The 3D room draws a lamp on the piece under it; this keeps the
 // stored height, which the stream and room-aware sampling read, in step with it.
-import { classifyFurniture, type FurnitureModel, modelTop, surfaceTop } from "@/features/room-view/model/furnitureModel";
+import { classifyFurniture, type FurnitureModel, placedSurfaceTop } from "@/features/room-view/model/furnitureModel";
 import { type FurniturePlacement, type HueChannelPlacement, type RoomMapConfig, resolveFurnitureTop } from "@/shared/contracts/roomMap";
 
 import { hueToPlanMetres, resolveHueChannelWorld, resolveHueChannelWorldZ, setHueChannelWorldZ } from "./hueChannelPosition";
 
 /** How far above a top a light still counts as standing on it: a Play bar's middle, a Go's dome. */
-const SITTING_METRES = 0.15;
+export const SITTING_METRES = 0.15;
 /** A rug, a bed's frame edge: too low to stand a lamp on as a surface of its own. */
 const LOWEST_SEAT = 0.05;
 
@@ -27,8 +27,7 @@ export function pieceUnder(
   for (const item of config.furniture) {
     const model = models.get(item.id);
     if (!model) continue;
-    const stored = resolveFurnitureTop(item);
-    const top = surfaceTop(model) * (stored !== undefined ? stored / modelTop(model) : 1);
+    const top = placedSurfaceTop(model, resolveFurnitureTop(item));
     if (top < LOWEST_SEAT || (best && top <= best.top)) continue;
     const angle = ((item.rotation ?? 0) * Math.PI) / 180;
     const dx = x - (item.x + item.width / 2);

@@ -433,6 +433,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
   },
   alignGuide: {
     symmetric: "simetrik",
+    seat: "üstünde, {{metres}} m",
   },
   shortcuts: {
     title: "Klavye kısayolları",

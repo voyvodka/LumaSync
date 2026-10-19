@@ -424,6 +424,12 @@ export function modelTop(model: FurnitureModel): number {
   }
 }
 
+/** `surfaceTop` for a piece scaled to its stored height: the scene stands lamps on it and a moved light
+ *  is seated on it, so both must read the same number. */
+export function placedSurfaceTop(model: FurnitureModel, storedTop: number | undefined): number {
+  return surfaceTop(model) * (storedTop !== undefined ? storedTop / modelTop(model) : 1);
+}
+
 /** The height of the surface a piece offers on top, for what stands on it. */
 export function surfaceTop(model: FurnitureModel): number {
   switch (model.kind) {

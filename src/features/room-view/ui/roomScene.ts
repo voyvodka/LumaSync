@@ -52,7 +52,7 @@ import type { PickLeg, Pickable } from "../model/picking";
 import { nearestWallFacing, type OutlineEdge, roomEdges } from "../model/roomOutline";
 import { hueChannelScenePoint, roomToScene, type ScenePoint, tvMountHeight } from "../model/roomSpace";
 import { contactShadow, floorParts, roomLights, WALL_THICKNESS, wallFootShade, wallGeometry } from "./scene/environment";
-import { classifyFurniture, contactShade, modelTop, surfaceTop } from "../model/furnitureModel";
+import { classifyFurniture, contactShade, modelTop, placedSurfaceTop } from "../model/furnitureModel";
 import { type LampFamily, ONE_SIDED } from "../model/lampFamily";
 import { DUSK_AT, type MoodLevels, paletteColour, pastDusk } from "../model/roomMood";
 import { furnitureParts } from "./scene/furniture";
@@ -266,7 +266,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     shadowOwners.push(id);
     const storedTop = resolveFurnitureTop(item);
     const scale = storedTop !== undefined ? storedTop / modelTop(model) : 1;
-    const top = surfaceTop(model) * scale;
+    const top = placedSurfaceTop(model, storedTop);
     const height = Math.max(modelTop(model) * scale, 0.02);
     pickables.push({
       id,
