@@ -7,8 +7,13 @@ import { OVERLAY } from "./bloom";
 import { pillTexture } from "./pill";
 import { SELECTION_COLOUR } from "./selection";
 
-const TAG_PX = 18;
-const TAG_GAP_PX = 8;
+const TAG_PX = 22;
+const TAG_GAP_PX = 12;
+/** Past the piece and its target at each end, so the line reads as joining them. */
+const OVERRUN_M = 0.25;
+/** The plan's dash, 4 on and 3 off, in screen pixels at any zoom. */
+const DASH_PX = 4;
+const GAP_PX = 3;
 /** One per axis, and the mirror's line with the level it sets. */
 const LINES = 4;
 
@@ -34,7 +39,7 @@ export function buildSnapGuides(dims: RoomDimensions): SnapGuides3D {
     geometry.setAttribute("position", new Float32BufferAttribute(new Float32Array(6), 3));
     const line = new Line(
       geometry,
-      new LineDashedMaterial({ color: SELECTION_COLOUR, dashSize: 0.08, gapSize: 0.06, transparent: true, opacity: 0.85, depthTest: false, depthWrite: false, toneMapped: false }),
+      new LineDashedMaterial({ color: SELECTION_COLOUR, dashSize: 0.04, gapSize: 0.03, transparent: true, opacity: 0.7, depthTest: false, depthWrite: false, toneMapped: false }),
     );
     line.renderOrder = 12;
     line.visible = false;
@@ -63,14 +68,16 @@ export function buildSnapGuides(dims: RoomDimensions): SnapGuides3D {
         if (!guide) return;
         const at = line.geometry.getAttribute("position") as Float32BufferAttribute;
         // Plan metres to the scene: x from the left wall, the plan's y toward the room from the screen wall.
+        const length = guide.axis === "x" ? d : w;
+        const [from, to] = guide.span ? [Math.max(guide.span[0] - OVERRUN_M, 0), Math.min(guide.span[1] + OVERRUN_M, length)] : [0, length];
         if (guide.axis === "x") {
           const x = guide.position - w / 2;
-          at.setXYZ(0, x, level, -d / 2);
-          at.setXYZ(1, x, level, d / 2);
+          at.setXYZ(0, x, level, from - d / 2);
+          at.setXYZ(1, x, level, to - d / 2);
         } else {
           const z = guide.position - d / 2;
-          at.setXYZ(0, -w / 2, level, z);
-          at.setXYZ(1, w / 2, level, z);
+          at.setXYZ(0, from - w / 2, level, z);
+          at.setXYZ(1, to - w / 2, level, z);
         }
         at.needsUpdate = true;
         line.geometry.computeBoundingSphere();
@@ -91,6 +98,10 @@ export function buildSnapGuides(dims: RoomDimensions): SnapGuides3D {
       if (ppm <= 0) return;
       const lift = tag.userData.lift as number | undefined;
       metresPerPx = 1 / ppm;
+      for (const line of lines) {
+        line.material.dashSize = DASH_PX * metresPerPx;
+        line.material.gapSize = GAP_PX * metresPerPx;
+      }
       if (tagText) {
         const before = lift ?? 0;
         sizeTag();

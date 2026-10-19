@@ -431,7 +431,7 @@ export default {
   },
   alignGuide: {
     symmetric: "symmetric",
-    seat: "on top, {{metres}} m",
+    seat: "stands at {{metres}} m",
   },
   shortcuts: {
     title: "Keyboard shortcuts",

@@ -24,6 +24,8 @@ export interface SnapGuide {
   kind?: SnapGuideKind;
   /** Where along the line its label sits: the mirror's line is named level with the light. */
   at?: number;
+  /** How far along the line the dragged piece and its target reach, so a guide can stop there. */
+  span?: [number, number];
 }
 
 export interface SnapResult {
@@ -154,6 +156,8 @@ function pickAxis(axis: "x" | "y", dragging: ObjectRect, others: readonly Object
   const lo = (r: ObjectRect) => (axis === "x" ? r.x : r.y);
   const size = (r: ObjectRect) => (axis === "x" ? r.w : r.h);
   const at = (r: ObjectRect, role: Role) => lo(r) + (role === "start" ? 0 : role === "end" ? size(r) : size(r) / 2);
+  const across = (r: ObjectRect): [number, number] => (axis === "x" ? [r.y, r.y + r.h] : [r.x, r.x + r.w]);
+  const mineAcross = across(dragging);
   let best: AxisPick | null = null;
   let kept: AxisPick | null = null;
   for (const other of others) {
@@ -165,7 +169,10 @@ function pickAxis(axis: "x" | "y", dragging: ObjectRect, others: readonly Object
       const otherVal = at(target, theirs);
       const diff = Math.abs(dragVal - otherVal);
       const key = `${other.id}:${mine}:${theirs}`;
-      const guide: SnapGuide = { axis, position: otherVal, kind: guideKind(other, theirs) };
+      // A wall runs the room's length; its guide is only as long as the piece against it.
+      const theirsAcross = other.axis ? mineAcross : across(target);
+      const span: [number, number] = [Math.min(mineAcross[0], theirsAcross[0]), Math.max(mineAcross[1], theirsAcross[1])];
+      const guide: SnapGuide = { axis, position: otherVal, kind: guideKind(other, theirs), span };
       if (key === held && diff < release) kept = { key, diff, delta: otherVal - dragVal, guides: [guide] };
       if (diff < (best?.diff ?? threshold)) best = { key, diff, delta: otherVal - dragVal, guides: [guide] };
       else if (best && diff === best.diff && !best.guides.some((g) => g.position === otherVal)) best.guides.push(guide);
@@ -206,8 +213,8 @@ export function computeSnap(
       snapX: dragging.x + dx,
       snapY: dragging.y + dy,
       guides: [
-        { axis: "x", position: mirror.mirror!, kind: "mirror", at: mirror.y },
-        { axis: "y", position: mirror.y, kind: "line" },
+        { axis: "x", position: mirror.mirror!, kind: "mirror", at: mirror.y, span: [mirror.y, mirror.y] },
+        { axis: "y", position: mirror.y, kind: "line", span: [Math.min(mirror.x, 2 * mirror.mirror! - mirror.x), Math.max(mirror.x, 2 * mirror.mirror! - mirror.x)] },
       ],
       hold: { mirror: mirror.id },
     };

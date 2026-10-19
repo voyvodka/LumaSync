@@ -102,7 +102,7 @@ describe("computeSnap", () => {
 
     expect(result.snapX).toBeCloseTo(1.05);
     expect(result.snapY).toBeNull();
-    expect(result.guides).toEqual([{ axis: "x", position: 1.05, kind: "edge" }]);
+    expect(result.guides).toEqual([expect.objectContaining({ axis: "x", position: 1.05, kind: "edge" })]);
   });
 
   it("aligns the dragged left edge to another object's right edge", () => {
@@ -113,7 +113,7 @@ describe("computeSnap", () => {
     );
 
     expect(result.snapX).toBeCloseTo(0.97);
-    expect(result.guides).toContainEqual({ axis: "x", position: 0.97, kind: "edge" });
+    expect(result.guides).toContainEqual(expect.objectContaining({ axis: "x", position: 0.97, kind: "edge" }));
   });
 
   it("aligns centres on both axes at once", () => {
@@ -142,7 +142,7 @@ describe("computeSnap", () => {
 
     expect(result.snapX).toBeCloseTo(1.01);
     expect(result.guides.filter((g) => g.axis === "x")).toEqual([
-      { axis: "x", position: 1.01, kind: "edge" },
+      expect.objectContaining({ axis: "x", position: 1.01, kind: "edge" }),
     ]);
   });
 
@@ -154,8 +154,8 @@ describe("computeSnap", () => {
     );
 
     expect(result.guides).toEqual([
-      { axis: "x", position: 1.02, kind: "edge" },
-      { axis: "y", position: 1.02, kind: "edge" },
+      expect.objectContaining({ axis: "x", position: 1.02, kind: "edge" }),
+      expect.objectContaining({ axis: "y", position: 1.02, kind: "edge" }),
     ]);
   });
 
@@ -173,7 +173,7 @@ describe("computeSnap", () => {
     const result = computeSnap({ id: "d", x: 2.97, y: 9, w: 1, h: 1 }, [origin], SNAP_THRESHOLD_M);
 
     expect(result.snapX).toBeCloseTo(3);
-    expect(result.guides).toContainEqual({ axis: "x", position: 3, kind: "centre" });
+    expect(result.guides).toContainEqual(expect.objectContaining({ axis: "x", position: 3, kind: "centre" }));
   });
 });
 
@@ -198,7 +198,7 @@ describe("computeSnap — a turned piece", () => {
     // Its covered left edge is at 1.7 (middle 2, half of 0.6 across); the stored rect's is at 1.
     const result = computeSnap({ id: "d", x: 1.72, y: 9, w: 0.5, h: 0.5 }, [desk], 0.05);
     expect(result.snapX).toBeCloseTo(1.7);
-    expect(result.guides).toContainEqual({ axis: "x", position: 1.7, kind: "edge" });
+    expect(result.guides).toContainEqual(expect.objectContaining({ axis: "x", position: 1.7, kind: "edge" }));
   });
 
   it("aligns a dragged quarter-turned piece by the box it covers, and gives back its stored corner", () => {
@@ -244,7 +244,16 @@ describe("getObjectRects — walls and the screen's mirror", () => {
     const config = configWith({ dimensions: { widthMeters: 4, depthMeters: 3, heightMeters: 2.5 }, furniture: [], tvAnchor: undefined });
     const result = computeSnap({ id: "furniture-a", x: 2.97, y: 1.2, w: 1, h: 0.5 }, getObjectRects(config, "furniture-a"), 0.05);
     expect(result.snapX).toBeCloseTo(3);
-    expect(result.guides).toContainEqual({ axis: "x", position: 4, kind: "wall" });
+    expect(result.guides).toContainEqual(expect.objectContaining({ axis: "x", position: 4, kind: "wall" }));
+  });
+
+  // A guide drawn across the whole room said nothing of what it lined up with.
+  it("reaches only from the dragged piece to its target, and along a wall only as far as the piece", () => {
+    const toBox = computeSnap({ id: "d", x: 1.02, y: 3, w: 1, h: 0.5 }, [{ id: "o", x: 1, y: 0.5, w: 1, h: 1 }], 0.05);
+    expect(toBox.guides).toContainEqual(expect.objectContaining({ axis: "x", position: 1, span: [0.5, 3.5] }));
+    const config = configWith({ dimensions: { widthMeters: 4, depthMeters: 3, heightMeters: 2.5 }, furniture: [], tvAnchor: undefined });
+    const toWall = computeSnap({ id: "furniture-a", x: 2.97, y: 1.2, w: 1, h: 0.5 }, getObjectRects(config, "furniture-a"), 0.05);
+    expect(toWall.guides).toContainEqual(expect.objectContaining({ kind: "wall", span: [1.2, 1.7] }));
   });
 
   it("puts a light where its pair's mirror across the screen's middle stands, on both axes at once", () => {
@@ -259,7 +268,7 @@ describe("getObjectRects — walls and the screen's mirror", () => {
     const result = computeSnap({ id: "hue-1", x: 2.83, y: 0.77, w: 0, h: 0 }, getObjectRects(config, "hue-1"), 0.05);
     expect(result.snapX).toBeCloseTo(2.8);
     expect(result.snapY).toBeCloseTo(0.8);
-    expect(result.guides).toContainEqual({ axis: "x", position: 2, kind: "mirror", at: 0.8 });
+    expect(result.guides).toContainEqual(expect.objectContaining({ axis: "x", position: 2, kind: "mirror", at: 0.8 }));
     expect(result.hold).toEqual({ mirror: "hue-0~mirror" });
   });
 });

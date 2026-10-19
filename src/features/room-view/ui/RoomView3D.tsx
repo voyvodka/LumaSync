@@ -159,7 +159,7 @@ const sameRoom = (a: RoomMapConfig, b: RoomMapConfig) => {
 export interface Snapping {
   on: boolean;
   symmetric: string;
-  seat: (top: number) => string;
+  seat: (metres: number) => string;
 }
 const NO_SNAPPING: Snapping = { on: false, symmetric: "", seat: () => "" };
 /** The frame of a piece being carried: the app's amber. */
@@ -621,6 +621,8 @@ function openRoomView(
         );
         ghost.position.set(item.centre.x, Math.max(item.centre.y, 0.025), item.centre.z);
         ghost.rotation.y = -item.angle;
+        // Over the guides, which draw through the room: the line ran straight into a light's small box.
+        ghost.renderOrder = 14;
         ghost.visible = false;
         const rises = item.rises === true;
         const plumb =
@@ -793,7 +795,7 @@ function openRoomView(
       return { guides, mirror: guides.some((g) => g.kind === "mirror") };
     };
     // A Hue light lands on what is under it (`seatMovedLight`): the ghost stands at that height before
-    // the drop, so letting go never jumps. The top it will stand on, or null.
+    // the drop, so letting go never jumps. The height it lands at when it stands on a piece, or null.
     const seatCarry = (c: NonNullable<typeof carry>): number | null => {
       const cfg = builtConfig;
       const ref = parseObjectId(c.id);
@@ -809,7 +811,7 @@ function openRoomView(
       c.seat = height - c.storedY;
       standAt(c);
       const under = pieceUnder(cfg, px, py);
-      return under && height - under.top <= SITTING_METRES ? under.top : null;
+      return under && height - under.top <= SITTING_METRES ? height : null;
     };
     const standAt = (c: NonNullable<typeof carry>) => {
       const y = c.fromY + c.rise + c.seat;
@@ -1574,7 +1576,7 @@ export default function RoomView3D({
   snappingRef.current = {
     on: snapOn,
     symmetric: t("roomMap:alignGuide.symmetric"),
-    seat: (top) => t("roomMap:alignGuide.seat", { metres: metres.format(top) }),
+    seat: (height) => t("roomMap:alignGuide.seat", { metres: metres.format(height) }),
   };
 
   useEffect(() => {
