@@ -727,8 +727,8 @@ Showroom fell from about 60 ms of main-thread work to about 16 ms.
   thumb in this window and is saved where it is let go (`previewPreference`), so a drag is one write.
 - **The camera travels to what is picked.** A light or the screen picked in the room or the dock
   draws the camera most of the way to it at once and then settles (760 ms, an exponential ease-out),
-  framed 1.55× closer with its middle 70% of the way from the room's centre to the light, so the
-  light sits in its corner of the room rather than alone. Clearing the pick travels back to where the
+  framed 1.55× closer with the light at the middle of the part the dock leaves free. Aiming 70% of
+  the way from the room's centre instead centred the view on neither. Clearing the pick travels back to where the
   camera was; turning or zooming by hand in between (OrbitControls' `start`) forgets the way back, so
   a view the user set is never taken from them. A piece of furniture picked to be carried does not
   move the camera. Over a light or the screen the pointer shows a chip with its name and whether it

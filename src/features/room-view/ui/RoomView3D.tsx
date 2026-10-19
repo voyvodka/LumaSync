@@ -166,8 +166,6 @@ const easeOut = (t: number) => 1 - (1 - t) ** 3;
 const DOLLY_MS = 760;
 const easeOutExpo = (t: number) => (t >= 1 ? 1 : 1 - 2 ** (-10 * t));
 const DOLLY_ZOOM = 1.55;
-/** Short of the light itself, so it is framed in its corner with the room around it. */
-const DOLLY_REACH = 0.7;
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
 const POLAR = 0.8;
@@ -403,10 +401,8 @@ function openRoomView(
         return;
       }
       if (!home) home = { zoom: camera.zoom, target: orbit.target.clone(), position: camera.position.clone() };
-      const target = new Vector3(item.centre.x, Math.min(item.centre.y, room.target.y * 2) * 0.6, item.centre.z).lerp(
-        room.target,
-        1 - DOLLY_REACH,
-      );
+      // On the light itself: stopping short of it, toward the room's middle, centred the view on neither.
+      const target = new Vector3(item.centre.x, item.centre.y, item.centre.z);
       const position = camera.position.clone().add(target.clone().sub(orbit.target));
       const zoom = Math.min(Math.max(home.zoom * DOLLY_ZOOM, camera.zoom), orbit.maxZoom);
       moveCamera({ zoom, target, position }, DOLLY_MS, easeOutExpo);
