@@ -6,6 +6,7 @@ import {
   resolveLaunchLights,
   resolveNotificationsPreference,
   resolveRoomAmbient,
+  resolveRoomMapSnapToObjects,
   resolveUiZoom,
   ROOM_AMBIENT_DEFAULT,
 } from "../shell";
@@ -47,5 +48,11 @@ describe("frontend-only preferences", () => {
     expect(resolveRoomAmbient(-5)).toBe(0);
     expect(resolveRoomAmbient("80")).toBe(ROOM_AMBIENT_DEFAULT);
     expect(resolveRoomAmbient(Number.NaN)).toBe(ROOM_AMBIENT_DEFAULT);
+  });
+
+  it("snaps to objects unless it was turned off", () => {
+    expect(resolveRoomMapSnapToObjects(undefined)).toBe(true);
+    expect(resolveRoomMapSnapToObjects(false)).toBe(false);
+    expect(resolveRoomMapSnapToObjects("false")).toBe(true);
   });
 });
