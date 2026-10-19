@@ -19,4 +19,11 @@ describe("CarryHint", () => {
     rerender(<CarryHint hint={null} />);
     expect(shown()).toBeEmptyDOMElement();
   });
+
+  it("names the key that moves a piece without snapping, only while it snaps", () => {
+    const { rerender } = render(<CarryHint hint="turn" free />);
+    expect(shown()).toHaveTextContent("roomMap:carryHint.free");
+    rerender(<CarryHint hint="turn" />);
+    expect(shown()).not.toHaveTextContent("roomMap:carryHint.free");
+  });
 });

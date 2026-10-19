@@ -427,6 +427,7 @@ export default {
     letGo: "let go",
     draw: "Drag to draw a zone",
     cancel: "cancel",
+    free: "move freely",
   },
   alignGuide: {
     symmetric: "symmetric",

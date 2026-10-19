@@ -6,11 +6,10 @@ import { IconInfoAlt } from "@/shared/ui/icons";
 import { Popover } from "@/shared/ui/Popover/Popover";
 
 import styles from "./ShortcutsHelp.module.css";
-
-const IS_MAC = typeof navigator !== "undefined" && navigator.platform.includes("Mac");
+import { IS_MAC } from "./keyCaps";
 
 // The plan's own gestures, which the 3D stage's camera takes instead.
-const PLAN_ONLY = new Set(["panKeyboard", "pan", "addToSelection", "boxSelect", "freeDrag"]);
+const PLAN_ONLY = new Set(["panKeyboard", "pan", "addToSelection", "boxSelect"]);
 const ROOM_ONLY = new Set(["raise"]);
 
 /** The editor's keys, behind one button; in the 3D room, only those that work there. */

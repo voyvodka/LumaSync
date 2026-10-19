@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { useTranslation } from "react-i18next";
 
+import { usePreference } from "@/features/persistence/preferences";
 import { type FurnitureModel, modelTop } from "@/features/room-view/model/furnitureModel";
 import { hexCss } from "@/features/room-view/model/roomMood";
 import type { LampFamily } from "@/features/room-view/model/lampFamily";
@@ -92,6 +93,7 @@ import { ROOM_MAP_FIT_INSETS, ROOM_MAP_PREVIEW_INSETS } from "./dock/dockGeometr
 import type { InspectorActions } from "./dock/DockInspector";
 import { RoomDock } from "./dock/RoomDock";
 import { HueChannelOverlay } from "./HueChannelOverlay";
+import { IS_MAC } from "./keyCaps";
 import { FurnitureObject } from "./objects/FurnitureObject";
 import { TvAnchorObject } from "./objects/TvAnchorObject";
 import { UsbStripObject } from "./objects/UsbStripObject";
@@ -132,7 +134,6 @@ export function __resetEditStage(): void {
   lastStage = EDIT_STAGES.ROOM;
 }
 
-const IS_MAC = navigator.platform.includes("Mac");
 const BOX_MODEL: FurnitureModel = { kind: "box" };
 
 // Literal keys, not `\`…${code}\``, so the orphan ratchet can see each one.
@@ -209,6 +210,8 @@ export function RoomMapEditor({
     setStageSwitched(true);
   }, []);
   const inRoom = room3d && stage === EDIT_STAGES.ROOM;
+  const snapOn = usePreference("roomMapSnapToObjects");
+  const pieceHint = carryHint(docConfig, docSelectedId, { hueAreaId });
   // An image layer is drawn on the plan alone: a card for one opens the plan with it.
   const planFor = useCallback(
     (objectId: string | null) => {
@@ -1187,7 +1190,10 @@ export function RoomMapEditor({
           </RoomMapCanvas>
         )}
         {!inRoom && <PlanDropGhost ref={planGhostRef} />}
-        <CarryHint hint={inRoom ? (preview ? null : roomZones?.held ? "rise" : carryHint(docConfig, docSelectedId, { hueAreaId })) : drawingZone ? "draw" : null} />
+        <CarryHint
+          hint={inRoom ? (preview ? null : roomZones?.held ? "rise" : pieceHint) : drawingZone ? "draw" : null}
+          free={inRoom && !preview && !roomZones?.held && pieceHint !== null && snapOn}
+        />
         {hoveredName && (
           <HoverChip
             chipRef={hover.chipRef}

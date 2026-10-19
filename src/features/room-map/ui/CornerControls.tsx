@@ -8,13 +8,12 @@ import { IconRedo, IconUndo } from "@/shared/ui/icons";
 
 import type { RoomAwareStatus } from "../model/roomAware";
 import styles from "./CornerControls.module.css";
+import { IS_MAC } from "./keyCaps";
 import { RoomAwareIndicator } from "./RoomAwareIndicator";
 import { RoomDaylight } from "./RoomDaylight";
 import { ShortcutsHelp } from "./ShortcutsHelp";
 import { RoomLights } from "./view/RoomLights";
 import { ZoomControl } from "./ZoomControl";
-
-const IS_MAC = typeof navigator !== "undefined" && navigator.platform.includes("Mac");
 
 export interface CornerEditControls {
   canUndo: boolean;

@@ -17,7 +17,12 @@ describe("ShortcutsHelp", () => {
   it("names ⇧-drag for height in the 3D room, and the plan's own drags only on the plan", () => {
     const room = open(true);
     expect(room).toHaveTextContent("roomMap:shortcuts.raise");
-    expect(room).not.toHaveTextContent("roomMap:shortcuts.freeDrag");
+    expect(room).not.toHaveTextContent("roomMap:shortcuts.boxSelect");
+  });
+
+  // A carry in the room snaps as the plan's does, so ⌥ frees it there too.
+  it("names ⌥-drag in both", () => {
+    expect(open(true)).toHaveTextContent("roomMap:shortcuts.freeDrag");
   });
 
   it("leaves height out of the plan, which has none", () => {

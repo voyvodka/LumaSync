@@ -430,6 +430,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     letGo: "bırak",
     draw: "Sürükleyerek bölge çiz",
     cancel: "vazgeç",
+    free: "serbest taşı",
   },
   alignGuide: {
     symmetric: "simetrik",

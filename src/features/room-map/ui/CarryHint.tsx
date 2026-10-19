@@ -6,11 +6,13 @@ import { StateSwap } from "@/shared/ui/StateSwap/StateSwap";
 import type { CarryHint as Hint } from "../model/carryHint";
 import styles from "./CarryHint.module.css";
 import { DOCK_BOTTOM_PX, DOCK_HEIGHT_PX } from "./dock/dockGeometry";
+import { IS_MAC } from "./keyCaps";
 
 // Over the dock, by the card the keys act on, rather than under the top bar across the room.
 const SLOT = { "--carry-hint-bottom": `${DOCK_BOTTOM_PX + DOCK_HEIGHT_PX + 10}px` } as CSSProperties;
 
-export function CarryHint({ hint }: { hint: Hint | null }) {
+/** `free`: the carried piece snaps to what it lines up with, and ⌥ lets it move without. */
+export function CarryHint({ hint, free = false }: { hint: Hint | null; free?: boolean }) {
   const { t } = useTranslation();
   const key = (cap: string, label: string) => (
     <span className={styles.key}>
@@ -18,7 +20,12 @@ export function CarryHint({ hint }: { hint: Hint | null }) {
       {label}
     </span>
   );
-  const letGo = key(t("roomMap:shortcuts.keys.escape"), t("roomMap:carryHint.letGo"));
+  const letGo = (
+    <>
+      {free ? key(IS_MAC ? "⌥" : "Alt", t("roomMap:carryHint.free")) : null}
+      {key(t("roomMap:shortcuts.keys.escape"), t("roomMap:carryHint.letGo"))}
+    </>
+  );
   return (
     // aria-hidden: the shortcuts list names the same keys.
     <div className={styles.slot} style={SLOT} data-testid="carry-hint" data-hint={hint ?? undefined} aria-hidden="true">
