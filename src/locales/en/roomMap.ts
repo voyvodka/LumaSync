@@ -199,6 +199,7 @@ export default {
     },
   },
   settings: {
+    snapToObjects: "Snap to objects",
     showGrid: "Show grid",
     gridStrokeWidth: "Grid thickness",
     showHueZones: "Show Hue zones",
@@ -426,6 +427,9 @@ export default {
     letGo: "let go",
     draw: "Drag to draw a zone",
     cancel: "cancel",
+  },
+  alignGuide: {
+    symmetric: "symmetric",
   },
   shortcuts: {
     title: "Keyboard shortcuts",

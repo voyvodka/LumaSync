@@ -10,12 +10,10 @@ import { furnitureName } from "../../model/furnitureName";
 import { furnitureObjectId } from "../../model/objectId";
 import { clampInsideRoom, resizeFromHandle, snapToStep } from "../../model/pieceGeometry";
 import { markDragging, stillAClick, useEscapeCancels } from "./dragIntent";
-import type { SnapResult } from "../../state/useSnapGuides";
+import { SNAP_ENGAGE_PX } from "../../model/snapGeometry";
+import type { SnapDragExtra, SnapResult } from "../../state/useSnapGuides";
 
 const MIN_SIZE_PX = 24;
-/** A grid line or guide catches a dragged piece only this close, on screen; past it the piece moves
- *  freely. Snapping to every grid step made a drag jump half a metre at a time. */
-const SOFT_SNAP_PX = 10;
 /** Sizes land on 5 cm, whatever the grid. */
 const RESIZE_STEP_M = 0.05;
 
@@ -41,7 +39,7 @@ interface FurnitureObjectProps {
   /** `additive`: ⇧ was held, so the piece joins or leaves the selection. */
   onSelect: (id: string, additive?: boolean) => void;
   onChange: (updated: FurniturePlacement) => void;
-  onSnapDragMove?: (id: string, x: number, y: number, w: number, h: number) => SnapResult;
+  onSnapDragMove?: (id: string, x: number, y: number, w: number, h: number, extra?: SnapDragExtra) => SnapResult;
   onSnapDragEnd?: () => void;
 }
 
@@ -111,9 +109,10 @@ export const FurnitureObject = memo(function FurnitureObject({
       { x: d.startX + (clientX - d.startClientX) / ppm, y: d.startY + (clientY - d.startClientY) / ppm, w: local.w, h: local.h, r: local.r },
       room,
     );
-    const snap = onSnapDragMove?.(furnitureObjectId(placement.id), raw.x, raw.y, local.w, local.h) ?? null;
+    const snap = onSnapDragMove?.(furnitureObjectId(placement.id), raw.x, raw.y, local.w, local.h, { r: local.r, free }) ?? null;
     if (free) return raw;
-    const reach = SOFT_SNAP_PX / ppm;
+    // A grid line catches only as close as a guide does; snapping to every step jumped half a metre.
+    const reach = SNAP_ENGAGE_PX / ppm;
     const soft = (value: number) => {
       if (!snapEnabled || gridStepM <= 0) return value;
       const onLine = snapToStep(value, gridStepM);

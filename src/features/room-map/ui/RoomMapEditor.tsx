@@ -290,7 +290,6 @@ export function RoomMapEditor({
     [inRoom, preview, scopedConfig, areaZones, activeHueZoneId, selectedId, showHueZones],
   );
 
-  const { guides: snapGuides, dragging: pieceDragging, onDragMove: snapDragMove, onDragEnd: snapDragEnd } = useSnapGuides(scopedConfig);
   const furnitureModels = useFurnitureModels(config);
   // Drawn lowest first, as seen from above: a rug stays under the sofa on it, whatever was added last.
   const furnitureByHeight = useMemo(() => {
@@ -303,6 +302,7 @@ export function RoomMapEditor({
 
   const { setCanvasContainer, canvasSize, zoom, setZoom, panOffset, setPanOffset, spaceHeld, fitToView, handleArrowPan } =
     useRoomMapViewport(config.dimensions, preview ? ROOM_MAP_PREVIEW_INSETS : ROOM_MAP_FIT_INSETS);
+  const { guides: snapGuides, dragging: pieceDragging, onDragMove: snapDragMove, onDragEnd: snapDragEnd } = useSnapGuides(scopedConfig, 1 / (ROOM_MAP_PX_PER_METER * zoom));
   const stageRef = useRef<HTMLDivElement | null>(null);
   const stageNode = useCallback(
     (node: HTMLDivElement | null) => {
@@ -1183,7 +1183,7 @@ export function RoomMapEditor({
               />
             )}
 
-            <SnapGuideOverlay guides={snapGuides} pxPerMeter={pxPerMeter} canvasWidth={canvasSize.w} canvasHeight={canvasSize.h} />
+            <SnapGuideOverlay guides={snapGuides} pxPerMeter={pxPerMeter} canvasWidth={canvasSize.w} canvasHeight={canvasSize.h} zoom={zoom} />
           </RoomMapCanvas>
         )}
         {!inRoom && <PlanDropGhost ref={planGhostRef} />}

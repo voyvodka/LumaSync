@@ -615,7 +615,7 @@ describe("HueChannelOverlay — guides", () => {
     const { dot, onChange, onSnapDragEnd } = renderLight(onSnapDragMove);
     fireEvent.pointerDown(dot, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
     fireEvent.pointerMove(dot, { clientX: 90, clientY: 50, pointerId: 1 });
-    expect(onSnapDragMove).toHaveBeenLastCalledWith("hue-0", 2.9, 2.5, 0, 0);
+    expect(onSnapDragMove).toHaveBeenLastCalledWith("hue-0", 2.9, 2.5, 0, 0, { free: false });
     fireEvent.pointerUp(dot, { pointerId: 1 });
     // x held at 3 m of 4 → 0.5 in the cube; y follows the pointer, 0.5 m toward the back.
     expect(onChange.mock.calls[0]![0].x).toBeCloseTo(0.5);

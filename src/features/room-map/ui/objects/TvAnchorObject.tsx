@@ -4,7 +4,7 @@ import type { TvAnchorPlacement } from "@/shared/contracts/roomMap";
 import { ResizeHandle } from "./ResizeHandle";
 import { clampInsideRoom, type RoomBox } from "../../model/pieceGeometry";
 import { markDragging, stillAClick, useEscapeCancels } from "./dragIntent";
-import type { SnapResult } from "../../state/useSnapGuides";
+import type { SnapDragExtra, SnapResult } from "../../state/useSnapGuides";
 
 const MIN_SIZE_PX = 24;
 
@@ -20,7 +20,7 @@ interface TvAnchorObjectProps {
   room?: RoomBox;
   onSelect: () => void;
   onChange: (updated: TvAnchorPlacement) => void;
-  onSnapDragMove?: (id: string, x: number, y: number, w: number, h: number) => SnapResult;
+  onSnapDragMove?: (id: string, x: number, y: number, w: number, h: number, extra?: SnapDragExtra) => SnapResult;
   onSnapDragEnd?: () => void;
   /** In a selection with others: dragging the TV moves them all, and they follow it meanwhile. */
   grouped?: boolean;
@@ -116,7 +116,7 @@ export const TvAnchorObject = memo(function TvAnchorObject({
     setLocalY(newY);
     onGroupDragMove?.(newX - dragRef.current.startX, newY - dragRef.current.startY);
     if (onSnapDragMove) {
-      snapResultRef.current = onSnapDragMove("tv", newX, newY, localW, localH);
+      snapResultRef.current = onSnapDragMove("tv", newX, newY, localW, localH, { free: e.altKey });
     }
   };
 

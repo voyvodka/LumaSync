@@ -6,6 +6,7 @@ import { clamp } from "@/shared/lib/math";
 import { hueChannelObjectId } from "../model/objectId";
 import { findBoundZone, hueToMetres, hueToPlanMetres, planMetresToHue, resolveHueChannelWorld } from "../model/hueChannelPosition";
 import type { SnapResult } from "../model/snapGeometry";
+import type { SnapDragExtra } from "../state/useSnapGuides";
 import type { CubeFootprint } from "../model/zoneRect";
 import { hueChannelDotText, hueChannelName } from "../model/hueChannelLabel";
 import { fanOutStacked } from "../model/stackFan";
@@ -49,7 +50,7 @@ interface HueChannelOverlayProps {
   /** The lights' colour and level while they are on, as the room view draws them; absent while off. */
   glow?: { colour: string; level: number } | null;
   /** Lines a dragged light up with the room's pieces and its other lights; ⌥ drags it free. */
-  onSnapDragMove?: (id: string, x: number, y: number, w: number, h: number) => SnapResult;
+  onSnapDragMove?: (id: string, x: number, y: number, w: number, h: number, extra?: SnapDragExtra) => SnapResult;
   onSnapDragEnd?: () => void;
   /** Called once when a grip on the active zone's bounds is let go. */
   onHueZoneResize?: (zoneId: string, footprint: CubeFootprint) => void;
@@ -349,7 +350,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
     const snapMove = snapRef.current.move;
     if (snapMove) {
       const at = hueToPlanMetres({ x: newX, y: newY }, widthRef.current, depthRef.current);
-      const snap = snapMove(hueChannelObjectId(dr.channelIndex), at.x, at.y, 0, 0);
+      const snap = snapMove(hueChannelObjectId(dr.channelIndex), at.x, at.y, 0, 0, { free: e.altKey });
       if (!e.altKey && (snap.snapX !== null || snap.snapY !== null)) {
         const held = planMetresToHue(snap.snapX ?? at.x, snap.snapY ?? at.y, widthRef.current, depthRef.current);
         const inside = boundZone ? clampWithinZone(held.x, held.y, boundZone) : null;

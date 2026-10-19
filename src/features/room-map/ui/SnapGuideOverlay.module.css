@@ -1,0 +1,23 @@
+@layer components {
+  /* Kept one size on screen at any zoom, over the guide just above where the light stands. */
+  .tag {
+    position: absolute;
+    z-index: 50;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: rgb(14 14 20 / 86%);
+    box-shadow: inset 0 0 0 1px var(--lm-amber);
+    color: var(--lm-amber);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.3;
+    white-space: nowrap;
+    pointer-events: none;
+    transform: translate(-50%, calc(-100% - 10px * var(--snap-tag-scale, 1))) scale(var(--snap-tag-scale, 1));
+    transform-origin: 50% 100%;
+  }
+
+  @media (forced-colors: active) {
+    .tag { background: Canvas; color: CanvasText; box-shadow: inset 0 0 0 1px CanvasText; }
+  }
+}

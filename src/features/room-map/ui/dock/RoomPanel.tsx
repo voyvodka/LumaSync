@@ -1,6 +1,7 @@
 import { type MouseEvent, type RefObject, useId } from "react";
 import { useTranslation } from "react-i18next";
 
+import { setPreference, usePreference } from "@/features/persistence/preferences";
 import { floorSwatchCss, wallSwatchCss } from "@/features/room-view/model/surfaceColours";
 import {
   DEFAULT_ROOM_DIMENSIONS,
@@ -71,6 +72,7 @@ export function RoomPanel({
   onAddImage?: (event: MouseEvent<HTMLButtonElement>) => void;
 }) {
   const { t } = useTranslation();
+  const snapToObjects = usePreference("roomMapSnapToObjects");
   const hintId = useId();
   const { dimensions, onDimensionsChange, minimumSize } = settings;
 
@@ -120,6 +122,16 @@ export function RoomPanel({
         <FieldHint>{settings.shape.kind === "rect" ? t("roomMap:shape.planHintRect") : t("roomMap:shape.planHintShaped")}</FieldHint>
 
         {settings.surfaces ? <SurfaceFields {...settings.surfaces} /> : null}
+
+        {/* Both stages carry pieces, so it stays out of the plan's switches below. */}
+        <label className={styles.toggle}>
+          <span>{t("roomMap:settings.snapToObjects")}</span>
+          <Toggle
+            checked={snapToObjects}
+            onChange={(on) => void setPreference("roomMapSnapToObjects", on)}
+            label={t("roomMap:settings.snapToObjects")}
+          />
+        </label>
 
         {settings.onPlan !== false && (
           <>

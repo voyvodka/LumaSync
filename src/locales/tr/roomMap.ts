@@ -202,6 +202,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     },
   },
   settings: {
+    snapToObjects: "Nesnelere yapış",
     showGrid: "Izgarayı göster",
     gridStrokeWidth: "Izgara kalınlığı",
     showHueZones: "Hue bölgelerini göster",
@@ -429,6 +430,9 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     letGo: "bırak",
     draw: "Sürükleyerek bölge çiz",
     cancel: "vazgeç",
+  },
+  alignGuide: {
+    symmetric: "simetrik",
   },
   shortcuts: {
     title: "Klavye kısayolları",

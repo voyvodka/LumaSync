@@ -162,3 +162,15 @@ describe("RoomPanel — on the 3D stage", () => {
     expect(screen.getByLabelText("roomMap:settings.showGrid")).toBeInTheDocument();
   });
 });
+
+describe("RoomPanel — snapping to objects", () => {
+  it("offers it on both stages, on by default, and saves a change", async () => {
+    renderPanel(settings({ onPlan: false }));
+    const toggle = screen.getByRole("switch", { name: "roomMap:settings.snapToObjects" });
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+    saves.length = 0;
+    fireEvent.click(toggle);
+    await Promise.resolve();
+    expect(saves).toContainEqual({ roomMapSnapToObjects: false });
+  });
+});

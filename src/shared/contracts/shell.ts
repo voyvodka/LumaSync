@@ -450,6 +450,12 @@ export interface ShellState {
   /** What a screen's diagonal is shown in. The frontend's alone; absent ⇒ inches. Additive. */
   roomMapScreenUnit?: RoomMapScreenUnit;
   /**
+   * Room settings "Snap to objects": a carried piece or light catches on other pieces, walls and its
+   * pair in the 3D room and the plan. Not the grid's snap, which stays with "Show grid". The
+   * frontend's alone; absent ⇒ on. Additive, no schema bump.
+   */
+  roomMapSnapToObjects?: boolean;
+  /**
    * Settings → General "Close button". `"quit"` makes the main window's close
    * quit the app through the normal shutdown; anything else hides to the tray.
    * Read by Rust on each close. Additive, no schema bump.
@@ -642,6 +648,10 @@ export type RoomMapScreenUnit = "inch" | "cm";
 
 export function resolveRoomMapScreenUnit(stored: unknown): RoomMapScreenUnit {
   return stored === "cm" ? "cm" : "inch";
+}
+
+export function resolveRoomMapSnapToObjects(stored: unknown): boolean {
+  return stored !== false;
 }
 
 /** Whole percents, for the same JSON round trip `resolveUiZoom` keeps to. */
