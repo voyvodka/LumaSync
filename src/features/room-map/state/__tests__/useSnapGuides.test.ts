@@ -68,33 +68,44 @@ describe("useSnapGuides — only a change in the guides re-renders", () => {
 
 describe("useSnapGuides — reach and switches", () => {
   // The TV's left edge is at x = 1.
+  const mover = (metresPerPx: number) => {
+    const hook = renderHook(() => useSnapGuides(CONFIG, metresPerPx));
+    const move = (x: number, extra?: { free?: boolean }) => {
+      let snap!: ReturnType<typeof hook.result.current.onDragMove>;
+      act(() => {
+        snap = hook.result.current.onDragMove(SOFA, x, 3.1, 1, 0.5, extra);
+      });
+      return snap;
+    };
+    return { ...hook, move };
+  };
+
   it("catches within its screen radius at the zoom given, and lets go only further out", () => {
     // 100 px a metre: catches within 10 cm, holds to 14 cm.
-    const { result } = renderHook(() => useSnapGuides(CONFIG, 1 / 100));
-    expect(result.current.onDragMove(SOFA, 1.12, 3.1, 1, 0.5).snapX).toBeNull();
-    expect(result.current.onDragMove(SOFA, 1.08, 3.1, 1, 0.5).snapX).toBeCloseTo(1);
-    expect(result.current.onDragMove(SOFA, 1.12, 3.1, 1, 0.5).snapX).toBeCloseTo(1);
-    expect(result.current.onDragMove(SOFA, 1.15, 3.1, 1, 0.5).snapX).toBeNull();
+    const { move } = mover(1 / 100);
+    expect(move(1.12).snapX).toBeNull();
+    expect(move(1.08).snapX).toBeCloseTo(1);
+    expect(move(1.12).snapX).toBeCloseTo(1);
+    expect(move(1.15).snapX).toBeNull();
   });
 
   it("never reaches past 15 cm, however small the room is fitted", () => {
-    const { result } = renderHook(() => useSnapGuides(CONFIG, 1 / 20));
-    expect(result.current.onDragMove(SOFA, 1.13, 3.1, 1, 0.5).snapX).toBeNull();
+    expect(mover(1 / 20).move(1.13).snapX).toBeNull();
   });
 
   it("starts a drag afresh: a hold from the last one does not carry over", () => {
-    const { result } = renderHook(() => useSnapGuides(CONFIG, 1 / 100));
-    result.current.onDragMove(SOFA, 1.05, 3.1, 1, 0.5);
+    const { result, move } = mover(1 / 100);
+    move(1.05);
     act(() => result.current.onDragEnd());
-    expect(result.current.onDragMove(SOFA, 1.12, 3.1, 1, 0.5).snapX).toBeNull();
+    expect(move(1.12).snapX).toBeNull();
   });
 
   it("moves free while ⌥ is held, and when snapping to objects is off", () => {
-    const { result, rerender } = renderHook(() => useSnapGuides(CONFIG, 1 / 100));
-    expect(result.current.onDragMove(SOFA, 1.05, 3.1, 1, 0.5, { free: true })).toEqual({ snapX: null, snapY: null, guides: [] });
+    const { rerender, move } = mover(1 / 100);
+    expect(move(1.05, { free: true })).toEqual({ snapX: null, snapY: null, guides: [] });
     snapPreference.on = false;
     rerender();
-    expect(result.current.onDragMove(SOFA, 1.05, 3.1, 1, 0.5).snapX).toBeNull();
+    expect(move(1.05).snapX).toBeNull();
     snapPreference.on = true;
   });
 });
