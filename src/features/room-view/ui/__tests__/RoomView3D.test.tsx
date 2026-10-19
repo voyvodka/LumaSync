@@ -894,7 +894,7 @@ describe("RoomView3D", () => {
 
   describe("a carried light", () => {
     // A bulb on the floor 5 cm up, and a desk it is carried onto.
-    const desk = { id: "desk", type: "table" as const, variant: "desk", x: 1, y: 1, width: 1.2, height: 0.6 };
+    const desk = { id: "desk", type: "table" as const, variant: "desk" as const, x: 1, y: 1, width: 1.2, height: 0.6 };
     const dims = { widthMeters: 5.5, depthMeters: 3.5, heightMeters: 2.5 };
     const bulb = { channelIndex: 0, ...planMetresToHue(3, 2.5, 5.5, 3.5), z: (0.05 / 2.5) * 2 - 1, zOrigin: "bridge" as const };
     const config: RoomMapConfig = { ...DEFAULT_ROOM_MAP, dimensions: dims, furniture: [desk], tvAnchor: undefined, hueChannels: [bulb] };
