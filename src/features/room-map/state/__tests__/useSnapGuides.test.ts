@@ -1,5 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_ROOM_MAP, type RoomMapConfig } from "@/shared/contracts/roomMap";
 import { furnitureObjectId } from "../../model/objectId";
@@ -16,6 +16,9 @@ const SOFA = furnitureObjectId("sofa");
 
 const snapPreference = vi.hoisted(() => ({ on: true }));
 vi.mock("@/features/persistence/preferences", () => ({ usePreference: () => snapPreference.on }));
+afterEach(() => {
+  snapPreference.on = true;
+});
 
 /** The guides live in the editor, so a render of this hook is a render of it. */
 function renderCounted() {
@@ -106,6 +109,5 @@ describe("useSnapGuides — reach and switches", () => {
     snapPreference.on = false;
     rerender();
     expect(move(1.05).snapX).toBeNull();
-    snapPreference.on = true;
   });
 });
