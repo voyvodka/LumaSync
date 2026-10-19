@@ -62,7 +62,7 @@ import { type Liftable, type LiftedPiece, liftPiece, spanHider, spansOf } from "
 import { beamGeometry, columnGeometry, decorLights, doorGaps, gappedWallGeometry, openingsTop, planStructures, thresholds } from "./scene/structures";
 import { buildScreen } from "./scene/screen";
 import { buildSelectionMark } from "./scene/selection";
-import { buildZoneBoxes } from "./scene/zoneBoxes";
+import { buildZoneBoxes, type ZoneLight } from "./scene/zoneBoxes";
 import { type LedTape, ledTape, TAPE_DEPTH as STRIP_DEPTH, TAPE_WIDTH as STRIP_WIDTH } from "./scene/ledTape";
 
 const STRIP_GLOW = 0xffc46b;
@@ -534,7 +534,13 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
 
   const mark = buildSelectionMark(pickables);
   scene.add(mark.group);
-  const zoneBoxes = buildZoneBoxes(config.zones, dims);
+  const zoneLights: ZoneLight[] = config.hueChannels.flatMap((channel) => {
+    const pick = pickables.find((p) => p.id === hueChannelObjectId(channel.channelIndex));
+    if (!channel.zoneId || !channel.zoneRelativePosition || !pick?.stored) return [];
+    const { centre, stored } = pick;
+    return [{ zoneId: channel.zoneId, rel: channel.zoneRelativePosition, half: pick.half, offset: { x: centre.x - stored.x, y: centre.y - stored.y, z: centre.z - stored.z } }];
+  });
+  const zoneBoxes = buildZoneBoxes(config.zones, dims, { lights: zoneLights, outline: corners });
   scene.add(zoneBoxes.group);
 
   // A room with no lamps keeps its evening light whatever the mode; the Ambient light moves it

@@ -10,8 +10,8 @@ const zone = (id: string): HueZone => ({ id, name: `Zone ${id}`, entertainmentAr
 
 const parts = (boxes: ReturnType<typeof buildZoneBoxes>, i: number) => {
   const one = boxes.group.children[i]!;
-  const [wall, posts, foot, label] = one.children as [Mesh, LineSegments, Mesh, Mesh];
-  return { one, wall, posts, foot, label };
+  const [fill, edges, foot, label] = one.children as [Mesh, LineSegments, Mesh, Mesh];
+  return { one, fill, edges, foot, label };
 };
 
 describe("buildZoneBoxes", () => {
@@ -21,7 +21,7 @@ describe("buildZoneBoxes", () => {
     expect(boxes.mark(null)).toBe(false);
   });
 
-  it("draws the zone being edited named and walled, the others as their footprint alone", () => {
+  it("draws the zone being edited named and as its cube, the others as their footprint alone", () => {
     const boxes = buildZoneBoxes([zone("a"), zone("b"), zone("c")], dims);
     expect(boxes.mark({ active: "a", held: null, others: ["b"] })).toBe(true);
     const a = parts(boxes, 0);
@@ -30,7 +30,7 @@ describe("buildZoneBoxes", () => {
     expect([a.one.visible, b.one.visible, parts(boxes, 2).one.visible]).toEqual([true, true, false]);
     expect(a.label.visible).toBe(true);
     expect(b.label.visible).toBe(false);
-    expect([a.wall.visible, a.posts.visible, b.wall.visible, b.posts.visible]).toEqual([true, true, false, false]);
+    expect([a.fill.visible, a.edges.visible, b.fill.visible, b.edges.visible]).toEqual([true, true, false, false]);
     expect((a.foot.material as MeshBasicMaterial).opacity).toBeGreaterThan((b.foot.material as MeshBasicMaterial).opacity);
     expect(boxes.mark({ active: "a", held: null, others: ["b"] })).toBe(false);
   });
@@ -43,13 +43,13 @@ describe("buildZoneBoxes", () => {
     const near = label.scale.y;
     boxes.setPixelsPerMetre(50);
     expect(label.scale.y).toBeCloseTo(near * 2);
-    // Looking down from the +x +z corner: the far corner (-x, -z) of the 2.5 × 2 m wall is highest.
+    // Looking down from the +x +z corner: the far corner (-x, -z) of the 2.5 × 2 m cube's top is highest.
     const q = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -0.6);
     q.premultiply(new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI / 4));
     boxes.orient(q);
     expect(label.position.x).toBeLessThan(-1.2);
     expect(label.position.z).toBeLessThan(-0.9);
-    expect(label.position.y).toBeGreaterThan(0.45);
+    expect(label.position.y).toBeGreaterThan(1.875);
   });
 
   it("takes a lower corner when the highest would put the name past the view's top", () => {
@@ -57,7 +57,7 @@ describe("buildZoneBoxes", () => {
     boxes.mark({ active: "a", held: null, others: [] });
     boxes.setPixelsPerMetre(100);
     const { one, label } = parts(boxes, 0);
-    // Close in, so the wall's far top corner is above the frame.
+    // Close in, so the cube's far top corner is above the frame.
     const camera = new OrthographicCamera(-1.5, 1.5, 1, -1, 0.1, 50);
     camera.position.set(6, 6, 6);
     camera.lookAt(0, 0.6, 0);
@@ -69,15 +69,49 @@ describe("buildZoneBoxes", () => {
     expect(label.position.clone().add(one.position).project(camera).y).toBeLessThan(0.72);
   });
 
-  it("rises a short wall that fades upward, whatever height the zone spans", () => {
+  it("draws its whole cube, all four sides, from its base to its top", () => {
     const boxes = buildZoneBoxes([zone("a")], dims);
-    const { one, wall } = parts(boxes, 0);
+    const { one, fill, edges } = parts(boxes, 0);
     expect(one.position.y).toBe(0);
-    wall.geometry.computeBoundingBox();
-    expect(wall.geometry.boundingBox!.max.y).toBeCloseTo(0.45);
-    const alpha = wall.geometry.getAttribute("color");
-    const pos = wall.geometry.getAttribute("position");
-    for (let i = 0; i < pos.count; i++) expect(alpha.getW(i)).toBe(pos.getY(i) === 0 ? 1 : 0);
+    edges.geometry.computeBoundingBox();
+    // A 1.25 m cube standing 0.625 m up, round a centre 1.25 m up.
+    expect(edges.position.y).toBeCloseTo(1.25);
+    expect(edges.geometry.boundingBox!.max.y).toBeCloseTo(0.625);
+    expect(edges.geometry.boundingBox!.max.x).toBeCloseTo(1.25);
+    expect(fill.position.y).toBe(edges.position.y);
+  });
+
+  it("reads its base and top by its outermost upright edge on screen, with the ceiling over it", () => {
+    const boxes = buildZoneBoxes([zone("a")], dims);
+    const reach = boxes.group.getObjectByName("zone-reach")!;
+    const ceiling = boxes.group.getObjectByName("zone-ceiling")!;
+    boxes.mark({ active: "a", held: null, others: [] });
+    expect([reach.visible, ceiling.visible]).toEqual([true, true]);
+    boxes.setPixelsPerMetre(100);
+    // Seen from the +x +z corner, the screen's right runs toward +x -z: the (+x, -z) edge is outermost.
+    const q = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -0.6);
+    q.premultiply(new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI / 4));
+    boxes.orient(q);
+    const [base, top] = reach.children;
+    expect(base!.position.x).toBeGreaterThan(1.25);
+    expect(base!.position.z).toBeLessThan(-1);
+    expect(base!.position.y).toBeCloseTo(0.625);
+    expect(top!.position.y).toBeCloseTo(1.875);
+    boxes.mark(null);
+    expect([reach.visible, ceiling.visible]).toEqual([false, false]);
+  });
+
+  it("carries the held zone's lights with it, where each sits in the cube", () => {
+    const light = { zoneId: "a", rel: { x: 0.5, y: 0.5, z: -1 }, half: [0.1, 0.1, 0.1] as const, offset: { x: 0, y: 0.05, z: 0 } };
+    const boxes = buildZoneBoxes([zone("a"), zone("b")], dims, { lights: [light, { ...light, zoneId: "b" }] });
+    const [mine, other] = boxes.group.children.filter((c) => c.name === "zone-light");
+    boxes.mark({ active: "a", held: "a", others: [] });
+    boxes.hold("a", { x0: 0, y0: 0, x1: 2, y1: 2 }, 0);
+    expect([mine!.visible, other!.visible]).toEqual([true, false]);
+    // The 2 m cube's centre is 1.5 m from the left wall, 1 m from the screen's, 1.25 m up.
+    expect(mine!.position.toArray().map((v) => Number(v.toFixed(3)))).toEqual([-1, 0.3, -1.5]);
+    boxes.hold("a", null);
+    expect(mine!.visible).toBe(false);
   });
 
   it("offers its grips only on the zone that is itself the selection", () => {
@@ -94,7 +128,7 @@ describe("buildZoneBoxes", () => {
     expect(grips.children[0]!.scale.x).toBeCloseTo(0.1);
   });
 
-  it("draws a held zone as its whole box where it is being put, and puts the low wall back after", () => {
+  it("draws a held zone as its box where it is being put, and puts it back after", () => {
     const boxes = buildZoneBoxes([zone("a")], dims);
     boxes.mark({ active: "a", held: "a", others: [] });
     const { one } = parts(boxes, 0);
@@ -119,21 +153,22 @@ describe("buildZoneBoxes", () => {
     expect(boxes.hold("a", null)).toBe(false);
   });
 
-  it("rests as a low wall rising from the cube's bottom, its footprint on the floor under it", () => {
+  it("rests raised where it is, its footprint on the floor under it", () => {
     const boxes = buildZoneBoxes([{ ...zone("a"), centerZ: 0.5 }], dims);
     boxes.mark({ active: "a", held: null, others: [] });
-    const { wall, posts, foot } = parts(boxes, 0);
-    expect([wall.position.y, posts.position.y]).toEqual([1.25, 1.25]);
+    const { edges, foot } = parts(boxes, 0);
+    expect(edges.position.y).toBeCloseTo(1.875);
     expect(foot.position.y).toBeLessThan(0.01);
   });
 
   it("stands a zone on the floor just clear of it", () => {
     const boxes = buildZoneBoxes([{ ...zone("a"), centerZ: -0.5 }], dims);
     boxes.mark({ active: "a", held: null, others: [] });
-    const { wall, posts } = parts(boxes, 0);
-    expect(wall.position.y).toBeGreaterThan(0.004);
-    expect(wall.position.y).toBeLessThan(0.01);
-    expect(posts.position.y).toBe(wall.position.y);
+    const { edges } = parts(boxes, 0);
+    edges.geometry.computeBoundingBox();
+    const bottom = edges.position.y + edges.geometry.boundingBox!.min.y;
+    expect(bottom).toBeGreaterThan(0.004);
+    expect(bottom).toBeLessThan(0.01);
   });
 
   it("keeps a zone that fills the room a centimetre inside its walls", () => {

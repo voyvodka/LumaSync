@@ -105,9 +105,13 @@ Delete, ⌘Z and the arrows work, and a selected piece or light is carried and t
 there that moved the sofa while turning the room was a layout change made by accident. What only the plan draws stays there — the
 walls' handles, a strip's ends and corners and image layers — so picking or adding an image opens the
 plan for it once the file dialog returns one, and going back to 3D closes that card. A Hue zone is
-drawn in 3D as well (`scene/zoneBoxes.ts`): the zone being edited, or else the selected light's, as a
-low wall in its colour that rises from the cube's bottom and fades upward, over a solid outline of its
-footprint on the floor below, named over its highest corner on screen (over the top's middle the name sat on the lamp inside), and with the zones
+drawn in 3D as well (`scene/zoneBoxes.ts`): the zone being edited, or else the selected light's, as
+its whole cube in its colour, every edge drawn and the sides barely filled, over a solid outline of its
+footprint on the floor below, named over its highest corner on screen (over the top's middle the name sat on the lamp inside). A
+low wall rising from the bottom kept the furniture readable but hid the near sides, and the cube's
+height could not be read. Its base and top read in metres by its outermost upright edge on screen,
+and the room's outline is dashed at the ceiling over it: the walls stand cut away at 70% of the
+ceiling, so a cube reaching the ceiling rose past them with nothing to say where it stopped. With the zones
 toggle the area's others faintly, as the plan draws them. So a zone picked or added stays in the 3D room,
 and its card stays open across a stage switch. The boxes are built with the scene and only shown or
 hidden after, so picking a zone rebuilds nothing. A drawn zone is picked in 3D under everything else:
@@ -117,8 +121,9 @@ and resized from eight grips only when it is itself the selection (`ZoneMarks.he
 shown for a selected light, whose drag carries the light. The grips keep it a cube and,
 sitting on the floor, the cube's bottom: it grows or shrinks from there rather than about its centre, and
 ⇧ while carrying raises or lowers it along the upright plane facing the camera, as a raised light
-rises, held between the floor and the ceiling. While held it is drawn as its whole cube; at rest the
-low wall keeps the furniture readable. Both stand a few millimetres off the floor, as the cube stands
+rises, held between the floor and the ceiling. While held its lights go with it, each as the box the
+carried light shows, where it sits in the cube; their lamps are merged into the room's meshes and
+move when the room is built again. The cube stands a few millimetres off the floor, as the cube stands
 a centimetre off the walls: flush, its bottom face fought the planks for the pixel. One write on
 release, through the plan's own zone handlers: a live write rebuilt the room on every move. The dock
 card's height is the base's height off the floor, since a centre's height named no place in the room,
