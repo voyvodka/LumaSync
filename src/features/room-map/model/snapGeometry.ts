@@ -24,7 +24,6 @@ export interface SnapGuide {
   kind?: SnapGuideKind;
   /** Where along the line its label sits: the mirror's line is named level with the light. */
   at?: number;
-  /** How far along the line the dragged piece and its target reach, so a guide can stop there. */
   span?: [number, number];
 }
 
