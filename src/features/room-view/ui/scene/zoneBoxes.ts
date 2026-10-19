@@ -35,7 +35,6 @@ import { floorBand } from "./selection";
 const LABEL_PX = 22;
 const LABEL_LIFT_PX = 12;
 const FLOOR_LIFT = 0.006;
-/** The base and top heights by the cube's edge: smaller than the name, which they sit under. */
 const TAG_PX = 18;
 const TAG_GAP_PX = 6;
 /** The far edges at the ceiling, and the near ones, which crossed the floor and its grips on screen. */
@@ -74,7 +73,6 @@ function offFloor(centre: number, size: number): [number, number] {
   return [(lo + hi) / 2, hi - lo];
 }
 
-/** A Hue light bound to a zone, where it sits in the zone's cube and the box it is picked by. */
 export interface ZoneLight {
   zoneId: string;
   rel: { x: number; y: number; z: number };
@@ -261,7 +259,6 @@ export function buildZoneBoxes(
   ghost.visible = false;
   group.add(ghost);
 
-  // Its base and top by the cube's outermost upright edge on screen, kept to one size like the name.
   const tags = (["base", "top"] as const).map(() => {
     const pill = pillTexture(TAG_PX, null, 600);
     const mesh = new Mesh(new PlaneGeometry(1, 1), new MeshBasicMaterial({ map: pill.texture, transparent: true, depthTest: false, depthWrite: false, toneMapped: false }));

@@ -23,7 +23,6 @@ export interface Beams {
   paint(lampColour: number | null, level: number, palette?: readonly number[]): void;
 }
 
-/** How far a ray from `at` along `aim` runs before it leaves the room's box. */
 function toRoomEdge(at: Vector3, aim: Vector3, room: { w: number; d: number; h: number }): number {
   const exit = (p: number, v: number, lo: number, hi: number) => (v > 1e-6 ? (hi - p) / v : v < -1e-6 ? (lo - p) / v : Infinity);
   return Math.min(exit(at.x, aim.x, -room.w / 2, room.w / 2), exit(at.y, aim.y, 0, room.h), exit(at.z, aim.z, -room.d / 2, room.d / 2));

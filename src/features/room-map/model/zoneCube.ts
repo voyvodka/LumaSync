@@ -57,7 +57,6 @@ export function maxZoneEdgeAt(zone: Pick<HueZone, "centerX" | "centerY">, d: Dim
   return clamp(Math.min(...(["X", "Y"] as const).map((a) => (1 - Math.abs(zone[`center${a}`])) * sideOf(a, d))), min, max);
 }
 
-/** How high its base stands off the floor, in metres. */
 export function zoneBase(zone: Pick<HueZone, "centerZ" | "scaleZ">, d: Dims): number {
   return ((zone.centerZ - Math.abs(zone.scaleZ) + 1) / 2) * d.heightMeters;
 }
