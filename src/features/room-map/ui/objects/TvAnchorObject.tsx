@@ -148,7 +148,7 @@ export const TvAnchorObject = memo(function TvAnchorObject({
     const snap = snapResultRef.current;
     snapResultRef.current = null;
     // Per axis: a guide wins where it caught, the grid holds the other.
-    const onGrid = snapEnabled && gridStepPx > 0;
+    const onGrid = snapEnabled && gridStepPx > 0 && !e.altKey;
     newX = snap?.snapX ?? (onGrid ? snapValue(newX, gridStepPx) : newX);
     newY = snap?.snapY ?? (onGrid ? snapValue(newY, gridStepPx) : newY);
     newX = Math.round(newX * 100) / 100;

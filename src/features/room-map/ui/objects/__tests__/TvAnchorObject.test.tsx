@@ -36,6 +36,14 @@ describe("TvAnchorObject", () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ x: 1.5, y: 0.5 }));
   });
 
+  it("lands where it is let go with ⌥ held, off the grid", () => {
+    const { onChange, root } = renderTv();
+    fireEvent.pointerDown(root, { clientX: 50, clientY: 50, pointerId: 1 });
+    fireEvent.pointerMove(root, { clientX: 70, clientY: 50, pointerId: 1, altKey: true });
+    fireEvent.pointerUp(root, { clientX: 70, clientY: 50, pointerId: 1, altKey: true });
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ x: 1.55, y: 0.3 }));
+  });
+
   describe("its corner handles", () => {
     const renderSelected = () => {
       const onChange = vi.fn<(updated: TvAnchorPlacement) => void>();
