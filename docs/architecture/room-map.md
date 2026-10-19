@@ -206,6 +206,34 @@ position (not where a stack fans it out to), then its zone's bounds clamp it; �
 a light takes the lights as targets: a sofa caught on every bulb would never sit where it was put.
 The guides read the shown area's lights, so another area's never pull one.
 
+**One snap model serves the plan and the 3D room, and it never pulls from far.** `computeSnap` in
+`snapGeometry.ts` works in plan metres; the plan feeds it a drag, the 3D carry its ghost converted to
+the plan. Reach is set on screen, not in metres: a target catches within `SNAP_ENGAGE_PX` (10 px) and,
+once caught, lets go only past `SNAP_RELEASE_PX` (14 px) — a `SnapHold` handed back on each move, so a
+drag neither chatters at the edge nor is tugged across the room. The plan converts with its zoom; the
+3D room with the floor's projected scale at the carried point. Either way a fitted-small room never
+reaches past 15 cm (`snapReach`). What each drag meets:
+
+- furniture and the TV by edge and middle; a piece turned a quarter by the box it covers, one turned
+  otherwise by its middle alone (its edges are off the axes);
+- the room's walls, flush, for a piece or the TV; a light hangs where it is put, so it meets none;
+- for a light, the other lights as points, and each one's mirror across the screen's middle line
+  (the screen always faces down the plan, so that line is `x = tv.x + tv.width / 2`). The mirror is
+  met on both axes at once, by distance, and outranks the per-axis targets — it is the pair being set
+  up; its guide is tagged "symmetric".
+
+⌥ held moves free for that drag (Figma and Blender suspend snapping with a held key the same way); "Snap to objects" in the room
+panel turns it off for good (`roomMapSnapToObjects`, absent ⇒ on). The plan's grid snap is separate: it
+follows "Show grid". In the 3D room the TV meets only side-to-side targets, because its scene box is the glass,
+not the footprint the plan stores, and the carry hint names ⌥ while snapping is on.
+
+**A carried light stands where it will land before it is let go.** The landing seats a Hue light on
+the piece under it (`seatMovedLight`), so the 3D ghost runs the same function on every move and rises
+or drops by the height it returns; a release never jumps. The tag names the top it will stand on.
+`placedSurfaceTop` is the one expression for a piece's top at its stored height: the scene stands
+lamps on it and the seat reads it, and two copies drifted would put the ghost and the landing at
+different heights.
+
 **Channel-to-zone assignment keeps three shapes in sync by hand.** One handler serves both ways a
 light changes zone — the zone picker in the light's inspector and the light chips in the zone's —
 because both have to write the same three fields: the channel's `zoneId` (the join key), its
