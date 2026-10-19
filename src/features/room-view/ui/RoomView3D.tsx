@@ -471,6 +471,7 @@ function openRoomView(
       /** A Hue light's stored height, and how far the piece under it will lift or lower it on landing. */
       storedY: number | null;
       seat: number;
+      snapped: { guides: SnapGuide[]; mirror: boolean };
     } | null = null;
     let zoneDrag: {
       id: string;
@@ -531,13 +532,15 @@ function openRoomView(
     };
     // While a piece of furniture is carried, the wheel or R turns it in 15° steps (⇧ the other way);
     // the TV and the lights keep the axes they have.
-    const turnCarry = (by: number) => {
+    const turnCarry = (by: number, free: boolean) => {
       if (!carry || carry.kind !== "furniture") return;
       if (!carry.tried) lift(carry);
       carry.turn = (((carry.turn + by) % 360) + 360) % 360;
       carry.moved = true;
       carry.ghost.visible = true;
       carry.ghost.rotation.y = -(carry.angle + (carry.turn * Math.PI) / 180);
+      // A turned piece covers another box: what it was caught on no longer lines up.
+      placeCarry(carry, free);
       follow(carry);
       request();
     };
@@ -546,7 +549,7 @@ function openRoomView(
       (event) => {
         if (!carry) return;
         event.preventDefault();
-        turnCarry(event.deltaY > 0 ? 15 : -15);
+        turnCarry(event.deltaY > 0 ? 15 : -15, event.altKey);
       },
       { signal: listening.signal, passive: false },
     );
@@ -571,7 +574,7 @@ function openRoomView(
         if (!carry || (event.key !== "r" && event.key !== "R")) return;
         event.preventDefault();
         event.stopPropagation();
-        turnCarry(event.shiftKey ? -15 : 15);
+        turnCarry(event.shiftKey ? -15 : 15, event.altKey);
       },
       { signal: listening.signal, capture: true },
     );
@@ -659,6 +662,7 @@ function openRoomView(
           hold: {},
           storedY: item.kind === "light" && item.stored ? item.stored.y : null,
           seat: 0,
+          snapped: { guides: [], mirror: false },
         };
         orbit.enabled = false;
         if (move !== 0) cancelAnimationFrame(move);
@@ -718,6 +722,7 @@ function openRoomView(
         const ray = rayAt(event.clientX, event.clientY);
         if (carry.rises && event.shiftKey) {
           if (!raise(carry, ray)) return;
+          showCarry(carry);
         } else {
           if (!ray.intersectPlane(floor, onFloor)) return;
           if (carry.grip !== null) {
@@ -727,10 +732,7 @@ function openRoomView(
           }
           carry.ghost.position.x = onFloor.x + carry.dx;
           carry.ghost.position.z = onFloor.z + carry.dz;
-          const snapped = snapCarry(carry, event.altKey);
-          const top = seatCarry(carry);
-          const tag = [snapped.mirror ? snapping().symmetric : null, top !== null ? snapping().seat(top) : null].filter(Boolean).join(" · ");
-          carry.guides?.show(snapped.guides, carry.kind === "light" ? carry.ghost.position.y : 0.01, tag ? { text: tag, x: carry.ghost.position.x, z: carry.ghost.position.z } : null);
+          placeCarry(carry, event.altKey);
         }
         if (!carry.tried) lift(carry);
         carry.moved = true;
@@ -794,6 +796,15 @@ function openRoomView(
       if (result.snapY !== null && c.kind !== "tv") c.ghost.position.z += result.snapY - dragged.y;
       return { guides, mirror: guides.some((g) => g.kind === "mirror") };
     };
+    const placeCarry = (c: NonNullable<typeof carry>, free: boolean) => {
+      c.snapped = snapCarry(c, free);
+      showCarry(c);
+    };
+    const showCarry = (c: NonNullable<typeof carry>) => {
+      const landing = seatCarry(c);
+      const tag = [c.snapped.mirror ? snapping().symmetric : null, landing !== null ? snapping().seat(landing) : null].filter(Boolean).join(" · ");
+      c.guides?.show(c.snapped.guides, c.kind === "light" ? c.ghost.position.y : 0.01, tag ? { text: tag, x: c.ghost.position.x, z: c.ghost.position.z } : null);
+    };
     // A Hue light lands on what is under it (`seatMovedLight`): the ghost stands at that height before
     // the drop, so letting go never jumps. The height it lands at when it stands on a piece, or null.
     const seatCarry = (c: NonNullable<typeof carry>): number | null => {
@@ -811,7 +822,8 @@ function openRoomView(
       c.seat = height - c.storedY;
       standAt(c);
       const under = pieceUnder(cfg, px, py);
-      return under && height - under.top <= SITTING_METRES ? height : null;
+      const landing = height + c.rise;
+      return under && landing - under.top <= SITTING_METRES && landing >= under.top - 0.01 ? landing : null;
     };
     const standAt = (c: NonNullable<typeof carry>) => {
       const y = c.fromY + c.rise + c.seat;
@@ -828,13 +840,14 @@ function openRoomView(
       upright.normal.normalize();
       upright.constant = -upright.normal.dot(c.ghost.position);
       if (!ray.intersectPlane(upright, onUpright)) return false;
-      const centre = c.fromY + c.rise;
-      if (c.grip === null) c.grip = onUpright.y - centre;
+      // Measured from where the ghost stands, seat included, so a light lifted off a desk still stops at the ceiling.
+      const base = c.fromY + c.seat;
+      if (c.grip === null) c.grip = onUpright.y - (base + c.rise);
       const ceiling = shownConfig?.dimensions.heightMeters ?? Number.POSITIVE_INFINITY;
       // A ceiling light's lit part is built at the ceiling, whatever its height says.
-      const y = Math.min(Math.max(onUpright.y - c.grip, Math.min(c.halfY, c.fromY)), Math.max(ceiling - c.halfY, c.fromY));
-      c.rise = y - c.fromY;
-      floor.constant = -y;
+      const y = Math.min(Math.max(onUpright.y - c.grip, Math.min(c.halfY, base)), Math.max(ceiling - c.halfY, base));
+      c.rise = y - base;
+      floor.constant = -(c.fromY + c.rise);
       standAt(c);
       return true;
     };
