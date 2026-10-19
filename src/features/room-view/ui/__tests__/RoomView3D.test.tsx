@@ -842,5 +842,52 @@ describe("RoomView3D", () => {
       expect(onPick).toHaveBeenCalledWith(null);
     });
   });
+  describe("a carried piece", () => {
+    // A 1 × 0.6 m sofa in a 5.5 × 3.5 m room no other test opens, its right side 3 cm off the wall at 5.5.
+    const sofa = { id: "s", type: "sofa" as const, x: 2, y: 1.5, width: 1, height: 0.6 };
+    const config: RoomMapConfig = { ...DEFAULT_ROOM_MAP, dimensions: { widthMeters: 5.5, depthMeters: 3.5, heightMeters: 2.5 }, furniture: [sofa], tvAnchor: undefined, hueChannels: [] };
+
+    const open = async () => {
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 400, 400));
+      const onMovePiece = vi.fn<(id: string, x: number, z: number) => boolean>(() => true);
+      render(<RoomView3D config={config} label="Room" selectedId="furniture-s" onPick={() => {}} onMovePiece={onMovePiece} onFail={() => {}} />);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+      const canvas = gl.renderers[0]?.domElement as HTMLCanvasElement;
+      const camera = gl.orbits[0]!.object as unknown as Camera;
+      const at = (x: number, y: number, height: number) => {
+        camera.updateMatrixWorld();
+        const p = new Vector3(x - 2.75, height, y - 1.75).project(camera);
+        return { x: ((p.x + 1) / 2) * 400, y: ((1 - p.y) / 2) * 400 };
+      };
+      const press = (type: string, p: { x: number; y: number }, altKey = false) =>
+        canvas.dispatchEvent(new PointerEvent(type, { clientX: p.x, clientY: p.y, button: 0, pointerId: 1, bubbles: true, altKey }));
+      return { onMovePiece, at, press };
+    };
+
+    afterEach(() => vi.restoreAllMocks());
+
+    it("goes flush against the wall it is brought to", async () => {
+      const { onMovePiece, at, press } = await open();
+      press("pointerdown", at(2.5, 1.8, 0.2));
+      press("pointermove", at(3.5, 1.8, 0.2));
+      // Its right side 3 cm short of the wall at 5.5.
+      press("pointermove", at(4.97, 1.8, 0.2));
+      press("pointerup", at(4.97, 1.8, 0.2));
+      // Its middle half a metre in from the wall: 5 on the plan, 2.25 in the scene.
+      expect(onMovePiece.mock.calls[0]![1]).toBeCloseTo(2.25);
+    });
+
+    it("moves free while ⌥ is held", async () => {
+      const { onMovePiece, at, press } = await open();
+      press("pointerdown", at(2.5, 1.8, 0.2));
+      press("pointermove", at(3.5, 1.8, 0.2), true);
+      press("pointermove", at(4.97, 1.8, 0.2), true);
+      press("pointerup", at(4.97, 1.8, 0.2), true);
+      expect(onMovePiece.mock.calls[0]![1]).toBeCloseTo(2.22, 1);
+      expect(onMovePiece.mock.calls[0]![1]).toBeLessThan(2.24);
+    });
+  });
 });
 

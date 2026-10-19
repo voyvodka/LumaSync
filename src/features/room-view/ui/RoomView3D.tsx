@@ -5,8 +5,10 @@ import { hueToMetres } from "@/features/room-map/model/hueChannelPosition";
 import type { ZoneMarks } from "@/features/room-map/model/zoneMarks";
 import { hueChannelObjectId } from "@/features/room-map/model/objectId";
 import { bottomKeptCenterZ } from "@/features/room-map/model/zoneCube";
+import { computeSnap, getObjectRects, type ObjectRect, SNAP_ENGAGE_PX, SNAP_RELEASE_PX, type SnapHold, snapReach } from "@/features/room-map/model/snapGeometry";
 import { rectToZone, resizeZoneRect, type ZoneHandle, type ZoneRect, zoneRect } from "@/features/room-map/model/zoneRect";
 import { type MutableRefObject, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import {
   BoxGeometry,
   Color,
@@ -45,6 +47,7 @@ import { pieceNudge } from "../model/pieceNudge";
 import { hueChannelScenePoint, roomToScene, tvMountHeight } from "../model/roomSpace";
 import { planMorph } from "../model/templateMorph";
 import { GRIP_CURSOR, gripAt, insideRect, moveZoneRect, type PlanPoint, sameRect, sceneToPlan, zoneAtFloor, zoneGrips } from "../model/zoneGesture";
+import { usePreference } from "@/features/persistence/preferences";
 import { isWindowVisible } from "@/features/shell/windowVisibility";
 import { clamp } from "@/shared/lib/math";
 import { prefersReducedMotion } from "@/shared/lib/motion";
@@ -55,6 +58,7 @@ import { finishMaterial } from "./scene/finishes";
 import { furnitureParts } from "./scene/furniture";
 import { firstSurfaceHit } from "./scene/surfaceHit";
 import type { LiftedPiece } from "./scene/lift";
+import { buildSnapGuides, type SnapGuides3D } from "./scene/snapGuides";
 import { PALETTE } from "./scene/palette";
 import { block, mergeParts } from "./scene/parts";
 import { type Morph, startMorph } from "./scene/morph";
@@ -151,6 +155,12 @@ const sameRoom = (a: RoomMapConfig, b: RoomMapConfig) => {
   const keys = Object.keys(a) as (keyof RoomMapConfig)[];
   return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key]);
 };
+/** Whether a carried piece catches on what it lines up with, and the words its guides show. */
+export interface Snapping {
+  on: boolean;
+  symmetric: string;
+}
+const NO_SNAPPING: Snapping = { on: false, symmetric: "" };
 /** The frame of a piece being carried: the app's amber. */
 const CARRY_COLOUR = 0xffb020;
 const REFUSED_COLOUR = 0xff5a4f;
@@ -190,6 +200,7 @@ function openRoomView(
   onHover: (objectId: string | null, clientX: number, clientY: number) => void = () => {},
   onDrawn: () => void = () => {},
   onZone: ZoneEdit | null = null,
+  snapping: () => Snapping = () => NO_SNAPPING,
 ): RoomView {
   let host = firstHost;
   const options: SpikeOptions = window.__roomViewSpikeOptions ?? {};
@@ -304,6 +315,10 @@ function openRoomView(
       pixelsPerMetre = host.clientHeight / ((camera.top - camera.bottom) / camera.zoom);
       room.setPixelsPerMetre(pixelsPerMetre);
       room.faceCamera(camera.quaternion, camera);
+      if (carry?.guides) {
+        carry.guides.setPixelsPerMetre(pixelsPerMetre);
+        carry.guides.orient(camera.quaternion);
+      }
       if (bloom) bloom.render(room.scene, camera);
       else renderer.render(room.scene, camera);
       disposeReplaced();
@@ -449,6 +464,10 @@ function openRoomView(
       rise: number;
       /** The pointer's height over the piece's centre when ⇧ went down; null while it slides. */
       grip: number | null;
+      /** Its footprint on the plan, for what it lines up with. */
+      foot: { w: number; d: number };
+      guides: SnapGuides3D | null;
+      hold: SnapHold;
     } | null = null;
     let zoneDrag: {
       id: string;
@@ -609,6 +628,8 @@ function openRoomView(
           ghost.add(plumb.group);
         }
         room.scene.add(ghost);
+        const guides = builtConfig ? buildSnapGuides(builtConfig.dimensions) : null;
+        if (guides) room.scene.add(guides.group);
         carry = {
           id,
           kind: item.kind,
@@ -628,6 +649,9 @@ function openRoomView(
           halfY: hy,
           rise: 0,
           grip: null,
+          foot: { w: hx * 2, d: hz * 2 },
+          guides,
+          hold: {},
         };
         orbit.enabled = false;
         if (move !== 0) cancelAnimationFrame(move);
@@ -696,6 +720,7 @@ function openRoomView(
           }
           carry.ghost.position.x = onFloor.x + carry.dx;
           carry.ghost.position.z = onFloor.z + carry.dz;
+          snapCarry(carry, event.altKey);
         }
         if (!carry.tried) lift(carry);
         carry.moved = true;
@@ -719,6 +744,54 @@ function openRoomView(
       const s = Math.min(1, (z.rect.x1 - z.rect.x0) / heightMeters);
       z.centerZ = clamp(((onUpright.y - z.grip) / heightMeters) * 2 - 1, s - 1, 1 - s);
       return true;
+    };
+    const floorScale = new Vector3();
+    /** Screen pixels to metres on the floor where the piece is: the mean of its two foreshortened axes. */
+    const metresPerPxAt = (at: Vector3) => {
+      const { clientWidth: w, clientHeight: h } = host;
+      const across = (dx: number, dz: number) => {
+        floorScale.copy(at).project(camera);
+        const [x0, y0] = [floorScale.x * w, floorScale.y * h];
+        floorScale.set(at.x + dx, at.y, at.z + dz).project(camera);
+        return Math.hypot((floorScale.x * w - x0) / 2, (floorScale.y * h - y0) / 2);
+      };
+      const ppm = (across(1, 0) + across(0, 1)) / 2;
+      return ppm > 0 ? 1 / ppm : 0.01;
+    };
+    // Caught on what it lines up with, as the plan does: the same targets, reach and hold.
+    const snapCarry = (c: NonNullable<typeof carry>, free: boolean) => {
+      const cfg = builtConfig;
+      if (!cfg || !c.guides) return;
+      const settings = snapping();
+      if (free || !settings.on) {
+        c.hold = {};
+        c.guides.show([], 0);
+        return;
+      }
+      const { widthMeters: w, depthMeters: d } = cfg.dimensions;
+      const px = c.ghost.position.x + c.storedDx + w / 2;
+      const py = c.ghost.position.z + c.storedDz + d / 2;
+      const turned = c.kind === "furniture" ? (c.angle * 180) / Math.PI + c.turn : 0;
+      const dragged: ObjectRect =
+        c.kind === "light"
+          ? { id: c.id, x: px, y: py, w: 0, h: 0 }
+          : { id: c.id, x: px - c.foot.w / 2, y: py - c.foot.d / 2, w: c.foot.w, h: c.foot.d, ...(turned ? { r: turned } : {}) };
+      const mpp = metresPerPxAt(c.ghost.position);
+      const result = computeSnap(dragged, getObjectRects(cfg, c.id), snapReach(SNAP_ENGAGE_PX, mpp), {
+        release: snapReach(SNAP_RELEASE_PX, mpp),
+        hold: c.hold,
+      });
+      // The screen's box is its glass, not the footprint the plan stores: only its side-to-side holds.
+      const guides = c.kind === "tv" ? result.guides.filter((g) => g.axis === "x") : result.guides;
+      c.hold = c.kind === "tv" ? { ...(result.hold.x ? { x: result.hold.x } : {}) } : result.hold;
+      if (result.snapX !== null) c.ghost.position.x += result.snapX - dragged.x;
+      if (result.snapY !== null && c.kind !== "tv") c.ghost.position.z += result.snapY - dragged.y;
+      const mirror = guides.find((g) => g.kind === "mirror" && g.at !== undefined);
+      c.guides.show(
+        guides,
+        c.kind === "light" ? c.ghost.position.y : 0.01,
+        mirror ? { text: settings.symmetric, x: c.ghost.position.x, z: c.ghost.position.z } : null,
+      );
     };
     // Up and down only, along the upright plane through the piece that faces the camera.
     const raise = (c: NonNullable<typeof carry>, ray: Ray) => {
@@ -757,6 +830,8 @@ function openRoomView(
       orbit.enabled = true;
       canvas.style.cursor = "";
       c.ghost.removeFromParent();
+      c.guides?.group.removeFromParent();
+      c.guides?.dispose();
       c.plumb?.dispose();
       c.ghost.geometry.dispose();
       (c.ghost.material as LineBasicMaterial).dispose();
@@ -1341,6 +1416,7 @@ interface Handlers {
   changeZone: ZoneEdit["change"];
   hover: (objectId: string | null, clientX: number, clientY: number) => void;
   drawn: () => void;
+  snapping: () => Snapping;
 }
 const IDLE: Handlers = {
   fail: () => {},
@@ -1350,6 +1426,7 @@ const IDLE: Handlers = {
   changeZone: () => false,
   hover: () => {},
   drawn: () => {},
+  snapping: () => NO_SNAPPING,
 };
 /** A new context, its shaders and the scene paused every face or stage switch; one is kept this long. */
 const PARK_MS = 20_000;
@@ -1469,6 +1546,10 @@ export default function RoomView3D({
   zonesRef.current = zones;
   const moodRef = useRef(mood);
   moodRef.current = mood;
+  const { t } = useTranslation();
+  const snapOn = usePreference("roomMapSnapToObjects");
+  const snappingRef = useRef<Snapping>(NO_SNAPPING);
+  snappingRef.current = { on: snapOn, symmetric: t("roomMap:alignGuide.symmetric") };
 
   useEffect(() => {
     const host = hostRef.current;
@@ -1481,6 +1562,7 @@ export default function RoomView3D({
       changeZone: (zoneId, rect, resized, centerZ) => onChangeZoneRef.current?.(zoneId, rect, resized, centerZ) ?? false,
       hover: (objectId, x, y) => onHoverRef.current?.(objectId, x, y),
       drawn: () => onDrawnRef.current?.(),
+      snapping: () => snappingRef.current,
     };
     let kept = unpark(host, mine);
     if (!kept) {
@@ -1494,6 +1576,7 @@ export default function RoomView3D({
           (objectId, x, y) => handlers.hover(objectId, x, y),
           () => handlers.drawn(),
           { pick: (zoneId) => handlers.pickZone(zoneId), change: (zoneId, rect, resized, centerZ) => handlers.changeZone(zoneId, rect, resized, centerZ) },
+          () => handlers.snapping(),
         );
         kept = { view, handlers };
       } catch (error) {
