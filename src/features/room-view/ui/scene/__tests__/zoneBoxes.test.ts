@@ -97,6 +97,9 @@ describe("buildZoneBoxes", () => {
     expect(base!.position.z).toBeLessThan(-1);
     expect(base!.position.y).toBeCloseTo(0.625);
     expect(top!.position.y).toBeCloseTo(1.875);
+    // The ceiling's far edges (the back and left walls) stay clear; the near two fade off the floor.
+    const opacity = ceiling.children.map((edge) => ((edge as LineSegments).material as MeshBasicMaterial).opacity);
+    expect(opacity).toEqual([0.3, 0.12, 0.12, 0.3]);
     boxes.mark(null);
     expect([reach.visible, ceiling.visible]).toEqual([false, false]);
   });

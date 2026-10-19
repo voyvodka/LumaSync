@@ -10,8 +10,8 @@ import {
   Float32BufferAttribute,
   Group,
   LineBasicMaterial,
+  Line,
   LineDashedMaterial,
-  LineLoop,
   LineSegments,
   Mesh,
   MeshBasicMaterial,
@@ -38,7 +38,10 @@ const FLOOR_LIFT = 0.006;
 /** The base and top heights by the cube's edge: smaller than the name, which they sit under. */
 const TAG_PX = 18;
 const TAG_GAP_PX = 6;
-const CEILING_OPACITY = 0.3;
+/** The far edges at the ceiling, and the near ones, which crossed the floor and its grips on screen. */
+const CEILING_OPACITY = { far: 0.3, near: 0.12 };
+/** The carried light's amber: in the zone's colour a light's box read as a second, small zone. */
+const LIGHT_GHOST = 0xffb020;
 /** Clear of the top bar. */
 const TOP_NDC = 0.72;
 const TOP_CORNERS = [
@@ -107,7 +110,7 @@ function pillTexture(px: number, colour: string | null, weight: number): Pill {
   const size = Math.round(height * 0.5);
   const css = getComputedStyle(document.body);
   const font = `${weight} ${size}px ${css.fontFamily || "sans-serif"}`;
-  const ink = css.getPropertyValue(colour ? "--lm-ink" : "--lm-ink-dim").trim() || "white";
+  const ink = css.getPropertyValue("--lm-ink").trim() || "white";
   const r = height / 2;
   canvas.height = height;
   canvas.width = height;
@@ -125,7 +128,8 @@ function pillTexture(px: number, colour: string | null, weight: number): Pill {
       canvas.width = Math.ceil(context.measureText(text).width + inset + r * 0.9);
       canvas.height = height;
       const width = canvas.width;
-      context.fillStyle = "rgba(14, 14, 20, 0.86)";
+      // Nearly solid: a tag on the TV's glow lost its text through a lighter pill.
+      context.fillStyle = "rgba(14, 14, 20, 0.92)";
       // Two arcs, not `roundRect`: the WebKit of the oldest macOS supported has none.
       context.beginPath();
       context.arc(r, r, r, Math.PI / 2, (Math.PI * 3) / 2);
@@ -161,27 +165,32 @@ const FOOTPRINT_CORNERS = [
   [1, 1],
 ] as const;
 
-/** The room's outline at the ceiling, for a zone to be read against: the walls stand cut away below it. */
-function ceilingFrame(dims: RoomDimensions, outline: readonly RoomCorner[] | null): LineLoop {
+/** The room's outline at the ceiling, for a zone to be read against: the walls stand cut away below it.
+ *  An edge per line, so each dashes along its own length and can fade on its own. */
+function ceilingFrame(dims: RoomDimensions, outline: readonly RoomCorner[] | null): Group {
   const corners = outline && outline.length >= 3 ? outline : [
     { x: 0, y: 0 },
     { x: dims.widthMeters, y: 0 },
     { x: dims.widthMeters, y: dims.depthMeters },
     { x: 0, y: dims.depthMeters },
   ];
-  const geometry = new BufferGeometry();
-  geometry.setAttribute(
-    "position",
-    new Float32BufferAttribute(corners.flatMap((c) => [c.x - dims.widthMeters / 2, dims.heightMeters, c.y - dims.depthMeters / 2]), 3),
-  );
-  // Over everything: the cut walls never reach it, and a zone's top in its plane would fight it.
-  const frame = new LineLoop(
-    geometry,
-    new LineDashedMaterial({ color: 0xffffff, dashSize: 0.12, gapSize: 0.08, transparent: true, opacity: CEILING_OPACITY, depthTest: false, depthWrite: false, toneMapped: false }),
-  );
-  frame.computeLineDistances();
-  frame.renderOrder = 10;
+  const frame = new Group();
   frame.visible = false;
+  corners.forEach((a, i) => {
+    const b = corners[(i + 1) % corners.length]!;
+    const geometry = new BufferGeometry();
+    const at = (c: RoomCorner) => [c.x - dims.widthMeters / 2, dims.heightMeters, c.y - dims.depthMeters / 2];
+    geometry.setAttribute("position", new Float32BufferAttribute([...at(a), ...at(b)], 3));
+    // Over everything: the cut walls never reach it, and a zone's top in its plane would fight it.
+    const edge = new Line(
+      geometry,
+      new LineDashedMaterial({ color: 0xffffff, dashSize: 0.12, gapSize: 0.08, transparent: true, opacity: CEILING_OPACITY.far, depthTest: false, depthWrite: false, toneMapped: false }),
+    );
+    edge.computeLineDistances();
+    edge.renderOrder = 10;
+    edge.userData.mid = new Vector3((a.x + b.x) / 2 - dims.widthMeters / 2, 0, (a.y + b.y) / 2 - dims.depthMeters / 2);
+    frame.add(edge);
+  });
   return frame;
 }
 
@@ -254,7 +263,7 @@ export function buildZoneBoxes(
 
   // Its base and top by the cube's outermost upright edge on screen, kept to one size like the name.
   const tags = (["base", "top"] as const).map(() => {
-    const pill = pillTexture(TAG_PX, null, 500);
+    const pill = pillTexture(TAG_PX, null, 600);
     const mesh = new Mesh(new PlaneGeometry(1, 1), new MeshBasicMaterial({ map: pill.texture, transparent: true, depthTest: false, depthWrite: false, toneMapped: false }));
     mesh.renderOrder = 11;
     return { pill, mesh, text: "" };
@@ -271,7 +280,7 @@ export function buildZoneBoxes(
   const lightGhosts = (options.lights ?? []).map((light) => {
     const box = new LineSegments(
       new EdgesGeometry(new BoxGeometry(light.half[0] * 2, Math.max(light.half[1] * 2, 0.05), light.half[2] * 2)),
-      new LineBasicMaterial({ ...ghostTint, opacity: 0.9 }),
+      new LineBasicMaterial({ ...ghostTint, color: LIGHT_GHOST, opacity: 0.9 }),
     );
     box.name = "zone-light";
     box.visible = false;
@@ -285,6 +294,7 @@ export function buildZoneBoxes(
   let ppm = 0;
   let reach: (typeof built)[number]["reach"] | null = null;
   const right = new Vector3();
+  const toward = new Vector3();
   const showReach = (next: typeof reach) => {
     reach = next;
     measure.visible = next !== null;
@@ -380,7 +390,6 @@ export function buildZoneBoxes(
       for (const { light, box } of lightGhosts) {
         box.visible = light.zoneId === zoneId;
         if (!box.visible) continue;
-        box.material.color.set(colour);
         // Hue's y runs toward the screen wall, the scene's z away from it.
         box.position.set(
           across.x + (light.rel.x * edge) / 2 + light.offset.x,
@@ -403,6 +412,11 @@ export function buildZoneBoxes(
     orient(q, camera) {
       up.set(0, 1, 0).applyQuaternion(q);
       right.set(1, 0, 0).applyQuaternion(q);
+      toward.set(0, 0, 1).applyQuaternion(q);
+      for (const edge of ceiling.children as Line<BufferGeometry, LineDashedMaterial>[]) {
+        const mid = edge.userData.mid as Vector3;
+        edge.material.opacity = mid.x * toward.x + mid.z * toward.z > 0 ? CEILING_OPACITY.near : CEILING_OPACITY.far;
+      }
       camera?.updateMatrixWorld();
       for (const { mesh } of tags) mesh.quaternion.copy(q);
       placeTags();
