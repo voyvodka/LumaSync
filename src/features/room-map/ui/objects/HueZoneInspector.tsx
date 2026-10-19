@@ -155,7 +155,7 @@ export function HueZoneInspector({
                   aria-label={name}
                   aria-pressed={member}
                   title={elsewhere ? `${name} · ${t("roomMap:inspector.zoneChipElsewhere", { zone: elsewhere.name })}` : name}
-                  // A locked light keeps its place, and joining a zone moves it to the zone's centre.
+                  // A locked light keeps its place; a light joining a zone keeps it too, held to the zone.
                   disabled={!!ch.locked}
                   data-testid={`hue-zone-chip-${ch.channelIndex}`}
                   onClick={() => onAssignChannel(ch.channelIndex, member ? null : zone.id)}

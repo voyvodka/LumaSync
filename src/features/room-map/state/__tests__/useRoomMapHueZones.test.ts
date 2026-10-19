@@ -200,6 +200,19 @@ describe("useRoomMapHueZones — pre-mutation payloads", () => {
   });
 });
 
+describe("useRoomMapHueZones — a light joining a zone from a card", () => {
+  it("joins it where it stands, without moving it to the centre", async () => {
+    mockAssign.mockResolvedValue(applied([ZONE_A], [CHANNEL_0]));
+    const { result, apply } = renderZones({ hueChannels: [{ ...CHANNEL_0, x: 0.15, y: -0.1875, z: 0.3 }] });
+
+    act(() => result.current.handleAssignChannelToZone(0, "zone-a"));
+
+    expect(apply.mock.calls[0][0].hueChannels[0].zoneRelativePosition).toEqual({ x: 0.5, y: -0.5, z: 0.5 });
+    await waitFor(() => expect(mockAssign).toHaveBeenCalledTimes(1));
+    expect(mockAssign.mock.calls[0][0].zoneRelativePosition).toEqual({ x: 0.5, y: -0.5, z: 0.5 });
+  });
+});
+
 describe("useRoomMapHueZones — a light dropped into a zone", () => {
   it("joins it where it was put down, sending that spot, and keeps what the drop changed", async () => {
     mockAssign.mockResolvedValue(applied([ZONE_A], [CHANNEL_0]));

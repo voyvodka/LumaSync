@@ -152,6 +152,22 @@ export function nudgeHueChannel(
   return moveHueChannelToWorld(channel, zones, world.x + dx, world.y + dy);
 }
 
+/** Where a light joining `zone` sits in it: where it stands now, or the nearest point inside when it
+ *  stands outside. Joining at the centre moved a light the zone already held. */
+export function zoneRelativeAt(
+  channel: HueChannelPlacement,
+  zones: readonly HueZone[],
+  zone: HueZone,
+): { x: number; y: number; z: number } {
+  const world = resolveHueChannelWorld(channel, zones);
+  const rel = (v: number, centre: number, scale: number) => (scale === 0 ? 0 : clampUnit((v - centre) / scale));
+  return {
+    x: rel(world.x, zone.centerX, zone.scaleX),
+    y: rel(world.y, zone.centerY, zone.scaleY),
+    z: rel(resolveHueChannelWorldZ(channel, zones), zone.centerZ, zone.scaleZ),
+  };
+}
+
 /** Out of its zone, standing where the zone had it. */
 export function detachHueChannel(channel: HueChannelPlacement, zones: readonly HueZone[]): HueChannelPlacement {
   if (!channel.zoneId) return channel;

@@ -201,11 +201,12 @@ The guides read the shown area's lights, so another area's never pull one.
 **Channel-to-zone assignment keeps three shapes in sync by hand.** One handler serves both ways a
 light changes zone — the zone picker in the light's inspector and the light chips in the zone's —
 because both have to write the same three fields: the channel's `zoneId` (the join key), its
-`zoneRelativePosition` (reset to the zone centre, refined by dragging), and the zone's
+`zoneRelativePosition` (where the light stands, read in the zone's cube and held to it), and the zone's
 `channelIndices` (denormalised for the runtime sampler). Letting those drift desyncs the frame
 builder from the zone-cap validator. Both offer only the shown area's zones and lights, since a pick
-across areas is one the backend refuses, and both hold still for a locked light: joining a zone
-moves it to the zone's centre.
+across areas is one the backend refuses, and both hold still for a locked light. A light already
+inside the zone does not move when it joins; one outside comes to the nearest point inside. Joining
+at the centre moved a light the zone already held.
 
 **Hue channels are bridge-managed; the editor never deletes one.** Only the Hue app or the bridge
 can remove a channel from an entertainment configuration, so LumaSync has no delete affordance for

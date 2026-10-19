@@ -9,7 +9,7 @@ import type {
   ZoneRelativePosition,
 } from "@/shared/contracts/roomMap";
 import { isHueZoneApplied, replaceHueChannel } from "@/shared/contracts/roomMap";
-import { detachHueChannel } from "../model/hueChannelPosition";
+import { detachHueChannel, zoneRelativeAt } from "../model/hueChannelPosition";
 import { findScopedHueChannel } from "../model/hueChannelScope";
 import { zoneToken } from "../model/zoneColor";
 import { bottomKeptCenterZ, withCubeEdge, zoneEdge } from "../model/zoneCube";
@@ -175,7 +175,6 @@ export function useRoomMapHueZones({
   const handleAssignChannelToZone = useCallback(
     (channelIndex: number, targetZoneId: string | null, dropped?: DroppedLight) => {
       const channel = dropped?.channel ?? findScopedHueChannel(config.hueChannels, hueAreaId, channelIndex);
-      const at = dropped?.at ?? { x: 0, y: 0, z: 0 };
       if (!channel) return;
       // No-op if already in the target bucket — avoids spurious invokes.
       const currentZoneId = channel.zoneId ?? null;
@@ -188,6 +187,7 @@ export function useRoomMapHueZones({
         ? hueZones.find((z) => z.id === targetZoneId)
         : null;
       if (targetZoneId && !targetZone) return;
+      const at = dropped?.at ?? (targetZone ? zoneRelativeAt(channel, config.zones, targetZone) : { x: 0, y: 0, z: 0 });
       // A zone holds its own area's lights: across areas the channel would point at a zone whose
       // `channelIndices` the sync below leaves alone, the desync the backend refuses.
       if (targetZone && channel.entertainmentAreaId && targetZone.entertainmentAreaId !== channel.entertainmentAreaId) {

@@ -11,6 +11,7 @@ import {
   resolveHueChannelWorld,
   resolveHueChannelWorldZ,
   setHueChannelWorldZ,
+  zoneRelativeAt,
 } from "../hueChannelPosition";
 
 const ZONE: HueZone = {
@@ -148,6 +149,25 @@ describe("hueChannelZRange", () => {
     const range = hueChannelZRange(BOUND, [high]);
     expect(range.max).toBe(1);
     expect(range.min).toBeCloseTo(0.3, 6);
+  });
+});
+
+describe("zoneRelativeAt", () => {
+  it("keeps a light the zone already holds where it stands", () => {
+    const inside: HueChannelPlacement = { channelIndex: 2, x: 0.45, y: -0.1, z: 0.25 };
+    const at = zoneRelativeAt(inside, [ZONE], ZONE);
+    expect(at.x).toBeCloseTo(0.2);
+    expect(at.y).toBeCloseTo(0.2);
+    expect(at.z).toBeCloseTo(0.5);
+  });
+
+  it("reads a bound light where its zone puts it, not its stale absolute pair", () => {
+    expect(zoneRelativeAt(BOUND, [ZONE], ZONE)).toEqual({ x: 0.5, y: -0.5, z: 0 });
+  });
+
+  it("brings a light from outside to the nearest point inside", () => {
+    const outside: HueChannelPlacement = { channelIndex: 2, x: -0.9, y: 0.9, z: 0 };
+    expect(zoneRelativeAt(outside, [ZONE], ZONE)).toEqual({ x: -1, y: 1, z: 0 });
   });
 });
 
