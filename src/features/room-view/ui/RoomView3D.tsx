@@ -3,6 +3,7 @@
 // in docs/architecture/ui-and-shell.md, "Per-window bundles".
 import { hueToMetres } from "@/features/room-map/model/hueChannelPosition";
 import type { ZoneMarks } from "@/features/room-map/model/zoneMarks";
+import { hueChannelObjectId } from "@/features/room-map/model/objectId";
 import { bottomKeptCenterZ } from "@/features/room-map/model/zoneCube";
 import { rectToZone, resizeZoneRect, type ZoneHandle, type ZoneRect, zoneRect } from "@/features/room-map/model/zoneRect";
 import { type MutableRefObject, useEffect, useRef } from "react";
@@ -32,7 +33,7 @@ import {
 } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-import type { FurniturePlacement, HueZone, RoomMapConfig } from "@/shared/contracts/roomMap";
+import type { FurniturePlacement, HueChannelPlacement, HueZone, RoomMapConfig } from "@/shared/contracts/roomMap";
 
 import { LAMP_COLOURS } from "../model/lampColours";
 import type { LampFamily } from "../model/lampFamily";
@@ -41,7 +42,7 @@ import { pressStartsCarry } from "../model/carryIntent";
 import { lightPickHalf, pickObject } from "../model/picking";
 import type { FurnitureModel } from "../model/furnitureModel";
 import { pieceNudge } from "../model/pieceNudge";
-import { roomToScene } from "../model/roomSpace";
+import { hueChannelScenePoint, roomToScene, tvMountHeight } from "../model/roomSpace";
 import { planMorph } from "../model/templateMorph";
 import { GRIP_CURSOR, gripAt, insideRect, moveZoneRect, type PlanPoint, sameRect, sceneToPlan, zoneAtFloor, zoneGrips } from "../model/zoneGesture";
 import { isWindowVisible } from "@/features/shell/windowVisibility";
@@ -111,6 +112,8 @@ export interface RoomDropTarget {
   settle(): void;
   /** A zone's whole cube held at `zone` without building the room, for the dock's dragged fields; null puts it back. */
   holdZone(zoneId: string, zone: HueZone | null): void;
+  /** The same for a light, shown where `channel` would stand; null hides it. */
+  holdLight(channelIndex: number, channel: HueChannelPlacement | null): void;
 }
 
 interface RoomView extends RoomDropTarget {
@@ -1167,6 +1170,12 @@ function openRoomView(
         if (!room || !builtConfig) return;
         const { widthMeters, depthMeters } = builtConfig.dimensions;
         if (room.holdZone(zoneId, zone && zoneRect(zone, widthMeters, depthMeters), zone?.centerZ)) request();
+      },
+      holdLight(channelIndex, channel) {
+        if (!room || !builtConfig) return;
+        const { zones, dimensions, tvAnchor } = builtConfig;
+        const at = channel && hueChannelScenePoint(channel, zones, dimensions, tvMountHeight(tvAnchor, dimensions));
+        if (room.holdLight(hueChannelObjectId(channelIndex), at)) request();
       },
       setMood(mood) {
         const same = (m: RoomMood | null) =>

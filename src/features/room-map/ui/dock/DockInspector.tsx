@@ -54,6 +54,8 @@ export interface InspectorActions {
   onUpdateHueZone: (zoneId: string, patch: Partial<HueZone>) => void;
   /** Shows a zone dragged in the card's fields without saving it; false when no room view can. */
   onPreviewHueZone: (zoneId: string, zone: HueZone | null) => boolean;
+  /** The same for a light: `channel` as its dragged fields would leave it. */
+  onPreviewHueChannel: (channelIndex: number, channel: HueChannelPlacement | null) => boolean;
   onRenameHueZone: (zoneId: string, name: string) => void;
   onDeleteHueZone: (zoneId: string) => void;
   onAssignChannelToZone: (channelIndex: number, zoneId: string | null) => void;
@@ -252,6 +254,7 @@ export function DockInspector({
           roomHeightMeters={config.dimensions.heightMeters}
           onMove={(x, y) => actions.onMoveObject(id, x, y)}
           onHeightChange={(worldZ) => actions.onHueChannelHeightChange(ch.channelIndex, worldZ)}
+          onPreview={(next) => actions.onPreviewHueChannel(ch.channelIndex, next)}
           modelChoices={modelChoices}
           bridgeFixture={lampFamilies.get(ch.channelIndex) ?? null}
           autoFacing={autoHueFacing(ch, config)}

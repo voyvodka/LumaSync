@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { FIXTURE_ORDER, type LampFamily, ONE_SIDED } from "@/features/room-view/model/lampFamily";
@@ -13,7 +14,7 @@ import { StateWord } from "@/shared/ui/StateWord/StateWord";
 
 import { furnitureName } from "../../model/furnitureName";
 import { hueChannelDotText, hueChannelIdLabel, hueChannelName } from "../../model/hueChannelLabel";
-import { hueToMetres, hueToPlanMetres, planMetresToHue } from "../../model/hueChannelPosition";
+import { hueToMetres, hueToPlanMetres, moveHueChannelToWorld, planMetresToHue, setHueChannelWorldZ } from "../../model/hueChannelPosition";
 import { HANGING_FIXTURES, hangHeight, isHung } from "../../model/hueHang";
 import { getZoneColor } from "../../model/zoneColor";
 import { DecimalField } from "../DecimalField";
@@ -54,6 +55,7 @@ export function HueChannelInspector({
   roomHeightMeters,
   onMove,
   onHeightChange,
+  onPreview,
   onAssignZone,
   lightCount,
   isGhost = false,
@@ -81,6 +83,8 @@ export function HueChannelInspector({
   /** A new position in the cube; the editor writes whichever field is live. */
   onMove: (worldX: number, worldY: number) => void;
   onHeightChange: (worldZ: number) => void;
+  /** Shows the light where a drag across its fields has put it, without saving; false when nothing can. */
+  onPreview?: (channel: HueChannelPlacement | null) => boolean;
   /** Joins a zone, or leaves one for `null`. Absent leaves membership read-only. */
   onAssignZone?: (zoneId: string | null) => void;
   /** Hue bridge reachability, in the strip inspector's words. `unknown` (default) shows none. */
@@ -108,18 +112,39 @@ export function HueChannelInspector({
   const { t } = useTranslation();
   const locked = !!channel.locked;
 
+  // A drag across a field rebuilt the 3D room each step, as the zone card's did: it is held instead.
+  const [dragged, setDragged] = useState<{ x: number; y: number; z: number } | null>(null);
+  const at = dragged ?? { x: world.x, y: world.y, z: worldZ };
   const minZ = heightRange?.min ?? -1;
   const maxZ = heightRange?.max ?? 1;
   const limitingZone = heightRange?.zone && (minZ > -1 || maxZ < 1) ? heightRange.zone : null;
-  const shownZ = Math.min(maxZ, Math.max(minZ, worldZ));
+  const shownZ = Math.min(maxZ, Math.max(minZ, at.z));
   /** Slider stays in Hue's [-1, 1]; only the readout is metres, because that is
    *  the unit the rest of the map speaks and `-0.42` names nothing a person owns. */
   const heightMetres = (z: number) => hueToMetres(z, roomHeightMeters).toFixed(2);
   // Metres on the plan, as every other object's position reads; the cube's [-1, 1] stays inside.
-  const plan = hueToPlanMetres(world, roomWidthMeters, roomDepthMeters);
-  const moveTo = (x: number, y: number) => {
+  const plan = hueToPlanMetres(at, roomWidthMeters, roomDepthMeters);
+  const hold = (next: { x: number; y: number; z: number }) => {
+    const moved = moveHueChannelToWorld(channel, zones, next.x, next.y);
+    if (!onPreview?.(next.z === worldZ ? moved : setHueChannelWorldZ(moved, zones, next.z))) return false;
+    setDragged(next);
+    return true;
+  };
+  const moveTo = (x: number, y: number, held = false) => {
     const next = planMetresToHue(x, y, roomWidthMeters, roomDepthMeters);
-    onMove(next.x, next.y);
+    if (!held || !hold({ ...at, x: next.x, y: next.y })) onMove(next.x, next.y);
+  };
+  const raiseTo = (z: number) => {
+    if (!hold({ ...at, z })) onHeightChange(z);
+  };
+  // Saved on release, and held until the room is built with it, as a zone is.
+  const letGo = () => {
+    if (!dragged) return;
+    setDragged(null);
+    const same = (a: number, b: number) => Math.abs(a - b) < 1e-9;
+    if (same(dragged.x, world.x) && same(dragged.y, world.y) && same(dragged.z, worldZ)) return void onPreview?.(null);
+    if (!same(dragged.x, world.x) || !same(dragged.y, world.y)) onMove(dragged.x, dragged.y);
+    if (!same(dragged.z, worldZ)) onHeightChange(dragged.z);
   };
 
   const fixture = resolveHueFixture(channel);
@@ -208,7 +233,8 @@ export function HueChannelInspector({
               max={roomWidthMeters}
               unit="m"
               disabled={locked}
-              onCommit={(x) => moveTo(x, plan.y)}
+              onCommit={(x, held) => moveTo(x, plan.y, held)}
+              onScrubEnd={letGo}
             />
             <DecimalField
               label={t("roomMap:inspector.yLabel")}
@@ -218,7 +244,8 @@ export function HueChannelInspector({
               max={roomDepthMeters}
               unit="m"
               disabled={locked}
-              onCommit={(y) => moveTo(plan.x, y)}
+              onCommit={(y, held) => moveTo(plan.x, y, held)}
+              onScrubEnd={letGo}
             />
           </FieldRow>
           <DockSlider
@@ -229,7 +256,8 @@ export function HueChannelInspector({
             step={0.01}
             value={shownZ}
             disabled={locked || maxZ <= minZ}
-            onChange={onHeightChange}
+            onChange={raiseTo}
+            onCommit={letGo}
             // The raw -1..1 is meaningless read aloud; this is the whole reason the
             // control moved off the Devices strip, so do not drop it.
             ariaValueText={t("roomMap:inspector.hueHeightValueText", {

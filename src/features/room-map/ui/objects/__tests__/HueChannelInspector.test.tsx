@@ -540,3 +540,64 @@ describe("HueChannelInspector standing on a piece", () => {
     expect(screen.queryByText("roomMap:inspector.hueSeatOn")).toBeNull();
   });
 });
+
+describe("HueChannelInspector — a drag across its fields", () => {
+  beforeEach(cleanup);
+
+  function renderHeld(onPreview: (next: HueChannelPlacement | null) => boolean) {
+    const onMove = vi.fn<(x: number, y: number) => void>();
+    const onHeightChange = vi.fn<(z: number) => void>();
+    render(
+      <HueChannelInspector
+        channel={channel}
+        zones={[]}
+        worldZ={0}
+        roomHeightMeters={2.5}
+        world={{ x: 0, y: 0 }}
+        roomWidthMeters={5}
+        roomDepthMeters={4}
+        onMove={onMove}
+        onHeightChange={onHeightChange}
+        onPreview={onPreview}
+        onRename={vi.fn()}
+        onToggleLock={vi.fn()}
+        onClose={vi.fn<() => void>()}
+      />,
+    );
+    return { onMove, onHeightChange };
+  }
+
+  it("shows the light where X has put it while held, and moves it once, when let go", () => {
+    const onPreview = vi.fn<(next: HueChannelPlacement | null) => boolean>(() => true);
+    const { onMove } = renderHeld(onPreview);
+    const box = screen.getByRole("spinbutton", { name: "roomMap:inspector.xLabel" }).closest("label")!;
+    fireEvent.pointerDown(box, { button: 0, clientX: 100, pointerId: 1 });
+    fireEvent.pointerMove(box, { clientX: 120, pointerId: 1 });
+    fireEvent.pointerMove(box, { clientX: 140, pointerId: 1 });
+    // Ten steps of 5 cm from the middle of a 5 m room: 3 m, or 0.2 in Hue units.
+    expect(onPreview).toHaveBeenLastCalledWith(expect.objectContaining({ x: expect.closeTo(0.2, 5), y: 0 }));
+    expect(onMove).not.toHaveBeenCalled();
+    fireEvent.pointerUp(box, { pointerId: 1 });
+    expect(onMove).toHaveBeenCalledTimes(1);
+    expect(onMove.mock.calls[0]![0]).toBeCloseTo(0.2, 5);
+  });
+
+  it("holds the height slider the same way and writes it where it is let go", () => {
+    const onPreview = vi.fn<(next: HueChannelPlacement | null) => boolean>(() => true);
+    const { onHeightChange } = renderHeld(onPreview);
+    const slider = screen.getByRole("slider");
+    fireEvent.change(slider, { target: { value: "0.3" } });
+    fireEvent.change(slider, { target: { value: "0.6" } });
+    expect(onPreview).toHaveBeenLastCalledWith(expect.objectContaining({ z: 0.6, zOrigin: "user" }));
+    expect(onHeightChange).not.toHaveBeenCalled();
+    fireEvent.pointerUp(slider);
+    expect(onHeightChange).toHaveBeenCalledTimes(1);
+    expect(onHeightChange).toHaveBeenCalledWith(0.6);
+  });
+
+  it("writes each step where no room view can show it", () => {
+    const { onHeightChange } = renderHeld(() => false);
+    fireEvent.change(screen.getByRole("slider"), { target: { value: "0.6" } });
+    expect(onHeightChange).toHaveBeenCalledWith(0.6);
+  });
+});

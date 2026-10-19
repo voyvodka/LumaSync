@@ -945,6 +945,11 @@ export function RoomMapEditor({
       view?.holdZone(zoneId, zone);
       return view !== null;
     },
+    onPreviewHueChannel: (channelIndex, channel) => {
+      const view = roomDropRef.current;
+      view?.holdLight(channelIndex, channel);
+      return view !== null;
+    },
     onRenameHueZone: handleRenameHueZone,
     onDeleteHueZone: handleDeleteHueZone,
     onAssignChannelToZone: handleAssignChannelToZone,

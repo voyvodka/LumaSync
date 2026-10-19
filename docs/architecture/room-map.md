@@ -130,7 +130,8 @@ card's height is the base's height off the floor, since a centre's height named 
 and its edge grows from the base as the grips do, the base giving way only once the top meets the
 ceiling. Both fields follow the same rule while dragged across: the 3D room shows the cube
 held, and release writes once and calls `update_hue_zone` once. In the plan, which has no held cube,
-each step still writes. Carried or raised, only its centre is written, so a zone
+each step still writes. A light's card holds its X, Y and height the same way: the 3D room shows the
+carried light's amber box where the fields put it (`holdLight`), and release writes once. Carried or raised, only its centre is written, so a zone
 against a wall stops there instead of shrinking. They are flagged `OVERLAY` for the glow pass, which hides them: its black stand-in
 for every other mesh writes depth, and a zone's box drawn that way put out the bulbs inside it. A loose
 light let go inside a drawn zone's cube joins it, on the plan or carried in 3D, at the spot it was put

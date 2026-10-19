@@ -6,12 +6,16 @@ import type { ZoneRect } from "@/features/room-map/model/zoneRect";
 import { lampColour } from "../model/lampColours";
 import {
   AdditiveBlending,
+  BoxGeometry,
   type BufferGeometry,
   type Camera,
   Color,
   DoubleSide,
+  EdgesGeometry,
   InstancedMesh,
   Light,
+  LineBasicMaterial,
+  LineSegments,
   type Material,
   Matrix4,
   Mesh,
@@ -46,7 +50,7 @@ import {
 
 import type { PickLeg, Pickable } from "../model/picking";
 import { nearestWallFacing, type OutlineEdge, roomEdges } from "../model/roomOutline";
-import { hueChannelScenePoint, roomToScene, tvMountHeight } from "../model/roomSpace";
+import { hueChannelScenePoint, roomToScene, type ScenePoint, tvMountHeight } from "../model/roomSpace";
 import { contactShadow, floorParts, roomLights, WALL_THICKNESS, wallFootShade, wallGeometry } from "./scene/environment";
 import { classifyFurniture, contactShade, modelTop, surfaceTop } from "../model/furnitureModel";
 import { type LampFamily, ONE_SIDED } from "../model/lampFamily";
@@ -66,6 +70,8 @@ import { buildZoneBoxes, type ZoneLight } from "./scene/zoneBoxes";
 import { type LedTape, ledTape, TAPE_DEPTH as STRIP_DEPTH, TAPE_WIDTH as STRIP_WIDTH } from "./scene/ledTape";
 
 const STRIP_GLOW = 0xffc46b;
+/** The carried light's amber, so a dock drag reads as the same gesture. */
+const HELD_LIGHT = 0xffb020;
 // At 1.6 with a steep fall-off the halo burnt to a white band with a hard edge.
 const BACKLIGHT_GAIN = 0.9;
 const LAMP_BOUNCE = 0.35;
@@ -169,6 +175,9 @@ export interface RoomScene {
   markZones(marks: ZoneMarks | null): boolean;
   /** A zone carried or resized, as its whole box on the plan rectangle; null sets it down. */
   holdZone(zoneId: string, rect: ZoneRect | null, centerZ?: number): boolean;
+  /** A light's dock fields while dragged: its box where they put its stored point, as a carried light
+   *  shows it; null hides it. The lamp moves when the room is built again. */
+  holdLight(objectId: string, at: ScenePoint | null): boolean;
   /** Turns what faces the camera (the selection's ring, a zone's name) to it; call before each draw. */
   faceCamera(cameraQuaternion: Quaternion, camera?: Camera): void;
   /** `null` keeps each lamp's own colour; a palette gives lamp i stop i mod n. */
@@ -542,6 +551,9 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
   });
   const zoneBoxes = buildZoneBoxes(config.zones, dims, { lights: zoneLights, outline: corners });
   scene.add(zoneBoxes.group);
+  const heldLight = new LineSegments(new EdgesGeometry(new BoxGeometry(1, 1, 1)), new LineBasicMaterial({ color: HELD_LIGHT }));
+  heldLight.visible = false;
+  scene.add(heldLight);
 
   // A room with no lamps keeps its evening light whatever the mode; the Ambient light moves it
   // toward night or day. A lamp-lit room's unlit end is a dusk, so the lamps going out reads.
@@ -598,6 +610,20 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     select: mark.select,
     markZones: zoneBoxes.mark,
     holdZone: zoneBoxes.hold,
+    holdLight(objectId, at) {
+      const item = at && pickables.find((p) => p.id === objectId && p.kind === "light");
+      if (!at || !item) {
+        if (!heldLight.visible) return false;
+        heldLight.visible = false;
+        return true;
+      }
+      const [hx, hy, hz] = item.half;
+      const from = item.stored ?? item.centre;
+      heldLight.scale.set(hx * 2, Math.max(hy * 2, 0.05), hz * 2);
+      heldLight.position.set(at.x + item.centre.x - from.x, Math.max(at.y + item.centre.y - from.y, 0.025), at.z + item.centre.z - from.z);
+      heldLight.visible = true;
+      return true;
+    },
     faceCamera(q, camera) {
       mark.orient(q);
       zoneBoxes.orient(q, camera);
