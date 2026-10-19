@@ -66,6 +66,7 @@ import { type Liftable, type LiftedPiece, liftPiece, spanHider, spansOf } from "
 import { beamGeometry, columnGeometry, decorLights, doorGaps, gappedWallGeometry, openingsTop, planStructures, thresholds } from "./scene/structures";
 import { buildScreen } from "./scene/screen";
 import { buildSelectionMark } from "./scene/selection";
+import { buildBeams } from "./scene/beams";
 import { buildZoneBoxes, type ZoneLight } from "./scene/zoneBoxes";
 import { type LedTape, ledTape, TAPE_DEPTH as STRIP_DEPTH, TAPE_WIDTH as STRIP_WIDTH } from "./scene/ledTape";
 
@@ -132,6 +133,8 @@ export interface RoomSceneOptions {
   coldKey?: number;
   /** Each Hue channel's fixture by channel index; one not listed draws as a bulb. */
   lampFamilies?: ReadonlyMap<number, LampFamily>;
+  /** The room is being edited: each one-sided Hue light shows which way it throws (`scene/beams.ts`). */
+  beams?: boolean;
 }
 
 /** A piece's top as something stands on it, in the scene frame. */
@@ -521,6 +524,8 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
 
   const surface = poolTexture(128);
   const glow = buildGlow(lamps, planes, H, surface, standing);
+  const throws = options.beams ? buildBeams(lamps.slice(0, hueLamps), { w: W, d: D, h: H }) : null;
+  if (throws) scene.add(throws.group);
   if (glow) scene.add(...glow.objects);
   else surface.dispose();
 
@@ -595,6 +600,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     lights.fill.intensity = unlit.fill;
     real?.paint(lampColour, level, palette);
     glow?.paint(lampColour, level, palette);
+    throws?.paint(lampColour, level, palette);
     // By the strip's level: Ambilight keeps the lamps at a fifth, which left the picture all but gone.
     screen?.paint(lampColour, strip, palette);
     spill?.color.set(lampColour ?? STRIP_GLOW).multiplyScalar(strip * BACKLIGHT_GAIN);

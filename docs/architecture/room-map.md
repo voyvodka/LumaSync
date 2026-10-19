@@ -734,6 +734,15 @@ Showroom fell from about 60 ms of main-thread work to about 16 ms.
   half the lamps' — so the setting mostly reads with
   the lights off or dim. It eases with the lamps (`daylight` is a `MoodLevels` level), follows the
   thumb in this window and is saved where it is let go (`previewPreference`), so a drag is one write.
+- **While the room is edited, a one-sided light shows its throw.** Each Hue light with a beam (Play
+  bar, Signe, Iris, Bloom, a pendant, a downlight) draws a soft cone from its lit part along its aim
+  (`scene/beams.ts`), additive, in its colour, fading to nothing at the mouth and across its sides by
+  how square it faces the eye: which way it shines reads without the room lit, and a facing changed
+  in the card turns it. Faded only along its length, both sides added gave it a hard silhouette and
+  it read as a flat wedge. It reaches the wall, floor or ceiling its aim meets (0.3 to 2.4 m); one
+  stopping at a metre hung in mid-air. Drawn at its real spread a pendant's cone filled the room, so
+  it is drawn at 60% of it. Off it keeps half its strength, as the dark bulb still says where it is.
+  An all-round bulb already reads by its glow, and View draws none.
 - **The camera travels to what is picked.** A light or the screen picked in the room or the dock
   draws the camera most of the way to it at once and then settles (760 ms, an exponential ease-out),
   framed 1.55× closer with the light at the middle of the part the dock leaves free. Aiming 70% of
