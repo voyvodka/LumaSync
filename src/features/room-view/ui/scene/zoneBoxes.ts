@@ -35,7 +35,7 @@ const LABEL_LIFT_PX = 12;
 const FLOOR_LIFT = 0.006;
 // The whole cube reads as a cage over the furniture, so at rest only a low wall rises from its bottom.
 const WALL_M = 0.45;
-/** Clear of the top bar and the carry hint under it. */
+/** Clear of the top bar. */
 const TOP_NDC = 0.72;
 const TOP_CORNERS = [
   [-1, -1],
