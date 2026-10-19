@@ -231,9 +231,9 @@ const roomMap: Catalogue<typeof enRoomMap> = {
   imageImportError: "Görsel eklenemedi. Ayrıntılar için günlüğe bak.",
   imageTooLarge: "Görsel {{maxMb}} MB'tan büyük. Daha küçük bir dosya seç.",
   usbStrip: {
-    online: "BAĞLI",
-    offline: "ÇEVRİMDIŞI",
-    noPort: "PORT YOK",
+    online: "Bağlı",
+    offline: "Çevrimdışı",
+    noPort: "Port yok",
   },
   hueChannel: {
     defaultLabel: "Kanal {{id}}",

@@ -228,9 +228,9 @@ export default {
   imageImportError: "Image could not be added. Check the log for details.",
   imageTooLarge: "Image is larger than {{maxMb}} MB. Choose a smaller file.",
   usbStrip: {
-    online: "ONLINE",
-    offline: "OFFLINE",
-    noPort: "NO PORT",
+    online: "Online",
+    offline: "Offline",
+    noPort: "No port",
   },
   hueChannel: {
     defaultLabel: "Channel {{id}}",

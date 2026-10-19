@@ -274,41 +274,28 @@ export const UsbStripObject = memo(function UsbStripObject({
         )}
       </svg>
 
-      {/* Connection status badge + multi-strip
-          port label anchored above the start handle. The port label
-          renders whenever the strip carries a persisted `portName`
-          (a contract field); the live status chip overlays the
-          existing badge palette. */}
-      {connectionStatus !== "unknown" ? (
+      {/* One pill over the start handle, its size kept on screen: two stacked labels grew with the
+          zoom until they covered the TV. */}
+      {connectionStatus !== "unknown" || placement.portName ? (
         <div
           className={`lm-room-usb-status-badge lm-room-usb-status-badge--${connectionStatus}`}
-          style={{
-            left: sx - 32,
-            top: sy - 22,
-          }}
-          aria-hidden
-        >
-          <span className="lm-room-usb-status-badge-dot" aria-hidden />
-          <span>
-            {connectionStatus === "connected"
-              ? t("roomMap:usbStrip.online")
-              : connectionStatus === "unlinked"
-                ? t("roomMap:usbStrip.noPort")
-                : t("roomMap:usbStrip.offline")}
-          </span>
-        </div>
-      ) : null}
-      {placement.portName ? (
-        <div
-          className="lm-room-usb-port-label"
-          style={{
-            left: sx - 32,
-            top: sy - 38,
-          }}
+          style={{ left: sx, top: sy, "--lm-usb-badge-scale": 1 / zoom } as React.CSSProperties}
           aria-hidden
           title={placement.portName}
         >
-          {placement.portName}
+          {connectionStatus !== "unknown" ? (
+            <>
+              <span className="lm-room-usb-status-badge-dot" aria-hidden />
+              <span>
+                {connectionStatus === "connected"
+                  ? t("roomMap:usbStrip.online")
+                  : connectionStatus === "unlinked"
+                    ? t("roomMap:usbStrip.noPort")
+                    : t("roomMap:usbStrip.offline")}
+              </span>
+            </>
+          ) : null}
+          {placement.portName ? <span className="lm-room-usb-port-label">{placement.portName.replace(/^\/dev\//, "")}</span> : null}
         </div>
       ) : null}
 

@@ -84,6 +84,25 @@ describe("UsbStripObject", () => {
     expect(screen.getByText("roomMap:usbStrip.noPort")).toBeTruthy();
     expect(screen.queryByText("roomMap:usbStrip.offline")).toBeNull();
   });
+
+  it("names its state and port in one pill over its start, one size on screen at any zoom", () => {
+    render(
+      <UsbStripObject
+        placement={{ ...PLACEMENT, portName: "/dev/cu.usbserial-10" }}
+        pxPerMeter={PX_PER_METER}
+        selected={false}
+        zoom={2.5}
+        connectionStatus="disconnected"
+        onSelect={vi.fn<(id: string) => void>()}
+        onChange={vi.fn<(updated: UsbStripPlacement) => void>()}
+      />,
+    );
+    const pill = screen.getByText("roomMap:usbStrip.offline").parentElement!;
+    expect(pill.textContent).toBe("roomMap:usbStrip.offlinecu.usbserial-10");
+    expect(pill.title).toBe("/dev/cu.usbserial-10");
+    expect([pill.style.left, pill.style.top]).toEqual(["80px", "80px"]);
+    expect(pill.style.getPropertyValue("--lm-usb-badge-scale")).toBe("0.4");
+  });
 });
 
 describe("UsbStripObject — dragging", () => {

@@ -164,27 +164,25 @@
   position: absolute;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: rgba(7, 8, 10, 0.78);
-  border: 1px solid var(--lm-line-2);
-  backdrop-filter: blur(4px);
-  font-family: var(--lm-mono);
-  font-size: 8.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgb(14 14 20 / 86%);
+  box-shadow: inset 0 0 0 1px var(--lm-line-2);
   color: var(--lm-ink-dim);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
   pointer-events: none;
   z-index: 22;
   white-space: nowrap;
+  transform: translate(-50%, calc(-100% - 10px * var(--lm-usb-badge-scale, 1))) scale(var(--lm-usb-badge-scale, 1));
+  transform-origin: 50% 100%;
 }
 .lm-room-usb-status-badge--connected {
-  border-color: rgba(74, 222, 128, 0.32);
   color: var(--lm-green);
 }
 .lm-room-usb-status-badge--disconnected {
-  border-color: rgba(239, 91, 91, 0.45);
   color: var(--lm-red);
 }
 /* Under the draw hint while a zone is drawn, and of no use then. */
@@ -199,13 +197,12 @@
 }
 @media (forced-colors: active) {
   .lm-room-usb-status-badge {
-    border-color: CanvasText;
+    border: 1px solid CanvasText;
     background: Canvas;
     color: CanvasText;
   }
   .lm-room-usb-status-badge--connected,
   .lm-room-usb-status-badge--disconnected {
-    border-color: Highlight;
     color: Highlight;
   }
 }
@@ -248,35 +245,19 @@
   }
 }
 
-/* Multi-strip canvas affordance — port name floats above each strip's
-   start handle so the user can tell which controller drives which run.
-   Sits 16 px above the status badge so the two never collide. */
+/* Names which controller drives which strip; the full path is in its title and the inspector. */
 .lm-room-usb-port-label {
-  position: absolute;
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 6px;
-  border-radius: 3px;
-  background: rgba(7, 8, 10, 0.78);
-  border: 1px solid var(--lm-line-2);
-  backdrop-filter: blur(4px);
-  font-family: var(--lm-mono);
-  font-size: 8.5px;
-  letter-spacing: 0.06em;
-  color: var(--lm-ink-dim);
-  pointer-events: none;
-  z-index: 22;
-  white-space: nowrap;
   max-width: 160px;
   overflow: hidden;
+  color: var(--lm-ink-dim);
+  font-family: var(--lm-mono);
+  font-size: 10.5px;
+  font-weight: 400;
   text-overflow: ellipsis;
 }
-@media (forced-colors: active) {
-  .lm-room-usb-port-label {
-    border-color: CanvasText;
-    background: Canvas;
-    color: CanvasText;
-  }
+.lm-room-usb-status-badge-dot ~ span + .lm-room-usb-port-label {
+  padding-left: 6px;
+  box-shadow: inset 1px 0 0 var(--lm-line-2);
 }
 
 /* What a drag carries, once the press has left its spot: lifted off the floor by a shadow and
