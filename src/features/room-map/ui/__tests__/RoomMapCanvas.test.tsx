@@ -37,6 +37,31 @@ describe("RoomMapCanvas — the toolbar fade", () => {
     expect(fade.style.height).toBe("36px");
     expect(Number(fade.style.zIndex)).toBeLessThan(10);
   });
+
+  it("stays on the viewport's top through a two-finger slide, before the pan is committed", () => {
+    const onPanChange = vi.fn<(pan: { x: number; y: number }) => void>();
+    const view = render(
+      <RoomMapCanvas
+        config={DEFAULT_ROOM_MAP}
+        pxPerMeter={100}
+        canvasSize={{ w: 800, h: 500 }}
+        showGrid
+        gridStrokeWidth={1}
+        selectedId={null}
+        onCanvasClick={() => {}}
+        zoom={2}
+        panOffset={{ x: 120, y: -60 }}
+        onZoomChange={vi.fn<(zoom: number) => void>()}
+        onPanChange={onPanChange}
+      />,
+    );
+    fireEvent.wheel(view.getByTestId("room-map-object-layer"), { deltaX: 20, deltaY: 40 });
+    expect(onPanChange).not.toHaveBeenCalled();
+    const fade = view.getByTestId("room-map-toolbar-fade");
+    // The layer now sits at (100, -100): the viewport's top-left is (-50, 50) in it.
+    expect(fade.style.left).toBe("-50px");
+    expect(fade.style.top).toBe("50px");
+  });
 });
 
 describe("RoomMapCanvas — an image layer", () => {

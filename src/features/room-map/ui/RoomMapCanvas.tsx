@@ -337,6 +337,24 @@ export function RoomMapCanvas({
   const { t } = useTranslation();
   const canvasRef = useRef<HTMLDivElement>(null);
   const objectLayerRef = useRef<HTMLDivElement>(null);
+  const fadeRef = useRef<HTMLDivElement>(null);
+  // A pan in flight moves the layer by hand; the fade goes with the viewport, not the room, or it
+  // drifted down over the plan and jumped back to the top when the pan was committed.
+  const moveLayer = useCallback(
+    (x: number, y: number) => {
+      const layer = objectLayerRef.current;
+      if (layer) {
+        layer.style.transition = "none";
+        layer.style.transform = layerTransform(x, y, zoom);
+      }
+      const fade = fadeRef.current;
+      if (fade) {
+        fade.style.left = `${-x / zoom}px`;
+        fade.style.top = `${-y / zoom}px`;
+      }
+    },
+    [zoom],
+  );
   const [selectionLayer, setSelectionLayer] = useState<HTMLDivElement | null>(null);
   // A zoom or pan from a button (+, −, fit, an arrow key) eases there; one the pointer drives — a
   // drag, the wheel, a pinch — follows it at once, or the plan would lag behind the hand.
@@ -394,11 +412,7 @@ export function RoomMapCanvas({
         const pending = wheelPanRef.current ?? { x: panOffset.x, y: panOffset.y, timer: null };
         pending.x -= e.deltaX;
         pending.y -= e.deltaY;
-        const layer = objectLayerRef.current;
-        if (layer) {
-          layer.style.transition = "none";
-          layer.style.transform = layerTransform(pending.x, pending.y, zoom);
-        }
+        moveLayer(pending.x, pending.y);
         if (pending.timer) clearTimeout(pending.timer);
         // One commit after the gesture, as a drag pan does: per event re-rendered every object.
         pending.timer = setTimeout(() => {
@@ -427,7 +441,7 @@ export function RoomMapCanvas({
       onZoomChange(next);
       onPanChange({ x: newPanX, y: newPanY });
     },
-    [zoom, panOffset, onZoomChange, onPanChange],
+    [zoom, panOffset, onZoomChange, onPanChange, moveLayer],
   );
 
   // A box across empty floor selects what it covers; the click that ends it is not a deselect.
@@ -480,13 +494,9 @@ export function RoomMapCanvas({
       if (!pan.active) return;
       pan.x = pan.ox + e.clientX - pan.startX;
       pan.y = pan.oy + e.clientY - pan.startY;
-      const layer = objectLayerRef.current;
-      if (layer) {
-        layer.style.transition = "none";
-        layer.style.transform = layerTransform(pan.x, pan.y, zoom);
-      }
+      moveLayer(pan.x, pan.y);
     },
-    [zoom, marquee],
+    [moveLayer, marquee],
   );
 
   const handleCanvasPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -636,7 +646,7 @@ export function RoomMapCanvas({
       // `select-none` because a drag sweeps bubbled pointer-moves across the
       // `<text>` and chip labels and highlights them. The dock's inputs mount
       // outside this root, so they keep native selection.
-      className={`select-none relative w-full h-full overflow-hidden bg-bg ${panMode ? "cursor-grab" : ""}`}
+      className={`select-none relative isolate w-full h-full overflow-hidden bg-bg ${panMode ? "cursor-grab" : ""}`}
       onClick={handleBackgroundClick}
       onWheel={handleCanvasWheel}
       onPointerDown={handleCanvasPointerDown}
@@ -679,6 +689,7 @@ export function RoomMapCanvas({
             between the floating toolbars read as drawn over them. Held to the viewport's top edge. */}
         <div
           aria-hidden="true"
+          ref={fadeRef}
           data-testid="room-map-toolbar-fade"
           className="pointer-events-none absolute"
           style={{

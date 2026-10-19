@@ -54,6 +54,8 @@
     left: 12px;
     z-index: 30;
     width: var(--room-switch-w);
+    /* Its own layer: WKWebView painted the plan's composited layer over it while the plan moved. */
+    will-change: transform;
     height: 32px;
     border-radius: 8px;
     background: var(--lm-panel);
