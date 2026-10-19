@@ -7,9 +7,8 @@ import { clamp, roundTo } from "@/shared/lib/math";
 import { useSideScroll } from "@/shared/lib/useSideScroll";
 
 import { hueChannelDotText, hueChannelName } from "../../model/hueChannelLabel";
-import { hueToMetres } from "../../model/hueChannelPosition";
 import { getZoneColor } from "../../model/zoneColor";
-import { maxZoneEdgeAt, withCubeEdge, zoneEdge } from "../../model/zoneCube";
+import { bottomKeptCenterZ, maxZoneEdgeAt, withCubeEdge, zoneBase, zoneEdge } from "../../model/zoneCube";
 import { zoneEdgeBounds } from "../../model/zoneRect";
 import { DecimalField } from "../DecimalField";
 import { ZoneSwatches } from "../dock/DockSwatches";
@@ -70,11 +69,11 @@ export function HueZoneInspector({
   const room = { widthMeters: widthM, depthMeters: depthM, heightMeters: heightM };
   const bounds = sized ? zoneEdgeBounds(widthM, depthM, heightM) : { min: 0, max: 0 };
   const edge = sized ? zoneEdge(shown, room) : 0;
-  // Grown about its centre, so the far side stops at the nearest wall, floor or ceiling: Rust
-  // refuses `|center| + scale > 1`.
+  // Grown about its middle on the plan, so the far side stops at the nearest wall: Rust refuses
+  // `|center| + scale > 1`.
   const maxEdge = sized ? maxZoneEdgeAt(shown, room) : 0;
-  const centreM = hueToMetres(shown.centerZ, heightM);
-  const halfH = edge / 2;
+  // The base, not the centre: a centre's height named no place in the room.
+  const base = sized ? zoneBase(shown, room) : 0;
   const cube = (next: HueZone) => {
     const { centerX, centerY, centerZ, scaleX, scaleY, scaleZ } = next;
     onUpdate({ centerX, centerY, centerZ, scaleX, scaleY, scaleZ });
@@ -87,7 +86,8 @@ export function HueZoneInspector({
   const letGo = () => {
     if (!dragged) return;
     setDragged(null);
-    if (SHAPE.every((key) => dragged[key] === zone[key])) onPreview?.(null);
+    // Within float noise: a base turned back into a centre is rarely the same bits.
+    if (SHAPE.every((key) => Math.abs(dragged[key] - zone[key]) < 1e-9)) onPreview?.(null);
     else cube(dragged);
   };
 
@@ -123,19 +123,22 @@ export function HueZoneInspector({
               unit="m"
               disabled={!sized}
               testId="hue-zone-size-input"
-              onCommit={(m, held) => step(withCubeEdge(shown, clamp(m, bounds.min, maxEdge), room), held)}
+              onCommit={(m, held) => {
+                const next = clamp(m, bounds.min, maxEdge);
+                step(withCubeEdge(shown, next, room, { x: shown.centerX, y: shown.centerY, z: bottomKeptCenterZ(shown, next, room) }), held);
+              }}
               onScrubEnd={letGo}
             />
             <DecimalField
               label={t("roomMap:inspector.zoneHeightLabel")}
               prefix={<GlyphHeight />}
-              value={centreM}
-              min={roundTo(halfH, 2)}
-              max={roundTo(heightM - halfH, 2)}
+              value={base}
+              min={0}
+              max={Math.max(0, roundTo(heightM - edge, 2))}
               unit="m"
               disabled={!sized}
               testId="hue-zone-height-input"
-              onCommit={(m, held) => step(withCubeEdge(shown, edge, room, { x: shown.centerX, y: shown.centerY, z: (clamp(m, halfH, heightM - halfH) / heightM) * 2 - 1 }), held)}
+              onCommit={(m, held) => step(withCubeEdge(shown, edge, room, { x: shown.centerX, y: shown.centerY, z: ((clamp(m, 0, heightM - edge) + edge / 2) / heightM) * 2 - 1 }), held)}
               onScrubEnd={letGo}
             />
           </FieldRow>

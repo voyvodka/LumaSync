@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 
 import { resolveHueChannelWorld, resolveHueChannelWorldZ } from "../hueChannelPosition";
-import { bottomKeptCenterZ, cubeZones, isCubeZone, maxZoneEdgeAt, withCubeEdge, zoneEdge } from "../zoneCube";
+import { bottomKeptCenterZ, cubeZones, isCubeZone, maxZoneEdgeAt, withCubeEdge, zoneBase, zoneEdge } from "../zoneCube";
 
 const dimensions = { widthMeters: 5, depthMeters: 4, heightMeters: 2.5 };
 // A zone as 10 → 11 left it: 2 × 1.2 m on the floor, floor to ceiling.
@@ -136,9 +136,14 @@ describe("zoneCube", () => {
     expect(tall.centerX).toBe(0.5);
   });
 
-  it("grows no further about its centre than the nearest wall, floor or ceiling allows", () => {
-    expect(maxZoneEdgeAt({ centerX: 0.6, centerY: 0, centerZ: 0 }, dimensions)).toBeCloseTo(2);
-    expect(maxZoneEdgeAt({ centerX: 0, centerY: 0, centerZ: 0 }, dimensions)).toBeCloseTo(2.5);
+  it("grows no further about its middle than the nearest wall allows, and no taller than the room", () => {
+    expect(maxZoneEdgeAt({ centerX: 0.6, centerY: 0 }, dimensions)).toBeCloseTo(2);
+    expect(maxZoneEdgeAt({ centerX: 0, centerY: 0 }, dimensions)).toBeCloseTo(2.5);
+  });
+
+  it("reads its base off the floor in metres", () => {
+    expect(zoneBase({ centerZ: 0, scaleZ: 0.5 }, dimensions)).toBeCloseTo(0.625);
+    expect(zoneBase({ centerZ: -0.6, scaleZ: 0.4 }, dimensions)).toBeCloseTo(0);
   });
 
   it("keeps the bottom as the edge changes, until the top meets the ceiling", () => {

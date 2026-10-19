@@ -315,7 +315,7 @@ export default {
     decorHeightLabel: "Light height, floor to ceiling",
     hueHeightZoneLimit: "Limited by zone {{name}} ({{min}}–{{max}} m). Move the light out of the zone to place it outside that range.",
     zoneSizeLabel: "Zone edge, the same on every side",
-    zoneHeightLabel: "Zone centre height above the floor",
+    zoneHeightLabel: "Zone base height above the floor",
     zoneChannelCount_one: "{{count}} light",
     zoneChannelCount_other: "{{count}} lights",
     widthLabel: "Width",

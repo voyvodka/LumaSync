@@ -1,6 +1,7 @@
 /**
- * HueZoneInspector — a zone is a cube in metres: one edge and its centre's height. The edge is capped
- * by the ceiling and by the headroom Rust leaves a zone near a wall. Its colour is one of the
+ * HueZoneInspector — a zone is a cube in metres: one edge and its base's height. The edge grows from
+ * the base, is capped by the headroom Rust leaves a zone near a wall, and pushes the base down only
+ * once the top meets the ceiling. Its colour is one of the
  * palette's six, and its lights join and leave from their chips.
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -107,13 +108,14 @@ describe("HueZoneInspector — a drag across a field", () => {
     expect(onUpdate).not.toHaveBeenCalled();
     fireEvent.pointerUp(box, { pointerId: 1 });
     expect(onUpdate).toHaveBeenCalledTimes(1);
-    expect(onUpdate).toHaveBeenLastCalledWith({ centerX: 0, centerY: 0, centerZ: 0, scaleX: 0.35, scaleY: 0.4375, scaleZ: 0.7 });
+    expect(onUpdate).toHaveBeenLastCalledWith({ centerX: 0, centerY: 0, centerZ: expect.closeTo(0.2, 5), scaleX: 0.35, scaleY: 0.4375, scaleZ: 0.7 });
     expect(onPreview).not.toHaveBeenCalledWith(null);
   });
 
   it("puts the zone back when the drag ends where it began", () => {
     const onPreview = vi.fn<(zone: HueZone | null) => boolean>(() => true);
-    const { onUpdate, height } = renderZone({ onPreview });
+    // Its base 0.5 m up, a value the field's two places hold exactly.
+    const { onUpdate, height } = renderZone({ onPreview, zone: { ...BASE_ZONE, centerZ: -0.1 } });
     const box = height.closest("label")!;
     fireEvent.pointerDown(box, { button: 0, clientX: 100, pointerId: 1 });
     fireEvent.pointerMove(box, { clientX: 120, pointerId: 1 });
@@ -133,20 +135,21 @@ describe("HueZoneInspector — a drag across a field", () => {
 });
 
 describe("HueZoneInspector — size and height", () => {
-  it("shows its edge in metres and writes it over each side of the room", () => {
+  it("shows its edge in metres and writes it over each side of the room, on the same base", () => {
     const { onUpdate, size } = renderZone();
     expect(size.value).toBe("1.25");
     commit(size, "0.75");
-    expect(onUpdate).toHaveBeenLastCalledWith({ centerX: 0, centerY: 0, centerZ: 0, scaleX: 0.15, scaleY: 0.1875, scaleZ: 0.3 });
+    // The base stays 0.625 m up: the 0.75 m cube's centre is 1 m up, -0.2 in Hue units.
+    expect(onUpdate).toHaveBeenLastCalledWith({ centerX: 0, centerY: 0, centerZ: expect.closeTo(-0.2, 5), scaleX: 0.15, scaleY: 0.1875, scaleZ: 0.3 });
   });
 
-  it("shows its centre's height in metres and moves it between the floor and the ceiling", () => {
+  it("shows its base's height in metres and moves it between the floor and the ceiling", () => {
     const { onUpdate, height } = renderZone();
-    expect(height.value).toBe("1.25");
-    expect(Number(height.getAttribute("aria-valuemin"))).toBeCloseTo(0.63, 2);
-    expect(Number(height.getAttribute("aria-valuemax"))).toBeCloseTo(1.88, 2);
-    commit(height, "1.5");
-    expect(onUpdate.mock.calls[0]![0].centerZ).toBeCloseTo(0.2, 5);
+    expect(Number(height.value)).toBeCloseTo(0.63, 2);
+    expect(height).toHaveAttribute("aria-valuemin", "0");
+    expect(height).toHaveAttribute("aria-valuemax", "1.25");
+    commit(height, "1");
+    expect(onUpdate.mock.calls[0]![0].centerZ).toBeCloseTo(0.3, 5);
   });
 
   it("holds both fields while the room's size has not loaded, rather than dividing by it", () => {
@@ -177,6 +180,7 @@ describe("HueZoneInspector — headroom at the wall", () => {
     expect(onUpdate).not.toHaveBeenCalled();
     commit(size, "2.5");
     expect(onUpdate.mock.calls[0]![0].scaleZ).toBeCloseTo(1, 5);
+    expect(onUpdate.mock.calls[0]![0].centerZ).toBeCloseTo(0, 5);
   });
 });
 
@@ -229,7 +233,7 @@ describe("HueZoneInspector — its lights", () => {
     expect(screen.getByTestId("hue-zone-chip-1").getAttribute("title")).toContain('roomMap:inspector.zoneChipElsewhere {"zone":"Desk"}');
   });
 
-  it("leaves a locked light where it is: joining a zone moves it to the zone's centre", () => {
+  it("leaves a locked light where it is: joining a zone may bring it inside", () => {
     const { onAssignChannel } = renderZone({ channels: [lamp(0, { locked: true })] });
     const chip = screen.getByTestId("hue-zone-chip-0");
     expect(chip).toBeDisabled();

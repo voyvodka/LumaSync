@@ -318,7 +318,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     decorHeightLabel: "Işık yüksekliği, zeminden tavana",
     hueHeightZoneLimit: "{{name}} bölgesiyle sınırlı ({{min}}–{{max}} m). Bu aralığın dışına koymak için ışığı bölgeden çıkar.",
     zoneSizeLabel: "Bölge kenarı, her yönde aynı",
-    zoneHeightLabel: "Bölge merkezinin zeminden yüksekliği",
+    zoneHeightLabel: "Bölge tabanının zeminden yüksekliği",
     zoneChannelCount_one: "{{count}} ışık",
     zoneChannelCount_other: "{{count}} ışık",
     widthLabel: "Genişlik",

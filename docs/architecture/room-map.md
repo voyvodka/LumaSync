@@ -121,7 +121,9 @@ rises, held between the floor and the ceiling. While held it is drawn as its who
 low wall keeps the furniture readable. Both stand a few millimetres off the floor, as the cube stands
 a centimetre off the walls: flush, its bottom face fought the planks for the pixel. One write on
 release, through the plan's own zone handlers: a live write rebuilt the room on every move. The dock
-card's edge and height fields follow the same rule while dragged across: the 3D room shows the cube
+card's height is the base's height off the floor, since a centre's height named no place in the room,
+and its edge grows from the base as the grips do, the base giving way only once the top meets the
+ceiling. Both fields follow the same rule while dragged across: the 3D room shows the cube
 held, and release writes once and calls `update_hue_zone` once. In the plan, which has no held cube,
 each step still writes. Carried or raised, only its centre is written, so a zone
 against a wall stops there instead of shrinking. They are flagged `OVERLAY` for the glow pass, which hides them: its black stand-in

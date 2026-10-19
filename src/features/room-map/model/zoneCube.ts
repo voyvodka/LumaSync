@@ -50,10 +50,16 @@ export function isCubeZone(zone: HueZone, d: Dims): boolean {
   );
 }
 
-/** The largest edge that still fits round the zone's centre: the dock grows it about its centre. */
-export function maxZoneEdgeAt(zone: Pick<HueZone, "centerX" | "centerY" | "centerZ">, d: Dims): number {
+/** The largest edge that still fits round the zone's middle on the floor plan. Upward it grows from
+ *  its base (`bottomKeptCenterZ`), which gives way only once the top meets the ceiling. */
+export function maxZoneEdgeAt(zone: Pick<HueZone, "centerX" | "centerY">, d: Dims): number {
   const { min, max } = zoneEdgeBounds(d.widthMeters, d.depthMeters, d.heightMeters);
-  return clamp(Math.min(...AXES.map((a) => (1 - Math.abs(zone[`center${a}`])) * sideOf(a, d))), min, max);
+  return clamp(Math.min(...(["X", "Y"] as const).map((a) => (1 - Math.abs(zone[`center${a}`])) * sideOf(a, d))), min, max);
+}
+
+/** How high its base stands off the floor, in metres. */
+export function zoneBase(zone: Pick<HueZone, "centerZ" | "scaleZ">, d: Dims): number {
+  return ((zone.centerZ - Math.abs(zone.scaleZ) + 1) / 2) * d.heightMeters;
 }
 
 /** A grip pulled at the floor resizes from the floor, not about the centre. */
