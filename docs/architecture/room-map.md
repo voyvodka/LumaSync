@@ -212,7 +212,8 @@ the plan. Reach is set on screen, not in metres: a target catches within `SNAP_E
 once caught, lets go only past `SNAP_RELEASE_PX` (14 px) — a `SnapHold` handed back on each move, so a
 drag neither chatters at the edge nor is tugged across the room. The plan converts with its zoom; the
 3D room with the floor's projected scale at the carried point. Either way a fitted-small room never
-reaches past 15 cm (`snapReach`). What each drag meets:
+holds past 15 cm, and catches within about 11 (`snapReach` keeps the two radii in their 10 : 14
+ratio). What each drag meets:
 
 - furniture and the TV by edge and middle; a piece turned a quarter by the box it covers, one turned
   otherwise by its middle alone (its edges are off the axes);
@@ -229,7 +230,8 @@ not the footprint the plan stores, and the carry hint names ⌥ while snapping i
 
 **A carried light stands where it will land before it is let go.** The landing seats a Hue light on
 the piece under it (`seatMovedLight`), so the 3D ghost runs the same function on every move and rises
-or drops by the height it returns; a release never jumps. The tag names the top it will stand on.
+or drops by the height it returns; a release never jumps. ⇧ lifts from that seated height, so the
+ceiling stop still holds over a desk. The tag names the height it will land at, as the panel shows it after.
 `placedSurfaceTop` is the one expression for a piece's top at its stored height: the scene stands
 lamps on it and the seat reads it, and two copies drifted would put the ghost and the landing at
 different heights.
