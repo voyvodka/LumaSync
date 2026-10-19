@@ -194,6 +194,12 @@ describe("computeSnap — a turned piece", () => {
   // A desk turned a quarter: 2 × 0.6 m stored, so it covers 0.6 across and 2 deep on the plan.
   const desk: ObjectRect = { id: "desk", x: 1, y: 1, w: 2, h: 0.6, r: 90 };
 
+  // 165° + 15° summed in radians in the 3D room comes to 179.99999999999997.
+  it("treats a turn a hair off a half as on it", () => {
+    const result = computeSnap({ id: "d", x: 1.02, y: 3, w: 1, h: 0.5, r: 179.99999999999997 }, [{ id: "o", x: 1, y: 0.5, w: 3, h: 1 }], 0.05);
+    expect(result.snapX).toBeCloseTo(1);
+  });
+
   it("offers the edges it covers on the plan, not the ones it was drawn with", () => {
     // Its covered left edge is at 1.7 (middle 2, half of 0.6 across); the stored rect's is at 1.
     const result = computeSnap({ id: "d", x: 1.72, y: 9, w: 0.5, h: 0.5 }, [desk], 0.05);

@@ -68,7 +68,11 @@ export function isClick(startX: number, startY: number, endX: number, endY: numb
   return Math.hypot(endX - startX, endY - startY) < CLICK_SLOP_PX;
 }
 
-const quarterTurned = (r: number | undefined) => Math.abs(((r ?? 0) % 90) + 90) % 90 < 1e-6;
+// Both sides of a quarter: a 3D turn summed in radians lands a hair under 180 as often as on it.
+const quarterTurned = (r: number | undefined) => {
+  const m = ((((r ?? 0) % 90) + 90) % 90);
+  return Math.min(m, 90 - m) < 1e-6;
+};
 const sideways = (r: number | undefined) => Math.abs((((r ?? 0) % 180) + 180) % 180 - 90) < 1e-6;
 
 /** The box a piece covers on the plan's axes; a piece turned off a quarter offers its middle alone. */
