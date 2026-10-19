@@ -559,8 +559,8 @@ describe("HueChannelInspector — a drag across its fields", () => {
         onMove={onMove}
         onHeightChange={onHeightChange}
         onPreview={onPreview}
-        onRename={vi.fn()}
-        onToggleLock={vi.fn()}
+        onRename={vi.fn<(label: string) => void>()}
+        onToggleLock={vi.fn<() => void>()}
         onClose={vi.fn<() => void>()}
       />,
     );
