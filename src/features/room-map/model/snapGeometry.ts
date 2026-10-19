@@ -52,7 +52,6 @@ export const SNAP_RELEASE_PX = 14;
 /** A room fitted small makes a few pixels a long way: a target past this never pulls. */
 const SNAP_REACH_MAX_M = 0.15;
 
-/** A screen radius in the plan's metres, never further than `SNAP_REACH_MAX_M`. */
 export function snapReach(px: number, metresPerPx: number): number {
   return Math.min(px * metresPerPx, SNAP_REACH_MAX_M * (px / SNAP_RELEASE_PX));
 }

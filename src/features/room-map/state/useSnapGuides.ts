@@ -15,7 +15,6 @@ import {
 
 export type { ObjectRect, SnapGuide, SnapResult };
 
-/** What else a drag knows about the piece: its turn, and whether ⌥ frees it from every target. */
 export interface SnapDragExtra {
   r?: number;
   free?: boolean;

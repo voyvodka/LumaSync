@@ -11,7 +11,6 @@ import { IS_MAC } from "./keyCaps";
 // Over the dock, by the card the keys act on, rather than under the top bar across the room.
 const SLOT = { "--carry-hint-bottom": `${DOCK_BOTTOM_PX + DOCK_HEIGHT_PX + 10}px` } as CSSProperties;
 
-/** `free`: the carried piece snaps to what it lines up with, and ⌥ lets it move without. */
 export function CarryHint({ hint, free = false }: { hint: Hint | null; free?: boolean }) {
   const { t } = useTranslation();
   const key = (cap: string, label: string) => (

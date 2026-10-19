@@ -1,4 +1,3 @@
-// What a carried piece or light has caught on, drawn across the room at the level it is carried.
 import { BufferGeometry, Float32BufferAttribute, Group, Line, LineDashedMaterial, Mesh, MeshBasicMaterial, PlaneGeometry, type Quaternion } from "three";
 
 import type { SnapGuide } from "@/features/room-map/model/snapGeometry";

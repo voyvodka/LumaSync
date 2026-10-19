@@ -156,11 +156,9 @@ const sameRoom = (a: RoomMapConfig, b: RoomMapConfig) => {
   const keys = Object.keys(a) as (keyof RoomMapConfig)[];
   return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key]);
 };
-/** Whether a carried piece catches on what it lines up with, and the words its guides show. */
 export interface Snapping {
   on: boolean;
   symmetric: string;
-  /** A light's tag over the piece it will stand on, `top` metres high. */
   seat: (top: number) => string;
 }
 const NO_SNAPPING: Snapping = { on: false, symmetric: "", seat: () => "" };
@@ -467,7 +465,6 @@ function openRoomView(
       rise: number;
       /** The pointer's height over the piece's centre when ⇧ went down; null while it slides. */
       grip: number | null;
-      /** Its footprint on the plan, for what it lines up with. */
       foot: { w: number; d: number };
       guides: SnapGuides3D | null;
       hold: SnapHold;
@@ -769,7 +766,6 @@ function openRoomView(
       const ppm = (across(1, 0) + across(0, 1)) / 2;
       return ppm > 0 ? 1 / ppm : 0.01;
     };
-    // Caught on what it lines up with, as the plan does: the same targets, reach and hold.
     const snapCarry = (c: NonNullable<typeof carry>, free: boolean): { guides: SnapGuide[]; mirror: boolean } => {
       const cfg = builtConfig;
       if (!cfg || free || !snapping().on) {

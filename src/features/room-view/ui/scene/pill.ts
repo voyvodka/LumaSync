@@ -1,4 +1,3 @@
-// A short label drawn into a texture, for a tag that stands in the room facing the camera.
 import { CanvasTexture, SRGBColorSpace } from "three";
 
 export interface Pill {
