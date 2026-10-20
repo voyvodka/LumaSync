@@ -654,12 +654,16 @@ Showroom fell from about 60 ms of main-thread work to about 16 ms.
   A light thrown straight down — a pendant, a downlight — reads nearly as well from a point, so the
   cones go to the sideways ones first.
 - **Each fixture lets its light out the way the product does** (`model/fixtureLight.ts`). One table
-  holds, per fixture, the lit part's size and its throw's spread and tilt. Sizes marked `checked`
-  come from product listings; every spread and tilt is recalled, not read off a spec sheet, so the
+  holds, per fixture, the lit part's size and its throw's spread and tilt. Values marked `checked`
+  come from Philips Hue product pages: the sizes, and the 40° of a Centura or Fugato spot. Philips
+  states no angle for its decorative lamps, so the other spreads and tilts are recalled, and the
   table is where a correction goes. A Play bar and a Signe throw level toward their wall, not
   tilted up. A ceiling light throws down. A spot on a stand is aimed up the wall it faces, and a
   wall light up and down it (`back`, a second throw that is drawn but never gets a real light). A
-  strip is 2 m and a tube 1.25 m. Spot and wall are one-sided now, so the map turns them too.
+  strip is 2 m and a tube 1.377 m. A pendant is a Cher's 47.5 cm dish, lit all over though the
+  real shade is opaque: from the camera above, a dark dish over a lit mouth read as switched off.
+  A strip's stated 120° goes unused, since the map does not know which way it is stuck. Spot and
+  wall are one-sided now, so the map turns them too.
   The light is the lit part's shape, not a point at its middle. In Edit the throw is a fan opening
   from the lit part's whole face (`fan` in `scene/beams.ts`): a Play bar's 25 cm, a Signe's 1.37 m.
   The wall wash is stretched to the lit part as the wall sees it (`extent` in `scene/glow.ts`): a
