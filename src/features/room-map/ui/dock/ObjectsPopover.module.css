@@ -1,0 +1,93 @@
+@layer components {
+  .list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    max-height: 320px;
+    margin: -4px;
+    padding: 4px;
+    overflow-y: auto;
+  }
+
+  .empty {
+    margin: 0;
+    padding: 8px;
+    font-size: 12px;
+    color: var(--lm-ink-faint);
+  }
+
+  .heading,
+  .subheading {
+    margin: 8px 8px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--lm-ink-faint);
+  }
+  .subheading { margin-top: 6px; font-weight: 500; }
+
+  .row {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    height: 32px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    font: 500 12px/1 var(--lm-sans);
+    text-align: left;
+    cursor: pointer;
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+  }
+  .row:hover { color: var(--lm-ink); background: rgb(255 255 255 / 4%); }
+  .row[aria-current="true"] {
+    color: var(--lm-ink);
+    background: color-mix(in srgb, var(--lm-amber) 12%, transparent);
+  }
+  .row:focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--lm-focus-ring-inset);
+  }
+  .nested { padding-left: 24px; }
+  .zone { color: var(--lm-ink); }
+
+  .dot {
+    flex-shrink: 0;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+  }
+  .disc { width: 10px; height: 10px; }
+
+  .label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .count {
+    flex-shrink: 0;
+    font: 10.5px var(--lm-mono);
+    color: var(--lm-ink-faint);
+  }
+  .lock {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    color: var(--lm-ink-faint);
+  }
+  .lock svg { width: 11px; height: 11px; }
+
+  :global(:root[data-reduced-motion]) .row { transition: none; }
+
+  @media (forced-colors: active) {
+    .row[aria-current="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
+    .row:focus-visible { outline: 2px solid Highlight; }
+    /* The dot's colour is what tells the zones apart. */
+    .dot { forced-color-adjust: none; }
+  }
+}

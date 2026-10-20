@@ -5,10 +5,12 @@
  *   macOS:       [80px traffic-light spacer] [app name] ——— [compact toggle]
  *   Windows/Linux: [icon] [app name]          ——— [compact toggle] [— □ ✕]
  *
- * The whole bar is a `data-tauri-drag-region`, which gives us native window
- * drag AND native double-click zoom/maximize on all platforms without any
- * JS handlers. Interactive elements opt out via
- * `data-tauri-drag-region="false"` so clicks pass through to React.
+ * The whole bar is a `data-tauri-drag-region`: Tauri's injected script drags
+ * the window on a press and zooms/maximizes it on a double-click. Interactive
+ * elements opt out via `data-tauri-drag-region="false"` so clicks pass through
+ * to React. On macOS a single press is taken first and drags through
+ * `start_window_drag` instead — Tauri's drag anchored on a stale event and the
+ * window jumped sideways — so only the double-click reaches Tauri there.
  *
  * macOS keeps native traffic lights (via `titleBarStyle: "Overlay"` +
  * `hiddenTitle: true` in tauri.conf.json). Windows/Linux disable native
@@ -16,7 +18,7 @@
  * component draws custom minimize / maximize-toggle / close buttons.
  */
 
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   closeCurrentWindow,
@@ -25,18 +27,10 @@ import {
   onCurrentWindowResized,
   toggleMaximizeCurrentWindow,
 } from "./windowApi";
+import { detectPlatform, handleDragRegionPress, type Platform } from "./windowDragApi";
 import { SECTION_ORDER, type SectionId } from "@/shared/contracts/shell";
+import { moveTabFocus } from "@/shared/lib/tablistKeys";
 import styles from "./TitleBar.module.css";
-
-type Platform = "macos" | "windows" | "linux";
-
-function detectPlatform(): Platform {
-  if (typeof navigator === "undefined") return "linux";
-  const ua = navigator.userAgent;
-  if (/Mac|iPhone|iPod|iPad/i.test(ua)) return "macos";
-  if (/Win/i.test(ua)) return "windows";
-  return "linux";
-}
 
 interface TitleBarProps {
   uiMode: "full" | "compact";
@@ -54,6 +48,9 @@ interface TitleBarProps {
 }
 
 export const TITLE_BAR_HEIGHT_PX = 36;
+
+/** The page the section tabs switch: the tabs name it as what they control. */
+export const SECTION_PANEL_ID = "lm-section-panel";
 
 export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChange, navLocked = false }: TitleBarProps) {
   const { t } = useTranslation();
@@ -88,6 +85,15 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
   return (
     <div
       data-tauri-drag-region
+      onMouseDown={(event) => {
+        // Compact is not maximizable, but tao ignores that flag on Linux and Tauri's script would
+        // still zoom the window on a double-click, with no zoom button left to undo it.
+        if (uiMode === "compact" && event.detail >= 2) {
+          event.stopPropagation();
+          return;
+        }
+        handleDragRegionPress(event);
+      }}
       className={`${styles.bar} fixed top-0 right-0 left-0 z-40 flex items-center select-none`}
       style={{
         height: `${TITLE_BAR_HEIGHT_PX}px`,
@@ -153,6 +159,7 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
             {/* small breathing room between toggle and native-replacement controls */}
             <span aria-hidden className="inline-block" style={{ width: "8px" }} />
             <WindowControls
+              canMaximize={uiMode === "full"}
               isMaximized={isMaximized}
               onMinimize={() => void minimizeCurrentWindow()}
               onToggleMaximize={() => void toggleMaximizeCurrentWindow()}
@@ -168,8 +175,6 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
 // ────────────────────────────────────────────────────────────────
 // Section tabs
 // ────────────────────────────────────────────────────────────────
-
-const STEP_BY_KEY: Record<string, 1 | -1> = { ArrowRight: 1, ArrowLeft: -1 };
 
 /**
  * The sections as a WAI-ARIA tablist: one tab stop, the arrows move focus and Enter or Space opens,
@@ -220,23 +225,6 @@ function SectionTabs({
     };
   }, [active]);
 
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const tabs = Array.from(listRef.current?.querySelectorAll<HTMLElement>('[role="tab"]') ?? []);
-    const at = tabs.indexOf(document.activeElement as HTMLElement);
-    if (at === -1) return;
-    const step = STEP_BY_KEY[event.key];
-    const next =
-      step !== undefined
-        ? tabs[(at + step + tabs.length) % tabs.length]
-        : event.key === "Home"
-          ? tabs[0]
-          : event.key === "End"
-            ? tabs[tabs.length - 1]
-            : undefined;
-    if (!next) return;
-    event.preventDefault();
-    next.focus();
-  };
 
   return (
     <div
@@ -246,7 +234,7 @@ function SectionTabs({
       aria-label={t("shell:titleBar.sectionsAriaLabel")}
       inert={locked}
       data-locked={locked || undefined}
-      onKeyDown={onKeyDown}
+      onKeyDown={moveTabFocus}
     >
       {SECTION_ORDER.map((id) => (
         <button
@@ -256,6 +244,7 @@ function SectionTabs({
           data-tauri-drag-region="false"
           className={styles.tab}
           aria-selected={id === active}
+          aria-controls={id === active ? SECTION_PANEL_ID : undefined}
           tabIndex={id === active ? 0 : -1}
           onClick={() => onChange(id)}
           data-testid={`section-tab-${id}`}
@@ -273,6 +262,8 @@ function SectionTabs({
 // ────────────────────────────────────────────────────────────────
 
 interface WindowControlsProps {
+  /** Compact cannot be zoomed (`applyModeLimits`), and 320 px has no room for a dead button. */
+  canMaximize: boolean;
   isMaximized: boolean;
   onMinimize: () => void;
   onToggleMaximize: () => void;
@@ -280,6 +271,7 @@ interface WindowControlsProps {
 }
 
 function WindowControls({
+  canMaximize,
   isMaximized,
   onMinimize,
   onToggleMaximize,
@@ -291,12 +283,14 @@ function WindowControls({
       <CtrlButton onClick={onMinimize} aria={t("shell:titleBar.minimize")}>
         <MinimizeIcon />
       </CtrlButton>
-      <CtrlButton
-        onClick={onToggleMaximize}
-        aria={isMaximized ? t("shell:titleBar.restore") : t("shell:titleBar.maximize")}
-      >
-        {isMaximized ? <RestoreIcon /> : <MaximizeIcon />}
-      </CtrlButton>
+      {canMaximize && (
+        <CtrlButton
+          onClick={onToggleMaximize}
+          aria={isMaximized ? t("shell:titleBar.restore") : t("shell:titleBar.maximize")}
+        >
+          {isMaximized ? <RestoreIcon /> : <MaximizeIcon />}
+        </CtrlButton>
+      )}
       <CtrlButton onClick={onClose} aria={t("shell:titleBar.close")} danger>
         <CloseIcon />
       </CtrlButton>
@@ -353,7 +347,7 @@ function LumaIcon() {
 
 function ExpandIcon() {
   return (
-    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M1 6V1h5M15 10v5h-5M1 10v5h5M15 6V1h-5" />
     </svg>
   );
@@ -361,7 +355,7 @@ function ExpandIcon() {
 
 function CollapseIcon() {
   return (
-    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M4 1v4H1M12 15v-4h3M1 12h4v3M15 4h-4V1" />
     </svg>
   );
@@ -369,7 +363,7 @@ function CollapseIcon() {
 
 function MinimizeIcon() {
   return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.2">
+    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden="true">
       <path d="M2 6h8" strokeLinecap="round" />
     </svg>
   );
@@ -377,7 +371,7 @@ function MinimizeIcon() {
 
 function MaximizeIcon() {
   return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.2">
+    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden="true">
       <rect x="2" y="2" width="8" height="8" rx="0.5" />
     </svg>
   );
@@ -385,7 +379,7 @@ function MaximizeIcon() {
 
 function RestoreIcon() {
   return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.2">
+    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden="true">
       <rect x="2" y="3.5" width="6.5" height="6.5" rx="0.5" />
       <path d="M3.5 3.5V2h6.5v6.5H8.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
@@ -394,7 +388,7 @@ function RestoreIcon() {
 
 function CloseIcon() {
   return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
       <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" />
     </svg>
   );

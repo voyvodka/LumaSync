@@ -90,7 +90,7 @@ export async function ensureStripForPort(
     );
     roster = next.roomMap.usbStrips;
     if (!next.changed) return null;
-    return { roomMap: next.roomMap, roomMapVersion: (current.roomMapVersion ?? 0) + 1 };
+    return { roomMap: next.roomMap };
   });
   return roster;
 }
@@ -123,6 +123,6 @@ export async function syncStripLedCount(totalLeds: number, connectedPort: string
     if (!current.roomMap) return null;
     const next = withStripLedCount(current.roomMap, totalLeds, connectedPort);
     if (!next.changed) return null;
-    return { roomMap: next.roomMap, roomMapVersion: (current.roomMapVersion ?? 0) + 1 };
+    return { roomMap: next.roomMap };
   });
 }

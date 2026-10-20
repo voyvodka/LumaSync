@@ -448,6 +448,9 @@ export type HueLightNamesWireStatusCode =
 export interface HueLightName {
   id: string;
   name: string;
+  /** CLIP v2 `metadata.archetype`, the bridge's spelling — an open set, not a code. `null` when
+   *  the bridge names none. */
+  archetype: string | null;
 }
 
 /** Result of `get_hue_light_names`. `lights` is empty on every failure arm. */

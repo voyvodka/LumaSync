@@ -1,8 +1,18 @@
 import type React from "react";
-import { memo, useRef, useState, useEffect, useCallback } from "react";
-import type { RoomMapConfig, ImageLayer } from "@/shared/contracts/roomMap";
+import { memo, useRef, useState, useEffect, useCallback, useId, useLayoutEffect, useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import { SelectionLayerContext } from "./objects/selectionLayer";
+import { type RoomMapConfig, type ImageLayer, resolveRoomFootprint } from "@/shared/contracts/roomMap";
+import { clamp } from "@/shared/lib/math";
+import { prefersReducedMotion } from "@/shared/lib/motion";
 import { imageLayerObjectId } from "../model/objectId";
+import { CLICK_SLOP_PX } from "../model/snapGeometry";
+import { pastSlop, useEscapeCancels } from "./objects/dragIntent";
+import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from "../state/useRoomMapViewport";
 import { readRoomMapImage } from "../roomMapFilesApi";
+
+// The floating toolbars end 40 px down; the guides are whole again 32 px below them.
+const TOOLBAR_FADE_PX = 72;
 
 type ResizeCorner = "nw" | "ne" | "sw" | "se";
 
@@ -82,6 +92,9 @@ const ImageLayerView = memo(function ImageLayerView({
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
 
+  // Latched once a press leaves its spot, so coming back near it still follows the pointer.
+  const movedRef = useRef(false);
+
   // --- Drag handlers ---
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (panMode) return;
@@ -90,10 +103,13 @@ const ImageLayerView = memo(function ImageLayerView({
     if (!canDrag) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     dragRef.current = { active: true, startX: e.clientX, startY: e.clientY, ox: localOx, oy: localOy };
+    movedRef.current = false;
   }, [localOx, localOy, canDrag, panMode, onSelect, layer.id]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (!dragRef.current.active) return;
+    if (!movedRef.current && !pastSlop(dragRef.current.startX, dragRef.current.startY, e.clientX, e.clientY)) return;
+    movedRef.current = true;
     const dx = (e.clientX - dragRef.current.startX) / zoomRef.current;
     const dy = (e.clientY - dragRef.current.startY) / zoomRef.current;
     setLocalOx(dragRef.current.ox + dx);
@@ -103,6 +119,8 @@ const ImageLayerView = memo(function ImageLayerView({
   const handlePointerUp = useCallback(() => {
     if (!dragRef.current.active) return;
     dragRef.current.active = false;
+    // A click selects; only a move is a step to undo.
+    if (localOx === dragRef.current.ox && localOy === dragRef.current.oy) return;
     onTransformChange?.(layer.id, localOx, localOy, layer.scale, localSx, localSy);
   }, [layer.id, layer.scale, localOx, localOy, localSx, localSy, onTransformChange]);
 
@@ -116,11 +134,14 @@ const ImageLayerView = memo(function ImageLayerView({
       initSx: localSx, initSy: localSy, initOx: localOx, initOy: localOy,
       imgW: naturalSize?.w ?? 100, imgH: naturalSize?.h ?? 100,
     };
+    movedRef.current = false;
   }, [panMode, canDrag, localSx, localSy, localOx, localOy, naturalSize]);
 
   const handleResizePointerMove = useCallback((e: React.PointerEvent) => {
     const r = resizeRef.current;
     if (!r.active) return;
+    if (!movedRef.current && !pastSlop(r.startX, r.startY, e.clientX, e.clientY)) return;
+    movedRef.current = true;
     const dx = (e.clientX - r.startX) / zoomRef.current;
     const dy = (e.clientY - r.startY) / zoomRef.current;
 
@@ -152,11 +173,25 @@ const ImageLayerView = memo(function ImageLayerView({
   const handleResizePointerUp = useCallback(() => {
     if (!resizeRef.current.active) return;
     resizeRef.current.active = false;
+    if (!movedRef.current) return;
     onTransformChange?.(layer.id, localOx, localOy, layer.scale, localSx, localSy);
   }, [layer.id, layer.scale, localOx, localOy, localSx, localSy, onTransformChange]);
 
+  const cancelGesture = () => {
+    if (!dragRef.current.active && !resizeRef.current.active) return;
+    dragRef.current.active = false;
+    resizeRef.current.active = false;
+    setLocalOx(layer.offsetX);
+    setLocalOy(layer.offsetY);
+    setLocalSx(layer.scaleX ?? layer.scale);
+    setLocalSy(layer.scaleY ?? layer.scale);
+  };
+  useEscapeCancels(() => dragRef.current.active || resizeRef.current.active, cancelGesture);
+
   const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (!canDrag) return;
+    // Two fingers sliding are the canvas's pan; only a pinch or a mouse wheel's notch scales the image.
+    const notch = e.deltaMode !== 0 || (e.deltaX === 0 && Math.abs(e.deltaY) >= 50 && Number.isInteger(e.deltaY));
+    if (!canDrag || !(e.ctrlKey || notch)) return;
     e.stopPropagation();
     const factor = e.deltaY > 0 ? 0.95 : 1.05;
     if (aspectLocked) {
@@ -220,6 +255,7 @@ const ImageLayerView = memo(function ImageLayerView({
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerCancel={cancelGesture}
         onWheel={handleWheel}
       />
       {/* Resize corner handles — same style as Furniture/TV ResizeHandle.
@@ -233,6 +269,7 @@ const ImageLayerView = memo(function ImageLayerView({
           onPointerDown={(e) => handleResizePointerDown(key, e)}
           onPointerMove={handleResizePointerMove}
           onPointerUp={handleResizePointerUp}
+          onPointerCancel={cancelGesture}
         >
           <span
             className="pointer-events-none absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-ink bg-bg"
@@ -266,8 +303,17 @@ interface RoomMapCanvasProps {
   onZoomChange?: (zoom: number) => void;
   onPanChange?: (offset: { x: number; y: number }) => void;
   panMode?: boolean;
+  /** A piece is being dragged: the grid steps forward so the snap it follows can be seen. */
+  dragging?: boolean;
+  /** A box dragged across empty floor, in room metres: what it covers is selected (⇧ adds). */
+  onMarquee?: (box: { x0: number; y0: number; x1: number; y1: number }, additive: boolean) => void;
   children?: React.ReactNode;
 }
+
+/** Changes to the view inside this long after the plan mounts are its opening fit, not a move. */
+const OPENING_SETTLE_MS = 500;
+/** How long a wheel pan waits after the last event before it commits the offset. */
+const WHEEL_PAN_SETTLE_MS = 120;
 
 export function RoomMapCanvas({
   config,
@@ -284,12 +330,58 @@ export function RoomMapCanvas({
   onZoomChange,
   onPanChange,
   panMode = false,
+  dragging = false,
+  onMarquee,
   children,
 }: RoomMapCanvasProps) {
+  const { t } = useTranslation();
   const canvasRef = useRef<HTMLDivElement>(null);
   const objectLayerRef = useRef<HTMLDivElement>(null);
+  const fadeRef = useRef<HTMLDivElement>(null);
+  // A pan in flight moves the layer by hand; the fade goes with the viewport, not the room, or it
+  // drifted down over the plan and jumped back to the top when the pan was committed.
+  const moveLayer = useCallback(
+    (x: number, y: number) => {
+      const layer = objectLayerRef.current;
+      if (layer) {
+        layer.style.transition = "none";
+        layer.style.transform = layerTransform(x, y, zoom);
+      }
+      const fade = fadeRef.current;
+      if (fade) {
+        fade.style.left = `${-x / zoom}px`;
+        fade.style.top = `${-y / zoom}px`;
+      }
+    },
+    [zoom],
+  );
+  const [selectionLayer, setSelectionLayer] = useState<HTMLDivElement | null>(null);
+  // A zoom or pan from a button (+, −, fit, an arrow key) eases there; one the pointer drives — a
+  // drag, the wheel, a pinch — follows it at once, or the plan would lag behind the hand.
+  const pointerDriven = useRef(false);
+  // The plan opens framed, not travelling there: the first fit lands before the easing starts.
+  const openedAt = useRef<number | null>(null);
+  if (openedAt.current === null) openedAt.current = performance.now();
+  const viewKey = `${zoom}:${panOffset.x}:${panOffset.y}`;
+  const lastView = useRef(viewKey);
+  useLayoutEffect(() => {
+    if (lastView.current === viewKey) return;
+    lastView.current = viewKey;
+    const layer = objectLayerRef.current;
+    if (!layer) return;
+    const settled = performance.now() - (openedAt.current ?? 0) > OPENING_SETTLE_MS;
+    const eased = settled && !pointerDriven.current && !prefersReducedMotion();
+    pointerDriven.current = false;
+    layer.style.transition = eased ? "transform var(--lm-dur-base) var(--lm-ease-out)" : "none";
+  }, [viewKey]);
 
   const { widthMeters, depthMeters } = config.dimensions;
+  const outline = useMemo(
+    () => resolveRoomFootprint({ dimensions: config.dimensions, footprint: config.footprint }),
+    [config.dimensions, config.footprint],
+  );
+  // A url(#…) reference cannot take the characters React puts in an id.
+  const cutPatternId = `room-cut-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
 
   // Grid interval: 0.5m if room width < 4m, else 1.0m
   const gridInterval = widthMeters < 4 ? 0.5 : 1.0;
@@ -301,30 +393,74 @@ export function RoomMapCanvas({
     active: false, startX: 0, startY: 0, ox: 0, oy: 0, x: 0, y: 0,
   });
 
+  // Two fingers on a trackpad pan and a pinch zooms, as every map does; a mouse wheel's notches
+  // still zoom. Every wheel event used to zoom, so a trackpad could not move the plan at all.
+  const wheelPanRef = useRef<{ x: number; y: number; timer: ReturnType<typeof setTimeout> | null } | null>(null);
+  useEffect(
+    () => () => {
+      const pending = wheelPanRef.current;
+      if (pending?.timer) clearTimeout(pending.timer);
+    },
+    [],
+  );
   const handleCanvasWheel = useCallback(
     (e: React.WheelEvent<HTMLDivElement>) => {
       if (!onZoomChange || !onPanChange) return;
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      const next = Math.max(0.3, Math.min(3, zoom + delta));
-      // Mouse position relative to canvas element
+      const pinch = e.ctrlKey;
+      const notch = e.deltaMode !== 0 || (e.deltaX === 0 && Math.abs(e.deltaY) >= 50 && Number.isInteger(e.deltaY));
+      if (!pinch && !notch) {
+        const pending = wheelPanRef.current ?? { x: panOffset.x, y: panOffset.y, timer: null };
+        pending.x -= e.deltaX;
+        pending.y -= e.deltaY;
+        moveLayer(pending.x, pending.y);
+        if (pending.timer) clearTimeout(pending.timer);
+        // One commit after the gesture, as a drag pan does: per event re-rendered every object.
+        pending.timer = setTimeout(() => {
+          wheelPanRef.current = null;
+          pointerDriven.current = true;
+          onPanChange({ x: pending.x, y: pending.y });
+        }, WHEEL_PAN_SETTLE_MS);
+        wheelPanRef.current = pending;
+        return;
+      }
+      const base = wheelPanRef.current ?? panOffset;
+      const next = pinch
+        ? clamp(zoom * Math.exp(-e.deltaY * 0.01), ZOOM_MIN, ZOOM_MAX)
+        : clamp(zoom + (e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP), ZOOM_MIN, ZOOM_MAX);
       const rect = canvasRef.current?.getBoundingClientRect();
       if (!rect) { onZoomChange(next); return; }
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
-      // Keep the point under the mouse fixed:
-      // Before zoom: worldX = (mx - panX) / oldZoom
-      // After zoom:  mx = worldX * newZoom + newPanX
-      // => newPanX = mx - (mx - panX) / oldZoom * newZoom
-      const newPanX = mx - ((mx - panOffset.x) / zoom) * next;
-      const newPanY = my - ((my - panOffset.y) / zoom) * next;
+      // Keep the point under the pointer fixed: newPan = m - (m - pan) / oldZoom * newZoom.
+      const newPanX = mx - ((mx - base.x) / zoom) * next;
+      const newPanY = my - ((my - base.y) / zoom) * next;
+      const pending = wheelPanRef.current;
+      if (pending?.timer) clearTimeout(pending.timer);
+      wheelPanRef.current = null;
+      pointerDriven.current = true;
       onZoomChange(next);
       onPanChange({ x: newPanX, y: newPanY });
     },
-    [zoom, panOffset, onZoomChange, onPanChange],
+    [zoom, panOffset, onZoomChange, onPanChange, moveLayer],
   );
+
+  // A box across empty floor selects what it covers; the click that ends it is not a deselect.
+  const marqueeRef = useRef<{ x: number; y: number; id: number } | null>(null);
+  const [marquee, setMarquee] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const swallowClick = useRef(false);
 
   const handleCanvasPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      // A cancelled press has no click to take the flag back.
+      swallowClick.current = false;
+      const onFloor = e.target === e.currentTarget || e.target === objectLayerRef.current;
+      if (!panMode && e.button === 0 && onFloor && onMarquee) {
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        marqueeRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top, id: e.pointerId };
+        return;
+      }
       if (panMode || e.button === 1) {
         e.preventDefault();
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -339,30 +475,74 @@ export function RoomMapCanvas({
         };
       }
     },
-    [panOffset, panMode],
+    [panOffset, panMode, onMarquee],
   );
 
   const handleCanvasPointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      const m = marqueeRef.current;
+      if (m) {
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        if (Math.hypot(x - m.x, y - m.y) < CLICK_SLOP_PX && marquee === null) return;
+        setMarquee({ left: Math.min(m.x, x), top: Math.min(m.y, y), width: Math.abs(x - m.x), height: Math.abs(y - m.y) });
+        return;
+      }
       const pan = panRef.current;
       if (!pan.active) return;
       pan.x = pan.ox + e.clientX - pan.startX;
       pan.y = pan.oy + e.clientY - pan.startY;
-      const layer = objectLayerRef.current;
-      if (layer) layer.style.transform = layerTransform(pan.x, pan.y, zoom);
+      moveLayer(pan.x, pan.y);
     },
-    [zoom],
+    [moveLayer, marquee],
   );
 
-  const handleCanvasPointerUp = useCallback(() => {
+  const handleCanvasPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (marqueeRef.current) {
+      marqueeRef.current = null;
+      const box = marquee;
+      setMarquee(null);
+      if (box && onMarquee) {
+        swallowClick.current = true;
+        const ppm = pxPerMeter * zoom;
+        onMarquee(
+          {
+            x0: (box.left - panOffset.x) / ppm,
+            y0: (box.top - panOffset.y) / ppm,
+            x1: (box.left + box.width - panOffset.x) / ppm,
+            y1: (box.top + box.height - panOffset.y) / ppm,
+          },
+          e.shiftKey,
+        );
+      }
+      return;
+    }
     const pan = panRef.current;
     if (!pan.active) return;
     pan.active = false;
-    if (pan.x !== pan.ox || pan.y !== pan.oy) onPanChange?.({ x: pan.x, y: pan.y });
-  }, [onPanChange]);
+    if (pan.x !== pan.ox || pan.y !== pan.oy) {
+      pointerDriven.current = true;
+      onPanChange?.({ x: pan.x, y: pan.y });
+    }
+  }, [onPanChange, marquee, onMarquee, pxPerMeter, zoom, panOffset]);
+
+  const handleCanvasPointerCancel = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!marqueeRef.current) return handleCanvasPointerUp(e);
+      marqueeRef.current = null;
+      setMarquee(null);
+    },
+    [handleCanvasPointerUp],
+  );
 
   const handleBackgroundClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
+      if (swallowClick.current) {
+        swallowClick.current = false;
+        return;
+      }
       if (e.target === e.currentTarget) {
         onCanvasClick();
       }
@@ -412,8 +592,8 @@ export function RoomMapCanvas({
           y2={svgMinY + svgH}
           stroke="currentColor"
           strokeWidth={gridStrokeWidth}
-          strokeDasharray="2 6"
-          opacity={0.4}
+          strokeDasharray={dragging ? undefined : "2 6"}
+          opacity={dragging ? 0.55 : 0.4}
         />,
       );
     }
@@ -429,36 +609,35 @@ export function RoomMapCanvas({
           y2={py}
           stroke="currentColor"
           strokeWidth={gridStrokeWidth}
-          strokeDasharray="2 6"
-          opacity={0.4}
-        />,
-      );
-    }
-
-    // Room boundary walls — solid red lines on top of grid
-    const bx0 = 0;
-    const bx1 = widthMeters * pxPerMeter;
-    const by0 = 0;
-    const by1 = depthMeters * pxPerMeter;
-    const wallStroke = 1;
-    const walls = [
-      { key: "wall-top",    x1: bx0, y1: by0, x2: bx1, y2: by0 },
-      { key: "wall-bottom", x1: bx0, y1: by1, x2: bx1, y2: by1 },
-      { key: "wall-left",   x1: bx0, y1: by0, x2: bx0, y2: by1 },
-      { key: "wall-right",  x1: bx1, y1: by0, x2: bx1, y2: by1 },
-    ];
-    for (const w of walls) {
-      gridLines.push(
-        <line
-          key={w.key}
-          x1={w.x1} y1={w.y1} x2={w.x2} y2={w.y2}
-          stroke="#f43f5e"
-          strokeWidth={wallStroke}
-          opacity={0.7}
+          strokeDasharray={dragging ? undefined : "2 6"}
+          opacity={dragging ? 0.55 : 0.4}
         />,
       );
     }
   }
+
+  // The walls, whether or not the grid shows: turning the grid off took the room's outline with it.
+  // Grey, not red — red read as an error on a line that is always there.
+  // The Hue cube's +y is the canvas top, so the top wall is always where the screen is.
+  const frontWall = outline.find((a, i) => a.y === 0 && outline[(i + 1) % outline.length]!.y === 0);
+  const frontLeft = frontWall
+    ? Math.min(frontWall.x, outline[(outline.indexOf(frontWall) + 1) % outline.length]!.x)
+    : null;
+  const wallLines = outline.map((a, i) => {
+    const b = outline[(i + 1) % outline.length]!;
+    return (
+      <line
+        key={`wall-${i}`}
+        x1={a.x * pxPerMeter}
+        y1={a.y * pxPerMeter}
+        x2={b.x * pxPerMeter}
+        y2={b.y * pxPerMeter}
+        stroke="var(--lm-ink-dim)"
+        strokeWidth={1.5}
+        strokeLinecap="square"
+      />
+    );
+  });
 
   return (
     <div
@@ -467,27 +646,31 @@ export function RoomMapCanvas({
       // `select-none` because a drag sweeps bubbled pointer-moves across the
       // `<text>` and chip labels and highlights them. The dock's inputs mount
       // outside this root, so they keep native selection.
-      className={`select-none relative w-full h-full overflow-hidden bg-bg ${panMode ? "cursor-grab" : ""}`}
+      className={`select-none relative isolate w-full h-full overflow-hidden bg-bg ${panMode ? "cursor-grab" : ""}`}
       onClick={handleBackgroundClick}
       onWheel={handleCanvasWheel}
       onPointerDown={handleCanvasPointerDown}
       onPointerMove={handleCanvasPointerMove}
       onPointerUp={handleCanvasPointerUp}
-      onPointerCancel={handleCanvasPointerUp}
+      onPointerCancel={handleCanvasPointerCancel}
     >
       {/* Object layer with zoom/pan transform (z-index 10+) */}
       <div
         ref={objectLayerRef}
         data-testid="room-map-object-layer"
+        data-room-map-object-layer=""
         className="relative z-10 w-full h-full"
         style={{
           transform: layerTransform(panOffset.x, panOffset.y, zoom),
           transformOrigin: "0 0",
         }}
         onClick={(e) => {
-          if (e.target === e.currentTarget) {
-            onCanvasClick();
+          if (e.target !== e.currentTarget) return;
+          if (swallowClick.current) {
+            swallowClick.current = false;
+            return;
           }
+          onCanvasClick();
         }}
       >
         {/* Grid SVG — inside object layer so it moves with zoom/pan */}
@@ -499,6 +682,86 @@ export function RoomMapCanvas({
             height={1}
           >
             {gridLines}
+          </svg>
+        )}
+
+        {/* Over the grid (1) and the origin's crosshair (5), under every piece: their lines running
+            between the floating toolbars read as drawn over them. Held to the viewport's top edge. */}
+        <div
+          aria-hidden="true"
+          ref={fadeRef}
+          data-testid="room-map-toolbar-fade"
+          className="pointer-events-none absolute"
+          style={{
+            zIndex: 6,
+            left: visMinXm * pxPerMeter,
+            top: visMinYm * pxPerMeter,
+            width: canvasSize.w / zoom,
+            height: TOOLBAR_FADE_PX / zoom,
+            background: "linear-gradient(var(--lm-bg) 55%, transparent)",
+          }}
+        />
+
+        {/* Above the furniture (10), under strips and lights (20): a piece pushed against a wall
+            or into the cut is drawn behind it, as a plan draws walls. */}
+        <svg
+          className="absolute pointer-events-none"
+          style={{ zIndex: 12, left: 0, top: 0, overflow: "visible" }}
+          width={1}
+          height={1}
+          aria-hidden="true"
+          data-testid="room-walls"
+        >
+          {wallLines}
+        </svg>
+
+        {frontLeft !== null && (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.08em] text-ink-faint"
+            style={{
+              left: frontLeft * pxPerMeter,
+              top: 0,
+              zIndex: 12,
+              transform: `translateY(calc(-100% - 6px / ${zoom})) scale(${1 / zoom})`,
+              transformOrigin: "0 100%",
+            }}
+            data-testid="room-front-wall"
+          >
+            {t("roomMap:frontWall")}
+          </span>
+        )}
+
+        {/* What the outline cuts out of the room's box: hatched, so it reads as not the room. */}
+        {outline.length > 4 && (
+          <svg
+            className="absolute pointer-events-none text-ink-faint"
+            style={{ zIndex: 11, left: 0, top: 0, overflow: "visible" }}
+            width={1}
+            height={1}
+            aria-hidden="true"
+            data-testid="room-outline-cut"
+          >
+            <defs>
+              <pattern id={cutPatternId} width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                <line x1="0" y1="0" x2="0" y2="8" stroke="currentColor" strokeWidth="1" opacity="0.35" />
+              </pattern>
+            </defs>
+            {/* A wash first, so what lies in the cut reads as out of the room, then the hatch. */}
+            <path
+              fillRule="evenodd"
+              style={{ fill: "var(--lm-bg)", opacity: 0.6 }}
+              d={`M0 0H${widthMeters * pxPerMeter}V${depthMeters * pxPerMeter}H0Z M${outline
+                .map((c) => `${c.x * pxPerMeter} ${c.y * pxPerMeter}`)
+                .join(" L")}Z`}
+            />
+            <path
+              fillRule="evenodd"
+              fill={`url(#${cutPatternId})`}
+              d={`M0 0H${widthMeters * pxPerMeter}V${depthMeters * pxPerMeter}H0Z M${outline
+                .map((c) => `${c.x * pxPerMeter} ${c.y * pxPerMeter}`)
+                .join(" L")}Z`}
+            />
           </svg>
         )}
 
@@ -515,8 +778,17 @@ export function RoomMapCanvas({
           />
         ))}
 
-        {children}
+        <SelectionLayerContext.Provider value={selectionLayer}>{children}</SelectionLayerContext.Provider>
+        {/* Above every piece: a selected rug keeps its handles while the sofa on it stays on top. */}
+        <div ref={setSelectionLayer} className="pointer-events-none absolute inset-0" style={{ zIndex: 40 }} />
       </div>
+      {marquee && (
+        <div
+          className="pointer-events-none absolute z-50 rounded-[3px] border border-amber/70 bg-amber/10"
+          style={marquee}
+          data-testid="room-marquee"
+        />
+      )}
     </div>
   );
 }

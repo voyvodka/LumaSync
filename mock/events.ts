@@ -11,8 +11,8 @@
  *
  * **One emit path, both runtimes.** `emit()` from `@tauri-apps/api/event` goes
  * out as `invoke("plugin:event|emit")`, and that command is deliberately absent
- * from `pluginHandlers` — so in the browser `mockIPC`'s own event registry
- * answers it, and under `tauri:mock` it reaches Rust, which broadcasts back to
+ * from `pluginHandlers` — so in the browser `eventBridge.ts` answers it, and
+ * under `tauri:mock` it reaches Rust, which broadcasts back to
  * the webview. Neither branch is special-cased here; if the capability set ever
  * stops allowing `event:allow-emit`, the failure surfaces through
  * `reportEmitFailure` rather than as silence.
@@ -27,10 +27,10 @@
 import { emit } from "@tauri-apps/api/event";
 
 import {
-  PREVIEW_EVENTS,
-  type EdgeSignalPayload,
-  type LedPreviewStatus,
+  TWIN_FRAME,
   type LedTestPatternKind,
+  type TwinFrameChannel,
+  type TwinLayout,
 } from "../src/shared/contracts/preview";
 import { UPDATER_EVENTS, type UpdateDownloadProgress } from "../src/shared/contracts/updater";
 import {
@@ -42,8 +42,8 @@ import { SHELL_EVENTS, TRAY_EVENTS } from "../src/shared/contracts/shell";
 import { primaryStripOf } from "../src/features/strips/model/stripSelectors";
 import { getWorld } from "./state";
 
-/** ~10 Hz. The real worker feeds an open twin at ~30 Hz; the mock does not need to. */
-export const EDGE_SIGNAL_INTERVAL_MS = 100;
+/** ~10 Hz. The real worker feeds a subscribed twin at up to 60 Hz; the mock does not need to. */
+export const TWIN_FRAME_INTERVAL_MS = 100;
 
 type Rgb = [number, number, number];
 
@@ -62,7 +62,7 @@ export { SHELL_EVENTS, TRAY_EVENTS };
 
 function reportEmitFailure(event: string, err: unknown): void {
   console.error(
-    `[LumaSync][mock] emitting "${event}" failed: ${String(err)}. In the browser this means mockIPC was installed without \`shouldMockEvents\`; under \`tauri:mock\` it usually means the capability set does not grant \`event:allow-emit\`.`,
+    `[LumaSync][mock] emitting "${event}" failed: ${String(err)}. In the browser this means \`eventBridge.ts\` did not answer the event plugin; under \`tauri:mock\` it usually means the capability set does not grant \`event:allow-emit\`.`,
   );
 }
 
@@ -75,23 +75,6 @@ export async function emitMockEvent(event: string, payload?: unknown): Promise<v
 }
 
 // --- Frame synthesis -------------------------------------------------------
-
-function hsvToRgb(h: number, s: number, v: number): Rgb {
-  const i = Math.floor(h * 6);
-  const f = h * 6 - i;
-  const p = v * (1 - s);
-  const q = v * (1 - f * s);
-  const t = v * (1 - (1 - f) * s);
-  const [r, g, b] = [
-    [v, t, p],
-    [q, v, p],
-    [p, v, t],
-    [p, q, v],
-    [t, p, v],
-    [v, p, q],
-  ][i % 6] as Rgb;
-  return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
-}
 
 /**
  * How many LEDs the calibration says the strip has.
@@ -114,61 +97,84 @@ function pixelAt(
   frame: number,
   slot: ProbeSlot,
 ): Rgb {
-  const position = count <= 1 ? 0 : index / (count - 1);
   switch (pattern) {
     case "solid":
       return [251, 191, 36];
-    case "chase": {
-      // A five-LED comet so direction and wrap are both visible; a single lit
-      // pixel reads as a rendering glitch at any real strip length.
-      const head = frame % count;
-      const distance = (index - head + count) % count;
-      const falloff = distance < 5 ? 1 - distance / 5 : 0;
-      return [Math.round(251 * falloff), Math.round(191 * falloff), Math.round(36 * falloff)];
-    }
-    case "rainbow":
-      return hsvToRgb((position + frame / 60) % 1, 1, 1);
-    case "spiral":
-      return hsvToRgb((position * 3 + frame / 30) % 1, 1, 0.5 + 0.5 * Math.sin(frame / 10));
-    case "gamut":
-      // Three flat bands — the case where a gamut-clipping bug is legible,
-      // which a continuous sweep hides.
-      return position < 1 / 3 ? [255, 0, 0] : position < 2 / 3 ? [0, 255, 0] : [0, 0, 255];
     case "channelProbe":
       // The whole strip in one primary, as the real probe renders it.
       return slot === 0 ? [255, 0, 0] : slot === 1 ? [0, 255, 0] : [0, 0, 255];
+    case "guide": {
+      // LED #1 green over a white light walking the strip; the edge and gap
+      // marks need the layout, which this stream does not carry.
+      if (index === 0) return [0, 255, 0];
+      const distance = (index - (frame % count) + count) % count;
+      const falloff = distance < 5 ? 1 - distance / 5 : 0;
+      const level = Math.round(255 * falloff);
+      return [level, level, level];
+    }
   }
 }
 
-export function buildEdgeSignalFrame(
-  pattern: LedTestPatternKind,
-  frame: number,
-  source: "test" | "live",
-  slot: ProbeSlot = 0,
-): EdgeSignalPayload {
+export interface MockTwinFrame {
+  leds: Rgb[];
+  lamps: Rgb[];
+}
+
+export function buildTwinFrame(pattern: LedTestPatternKind, frame: number, slot: ProbeSlot = 0): MockTwinFrame {
   const world = getWorld();
   const ledCount = calibratedLedCount();
   return {
     leds: Array.from({ length: ledCount }, (_, i) => pixelAt(pattern, i, ledCount, frame, slot)),
-    ledCount,
-    hueChannels: world.hue.channels.map((_, i) =>
+    lamps: world.hue.channels.map((_, i) =>
       pixelAt(pattern, i, Math.max(world.hue.channels.length, 1), frame, slot),
     ),
-    source,
-    pattern: source === "test" ? pattern : undefined,
-    seq: frame,
-    displayId: world.displays[0]?.id,
   };
+}
+
+/** The mock's twin layout never changes, so one revision covers it. */
+const MOCK_LAYOUT_REVISION = 1;
+
+export function mockTwinLayout(): TwinLayout {
+  const world = getWorld();
+  const layout = primaryStripOf(world.shellState)?.layout;
+  return {
+    displayId: world.displays[0]?.id ?? "display-1",
+    layoutRevision: MOCK_LAYOUT_REVISION,
+    leds: layout ? { ...layout, totalLeds: calibratedLedCount() } : null,
+    // The row Rust draws unplaced lamps in: centred, just above the bottom.
+    lamps: world.hue.channels.map((channel, i) => ({
+      id: channel.index,
+      x: 0.5 + (i - (world.hue.channels.length - 1) / 2) * 0.035,
+      y: 0.9,
+    })),
+  };
+}
+
+export function encodeTwinFrame(seq: number, { leds, lamps }: MockTwinFrame): ArrayBuffer {
+  const buffer = new ArrayBuffer(TWIN_FRAME.HEADER_BYTES + (leds.length + lamps.length) * 3);
+  const view = new DataView(buffer);
+  view.setUint32(TWIN_FRAME.SEQ_OFFSET, seq, true);
+  view.setUint32(TWIN_FRAME.REVISION_OFFSET, MOCK_LAYOUT_REVISION, true);
+  view.setUint32(TWIN_FRAME.LED_COUNT_OFFSET, leds.length, true);
+  view.setUint32(TWIN_FRAME.LAMP_COUNT_OFFSET, lamps.length, true);
+  new Uint8Array(buffer, TWIN_FRAME.HEADER_BYTES).set([...leds, ...lamps].flat());
+  return buffer;
+}
+
+/** The twin that subscribed last; frames go to it alone, as in Rust. */
+let twinChannel: Pick<TwinFrameChannel, "onmessage"> | null = null;
+
+export function attachTwinChannel(channel: Pick<TwinFrameChannel, "onmessage">): void {
+  twinChannel = channel;
 }
 
 // --- The stream ------------------------------------------------------------
 
-export interface EdgeSignalStreamState {
+export interface TwinFrameStreamState {
   running: boolean;
   pattern: LedTestPatternKind;
   /** Wire slot a `channelProbe` stream lights; ignored by every other pattern. */
   probeSlot: ProbeSlot;
-  source: "test" | "live";
   /** Frames emitted since the stream last started. Drives `seq`. */
   frame: number;
   /**
@@ -180,11 +186,10 @@ export interface EdgeSignalStreamState {
   dropEveryNthFrame: number;
 }
 
-let stream: EdgeSignalStreamState = {
+let stream: TwinFrameStreamState = {
   running: false,
-  pattern: "rainbow",
+  pattern: "guide",
   probeSlot: 0,
-  source: "live",
   frame: 0,
   dropEveryNthFrame: 0,
 };
@@ -192,16 +197,16 @@ let stream: EdgeSignalStreamState = {
 let timer: ReturnType<typeof setInterval> | null = null;
 const streamListeners = new Set<() => void>();
 
-export function getEdgeSignalStream(): EdgeSignalStreamState {
+export function getTwinFrameStream(): TwinFrameStreamState {
   return stream;
 }
 
-export function subscribeToEdgeSignalStream(listener: () => void): () => void {
+export function subscribeToTwinFrameStream(listener: () => void): () => void {
   streamListeners.add(listener);
   return () => streamListeners.delete(listener);
 }
 
-function setStream(next: Partial<EdgeSignalStreamState>): void {
+function setStream(next: Partial<TwinFrameStreamState>): void {
   stream = { ...stream, ...next };
   for (const listener of streamListeners) listener();
 }
@@ -214,68 +219,28 @@ function tick(): void {
   setStream({ frame });
   const drop = stream.dropEveryNthFrame;
   if (drop > 1 && frame % drop === 0) return;
-  void emitMockEvent(
-    PREVIEW_EVENTS.EDGE_SIGNAL,
-    buildEdgeSignalFrame(stream.pattern, frame, stream.source, stream.probeSlot),
-  );
+  twinChannel?.onmessage(encodeTwinFrame(frame, buildTwinFrame(stream.pattern, frame, stream.probeSlot)));
 }
 
-export function startEdgeSignalStream(
+export function startTwinFrameStream(
   options?: Partial<
-    Pick<EdgeSignalStreamState, "pattern" | "probeSlot" | "source" | "dropEveryNthFrame">
+    Pick<TwinFrameStreamState, "pattern" | "probeSlot" | "dropEveryNthFrame">
   >,
 ): void {
-  stopEdgeSignalStream();
+  stopTwinFrameStream();
   setStream({ ...options, running: true, frame: 0 });
-  timer = setInterval(tick, EDGE_SIGNAL_INTERVAL_MS);
-  void emitPreviewState();
+  timer = setInterval(tick, TWIN_FRAME_INTERVAL_MS);
 }
 
-export function stopEdgeSignalStream(): void {
+export function stopTwinFrameStream(): void {
   if (timer !== null) {
     clearInterval(timer);
     timer = null;
   }
-  if (stream.running) {
-    setStream({ running: false });
-    void emitPreviewState();
-  }
+  if (stream.running) setStream({ running: false });
 }
 
 // --- One-shot emitters -----------------------------------------------------
-
-/**
- * Derived from the stream rather than stored separately, so the preview status
- * and the frames the app is receiving cannot disagree — which they would if the
- * panel had a second switch for each.
- */
-export function currentPreviewStatus(): LedPreviewStatus {
-  const running = stream.running;
-  return {
-    testActive: running && stream.source === "test",
-    source: running ? stream.source : "idle",
-    activePattern:
-      running && stream.source === "test"
-        ? patternPayload(stream.pattern, stream.probeSlot)
-        : undefined,
-    twinDisplays: [],
-    popupVisible: false,
-    liveTwinSupported: true,
-  };
-}
-
-function patternPayload(
-  kind: LedTestPatternKind,
-  slot: ProbeSlot,
-): NonNullable<LedPreviewStatus["activePattern"]> {
-  if (kind === "solid" || kind === "chase") return { kind, r: 251, g: 191, b: 36 };
-  if (kind === "channelProbe") return { kind, slot };
-  return { kind };
-}
-
-export async function emitPreviewState(): Promise<void> {
-  await emitMockEvent(PREVIEW_EVENTS.STATE_CHANGED, currentPreviewStatus());
-}
 
 /**
  * The worker's push of the stall and link budget. The real one fires when they

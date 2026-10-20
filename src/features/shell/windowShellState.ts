@@ -6,10 +6,10 @@
 
 import {
   DEFAULT_SHELL_STATE,
+  SHELL_STATE_SCHEMA_VERSION,
   type ShellState,
   type ShellStateChanged,
 } from "@/shared/contracts/shell";
-import { migrateShellState } from "../persistence/migrations";
 import { reportShellStateWrite } from "../persistence/writeHealth";
 import {
   getShellState,
@@ -26,8 +26,9 @@ const WRITER_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice
  * re-migrated, which normally settles on the second try. */
 const MIGRATION_WRITE_ATTEMPTS = 3;
 
-/** A stored snapshot as the app reads it: defaults filled in, then migrated. */
-function readSnapshot(saved: Partial<ShellState>): ShellState {
+/** A stored snapshot as the app reads it: defaults filled in, then migrated. The steps load only
+ *  for a snapshot that needs them, so every window's entry does not carry them. */
+async function readSnapshot(saved: Partial<ShellState>): Promise<ShellState> {
   // `schemaVersion` defaults to `1`, NOT the latest — an absent version is a
   // legacy snapshot the shim below still has to upgrade.
   const merged: ShellState = {
@@ -38,7 +39,9 @@ function readSnapshot(saved: Partial<ShellState>): ShellState {
 
   // Caught so one corrupt persisted record cannot brick startup: we fall back
   // to the unmigrated shape and the next launch retries.
+  if (merged.schemaVersion >= SHELL_STATE_SCHEMA_VERSION) return merged;
   try {
+    const { migrateShellState } = await import("../persistence/migrations");
     return migrateShellState(merged);
   } catch (error) {
     console.warn(
@@ -75,7 +78,7 @@ async function readShellState(): Promise<ShellState> {
     const { state: saved, revision } = await getShellState();
     if (!saved) return { ...DEFAULT_SHELL_STATE };
 
-    const migrated = readSnapshot(saved);
+    const migrated = await readSnapshot(saved);
 
     if (saved.schemaVersion !== undefined && migrated.schemaVersion === saved.schemaVersion) {
       return migrated;
@@ -209,7 +212,7 @@ export async function updateShellState(
   const write = shellWriteQueue.then(async () => {
     for (let attempt = 1; ; attempt++) {
       const { state: saved, revision } = await getShellState();
-      const current = saved ? readSnapshot(saved) : { ...DEFAULT_SHELL_STATE };
+      const current = saved ? await readSnapshot(saved) : { ...DEFAULT_SHELL_STATE };
       const partial = update(current);
       if (!partial) return current;
 

@@ -4,22 +4,13 @@ import { shellStore } from "@/features/persistence/shellStore";
 import { withLayoutOf, withStripLayout } from "@/features/strips/model/stripWrites";
 import { focusCurrentWindow } from "@/features/shell/windowApi";
 import type { LeaveGuard } from "@/features/shell/navigationStore";
-import {
-  openLedTwinOverlay,
-  openLedControlPopup,
-  showLedControlPopup,
-} from "@/features/preview/previewApi";
-import {
-  controlPopupOpenFailure,
-  twinOverlayOpenFailure,
-  type PreviewOpenFailure,
-} from "@/features/preview/previewOpenFailure";
 import type {
   LedCalibrationConfig,
   LedDirection,
   LedSegmentKey,
 } from "../model/contracts";
 import {
+  aspectOf,
   distribute,
   draftFromCounts,
   setCount,
@@ -62,6 +53,7 @@ import {
   isSameCalibrationLayout,
   keepEditing,
   loadEditorConfig,
+  rebaseOnSaved,
   saveEditorCalibration,
   discardEditorChanges,
   type CalibrationEditorState,
@@ -116,11 +108,6 @@ function buildOverlayPreviewPayload(
     })),
   };
 }
-
-const UNKNOWN_DISPLAY: DisplayAspect = { width: 16, height: 9 };
-
-const aspectOf = (display: Pick<DisplayInfo, "width" | "height"> | undefined): DisplayAspect =>
-  display && display.width > 0 && display.height > 0 ? display : UNKNOWN_DISPLAY;
 
 /** A total shared over the edges the layout lights (all four when it lights none), as an autofill patch. */
 function distributedPatch(config: LedCalibrationConfig, ui: LayoutUi, total: number, display: DisplayAspect) {
@@ -228,7 +215,6 @@ export function useCalibrationSession({
   const [testPattern, setTestPattern] = useState<TestPatternSnapshot>(flowRef.current.getSnapshot());
   const [validationErrors, setValidationErrors] = useState<CalibrationValidationError[] | null>(null);
   const [testPatternError, setTestPatternError] = useState<CalibrationNotice | null>(null);
-  const [previewOpenFailure, setPreviewOpenFailure] = useState<PreviewOpenFailure | null>(null);
 
   // Read on every visit: a display plugged in since the last one is a real change. Honour any
   // persisted selection so the capture source survives app restarts.
@@ -512,12 +498,16 @@ export function useCalibrationSession({
     return aspectOf(snapshot.displays.find((candidate) => candidate.id === snapshot.selectedDisplayId));
   }, []);
 
+  /** Lets a save tell whether the page was edited while its write was in flight. */
+  const editCountRef = useRef(0);
+
   /** Every layout or start edit goes through here: model step, then back into the saved shape. */
   const edit = useCallback(
     (step: (draft: ReturnType<typeof draftOf>, start: StartPoint) => { draft?: ReturnType<typeof draftOf>; rule: StartRule }) => {
       const draft = draftOf(editorState.current, layoutUi);
       const result = step(draft, startOf(editorState.current));
       const committed = commitLayout(editorState, layoutUi, result.draft ?? draft, result.rule);
+      editCountRef.current += 1;
       setEditorState(committed.state);
       setLayoutUi(committed.ui);
       setValidationErrors(null);
@@ -592,6 +582,7 @@ export function useCalibrationSession({
     }
     setValidationErrors(null);
     const savedState = saveEditorCalibration(editorState);
+    const editsAtSave = editCountRef.current;
     try {
       let gone = false;
       await shellStore.update((current) => {
@@ -614,10 +605,11 @@ export function useCalibrationSession({
     // The page stays open after a save, and a running test keeps going on the saved layout.
     onSaved(savedState.current);
     setKeepUiFor(calibrationLayoutKey(savedState.baseline));
-    setEditorState(savedState);
+    // Only the baseline moves: an edit made during the write stays on screen, unsaved.
+    setEditorState((prev) => rebaseOnSaved(prev, savedState.current));
     setSavedOnce(true);
     setLastSavedAt(Date.now());
-    dirtyRef.current = false;
+    if (editCountRef.current === editsAtSave) dirtyRef.current = false;
     setIsSaving(false);
   }, [editorState, onSaved, stripId]);
 
@@ -647,33 +639,6 @@ export function useCalibrationSession({
     else onNavigateBack();
   }, [onNavigateBack]);
 
-  // v1.6 — launch the LED preview surface (click-through digital-twin
-  // overlay + interactive control popup) straight from LED Setup. The
-  // preview API never throws; the try/catch guards the shellStore write.
-  const handleOpenPreview = useCallback(async () => {
-    setPreviewOpenFailure(null);
-    try {
-      // Without an explicit id Rust falls back to the primary display, which
-      // strands the overlay on the wrong monitor for a non-primary selection.
-      const overlayFailure = twinOverlayOpenFailure(
-        await openLedTwinOverlay({
-          scope: "test",
-          displayId: displayTargetRef.current.getSnapshot().selectedDisplayId ?? undefined,
-        }),
-      );
-      const popupFailure =
-        controlPopupOpenFailure(await openLedControlPopup())
-        ?? controlPopupOpenFailure(await showLedControlPopup());
-      setPreviewOpenFailure(overlayFailure ?? popupFailure);
-      await shellStore.save({
-        ...(popupFailure === null ? { ledPreviewPopupVisible: true } : {}),
-        ledTwinEnabledTest: true,
-      });
-    } catch (err) {
-      console.error("[LumaSync] open LED preview from setup failed:", err);
-    }
-  }, []);
-
   const overlayBlocked = displayTarget.blocked
     ? overlayBlockedNotice(displayTarget.blockedCode, displayTarget.blockedReason)
     : null;
@@ -699,7 +664,6 @@ export function useCalibrationSession({
     overlayBlocked,
     validationErrors,
     testPatternError,
-    previewOpenFailure,
     handlePreviewToggle,
     handleSelectDisplay,
     handleEdgeToggle,
@@ -718,6 +682,5 @@ export function useCalibrationSession({
     handleRevert,
     handleKeepEditing,
     handleDiscard,
-    handleOpenPreview,
   };
 }

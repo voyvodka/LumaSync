@@ -52,6 +52,17 @@ describe("WledAddressRow", () => {
     expect(onBound).toHaveBeenCalledWith(DEVICE);
   });
 
+  // Typing the address of the device already bound made a second strip of it ("WLED … 2").
+  it("the address of the bound device opens its strip instead of binding it again", () => {
+    const d = deps(WLED_STATUS.DISCOVERY_OK);
+    const onAdded = vi.fn<(added: AddedOutput) => void>();
+    render(<WledAddressRow onBound={async () => {}} onAdded={onAdded} primary boundIp="10.0.0.5" deps={d} />);
+    fireEvent.change(screen.getByTestId("wled-address-input"), { target: { value: "10.0.0.5" } });
+    fireEvent.click(screen.getByTestId("wled-address-add"));
+    expect(onAdded).toHaveBeenCalledWith({ kind: "wled", ip: "10.0.0.5" });
+    expect(d.discover).not.toHaveBeenCalled();
+  });
+
   it("an address that is not WLED says so in the user's words", async () => {
     const d = deps(WLED_STATUS.PROTOCOL_MISMATCH);
     const onAdded = vi.fn<(added: AddedOutput) => void>();
@@ -73,7 +84,6 @@ function device(overrides: Partial<UseDeviceConnectionResult> = {}): UseDeviceCo
     connectedPort: "/dev/cu.old",
     lastSuccessfulPort: undefined,
     statusCard: null,
-    canConnect: true,
     isScanning: false,
     isConnecting: false,
     isReconnecting: false,

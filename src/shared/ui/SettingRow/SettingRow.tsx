@@ -27,7 +27,11 @@ export function SettingRow({ label, hint, value, control, controlFills = false, 
       <div className={styles.line}>
         <span className={styles.name}>{label}</span>
         {hint && <InfoTip label={t("common:hintFor", { label })}>{hint}</InfoTip>}
-        {value !== undefined && <span className={styles.value}>{value}</span>}
+        {value !== undefined && (
+          <span className={styles.value} data-selectable>
+            {value}
+          </span>
+        )}
         <span className={cx(styles.control, controlFills && styles.fills)}>{control}</span>
       </div>
       {children}
@@ -72,6 +76,7 @@ export function RowNote({ tone, children, testId }: { tone: "status" | "error"; 
       role={tone === "error" ? "alert" : "status"}
       aria-live={tone === "error" ? undefined : "polite"}
       data-testid={testId}
+      data-selectable={tone === "error" || undefined}
     >
       {children}
     </p>

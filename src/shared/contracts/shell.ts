@@ -1,7 +1,6 @@
 import type { ColorCorrectionConfig } from "./device";
 import type { DisplayId } from "./display";
-import type { LedTestPattern } from "./preview";
-import type { LightingModeConfig, LightingModeKind } from "./mode";
+import type { LightingModeConfig, LightingModeKind, LitModeKind } from "./mode";
 import type {
   HueBridgeSummary,
   HueChannelPlacementOverride,
@@ -13,6 +12,8 @@ import type {
   HueRuntimeTarget,
 } from "./hue";
 import type { RoomMapConfig } from "./roomMap";
+import type { StoredRoomLayouts } from "./roomLayouts";
+import type { StoredScene } from "./scenes";
 import type { LedStrip } from "./strips";
 
 /**
@@ -43,6 +44,13 @@ export const SHELL_COMMANDS = {
   REPLACE_SHELL_STATE: "replace_shell_state",
   /** Whether the main window is on screen, read from the native window. */
   GET_MAIN_WINDOW_VISIBILITY: "get_main_window_visibility",
+  /**
+   * Drag the main window by its title bar (macOS; elsewhere Tauri's own drag). Starts from the
+   * pointer, where `start_dragging` anchors on the last event AppKit saw and made the window jump.
+   * Resolves `null` and never fails: there is no actionable branching — a drag that does not
+   * start leaves the window where it is, and the user presses again.
+   */
+  START_WINDOW_DRAG: "start_window_drag",
 } as const;
 
 export type ShellCommand = (typeof SHELL_COMMANDS)[keyof typeof SHELL_COMMANDS];
@@ -54,10 +62,11 @@ export interface TrayLabels {
   openSettings: string;
   /** The disabled status line under it — the running mode and its outputs. */
   status: string;
-  /** The three mode items, a check group: Rust checks the one that runs. */
+  /** The mode items, a check group: Rust checks the one that runs. */
   lightsOff: string;
   ambilight: string;
   solidColor: string;
+  effect: string;
   /**
    * The modes the main window's own mode buttons have disabled right now — no
    * layout for a bound strip, no output, a choice in flight. The tray greys
@@ -97,8 +106,9 @@ export const TRAY_MENU_IDS = {
   MODE_OFF: "tray-mode-off",
   MODE_AMBILIGHT: "tray-mode-ambilight",
   MODE_SOLID: "tray-mode-solid",
+  MODE_EFFECT: "tray-mode-effect",
   /**
-   * v1.6 — opens (or focuses) the LED preview surface: the interactive
+   * Opens (or focuses) the LED preview surface: the interactive
    * control popup plus, when enabled, the digital-twin overlay. Lets the
    * user reach the preview/test experience without opening full settings.
    */
@@ -179,12 +189,8 @@ export const SECTION_ORDER: SectionId[] = [
  * and drops the corner shape; restore now computes the corner from the
  * saved center plus the current outer size.
  *
- * v1.6 (LED Preview & Test Experience) adds six OPTIONAL preview fields
- * (`ledPreviewPopupVisible` / `ledPreviewPopupCenterX` /
- * `ledPreviewPopupCenterY` / `ledTwinEnabledTest` /
- * `lastLedTestPattern` / `ledPreviewHintShown`). All are optional with
- * absence-defaults, so NO schema bump is required — the version MUST stay
- * `3` and the legacy spread-merge handles upgrading on-disk v3 states.
+ * The LED preview keeps one OPTIONAL pair, `ledPreviewPopupCenterX/Y`: the
+ * popup reopens where the user left it.
  */
 /** `3 → 4` re-folds Hue zones stranded in `roomMap.hueZones` — see docs/architecture/hue.md.
  *  `4 → 5` stamps each `hueChannels` record with its entertainment area.
@@ -192,8 +198,14 @@ export const SECTION_ORDER: SectionId[] = [
  *  `6 → 7` drops keys nothing read: `startupEnabled`, `notificationsEnabled`,
  *  `roomMapBackgroundOpacity` and `lightingMode.targets`.
  *  `7 → 8` stores the local output as `ledStrips`; the six keys it came from
- *  stay on disk, frozen, so a v7 build still boots (`LegacyV7StripKeys`). */
-export const SHELL_STATE_SCHEMA_VERSION = 8 as const;
+ *  stay on disk, frozen, so a v7 build still boots (`LegacyV7StripKeys`).
+ *  `8 → 9` drops the old LED preview's keys: `ledPreviewPopupVisible`,
+ *  `ledTwinEnabledTest`, `lastLedTestPattern` and `ledPreviewHintShown`.
+ *  `9 → 10` drops `roomMapVersion`, which every room-map writer bumped and none read.
+ *  `10 → 11` makes every zone span floor to ceiling, its bound lights' heights kept.
+ *  `11 → 12` makes every zone a cube in metres, its bound lights kept where they are or, past what
+ *  the ceiling-capped cube holds, out of the zone where they stood. */
+export const SHELL_STATE_SCHEMA_VERSION = 12 as const;
 
 /** Shape of shell state persisted to `shell-state.json` */
 export interface ShellState {
@@ -245,6 +257,25 @@ export interface ShellState {
    * Absent until user explicitly changes mode settings.
    */
   lightingMode?: LightingModeConfig;
+  /**
+   * The user's scenes, in the order shown. Frontend-only: Rust carries it without reading. Kept out
+   * of `DEFAULT_SHELL_STATE` — absent reads as the seeded list, `[]` as every scene deleted.
+   * Additive, no schema bump.
+   */
+  scenes?: StoredScene[];
+  /**
+   * The rooms besides the one the lights follow, which stays `roomMap`. Frontend-owned; Rust reads it
+   * only for the image paths its startup prune keeps. Kept out of `DEFAULT_SHELL_STATE`: absent reads
+   * as one implicit room. Additive, no schema bump.
+   */
+  roomLayouts?: StoredRoomLayouts;
+  /**
+   * The last mode that lit something, which Lights' power button turns back on. Written by Rust
+   * (`persist_mode`) with every lit choice, from any window or the tray; an Off leaves it. Absent
+   * or unknown reads as Ambilight — so an install upgraded while off offers Ambilight until its
+   * first lit choice. Additive, no schema bump.
+   */
+  lastLitKind?: LitModeKind;
   /**
    * Last selected runtime output target set.
    * Defaults to USB-first when absent.
@@ -310,11 +341,6 @@ export interface ShellState {
    * Absent until the user first opens the room map editor.
    */
   roomMap?: RoomMapConfig;
-  /**
-   * Monotonically increasing integer, incremented on each room map save.
-   * Allows downstream consumers to detect stale in-memory state.
-   */
-  roomMapVersion?: number;
   /** Room map editor grid visibility */
   roomMapShowGrid?: boolean;
   /** Room map editor grid stroke width (px) */
@@ -416,6 +442,20 @@ export interface ShellState {
    */
   uiZoom?: UiZoom;
   /**
+   * Room settings "Ambient light": how lit the 3D room is with no lamp on, in whole percent from
+   * night (0) to day (100). The frontend's alone; absent ⇒ `ROOM_AMBIENT_DEFAULT`. Additive, no
+   * schema bump.
+   */
+  roomMapAmbient?: number;
+  /** What a screen's diagonal is shown in. The frontend's alone; absent ⇒ inches. Additive. */
+  roomMapScreenUnit?: RoomMapScreenUnit;
+  /**
+   * Room settings "Snap to objects": a carried piece or light catches on other pieces, walls and its
+   * pair in the 3D room and the plan. Not the grid's snap, which stays with "Show grid". The
+   * frontend's alone; absent ⇒ on. Additive, no schema bump.
+   */
+  roomMapSnapToObjects?: boolean;
+  /**
    * Settings → General "Close button". `"quit"` makes the main window's close
    * quit the app through the normal shutdown; anything else hides to the tray.
    * Read by Rust on each close. Additive, no schema bump.
@@ -441,15 +481,8 @@ export interface ShellState {
    */
   awayLights?: AwayLights;
   // -------------------------------------------------------------------------
-  // v1.6 — LED Preview & Test Experience (all OPTIONAL / additive; no schema
-  // bump — absence degrades to the documented default below).
+  // LED preview (OPTIONAL; absence degrades to the default below).
   // -------------------------------------------------------------------------
-  /**
-   * Whether the interactive control popup was visible when the app last
-   * closed, so it can be re-shown on next launch. Absent ⇒ `false`
-   * (popup starts hidden).
-   */
-  ledPreviewPopupVisible?: boolean;
   /**
    * Persisted control-popup window center (logical pixels, screen
    * coordinates). Mirrors the `windowCenterX`/`windowCenterY` rationale so
@@ -459,22 +492,6 @@ export interface ShellState {
    */
   ledPreviewPopupCenterX?: number | null;
   ledPreviewPopupCenterY?: number | null;
-  /**
-   * Whether the digital-twin overlay is enabled for synthetic test patterns.
-   * Absent ⇒ `false` (overlay off until the user opts in).
-   */
-  ledTwinEnabledTest?: boolean;
-  /**
-   * Last synthetic test pattern the user ran, restored as the default
-   * selection next time the control popup opens. Absent ⇒ the UI picks its
-   * own first-run default (e.g. `gamut`).
-   */
-  lastLedTestPattern?: LedTestPattern;
-  /**
-   * Whether the one-time "LED preview" discovery hint has been shown.
-   * Absent ⇒ `false` (hint shows once, then this flips to `true`).
-   */
-  ledPreviewHintShown?: boolean;
 }
 
 /** Default shell state for first launch */
@@ -624,6 +641,24 @@ export function resolveUiZoom(stored: unknown): UiZoom {
   return UI_ZOOM_STEPS.find((step) => step === stored) ?? 100;
 }
 
+/** A dim evening, where the room and its unlit lamps read. */
+export const ROOM_AMBIENT_DEFAULT = 35;
+
+export type RoomMapScreenUnit = "inch" | "cm";
+
+export function resolveRoomMapScreenUnit(stored: unknown): RoomMapScreenUnit {
+  return stored === "cm" ? "cm" : "inch";
+}
+
+export function resolveRoomMapSnapToObjects(stored: unknown): boolean {
+  return stored !== false;
+}
+
+/** Whole percents, for the same JSON round trip `resolveUiZoom` keeps to. */
+export function resolveRoomAmbient(stored: unknown): number {
+  return typeof stored === "number" && Number.isFinite(stored) ? Math.min(100, Math.max(0, Math.round(stored))) : ROOM_AMBIENT_DEFAULT;
+}
+
 export const CLOSE_ACTIONS = ["tray", "quit"] as const;
 export type CloseAction = (typeof CLOSE_ACTIONS)[number];
 
@@ -696,6 +731,7 @@ export const KEYBIND_ACTIONS = {
   MODE_OFF: "mode-off",
   MODE_AMBILIGHT: "mode-ambilight",
   MODE_SOLID: "mode-solid",
+  MODE_EFFECT: "mode-effect",
   OPEN_SETTINGS: "open-settings",
 } as const;
 
@@ -735,12 +771,14 @@ export const KEYBIND_REGISTRY: Readonly<
     [KEYBIND_ACTIONS.MODE_OFF]: { modifier: "alt", code: "Digit1", badge: ["⌥", "1"] },
     [KEYBIND_ACTIONS.MODE_AMBILIGHT]: { modifier: "alt", code: "Digit2", badge: ["⌥", "2"] },
     [KEYBIND_ACTIONS.MODE_SOLID]: { modifier: "alt", code: "Digit3", badge: ["⌥", "3"] },
+    [KEYBIND_ACTIONS.MODE_EFFECT]: { modifier: "alt", code: "Digit4", badge: ["⌥", "4"] },
     [KEYBIND_ACTIONS.OPEN_SETTINGS]: { modifier: "meta", code: "Comma", badge: ["⌘", ","] },
   },
   default: {
     [KEYBIND_ACTIONS.MODE_OFF]: { modifier: "alt", code: "Digit1", badge: ["Alt", "1"] },
     [KEYBIND_ACTIONS.MODE_AMBILIGHT]: { modifier: "alt", code: "Digit2", badge: ["Alt", "2"] },
     [KEYBIND_ACTIONS.MODE_SOLID]: { modifier: "alt", code: "Digit3", badge: ["Alt", "3"] },
+    [KEYBIND_ACTIONS.MODE_EFFECT]: { modifier: "alt", code: "Digit4", badge: ["Alt", "4"] },
     [KEYBIND_ACTIONS.OPEN_SETTINGS]: { modifier: "ctrl", code: "Comma", badge: ["Ctrl", ","] },
   },
 } as const;

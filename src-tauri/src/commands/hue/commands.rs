@@ -58,14 +58,12 @@ use super::transport::{
 };
 
 // ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
 // Tauri-command-only constants
 // ---------------------------------------------------------------------------
 
 /// Maximum time (in seconds) to wait for the sender thread to shut down
 /// before reporting a partial-stop timeout.
-const HUE_STOP_TIMEOUT_SECS: u64 = 3;
+pub(crate) const HUE_STOP_TIMEOUT_SECS: u64 = 3;
 
 /// A stop with a deadline aims every wait at this much before it: a request
 /// timed out on the deadline itself still has to unwind, and the call
@@ -528,6 +526,9 @@ where
         if let Some(ref stream) = owner.active_stream {
             spawn_reconnect_monitor(
                 Arc::clone(&stream.shutdown_signal),
+                stream
+                    .uses_dtls
+                    .then(|| Arc::clone(&stream.deactivate_token)),
                 Arc::clone(runtime),
                 request.clone(),
             );
@@ -575,10 +576,7 @@ fn a_stop_overtook_the_start(runtime: &Arc<Mutex<HueRuntimeOwner>>) -> bool {
 /// starts back; an abandoned start's restore and the quit path have no such
 /// gate.
 fn a_newer_session_began(runtime: &Arc<Mutex<HueRuntimeOwner>>) -> bool {
-    matches!(
-        acquire_hue_runtime(runtime).state,
-        HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
-    )
+    acquire_hue_runtime(runtime).state.is_active()
 }
 
 /// `stop_hue_stream_on` with the lights put back, as the stop tests drive it.
@@ -663,7 +661,7 @@ pub(crate) fn stop_hue_runtime(
     //    then initiate cleanup.  Dropping the active_stream (and thus the sender
     //    Arc) closes the mpsc channel, which unblocks the background thread's
     //    recv loop.  DTLS deactivation HTTP call happens AFTER the lock is released.
-    let (maybe_shutdown, dtls_deactivate, light_restore) = {
+    let (maybe_shutdown, dtls_deactivate, light_restore, reconnect_building) = {
         let mut owner = acquire_hue_runtime(runtime);
 
         // Grab the shutdown signal before stop_with_timeout drops active_stream.
@@ -693,12 +691,19 @@ pub(crate) fn stop_hue_runtime(
         // and its lights still show what the session left them.
         let light_restore = owner.light_restore.take();
 
+        // A reconnect between its readiness gate and storing its sender
+        // (`Starting`) has no stream here to wait for, yet its build may have
+        // activated the area. It abandons on seeing this stop and gives the
+        // area back before it clears the flag; see step 3b.
+        let reconnect_building =
+            owner.reconnect_in_progress && owner.state == HueRuntimeState::Starting;
+
         // Perform synchronous cleanup (drop sender, reset state).
         // We pass `timed_out=false` initially; if the wait below times out
         // we will re-lock and update the status.
         let _ = stop_with_timeout(&mut owner, false, trigger.clone());
 
-        (signal, dtls_deactivate, light_restore)
+        (signal, dtls_deactivate, light_restore, reconnect_building)
     }; // lock released -- background thread can now observe the channel close.
 
     // Best-effort, dedupe-aware DTLS deactivation outside the lock to avoid
@@ -755,6 +760,18 @@ pub(crate) fn stop_hue_runtime(
         make_result(&owner)
     };
 
+    // 3b. Wait for an overtaken reconnect to give the area back. Writing the
+    //     lights while it still held the area gave up on the held area, and
+    //     its deactivate then let the bridge switch the lamps on after Off.
+    if reconnect_building
+        && !wait_for_overtaken_reconnect(
+            runtime,
+            remaining(Duration::from_secs(HUE_STOP_TIMEOUT_SECS)),
+        )
+    {
+        warn!("[hue-stop] an overtaken reconnect still held the area at the stop's timeout");
+    }
+
     // 4. Put the lights back — or, for a user's Off, switch them off through
     //    the same writes and watch, so the bridge's own post-stream state
     //    cannot turn them back on. Logged, never fatal: a refusal or an
@@ -780,6 +797,20 @@ pub(crate) fn stop_hue_runtime(
     }
 
     result
+}
+
+/// `false` if the reconnect still runs at `timeout`.
+fn wait_for_overtaken_reconnect(runtime: &Arc<Mutex<HueRuntimeOwner>>, timeout: Duration) -> bool {
+    let until = Instant::now() + timeout;
+    loop {
+        if !acquire_hue_runtime(runtime).reconnect_in_progress {
+            return true;
+        }
+        if Instant::now() >= until {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
 }
 
 /// Stop the current stream (if any) and start a fresh one for the given
@@ -943,10 +974,7 @@ pub fn set_hue_solid_color(
     let state_for_status = owner.state.clone();
     queue_solid_color(&mut owner, snapshot);
 
-    if matches!(
-        state_for_status,
-        HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
-    ) {
+    if state_for_status.is_active() {
         owner.last_status = status_with(
             state_for_status,
             "HUE_COLOR_QUEUED_PENDING_STREAM",
@@ -1001,10 +1029,7 @@ pub(crate) async fn refresh_hue_stream_status(
             .active_stream
             .as_ref()
             .map(|stream| (stream.bridge_ip.clone(), stream.area_id.clone()));
-        let params = if matches!(
-            owner.state,
-            HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
-        ) {
+        let params = if owner.state.is_active() {
             owner.active_stream.as_ref().map(|stream| {
                 (
                     stream.bridge_ip.clone(),
@@ -1032,12 +1057,16 @@ pub(crate) async fn refresh_hue_stream_status(
     if let Some((_, _, _, ref shutdown_signal)) = active_stream_params {
         if is_shutdown_signaled(shutdown_signal) {
             let mut owner = acquire_hue_runtime(&runtime_state.runtime);
-            if matches!(
-                owner.state,
-                HueRuntimeState::Starting
-                    | HueRuntimeState::Running
-                    | HueRuntimeState::Reconnecting
-            ) {
+            // A claimed reconnect has counted this death already, and its
+            // first step still needs the dead stream's deactivate parameters.
+            if !owner.reconnect_in_progress
+                && matches!(
+                    owner.state,
+                    HueRuntimeState::Starting
+                        | HueRuntimeState::Running
+                        | HueRuntimeState::Reconnecting
+                )
+            {
                 // Clear dead stream/sender contexts so the next start can spawn fresh.
                 owner.set_active_stream(None);
                 owner.persistent_sender = None;

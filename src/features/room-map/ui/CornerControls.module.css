@@ -1,0 +1,130 @@
+@layer components {
+  .corner {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    z-index: 30;
+    /* Its own layer: WKWebView painted the plan's composited layer over it while the plan moved. */
+    will-change: transform;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+  }
+
+  /* The switch's look: one quiet capsule, its buttons grey until the pointer or focus is on them. */
+  .capsule {
+    display: flex;
+    align-items: center;
+    height: 32px;
+    padding: 0 2px;
+    border-radius: 8px;
+    background: var(--lm-panel);
+    box-shadow: inset 0 0 0 1px var(--lm-line-2);
+  }
+  .group { display: flex; align-items: center; }
+  /* The plan's zoom or the 3D camera, at the zoom's width (32 + 48 + 32), so the capsule is one
+     width on both stages. */
+  .slot {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-width: 112px;
+  }
+
+  .button {
+    display: grid;
+    place-items: center;
+    min-width: 32px;
+    height: 32px;
+    padding: 0 4px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    font: 500 12px/1 var(--lm-sans);
+    cursor: pointer;
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+  }
+  .button svg { width: 14px; height: 14px; }
+  .button:hover:not(:disabled, [aria-disabled="true"]) { color: var(--lm-ink); background: rgb(255 255 255 / 4%); }
+  .button[aria-expanded="true"] { color: var(--lm-amber); }
+  .button:disabled,
+  .button[aria-disabled="true"] { color: var(--lm-ink-faint); cursor: default; }
+  .button:focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--lm-focus-ring-inset);
+  }
+  /* The zoom readout is a value: fixed width and tabular, so stepping never shifts the buttons. */
+  .button[data-readout] {
+    width: 48px;
+    font: 11px var(--lm-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rule {
+    width: 1px;
+    height: 16px;
+    margin: 0 2px;
+    background: var(--lm-line-2);
+  }
+
+  /* A lone button standing as a capsule: `.button` comes later and would clear the panel. */
+  .solo {
+    display: flex;
+    gap: 6px;
+    padding: 0 10px;
+    background: var(--lm-panel);
+  }
+  .solo:hover:not(:disabled) { background: var(--lm-panel-2); }
+
+  /* The stage shown is marked by the face switch's plate, so never by colour alone, and the plate
+     slides between the two as the face switch's does; the labels never move. */
+  .stages {
+    position: relative;
+    padding: 0;
+  }
+  .stageGroup {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    height: 100%;
+  }
+  .button.stage { width: 44px; }
+  .button.stage[aria-checked="true"] { color: var(--lm-amber); }
+  .stageMark {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 44px;
+    border-radius: 8px;
+    background: var(--lm-panel-2);
+    box-shadow: inset 0 0 0 1px var(--lm-amber);
+    transform: translateX(calc(var(--i, 0) * 100%));
+    transition: transform var(--lm-dur-base) var(--lm-ease-out);
+  }
+
+  :global(:root[data-reduced-motion]) .button,
+  :global(:root[data-reduced-motion]) .stageMark { transition: none; }
+
+  @media (forced-colors: active) {
+    .capsule {
+      box-shadow: none;
+      outline: 1px solid CanvasText;
+    }
+    .button:focus-visible { outline: 2px solid Highlight; }
+    .rule { background: CanvasText; }
+    .stageMark {
+      box-shadow: none;
+      background: Highlight;
+      forced-color-adjust: none;
+    }
+    .button.stage[aria-checked="true"] {
+      color: HighlightText;
+      forced-color-adjust: none;
+    }
+    /* On the Highlight plate a Highlight ring could not be seen. */
+    .button.stage[aria-checked="true"]:focus-visible { outline-color: CanvasText; }
+  }
+}

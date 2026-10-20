@@ -9,6 +9,7 @@
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "log:allow-log",
-    "allow-get-shell-state"
+    "allow-get-shell-state",
+    "allow-subscribe-twin-frames"
   ]
 }

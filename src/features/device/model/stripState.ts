@@ -32,7 +32,8 @@ export const STRIP_STATE_VIEW = {
   connecting: { word: "device:strip.state.connecting", tone: "busy", action: null },
   connected: { word: "device:strip.state.connected", tone: "live", action: "flash" },
   unlit: { word: "device:strip.state.unlit", tone: "warn", action: "retry" },
-  reconnecting: { word: "device:strip.state.reconnecting", tone: "busy", action: null },
+  // A static word, not a spinner: it can wait for the cable for hours, and the shell reconnects it.
+  reconnecting: { word: "device:strip.state.reconnecting", tone: "idle", action: null },
   disconnected: { word: "device:strip.state.disconnected", tone: "idle", action: "connect" },
   busy: { word: "device:strip.state.busy", tone: "warn", action: "retry" },
   replug: { word: "device:strip.state.replug", tone: "error", action: "retry" },

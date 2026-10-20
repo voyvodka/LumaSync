@@ -1,20 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { SerialPortListResponse } from "../deviceConnectionApi";
 import { withRegistry } from "./support/fakeRegistry";
+import { listResponse } from "./support/portList";
 import { createDeviceConnectionController } from "../state/deviceConnectionController";
 import type { DeviceConnectionControllerDeps } from "@/features/device/state/connectionTypes";
-
-function listResponse(ports: SerialPortListResponse["ports"]): SerialPortListResponse {
-  return {
-    status: {
-      code: "LIST_PORTS_OK",
-      message: "ok",
-      details: null,
-    },
-    ports,
-  };
-}
 
 describe("selection memory", () => {
   it("persists lastSuccessfulPort only after successful connect", async () => {

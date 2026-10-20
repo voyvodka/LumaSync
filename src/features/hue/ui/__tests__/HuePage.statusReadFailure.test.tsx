@@ -5,7 +5,7 @@
 // last snapshot beside the rejection and re-asks on a backoff. Real runtime
 // hook, real store and the real card; only the health API is fake.
 
-import { act, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { HueBridgeSummary, HuePairingCredentials } from "@/features/hue/hueOnboardingApi";
@@ -21,6 +21,7 @@ import {
 } from "@/features/hue/__tests__/fakeHueHealth";
 import { HuePage } from "../HuePage";
 import { shownByTestId } from "./hueFixture";
+import { flush } from "../../__tests__/support/flushTimers";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -102,12 +103,6 @@ function Harness() {
     />
   );
 }
-
-const flush = async (ms = 0) => {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(ms);
-  });
-};
 
 function expectNotReady() {
   expect(screen.getByTestId("hue-state")).not.toHaveTextContent("hue:state.idle");

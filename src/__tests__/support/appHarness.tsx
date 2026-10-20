@@ -401,7 +401,7 @@ function localOutputsSnapshot(serialConnected: boolean): LocalOutputsSnapshot {
       updatedAtUnixMs: 0,
     },
   ];
-  if (env.activeWledIp) outputs.push({ kind: "wled", ip: env.activeWledIp, ledCount: 60, connected: true });
+  if (env.activeWledIp) outputs.push({ kind: "wled", ip: env.activeWledIp, ledCount: 60, connected: true, reachable: true });
   return {
     revision: localOutputsRevision,
     outputs,
@@ -424,6 +424,7 @@ export function snapshot(overrides: Partial<LightingRuntimeSnapshot> = {}): Ligh
   env.revision += 1;
   return {
     mode: { kind: "off" },
+    brightness: 1,
     active: false,
     activeTargets: [],
     selectedTargets: ["usb"],
@@ -463,6 +464,7 @@ export function reply(
       stopFailed: [],
       droppedTargets: [],
       modeEnded: false,
+      wledAdvisory: null,
       ...outcome,
     },
   };

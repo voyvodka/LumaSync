@@ -24,7 +24,7 @@ import {
   type TvAnchorPlacement,
 } from "../src/shared/contracts/roomMap";
 
-export const ROOM_MAP_PRESET_IDS = ["none", "simple", "zoned", "legacy-gapped", "tv-anchored"] as const;
+export const ROOM_MAP_PRESET_IDS = ["none", "simple", "zoned", "legacy-gapped", "tv-anchored", "studio"] as const;
 
 export type RoomMapPresetId = (typeof ROOM_MAP_PRESET_IDS)[number];
 
@@ -106,18 +106,25 @@ function simple(): RoomMapConfig {
   };
 }
 
+// A cube in metres as tall as the room: one 2.6 m edge over each side.
+const LIVING_EDGE = DIMENSIONS.heightMeters;
 const LIVING_ZONE: HueZone = {
   id: "zone-living",
   name: "Living room",
   entertainmentAreaId: "area-living",
   centerX: 0,
-  centerY: 0.2,
+  centerY: 0,
   centerZ: 0,
-  scaleX: 0.8,
-  scaleY: 0.6,
-  scaleZ: 0.5,
+  scaleX: LIVING_EDGE / DIMENSIONS.widthMeters,
+  scaleY: LIVING_EDGE / DIMENSIONS.depthMeters,
+  scaleZ: LIVING_EDGE / DIMENSIONS.heightMeters,
   channelIndices: [0, 1, 2],
 };
+// The strips stand 4.2 m apart in `simple`, wider than any cube the ceiling allows, so here they flank the middle.
+const LIVING_X: ReadonlyMap<number, number> = new Map([
+  [0, -0.4],
+  [1, 0.4],
+]);
 
 /**
  * Three channels inside a zone, one left outside it.
@@ -132,7 +139,7 @@ function zoned(): RoomMapConfig {
   return {
     ...base,
     zones: [LIVING_ZONE],
-    hueChannels: base.hueChannels.map((placement) =>
+    hueChannels: base.hueChannels.map((p) => ({ ...p, x: LIVING_X.get(p.channelIndex) ?? p.x })).map((placement) =>
       LIVING_ZONE.channelIndices.includes(placement.channelIndex)
         ? {
             ...placement,
@@ -217,6 +224,55 @@ function tvAnchored(): RoomMapConfig {
   };
 }
 
+/** Every kitchen, stool, beanbag and dresser kind on one map, for the plan and the 3D room. */
+function studio(): RoomMapConfig {
+  const base = tvAnchored();
+  const dimensions = { ...DIMENSIONS, widthMeters: 7, depthMeters: 4.6 };
+  return {
+    ...base,
+    dimensions,
+    usbStrips: [
+      ...base.usbStrips,
+      // Under the wall cabinets a counter would have: a strip on its own height, off the skirting.
+      { stripId: "strip-kitchen", startX: 4.65, startY: 4.59, endX: 6.95, endY: 4.59, ledCount: 90, mountHeightMeters: 1.45 },
+      // Round three sides of the island's kick, bent at its two corners.
+      {
+        stripId: "strip-island",
+        startX: 4.88,
+        startY: 3.12,
+        corners: [
+          { x: 4.88, y: 2.18 },
+          { x: 6.72, y: 2.18 },
+        ],
+        endX: 6.72,
+        endY: 3.12,
+        ledCount: 223,
+        ledsPerMeter: 60,
+        mountHeightMeters: 0.1,
+      },
+    ],
+    furniture: [
+      ...FURNITURE,
+      { id: "counter-1", type: "kitchen", x: 4.6, y: dimensions.depthMeters - 0.62, width: 2.4, height: 0.62, rotation: 0, label: "Counter" },
+      { id: "fridge-1", type: "kitchen", x: 3.85, y: dimensions.depthMeters - 0.68, width: 0.7, height: 0.68, rotation: 0, label: "Fridge" },
+      { id: "island-1", type: "kitchen", x: 4.9, y: 2.2, width: 1.8, height: 0.9, rotation: 0, label: "Island" },
+      ...[5.15, 5.6, 6.05].map((x, i) => ({
+        id: `stool-${i + 1}`,
+        type: "chair" as const,
+        x,
+        y: 1.7,
+        width: 0.4,
+        height: 0.4,
+        rotation: 0,
+        variant: "stool" as const,
+        label: `Stool ${i + 1}`,
+      })),
+      { id: "beanbag-1", type: "chair", x: 0.3, y: 3.4, width: 0.9, height: 0.9, rotation: 20, variant: "beanbag", label: "Beanbag" },
+      { id: "dresser-1", type: "storage", x: 5.6, y: 0, width: 1.0, height: 0.5, rotation: 180, variant: "dresser", label: "Dresser" },
+    ],
+  };
+}
+
 export const ROOM_MAP_PRESETS: Record<RoomMapPresetId, RoomMapPreset> = {
   none: {
     id: "none",
@@ -247,5 +303,11 @@ export const ROOM_MAP_PRESETS: Record<RoomMapPresetId, RoomMapPreset> = {
     label: "TV-anchored, known heights",
     summary: "TV with an explicit mount height, channels with recorded floor/mid/ceiling z-origins.",
     build: tvAnchored,
+  },
+  studio: {
+    id: "studio",
+    label: "Open-plan studio",
+    summary: "The tv-anchored room widened with a kitchen run, fridge, island, stools, a beanbag and a dresser.",
+    build: studio,
   },
 };

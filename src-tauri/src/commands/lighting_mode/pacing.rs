@@ -168,17 +168,28 @@ pub(super) fn resolve_quality_config(
 /// plan".
 const STRIP_CAPTURE_INTERVAL: Duration = Duration::from_millis(33);
 
-pub(super) fn capture_interval_for(
-    strip: Option<&UsbOutputPlan>,
-    strip_budget_ms: Option<u64>,
-) -> Duration {
-    match strip {
-        None => DEFAULT_CAPTURE_INTERVAL,
-        Some(_) => strip_budget_ms
-            .map(Duration::from_millis)
-            .map_or(STRIP_CAPTURE_INTERVAL, |wire| {
-                wire.max(STRIP_CAPTURE_INTERVAL)
-            })
-            .min(DEFAULT_CAPTURE_INTERVAL),
-    }
+/// How one strip limits the capture rate: a serial link by the time a frame takes on the wire, a
+/// WLED or a preview-only strip not at all past the strip rate.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) enum StripRate {
+    Wire { wire_ms: u64 },
+    Unpaced,
+}
+
+/// One capture feeds every strip, so it runs at the fastest strip's pace — never above the strip
+/// rate, never below Hue's floor — and a slower strip skips frames at its own send gate instead of
+/// holding the others back. No strip at all is Hue alone at its default.
+pub(super) fn capture_interval_for(strips: &[StripRate]) -> Duration {
+    strips
+        .iter()
+        .map(|rate| match rate {
+            StripRate::Wire { wire_ms } => {
+                Duration::from_millis(*wire_ms).max(STRIP_CAPTURE_INTERVAL)
+            }
+            StripRate::Unpaced => STRIP_CAPTURE_INTERVAL,
+        })
+        .min()
+        .map_or(DEFAULT_CAPTURE_INTERVAL, |fastest| {
+            fastest.min(DEFAULT_CAPTURE_INTERVAL)
+        })
 }

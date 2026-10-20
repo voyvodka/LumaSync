@@ -6,11 +6,8 @@
 # Every entry left is copy kept for a case the app does not show yet:
 #   hue:pairing.errors.LINK_BUTTON_NOT_PRESSED  the unpressed link button has its
 #     own polling and timed-out copy under hue:pair.*
-#   preview:live.unavailableLinux  nothing opens a live-scope twin overlay yet;
-#     both launchers ask for the test scope
 # Everything else unreferenced was deleted from both locales.
 #
 # Blank lines and # comments ignored. One key per line, sorted.
 
 hue:pairing.errors.LINK_BUTTON_NOT_PRESSED.description
-preview:live.unavailableLinux

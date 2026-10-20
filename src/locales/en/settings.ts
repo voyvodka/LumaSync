@@ -40,6 +40,7 @@ export default {
       action: "Discussions",
     },
     shortcuts: {
+      show: "Show",
       label: "Keyboard shortcuts",
       zoomIn: "Make the interface larger",
       zoomOut: "Make the interface smaller",
@@ -60,8 +61,8 @@ export default {
     license: "MIT licence",
   },
   nav: {
-    switchToCompact: "Compact view",
-    switchToFull: "Full settings",
+    switchToCompact: "Compact window",
+    switchToFull: "Full window",
     sections: {
       lights: "Lights",
       devices: "Devices",
@@ -70,18 +71,18 @@ export default {
     },
   },
   startupTray: {
-    launchAtLogin: "Launch at login",
+    launchAtLogin: "Start at login",
     readError: "Couldn't read whether LumaSync launches at login",
     writeError: "Couldn't change launch at login — try again",
   },
   launchLights: {
-    label: "Lights on launch",
+    label: "When LumaSync starts",
     hint: "What the lights do when LumaSync starts, at login included.",
-    resume: "Resume last mode",
-    off: "Stay off",
+    resume: "Last mode",
+    off: "Lights off",
   },
   awayLights: {
-    label: "Lights off when away",
+    label: "Off when locked or asleep",
     hint: "Locking the computer, putting it to sleep or turning its display off puts the lights out; coming back brings back what ran. macOS and Windows.",
   },
   closeAction: {
@@ -107,7 +108,7 @@ export default {
     hint: "Turns animations down in every LumaSync window. Off, your system's setting applies.",
   },
   nerdStats: {
-    label: "Show stats for nerds",
+    label: "Live stats",
     description: "Show frame rate and live output numbers in the status bar. Off saves a little work.",
   },
 };

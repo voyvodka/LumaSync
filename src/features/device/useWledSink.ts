@@ -1,5 +1,5 @@
 /** Two hooks over one restore: `useWledSinkRestore` runs it once at boot from App.tsx, `useActiveWledSink` is the read-only view the WLED picker mounts later. */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 
 import {
@@ -88,6 +88,8 @@ export interface UseActiveWledSinkDeps {
   releaseOthers?: (kept: DrivenOutputRef) => Promise<void>;
   loadShellState?: () => Promise<ShellState>;
   updateShellState?: ShellStateUpdater;
+  /** After the user's own connect, never the launch's restore: like pairing a strip, it is the "use it" intent. */
+  onUserConnected?: () => void;
 }
 
 // Stable across renders: `refresh` depends on them, and a fresh arrow per render
@@ -104,6 +106,8 @@ export function useActiveWledSink(
   const releaseOthers = deps.releaseOthers ?? releaseOthersInApp;
   const loadShellState = deps.loadShellState ?? loadShell;
   const updateShellState = deps.updateShellState ?? updateShell;
+  const onUserConnectedRef = useRef(deps.onUserConnected);
+  onUserConnectedRef.current = deps.onUserConnected;
 
   useEffect(() => outputs.start(), [outputs]);
   const activeWledIp = useStoreSelector(outputs.store, (state) => wledOutput(state.snapshot)?.ip ?? null);
@@ -150,6 +154,8 @@ export function useActiveWledSink(
       } catch (err) {
         console.error("[LumaSync] persisting the connected WLED sink failed:", err);
       }
+      // Even after a failed save: the device is bound.
+      onUserConnectedRef.current?.();
       await refresh();
     },
     [updateShellState, releaseOthers, refresh],

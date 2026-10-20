@@ -4,12 +4,12 @@
 
 use std::collections::HashMap;
 use std::ffi::CString;
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex, OnceLock};
 
 use objc2::encode::Encode;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyClass, AnyObject, Bool, Imp, Sel};
-use objc2::{ffi, msg_send, sel};
+use objc2::{ffi, msg_send, sel, ClassType};
 use objc2_app_kit::{NSAnimationContext, NSWindow, NSWindowCollectionBehavior};
 use objc2_foundation::NSRect;
 use tauri::WebviewWindow;
@@ -135,7 +135,8 @@ extern "C-unwind" fn should_zoom(
 /// when another app owns the active fullscreen Space (e.g. a fullscreen game /
 /// video the user is calibrating against). Sets `canJoinAllSpaces |
 /// fullScreenAuxiliary` collection behaviour plus a raised window level, using
-/// the same objc2 NSWindow pattern as `forbid_native_fullscreen`.
+/// the same objc2 NSWindow pattern as `forbid_native_fullscreen`, and lets the
+/// window into another app's full-screen Space (`ALLOWED_IN_OTHER_APPS_FULL_SCREEN`).
 pub fn elevate_overlay_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
     let raw = match window.ns_window() {
         Ok(ptr) => ptr,
@@ -165,6 +166,194 @@ pub fn elevate_overlay_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R
         // overlay + control popup stay visible over fullscreen content.
         let level: objc2_app_kit::NSWindowLevel = 25;
         ns_window.setLevel(level);
+
+        if *ALLOWED_IN_OTHER_APPS_FULL_SCREEN {
+            // The mark is only looked for, never messaged, so it is assigned rather than retained.
+            ffi::objc_setAssociatedObject(
+                &*ns_window as *const NSWindow as *mut AnyObject,
+                joins_full_screen_key(),
+                NSWindow::class() as *const AnyClass as *mut AnyObject,
+                ffi::OBJC_ASSOCIATION_ASSIGN,
+            );
+        }
+    }
+}
+
+type AllowedInFullScreen = extern "C-unwind" fn(&AnyObject, Sel, usize) -> Bool;
+
+static JOINS_FULL_SCREEN: u8 = 0;
+
+fn joins_full_screen_key() -> *const std::ffi::c_void {
+    &JOINS_FULL_SCREEN as *const u8 as *const std::ffi::c_void
+}
+
+/// NSWindow's own answer, for every window not marked by `elevate_overlay_window`.
+static NSWINDOW_ALLOWED_IN_FULL_SCREEN: OnceLock<AllowedInFullScreen> = OnceLock::new();
+
+/// AppKit lets a `fullScreenAuxiliary` window into another app's full-screen
+/// Space only when the private `_allowedInOtherAppsFullScreenSpaceWithCollectionBehavior:`
+/// says so, and it says so only for a non-activating NSPanel: an NSWindow stays
+/// on the Space it was first shown on. tao's TaoWindow answers it here instead —
+/// yes for a marked window, NSWindow's answer for the rest. Turning the window
+/// into a panel by swapping its class is not an option: AppKit removes an
+/// observer registered under the old class in `-[NSWindow dealloc]`, which
+/// throws. Without the query (a later macOS) the windows stay on their Space.
+static ALLOWED_IN_OTHER_APPS_FULL_SCREEN: LazyLock<bool> = LazyLock::new(|| {
+    let sel = sel!(_allowedInOtherAppsFullScreenSpaceWithCollectionBehavior:);
+    let Some(tao) = AnyClass::get(c"TaoWindow") else {
+        log::warn!("[macos_window] no TaoWindow class; preview windows stay on their Space");
+        return false;
+    };
+    // SAFETY: NSWindow's method is read, not changed; the one added to
+    // TaoWindow takes and returns what it does, under its type encoding.
+    unsafe {
+        let method = ffi::class_getInstanceMethod(NSWindow::class(), sel);
+        let Some(original) = (!method.is_null())
+            .then(|| ffi::method_getImplementation(method))
+            .flatten()
+        else {
+            log::warn!("[macos_window] NSWindow no longer answers {sel}; preview windows stay on their Space");
+            return false;
+        };
+        NSWINDOW_ALLOWED_IN_FULL_SCREEN
+            .get_or_init(|| std::mem::transmute::<Imp, AllowedInFullScreen>(original));
+        let imp =
+            std::mem::transmute::<AllowedInFullScreen, Imp>(allowed_in_other_apps_full_screen);
+        let added = ffi::class_addMethod(
+            (tao as *const AnyClass).cast_mut(),
+            sel,
+            imp,
+            ffi::method_getTypeEncoding(method),
+        );
+        if !added.as_bool() {
+            log::warn!("[macos_window] TaoWindow already answers {sel}; preview windows stay on their Space");
+        }
+        added.as_bool()
+    }
+});
+
+extern "C-unwind" fn allowed_in_other_apps_full_screen(
+    this: &AnyObject,
+    cmd: Sel,
+    behavior: usize,
+) -> Bool {
+    // SAFETY: only the presence of the mark is read.
+    let marked = unsafe { !ffi::objc_getAssociatedObject(this, joins_full_screen_key()).is_null() };
+    if marked {
+        return Bool::YES;
+    }
+    match NSWINDOW_ALLOWED_IN_FULL_SCREEN.get() {
+        Some(original) => original(this, cmd, behavior),
+        None => Bool::NO,
+    }
+}
+
+/// The window server's number for the window (`CGWindowID`).
+pub fn window_number<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) -> Option<u32> {
+    let raw = window.ns_window().ok().filter(|raw| !raw.is_null())?;
+    // SAFETY: Tauri's retained NSWindow pointer, borrowed for this call only.
+    let number = unsafe { (*(raw as *const NSWindow)).windowNumber() };
+    u32::try_from(number).ok().filter(|&number| number > 0)
+}
+
+/// Drags `window` from where the mouse is now, while its button is still down. tao starts a drag
+/// from `NSApp.currentEvent`, read when the `start_dragging` IPC lands — by then often the
+/// mouse-up, or an event of another window, and AppKit anchors the drag on that event's point: the
+/// window jumped sideways on a click. A fresh mouse-down at the pointer anchors where the user is.
+/// Main thread only.
+pub fn drag_from_mouse<R: tauri::Runtime>(window: &tauri::Window<R>) {
+    // SAFETY: a class message with no receiver state.
+    let pressed: usize = unsafe { msg_send![objc2::class!(NSEvent), pressedMouseButtons] };
+    if pressed & 1 == 0 {
+        return;
+    }
+    let Some(raw) = window.ns_window().ok().filter(|raw| !raw.is_null()) else {
+        return;
+    };
+    // SAFETY: Tauri's retained NSWindow pointer, borrowed for this call only; every message is
+    // sent on the main thread, which the caller guarantees.
+    unsafe {
+        let ns_window = &*(raw as *const NSWindow);
+        let location: objc2_foundation::NSPoint =
+            msg_send![ns_window, mouseLocationOutsideOfEventStream];
+        let process_info: *mut AnyObject = msg_send![objc2::class!(NSProcessInfo), processInfo];
+        let uptime: f64 = msg_send![process_info, systemUptime];
+        // NSEventTypeLeftMouseDown; no modifiers, no graphics context.
+        let event: Option<Retained<AnyObject>> = msg_send![
+            objc2::class!(NSEvent),
+            mouseEventWithType: 1usize,
+            location: location,
+            modifierFlags: 0usize,
+            timestamp: uptime,
+            windowNumber: ns_window.windowNumber(),
+            context: std::ptr::null_mut::<AnyObject>(),
+            eventNumber: 0isize,
+            clickCount: 1isize,
+            pressure: 1.0f32
+        ];
+        let Some(event) = event else {
+            log::warn!("[macos_window] no mouse-down to start a window drag from");
+            return;
+        };
+        let _: () = msg_send![ns_window, performWindowDragWithEvent: &*event];
+    }
+}
+
+/// The app in front, when it is not this one.
+pub fn frontmost_other_app() -> Option<i32> {
+    objc2_app_kit::NSWorkspace::sharedWorkspace()
+        .frontmostApplication()
+        .map(|app| app.processIdentifier())
+        .filter(|pid| *pid != std::process::id() as i32)
+}
+
+pub fn activate_app(pid: i32) {
+    if let Some(app) =
+        objc2_app_kit::NSRunningApplication::runningApplicationWithProcessIdentifier(pid)
+    {
+        app.activateWithOptions(objc2_app_kit::NSApplicationActivationOptions::empty());
+    }
+}
+
+/// Shows the window on its own Space without making it key or activating the
+/// app, so the user is not moved to that Space.
+pub fn order_front_without_focus<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
+    let raw = match window.ns_window() {
+        Ok(ptr) if !ptr.is_null() => ptr,
+        Ok(_) => return,
+        Err(err) => {
+            log::warn!("[macos_window] ns_window unavailable for order_front: {err}");
+            return;
+        }
+    };
+    // SAFETY: as in `elevate_overlay_window` — a retained NSWindow, borrowed
+    // for this call only.
+    unsafe {
+        let ns_window: Retained<NSWindow> =
+            Retained::retain(raw as *mut AnyObject as *mut NSWindow)
+                .expect("NSWindow pointer must be non-null");
+        ns_window.orderFront(None);
+    }
+}
+
+/// Brings the window forward while the app is not active, which `orderFront`
+/// does not.
+pub fn order_front_regardless<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
+    let raw = match window.ns_window() {
+        Ok(ptr) if !ptr.is_null() => ptr,
+        Ok(_) => return,
+        Err(err) => {
+            log::warn!("[macos_window] ns_window unavailable for order_front_regardless: {err}");
+            return;
+        }
+    };
+    // SAFETY: as in `elevate_overlay_window` — a retained NSWindow, borrowed
+    // for this call only.
+    unsafe {
+        let ns_window: Retained<NSWindow> =
+            Retained::retain(raw as *mut AnyObject as *mut NSWindow)
+                .expect("NSWindow pointer must be non-null");
+        ns_window.orderFrontRegardless();
     }
 }
 

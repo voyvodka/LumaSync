@@ -181,7 +181,7 @@ pub(super) fn activate_entertainment_config(
 /// Prefer `deactivate_with_token` over calling this directly — direct
 /// callers bypass the dedupe primitive and risk re-introducing
 /// the double-PUT race.
-pub(crate) fn deactivate_entertainment_config(
+fn deactivate_entertainment_config(
     client: &BlockingClient,
     bridge_ip: &str,
     username: &str,

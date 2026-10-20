@@ -15,15 +15,22 @@ vi.mock("@/features/persistence/shellStore", () => ({
 
 import { createLocalOutputs } from "../state/localOutputsStore";
 import { useActiveWledSink } from "../useWledSink";
+import { createWledSinkEventBus } from "../wledSinkEvents";
+import type { WledRestoreOutcome } from "../wledSinkRestore";
 
 function registry(snapshot: LocalOutputsSnapshot) {
   const read = vi.fn<() => Promise<LocalOutputsSnapshot>>(async () => snapshot);
   return { read, outputs: createLocalOutputs({ read, listen: async () => () => {} }) };
 }
 
+const RESTORED: WledRestoreOutcome = {
+  kind: "restored",
+  sink: { ip: "192.168.1.42", port: 4048, ledCount: 60, protocol: "ddp" },
+};
+
 const wledBound: LocalOutputsSnapshot = {
   revision: 1,
-  outputs: [{ kind: "wled", ip: "192.168.1.42", ledCount: 60, connected: true }],
+  outputs: [{ kind: "wled", ip: "192.168.1.42", ledCount: 60, connected: true, reachable: true }],
   driven: { kind: "wled", ip: "192.168.1.42" },
 };
 
@@ -74,5 +81,31 @@ describe("useActiveWledSink", () => {
 
     expect(releaseOthers).toHaveBeenCalledWith({ kind: "wled", ip: "192.168.1.42" });
     expect(updateShellState.mock.invocationCallOrder[0]).toBeLessThan(releaseOthers.mock.invocationCallOrder[0]!);
+  });
+
+  // The launch's restore binds the same device; counting it would add `usb` on every launch.
+  it("reports the user's connect as a choice, and the launch's restore not", async () => {
+    loadMock.mockResolvedValue({} as Awaited<ReturnType<typeof shellStoreType.load>>);
+    const { outputs } = registry(wledBound);
+    const bus = createWledSinkEventBus();
+    const onUserConnected = vi.fn<() => void>();
+    const { result } = renderHook(() =>
+      useActiveWledSink({
+        localOutputs: outputs,
+        wledSinkEvents: bus,
+        releaseOthers: async () => {},
+        updateShellState: async () => ({}) as Awaited<ReturnType<typeof shellStoreType.update>>,
+        onUserConnected,
+      }),
+    );
+
+    act(() => bus.publish(RESTORED));
+    await waitFor(() => expect(result.current.restoreOutcome.kind).toBe("restored"));
+    expect(onUserConnected).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await result.current.markConnected({ ip: "192.168.1.42", mac: null, ledCount: 60, name: null, version: null });
+    });
+    expect(onUserConnected).toHaveBeenCalledTimes(1);
   });
 });

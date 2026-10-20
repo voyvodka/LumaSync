@@ -7,9 +7,9 @@ export default {
       off: "Off",
       ambilight: "Ambilight",
       solid: "Solid",
+      effect: "Effect",
     },
-    colorModelRgb: "RGB",
-    solidColor: "Solid color",
+    solidColor: "Solid colour",
     brightness: "Brightness",
   },
   callout: {
@@ -20,25 +20,12 @@ export default {
       ok: "Done",
     },
   },
-  compact: {
-    sections: {
-      mode: "Mode",
-      scene: "Scene",
-    },
-    scenes: {
-      movie: "Movie",
-      game: "Game",
-      music: "Music",
-      chill: "Chill",
-      read: "Read",
-    },
-  },
   ui: {
     colorPicker: {
-      rootAriaLabel: "Color picker",
+      rootAriaLabel: "Colour picker",
       hueLabel: "Hue",
       svLabel: "Saturation and brightness",
-      hexLabel: "HEX",
+      hexLabel: "Hex",
       hexPlaceholder: "RRGGBB",
       recentColors: "Recent",
       recentItemAriaLabel: "Use {{hex}}",

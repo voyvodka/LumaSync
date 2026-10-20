@@ -4,7 +4,7 @@
 
   .list { display: grid; gap: 2px; }
   .item {
-    height: 30px;
+    height: 32px;
     padding: 0 10px;
     border-radius: 7px;
     text-align: left;
@@ -14,4 +14,6 @@
   }
   .item:hover { color: var(--lm-ink); background: var(--lm-panel); }
   .item:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+
+  :global(:root[data-reduced-motion]) .item { transition: none; }
 }

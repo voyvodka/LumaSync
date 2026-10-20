@@ -1,0 +1,110 @@
+import { BufferAttribute, BufferGeometry, Mesh, MeshBasicMaterial, Scene, Texture, Vector3 } from "three";
+import { describe, expect, it, vi } from "vitest";
+
+import { type Liftable, liftPiece, spansOf } from "../lift";
+
+const liftable = (): Liftable => ({ spans: [], extras: [], pivot: { x: 0, z: 0 } });
+
+describe("spansOf", () => {
+  it("joins an owner's neighbouring parts and splits them round another's", () => {
+    const mesh = new Mesh(new BufferGeometry());
+    const a = liftable();
+    const b = liftable();
+    const owners = new Map([["a", a], ["b", b]]);
+    spansOf(mesh, [3, 6, 9, 3], ["a", "a", "b", "a"], (id) => owners.get(id));
+    expect(a.spans.map(({ start, count }) => [start, count])).toEqual([[0, 9], [18, 3]]);
+    expect(b.spans.map(({ start, count }) => [start, count])).toEqual([[9, 9]]);
+  });
+});
+
+describe("liftPiece", () => {
+  // Two quads in one indexed mesh, as the merged contact shadows are: the second one is lifted.
+  const quads = () => {
+    const geometry = new BufferGeometry();
+    const positions = new Float32Array(8 * 3).map((_, i) => i + 1);
+    geometry.setAttribute("position", new BufferAttribute(positions, 3));
+    geometry.setIndex([0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7]);
+    return new Mesh(geometry, new MeshBasicMaterial());
+  };
+
+  it("copies only the span's own triangles out, and collapses exactly its vertices", () => {
+    const scene = new Scene();
+    const mesh = quads();
+    scene.add(mesh);
+    const piece: Liftable = { spans: [{ mesh, start: 4, count: 4 }], extras: [], pivot: { x: 0, z: 0 } };
+    const lifted = liftPiece(scene, piece);
+    const copy = scene.children[1]!.children[0]!.children[0]!.children[0] as Mesh;
+    expect(Array.from(copy.geometry.index!.array)).toEqual([0, 1, 2, 0, 2, 3]);
+    expect(copy.geometry.getAttribute("position").count).toBe(4);
+    const position = mesh.geometry.getAttribute("position").array as Float32Array;
+    expect(Array.from(position.slice(0, 12)).every((v) => v !== 0)).toBe(true);
+    expect(Array.from(position.slice(12)).every((v) => v === 0)).toBe(true);
+    lifted.restore();
+    expect(Array.from(position)).toEqual(Array.from(new Float32Array(24).map((_, i) => i + 1)));
+  });
+
+  it("moves a rider by as far as the piece, without turning it", () => {
+    const scene = new Scene();
+    const rider: Liftable = { spans: [], extras: [new Mesh()], pivot: { x: 1, z: -2 } };
+    scene.add(rider.extras[0]!);
+    const lifted = liftPiece(scene, { spans: [], extras: [], pivot: { x: 0, z: 0 } }, new Map([["tv", rider]]));
+    expect(lifted.riders).toEqual(["tv"]);
+    lifted.moveTo(0.5, 0.25);
+    lifted.turnTo(Math.PI / 2);
+    const riderPivot = rider.extras[0]!.parent!.parent!.parent!;
+    expect([riderPivot.position.x, riderPivot.position.z]).toEqual([1.5, -1.75]);
+    expect(riderPivot.rotation.y).toBe(0);
+  });
+
+  it("reshapes a piece about a height: across and up from its centre there, then raised", () => {
+    const scene = new Scene();
+    const point = new Mesh();
+    point.position.set(2.5, 1.5, -1);
+    const lifted = liftPiece(scene, { spans: [], extras: [point], pivot: { x: 2, z: -1 } });
+    lifted.reshape(2, 2, 1, 0.25);
+    scene.updateMatrixWorld(true);
+    expect(point.getWorldPosition(new Vector3()).toArray()).toEqual([3, 2.25, -1]);
+    lifted.reshape(1, 1, 0, 0);
+    scene.updateMatrixWorld(true);
+    expect(point.getWorldPosition(new Vector3()).toArray()).toEqual([2.5, 1.5, -1]);
+  });
+
+  // A sofa turned a quarter swelled in depth through a morph: the stretch was the room's x.
+  it("stretches a turned piece along its own width", () => {
+    const scene = new Scene();
+    const alongWidth = new Mesh();
+    alongWidth.position.set(2, 0, -1.5);
+    const alongDepth = new Mesh();
+    alongDepth.position.set(2.5, 0, -1);
+    const lifted = liftPiece(scene, { spans: [], extras: [alongWidth, alongDepth], pivot: { x: 2, z: -1 }, turn: Math.PI / 2 });
+    scene.updateMatrixWorld(true);
+    const at = (mesh: Mesh) => mesh.getWorldPosition(new Vector3()).toArray().map((v) => Math.round(v * 1000) / 1000 + 0);
+    expect(at(alongWidth)).toEqual([2, 0, -1.5]);
+    lifted.reshape(2, 1, 0, 0);
+    scene.updateMatrixWorld(true);
+    expect(at(alongWidth)).toEqual([2, 0, -2]);
+    expect(at(alongDepth)).toEqual([2.5, 0, -1]);
+  });
+
+  it("discards an extra with its material and texture, but not the material its copies borrow", () => {
+    const scene = new Scene();
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new BufferAttribute(new Float32Array(12), 3));
+    const merged = new MeshBasicMaterial();
+    const mesh = new Mesh(geometry, merged);
+    scene.add(mesh);
+    const map = new Texture();
+    const own = new MeshBasicMaterial({ map });
+    const panel = new Mesh(new BufferGeometry(), own);
+    scene.add(panel);
+    const lifted = liftPiece(scene, { spans: [{ mesh, start: 0, count: 4 }], extras: [panel], pivot: { x: 0, z: 0 } });
+    const borrowed = vi.spyOn(merged, "dispose");
+    const owned = vi.spyOn(own, "dispose");
+    const texture = vi.spyOn(map, "dispose");
+    lifted.discard();
+    expect(owned).toHaveBeenCalled();
+    expect(texture).toHaveBeenCalled();
+    expect(borrowed).not.toHaveBeenCalled();
+    expect(panel.parent?.parent?.parent?.parent ?? null).toBeNull();
+  });
+});

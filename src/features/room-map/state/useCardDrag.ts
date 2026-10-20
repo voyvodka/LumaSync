@@ -1,0 +1,90 @@
+import { type PointerEvent as ReactPointerEvent, useEffect, useRef } from "react";
+
+import type { LibraryCard, LibraryDrop } from "../model/libraryDrop";
+import { CLICK_SLOP_PX } from "../model/snapGeometry";
+
+export const LIBRARY_DRAG_ATTR = "data-library-drag";
+
+export interface CardDrag {
+  onPointerDown: (card: LibraryCard) => (event: ReactPointerEvent<HTMLButtonElement>) => void;
+}
+
+/** Listens on the window: the drawer, and the card with it, closes once the drag starts. */
+export function useCardDrag(drop: LibraryDrop | undefined, { onStart, onAbandon }: { onStart: () => void; onAbandon: () => void }): CardDrag {
+  const stop = useRef<(() => void) | null>(null);
+  const handlers = useRef({ onStart, onAbandon });
+  handlers.current = { onStart, onAbandon };
+
+  useEffect(() => () => stop.current?.(), []);
+
+  return {
+    onPointerDown: (card) => (event) => {
+      if (!drop || event.button !== 0) return;
+      stop.current?.();
+      const id = event.pointerId;
+      const from = { x: event.clientX, y: event.clientY };
+      let dragging = false;
+
+      const end = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        window.removeEventListener("pointercancel", cancel);
+        window.removeEventListener("keydown", key, true);
+        window.removeEventListener("blur", cancel);
+        document.documentElement.removeAttribute(LIBRARY_DRAG_ATTR);
+        stop.current = null;
+      };
+      // The click a drag ends with lands on whatever is under the pointer: the plan's floor deselects on one.
+      const swallowClick = () => {
+        const eat = (e: MouseEvent) => {
+          e.stopPropagation();
+          e.preventDefault();
+        };
+        window.addEventListener("click", eat, { capture: true, once: true });
+        setTimeout(() => window.removeEventListener("click", eat, true), 0);
+      };
+      const move = (e: PointerEvent) => {
+        if (e.pointerId !== id) return;
+        // A release the window never saw — it lost focus mid-drag — must not leave the card held.
+        if (e.buttons === 0) {
+          cancel();
+          return;
+        }
+        if (!dragging) {
+          if (Math.hypot(e.clientX - from.x, e.clientY - from.y) < CLICK_SLOP_PX) return;
+          dragging = true;
+          document.documentElement.setAttribute(LIBRARY_DRAG_ATTR, "");
+          handlers.current.onStart();
+        }
+        document.documentElement.setAttribute(LIBRARY_DRAG_ATTR, drop.hover(card, e.clientX, e.clientY) ? "" : "refused");
+      };
+      const up = (e: PointerEvent) => {
+        if (e.pointerId !== id) return;
+        end();
+        if (!dragging) return;
+        swallowClick();
+        if (!drop.land(card, e.clientX, e.clientY)) handlers.current.onAbandon();
+      };
+      const cancel = () => {
+        end();
+        if (!dragging) return;
+        drop.cancel();
+        handlers.current.onAbandon();
+      };
+      // Capture, ahead of the editor's own Escape, which would clear the selection too.
+      const key = (e: KeyboardEvent) => {
+        if (e.key !== "Escape" || !dragging) return;
+        e.preventDefault();
+        e.stopPropagation();
+        cancel();
+      };
+
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+      window.addEventListener("pointercancel", cancel);
+      window.addEventListener("keydown", key, true);
+      window.addEventListener("blur", cancel);
+      stop.current = cancel;
+    },
+  };
+}

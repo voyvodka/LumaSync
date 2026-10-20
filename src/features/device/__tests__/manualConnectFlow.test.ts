@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { SerialPortListResponse } from "../deviceConnectionApi";
 import { withRegistry } from "./support/fakeRegistry";
+import { listResponse } from "./support/portList";
 import { createDeviceConnectionController } from "../state/deviceConnectionController";
 import type { DeviceConnectionControllerDeps } from "@/features/device/state/connectionTypes";
 
@@ -15,17 +16,6 @@ function deferred<T>() {
   });
 
   return { promise, resolve, reject };
-}
-
-function listResponse(ports: SerialPortListResponse["ports"]): SerialPortListResponse {
-  return {
-    status: {
-      code: "LIST_PORTS_OK",
-      message: "ok",
-      details: null,
-    },
-    ports,
-  };
 }
 
 describe("manual connect flow", () => {
@@ -154,7 +144,6 @@ describe("manual connect flow", () => {
     expect(connectSerialPort).toHaveBeenCalledTimes(1);
     expect(controller.getState().status).toBe("connected");
     expect(controller.getState().connectedPort).toBe("COM3");
-    expect(controller.getState().canConnect).toBe(true);
     expect(controller.getState().selectedPort).toBe("COM3");
   });
 

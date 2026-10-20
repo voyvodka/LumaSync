@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-preview-scene-brightness"
+description = "Enables the set_preview_scene_brightness command without any pre-configured scope."
+commands.allow = ["set_preview_scene_brightness"]
+
+[[permission]]
+identifier = "deny-set-preview-scene-brightness"
+description = "Denies the set_preview_scene_brightness command without any pre-configured scope."
+commands.deny = ["set_preview_scene_brightness"]

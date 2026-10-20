@@ -22,6 +22,8 @@ interface PickerListProps<T> {
   isDisabled?: (item: T) => boolean;
   /** Called once the tint has landed on the picked row; the caller commits and closes. */
   onPick: (index: number) => void;
+  /** A long list scrolls past this height instead of running off a small window. */
+  maxHeight?: number;
 }
 
 /**
@@ -42,6 +44,7 @@ export function PickerList<T>({
   selectedIndex,
   isDisabled,
   onPick,
+  maxHeight,
 }: PickerListProps<T>) {
   const [picked, setPicked] = useState<number | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -85,7 +88,7 @@ export function PickerList<T>({
 
   return (
     <Popover open={open} onClose={onClose} anchorRef={anchorRef} side={side} id={id} role="listbox" label={label} width={width}>
-      <div className={styles.list} ref={listRef}>
+      <div className={cx(styles.list, maxHeight !== undefined && styles.scrolls)} style={{ maxHeight }} ref={listRef}>
         <span
           aria-hidden
           className={cx(styles.mark, mark < 0 && styles.none)}

@@ -5,6 +5,7 @@ import {
   autofillEditorConfig,
   createCalibrationEditorState,
   isSameCalibrationLayout,
+  rebaseOnSaved,
   saveEditorCalibration,
   updateEditorConfig,
 } from "../calibrationEditorState";
@@ -112,6 +113,18 @@ describe("calibrationEditorState", () => {
     const saved = saveEditorCalibration(dirtyState);
     expect(saved.baseline.counts.right).toBe(24);
     expect(saved.isDirty).toBe(false);
+  });
+
+  it("keeps an edit made after the saved snapshot was taken, as unsaved", () => {
+    const atSave = updateEditorConfig(createCalibrationEditorState(BASELINE), { counts: { right: 24 } });
+    const editedMeanwhile = updateEditorConfig(atSave, { counts: { right: 25 } });
+
+    const landed = rebaseOnSaved(editedMeanwhile, saveEditorCalibration(atSave).current);
+
+    expect(landed.baseline.counts.right).toBe(24);
+    expect(landed.current.counts.right).toBe(25);
+    expect(landed.isDirty).toBe(true);
+    expect(rebaseOnSaved(atSave, atSave.current).isDirty).toBe(false);
   });
 });
 

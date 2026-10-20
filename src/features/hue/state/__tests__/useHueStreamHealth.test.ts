@@ -15,6 +15,7 @@ import {
   runtimeStatus,
   setHealth,
 } from "../../__tests__/fakeHueHealth";
+import { flush } from "../../__tests__/support/flushTimers";
 
 vi.mock("../../hueHealthApi", async () => (await import("../../__tests__/fakeHueHealth")).fakeHueHealthApi);
 
@@ -25,12 +26,6 @@ const stream = (state: "Running" | "Reconnecting" | "Failed" | "Idle") => ({
 function mount(opts: { hueTargetSelected?: boolean } = {}) {
   return renderHook(() => useHueStreamHealth({ hueTargetSelected: opts.hueTargetSelected ?? true }));
 }
-
-const flush = async (ms = 0) => {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(ms);
-  });
-};
 
 const publish = async (state: "Running" | "Reconnecting" | "Failed" | "Idle") => {
   act(() => {

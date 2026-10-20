@@ -171,7 +171,7 @@ between the read and the save. `update(fn)` reads with `get_shell_state`, applie
 derives from that state, and writes with `replace_shell_state` guarded by the revision it read; on a
 conflict it re-reads and re-runs `fn`, up to five attempts, then rejects. It runs in the window's
 write queue, and its listeners hear the partial once, as for a save. Main window only, like the
-migration write-back. The Devices → USB roster writes use it.
+migration write-back. The Devices → USB roster writes and the Devices channel map's placement writes use it.
 
 **`shell://state-changed` carries `{ set, remove, revision, writerId }` to every window.** The
 facade feeds it to `onShellStateSaved` listeners, so a save in the popup reaches the main
@@ -211,14 +211,16 @@ disk, as before.
 **Preferences Rust acts on are reverted when their save fails.** Settings preferences live in one
 store (`persistence/preferences.ts`): flat top-level keys, each with a resolver in `contracts/shell.ts`
 that turns an absent or unknown value into the default. Most only change what a window draws and
-hold for the session even when a save fails. Six are also read by Rust off disk —
+hold for the session even when a save fails. Seven are also read by Rust off disk —
 `updateChannel` (the update feed), `uiZoom` (the webview zoom, applied from `window_wrote` and at
 setup), `closeAction` (the main window's `CloseRequested` quits through the shutdown coordinator),
 `notifications` (`show_notification` answers `suppressed`), `launchLights` (the boot restore
-starts Off, only while nothing runs, so a reload keeps lights the user has on) and `awayLights`
-(`"keep"` leaves the lights on while the computer is locked, asleep or dark). Those revert on a
-failed save (`READ_BY_RUST`), and each has a Rust accessor in `shell_state.rs` whose test uses the
-same inputs as `shellPreferences.test.ts`, so both sides read a stored value alike.
+starts Off, only while nothing runs, so a reload keeps lights the user has on), `awayLights`
+(`"keep"` leaves the lights on while the computer is locked, asleep or dark) and
+`lightingIntensityPreset` (Ambilight's smoothing, stamped onto the mode as it is applied). Those revert on a
+failed save (`READ_BY_RUST`), and each has a Rust accessor in `shell_state.rs`. For `uiZoom`,
+`closeAction`, `notifications`, `launchLights` and `awayLights` the accessor's test uses the same
+inputs as `shellPreferences.test.ts`, so both sides read a stored value alike.
 
 **The local output is stored as strips (schema 8).** A strip is one run of LEDs behind one
 controller, with its transport, hardware (firmware profile, chip, colour order), layout and colour
@@ -268,5 +270,6 @@ through the `PersistedShellState` accessors.
 - **Hue credentials are not in `shell-state.json`.** They live in the OS keychain — see [`hue.md`](hue.md).
 - **The `2 → 3` window-geometry migration derives a centre that sits ~14 px high on macOS, and that is accepted, not a bug.** The legacy `windowX/Y/Width/Height` fields stored the *inner* content size, but macOS adds ~28 px of title bar to the *outer* rect, and the derived centre can only use what was persisted. The bias self-corrects on the very next move or resize, because the rewritten `persistWindowState` path measures the outer size from then on. Do not "fix" the one-shot migration by reaching for a chrome height — it is platform-dependent and not knowable from persisted state alone.
 - **A migration that drops records needs a reason it is safe.** The `1 → 2` step drops legacy `ZoneDefinition` records with a `console.warn` so the loss is auditable. That is only safe because the shape that produced them never shipped; no released build ever persisted one. A future migration cannot assume the same.
-- **Retiring a stored key takes a step on both sides.** The `6 → 7` step deletes `startupEnabled`, `notificationsEnabled`, `roomMapBackgroundOpacity` and `lightingMode.targets` — safe to drop because nothing in either language read them (launch at login is the OS autostart entry's own state; the saved selection is `lastOutputTargets`). The TypeScript step alone is not enough for a nested key: Rust saves `lightingMode` as a read-modify-write that carries unknown fields through (`persist_mode` in `lighting_mode/outputs.rs`), so it strips `targets` itself, or an older file's copy would outlive the migration. A top-level key is also re-added by anything that merges `DEFAULT_SHELL_STATE` before writing, which is how `startupEnabled` kept reappearing as `false`.
+- **Retiring a stored key takes a step on both sides.** The `6 → 7` step deletes `startupEnabled`, `notificationsEnabled`, `roomMapBackgroundOpacity` and `lightingMode.targets` — safe to drop because nothing in either language read them (launch at login is the OS autostart entry's own state; the saved selection is `lastOutputTargets`). The TypeScript step alone is not enough for a nested key: Rust saves `lightingMode` as a read-modify-write that carries unknown fields through (`persist_mode` in `lighting_mode/outputs/mod.rs`), so it strips `targets` itself, or an older file's copy would outlive the migration. A top-level key is also re-added by anything that merges `DEFAULT_SHELL_STATE` before writing, which is how `startupEnabled` kept reappearing as `false`. The `8 → 9` step drops the old LED preview's `ledPreviewPopupVisible`, `ledTwinEnabledTest`, `lastLedTestPattern` and `ledPreviewHintShown` on the same grounds: the rebuilt preview reads none of them, and a v8 build reads each as absent and takes its own default. The `9 → 10` step drops `roomMapVersion`: every room-map writer bumped it and nothing compared it — the store's revision is what guards a write — and a v9 build reads it as absent and counts again from 0. A v9 build run after v10 writes it back, and it stays there unread until a later migration rewrites the file, since a state already at 10 runs no step; harmless. `verify:shell-contracts` fails if one comes back into `ShellState` or gains a reader.
+- **A value migration keeps what the runtime resolves.** The `10 → 11` step opens every Hue zone to the room's full height (`centerZ 0, scaleZ 1`) and first rewrites each bound light's `zoneRelativePosition.z` to `centerZ + scaleZ · z`, channel by channel through the first zone with its id, the way both resolvers find it. Rust never migrates the file and reads it raw, so the step changes nothing it computes, whichever file it reads; a zone with a non-finite height is left alone rather than repaired, since repairing it would bind lights that resolved unbound. See `room-map.md`.
 - **`generate_handler![]` in `src-tauri/src/lib.rs` is the authoritative registration list.** A `#[tauri::command]` that is not in it does not exist at runtime, and the failure is an unhelpful "command not found" at the call site.

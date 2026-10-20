@@ -1,17 +1,25 @@
-import type { RoomMapConfig, UsbStripPlacement } from "@/shared/contracts/roomMap";
+import { type RoomMapConfig, resolveRoomFootprint, type UsbStripPlacement } from "@/shared/contracts/roomMap";
+
+import { keepStripInside, roomBoxOf } from "./pieceGeometry";
+import { cubeZones } from "./zoneCube";
 
 /**
- * Whether the editor opens on the template picker: nothing the user placed is
+ * Whether the room map opens on the template picker: nothing the user placed is
  * on the map. A strip linked to a port does not count — connecting a
  * controller on Devices → USB writes one, and that must not take the templates
- * away from a first-time USB user. A strip drawn without a port does count.
+ * away from a first-time USB user. Hue channels do not count either: the
+ * bridge sync seeds them a moment after the map opens, so counting them took
+ * the picker away under a first-time Hue user's pointer. A template keeps both.
+ * A strip drawn without a port does count.
  */
-export function isRoomMapEmpty(config: RoomMapConfig, visibleHueChannelCount: number): boolean {
+export function isRoomMapEmpty(config: RoomMapConfig): boolean {
   return (
+    // A room drawn into an L is a choice already made, even with nothing in it yet.
+    resolveRoomFootprint(config).length === 4 &&
     !config.tvAnchor &&
     config.furniture.length === 0 &&
-    config.usbStrips.every((strip) => Boolean(strip.portName)) &&
-    visibleHueChannelCount === 0
+    !(Array.isArray(config.structures) && config.structures.length > 0) &&
+    config.usbStrips.every((strip) => Boolean(strip.portName))
   );
 }
 
@@ -26,18 +34,31 @@ export function applyRoomTemplate(current: RoomMapConfig, template: RoomMapConfi
   const [first, ...others] = current.usbStrips.filter((strip) => Boolean(strip.portName));
   const [placement, ...otherTemplateStrips] = template.usbStrips;
 
+  const room = roomBoxOf(template);
   let usbStrips: UsbStripPlacement[];
+  let tvAnchor = template.tvAnchor;
   if (!first) {
     usbStrips = template.usbStrips;
   } else if (!placement) {
-    usbStrips = [first, ...others];
+    usbStrips = [first, ...others].map((strip) => keepStripInside(strip, room));
   } else {
+    // The template's screen names its strip by the id the connected one replaces.
+    if (tvAnchor?.backlightStripId === placement.stripId) tvAnchor = { ...tvAnchor, backlightStripId: first.stripId };
     usbStrips = [
-      { ...placement, stripId: first.stripId, portName: first.portName, ledCount: first.ledCount },
-      ...others,
+      {
+        ...placement,
+        stripId: first.stripId,
+        portName: first.portName,
+        ledCount: first.ledCount,
+        // The density is the tape's, like its LED count; the template's run is still drawn as is.
+        ...(first.ledsPerMeter !== undefined ? { ledsPerMeter: first.ledsPerMeter } : {}),
+      },
+      ...others.map((strip) => keepStripInside(strip, room)),
       ...otherTemplateStrips,
     ];
   }
 
-  return { ...template, usbStrips, hueChannels: current.hueChannels, zones: current.zones };
+  // A template lays out the furniture and the room's build; the room's finish is the user's and stays.
+  // Hue zones keep their place in the Hue cube and are made cubes again in the template's metres.
+  return cubeZones({ ...template, tvAnchor, usbStrips, hueChannels: current.hueChannels, zones: current.zones, surfaces: current.surfaces }, current.dimensions);
 }

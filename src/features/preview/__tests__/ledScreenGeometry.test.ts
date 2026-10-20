@@ -57,7 +57,7 @@ describe("LED screen geometry — shared golden fixture", () => {
         segment,
         localIndex,
       });
-      const position = ledScreenPosition(item, golden.config.counts);
+      const position = ledScreenPosition(item, golden.config);
       expect(position.x, `${where} x`).toBeCloseTo(x, 5);
       expect(position.y, `${where} y`).toBeCloseTo(y, 5);
     });

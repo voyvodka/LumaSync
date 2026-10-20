@@ -1,4 +1,4 @@
-import { DEFAULT_STATE, withDerivedFlags } from "./connectionStateHelpers";
+import { DEFAULT_STATE } from "./connectionStateHelpers";
 import { createConnectionStore } from "./connectionStore";
 import { createPortDiscovery } from "./portDiscovery";
 import { createConnectionLifecycle } from "./connectionLifecycle";
@@ -41,12 +41,10 @@ export function createDeviceConnectionController(
     },
   };
 
-  const store = createConnectionStore(
-    withDerivedFlags({
-      ...DEFAULT_STATE,
-      lastSuccessfulPort: deps.initialLastSuccessfulPort,
-    }),
-  );
+  const store = createConnectionStore({
+    ...DEFAULT_STATE,
+    lastSuccessfulPort: deps.initialLastSuccessfulPort,
+  });
 
   const follower = createRegistryFollower(store, deps.localOutputs);
   const sync = follower.sync;

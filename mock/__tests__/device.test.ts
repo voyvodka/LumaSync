@@ -85,12 +85,12 @@ describe("the mode apply reaches every mode", () => {
  * The mode apply used to ignore `targets` entirely — every mode applied
  * regardless of whether USB or Hue was actually available, so the two gates
  * `apply_mode_change_inner` runs before ever touching the worker
- * (`src-tauri/src/commands/lighting_mode.rs:2023-2036` USB,
- * `lighting_mode.rs:2039-2052` Hue) were both unreachable through the mock.
+ * (`src-tauri/src/commands/lighting_mode/transition.rs`, USB then Hue) were
+ * both unreachable through the mock.
  *
  * `hue_output` (the thing the Hue gate actually tests) is `Some` only once
  * `start_hue_stream` has spawned a sender — `snapshot_hue_output_context`
- * (`src-tauri/src/commands/hue/state_store.rs:451-463`) reads
+ * (`src-tauri/src/commands/hue/state_store.rs`) reads
  * `owner.active_stream`, set only at start's step 4c and cleared by every
  * stop/gate-block/abort/reconnect path. `hue.streaming` is the mock's proxy
  * for that fact, not `hue.everActive` or `hue.reachable` — a bridge that is
@@ -189,6 +189,17 @@ describe("the mode apply's USB and Hue gates fire in the same order apply_mode_c
     const result = applyLightingMode({ kind: "ambilight", targets: ["usb"] });
 
     expect(result.status.code).not.toBe("DEVICE_NOT_CONNECTED");
+  });
+
+  it("looking up a WLED address finds the device there, and nothing at an address no device has", () => {
+    const world = SCENARIOS.empty.build();
+    world.wled.devices = [{ host: "192.168.1.42", name: "WLED Panel", ledCount: 60, port: 4048, protocol: "ddp" }];
+    setWorld(world);
+
+    const found = call(DEVICE_COMMANDS.DISCOVER_WLED_DEVICES, { request: { ip: "192.168.1.42" } });
+    expect(found).toMatchObject({ status: { code: "WLED_DISCOVERY_OK" }, devices: [{ ip: "192.168.1.42" }] });
+    const nothing = call(DEVICE_COMMANDS.DISCOVER_WLED_DEVICES, { request: { ip: "192.168.1.99" } });
+    expect(nothing).toMatchObject({ status: { code: "WLED_DISCOVERY_UNREACHABLE" }, devices: [] });
   });
 
   it("Off never gates — targets are irrelevant when the mode is being turned off", async () => {

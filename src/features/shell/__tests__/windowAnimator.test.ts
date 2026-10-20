@@ -13,13 +13,16 @@ import {
   backend,
   captureLastSavedState,
   innerSizeMock,
+  isMaximizedMock,
   makePersistedState,
   outerPositionMock,
   scaleFactorMock,
+  setMaximizableMock,
   setMinSizeMock,
   setPositionMock,
   setSizeMock,
   setupPersistedState,
+  unmaximizeMock,
   type MonitorInfo,
 } from "./support/windowTestHarness";
 
@@ -89,6 +92,22 @@ describe("Scenario 11 — boot restores the persisted UI mode", () => {
 
     const position = setPositionMock.mock.calls[0][0] as { x: number; y: number };
     expect(position).toMatchObject({ x: 510, y: 216 });
+  });
+
+  it("a compact round trip brings an odd-sized full window back to the pixel it left", async () => {
+    innerSizeMock.mockResolvedValue({ width: 1151, height: 753 });
+    outerPositionMock.mockResolvedValue({ x: 400, y: 150 });
+    setupPersistedState(makePersistedState({ uiMode: "full" }));
+    await resizeToMode("compact", { animate: false });
+
+    const compactAt = setPositionMock.mock.calls[setPositionMock.mock.calls.length - 1][0] as { x: number; y: number };
+    innerSizeMock.mockResolvedValue({ width: 320, height: 480 });
+    outerPositionMock.mockResolvedValue({ x: compactAt.x, y: compactAt.y });
+    setupPersistedState(makePersistedState({ uiMode: "compact", lastFullSize: { width: 1151, height: 753 } }));
+    await resizeToMode("full", { animate: false });
+
+    const fullAt = setPositionMock.mock.calls[setPositionMock.mock.calls.length - 1][0] as { x: number; y: number };
+    expect(fullAt).toMatchObject({ x: 400, y: 150 });
   });
 
   it("re-entering full does not overwrite the remembered full size", async () => {
@@ -245,6 +264,19 @@ describe("Scenario 15b — the animator finishes when animation frames stop", ()
     expect(floors[floors.length - 1]).toMatchObject({ width: 800, height: 560 });
     const saved = backend.patches().map((p) => p.set.uiMode);
     expect(saved).toContain("full");
+  });
+});
+
+describe("a failed write after the resize", () => {
+  // The window was already compact-sized: throwing here left the full layout in a 320 px window.
+  it("resolves and logs, so the caller still swaps the layout", async () => {
+    setupPersistedState(makePersistedState({ uiMode: "full" }));
+    backend.failNextWrite("SHELL_STATE_WRITE_FAILED");
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(resizeToMode("compact", { animate: false })).resolves.toBeUndefined();
+    expect(setSizeMock).toHaveBeenCalled();
+    expect(error.mock.calls.some((call) => String(call[0]).startsWith("[LumaSync]"))).toBe(true);
   });
 });
 
@@ -453,5 +485,80 @@ describe("Interface size", () => {
 
     expect(captureLastSavedState().lastFullSize).toMatchObject({ width: 1100, height: 760 });
     expect(lastSize()).toMatchObject({ width: 352, height: 528 });
+  });
+});
+
+describe("a remembered full size", () => {
+  it("smaller than any floor is a minimized frame, and the first-run size replaces it", async () => {
+    setupPersistedState(makePersistedState({ uiMode: "compact", lastFullSize: { width: 144, height: 19 } }));
+
+    await resizeToMode("full", { animate: false });
+
+    const size = setSizeMock.mock.calls[0][0] as { width: number; height: number };
+    expect(size).toMatchObject(firstRunFullSize({ width: 1920, height: 1080 }));
+  });
+});
+
+describe("zoom and the modes", () => {
+  it("compact cannot be zoomed and full can", async () => {
+    setupPersistedState(makePersistedState({ uiMode: "full" }));
+    await resizeToMode("compact", { animate: false });
+    expect(setMaximizableMock).toHaveBeenLastCalledWith(false);
+
+    await resizeToMode("full", { animate: false });
+    expect(setMaximizableMock).toHaveBeenLastCalledWith(true);
+  });
+
+  it("leaving a zoomed full window remembers the size it unzooms to, not the screen's", async () => {
+    isMaximizedMock.mockResolvedValue(true);
+    innerSizeMock.mockResolvedValue({ width: 1920, height: 1032 });
+    unmaximizeMock.mockImplementation(async () => {
+      innerSizeMock.mockResolvedValue({ width: 1000, height: 700 });
+    });
+    setupPersistedState(makePersistedState({ uiMode: "full" }));
+
+    await resizeToMode("compact", { animate: false });
+
+    expect(unmaximizeMock).toHaveBeenCalledTimes(1);
+    expect(captureLastSavedState().lastFullSize).toMatchObject({ width: 1000, height: 700 });
+  });
+
+  it("reads the size once the window reports the unzoom, not before", async () => {
+    let unzoomed = false;
+    let asked = 0;
+    isMaximizedMock.mockImplementation(async () => {
+      if (unzoomed && ++asked > 2) innerSizeMock.mockResolvedValue({ width: 1000, height: 700 });
+      return !(unzoomed && asked > 2);
+    });
+    innerSizeMock.mockResolvedValue({ width: 1920, height: 1032 });
+    unmaximizeMock.mockImplementation(async () => {
+      unzoomed = true;
+    });
+    setupPersistedState(makePersistedState({ uiMode: "full" }));
+
+    await resizeToMode("compact", { animate: false });
+
+    expect(captureLastSavedState().lastFullSize).toMatchObject({ width: 1000, height: 700 });
+  });
+
+  it("on macOS keeps the size remembered before the zoom and leaves the unzoom to the resize", async () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Macintosh)");
+    isMaximizedMock.mockResolvedValue(true);
+    innerSizeMock.mockResolvedValue({ width: 1920, height: 1032 });
+    setupPersistedState(makePersistedState({ uiMode: "full", lastFullSize: { width: 1000, height: 700 } }));
+
+    await resizeToMode("compact", { animate: false });
+
+    expect(unmaximizeMock).not.toHaveBeenCalled();
+    expect(captureLastSavedState().lastFullSize).toMatchObject({ width: 1000, height: 700 });
+  });
+
+  it("a size change in a zoomed full window leaves it zoomed", async () => {
+    isMaximizedMock.mockResolvedValue(true);
+    setupPersistedState(makePersistedState({ uiMode: "full" }));
+
+    await resizeToMode("full", { animate: false, zoom: 1.1, fromZoom: 1 });
+
+    expect(unmaximizeMock).not.toHaveBeenCalled();
   });
 });

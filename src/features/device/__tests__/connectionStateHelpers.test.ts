@@ -3,12 +3,10 @@ import { describe, expect, it } from "vitest";
 import { DEVICE_STATUS } from "@/shared/contracts/device";
 import type { SerialConnectionStatus, SerialPortListResponse } from "../deviceConnectionApi";
 import {
-  DEFAULT_STATE,
   nextStatusForReadyState,
   toConnectionCard,
   toDevicePort,
   toSortKey,
-  withDerivedFlags,
 } from "../state/connectionStateHelpers";
 
 function rawPort(overrides: Partial<SerialPortListResponse["ports"][number]> = {}): SerialPortListResponse["ports"][number] {
@@ -79,24 +77,5 @@ describe("toConnectionCard", () => {
 
   it("maps a disconnected status to the error variant", () => {
     expect(toConnectionCard(status(false))).toMatchObject({ variant: "error", code: "CONNECT_FAILED" });
-  });
-});
-
-describe("withDerivedFlags", () => {
-  it("can connect once a port is selected, not scanning, and not already connecting", () => {
-    const state = { ...DEFAULT_STATE, selectedPort: "COM3" };
-    expect(withDerivedFlags(state).canConnect).toBe(true);
-  });
-
-  it("cannot connect while scanning or already connecting", () => {
-    const scanning = { ...DEFAULT_STATE, selectedPort: "COM3", isScanning: true };
-    const connecting = { ...DEFAULT_STATE, selectedPort: "COM3", isConnecting: true };
-
-    expect(withDerivedFlags(scanning).canConnect).toBe(false);
-    expect(withDerivedFlags(connecting).canConnect).toBe(false);
-  });
-
-  it("cannot connect with no selected port", () => {
-    expect(withDerivedFlags(DEFAULT_STATE).canConnect).toBe(false);
   });
 });

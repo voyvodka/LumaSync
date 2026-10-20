@@ -5,7 +5,10 @@ import {
   resolveCloseAction,
   resolveLaunchLights,
   resolveNotificationsPreference,
+  resolveRoomAmbient,
+  resolveRoomMapSnapToObjects,
   resolveUiZoom,
+  ROOM_AMBIENT_DEFAULT,
 } from "../shell";
 
 // The same inputs as `settings_preferences_default_unless_set_to_a_known_value` in
@@ -33,5 +36,23 @@ describe("settings preferences Rust also reads", () => {
     expect(resolveAwayLights("keep")).toBe("keep");
     expect(resolveAwayLights("off")).toBe("off");
     expect(resolveAwayLights(true)).toBe("off");
+  });
+});
+
+describe("frontend-only preferences", () => {
+  it("reads the room's ambient light as a whole percent from 0 to 100", () => {
+    expect(resolveRoomAmbient(undefined)).toBe(ROOM_AMBIENT_DEFAULT);
+    expect(resolveRoomAmbient(0)).toBe(0);
+    expect(resolveRoomAmbient(72.4)).toBe(72);
+    expect(resolveRoomAmbient(140)).toBe(100);
+    expect(resolveRoomAmbient(-5)).toBe(0);
+    expect(resolveRoomAmbient("80")).toBe(ROOM_AMBIENT_DEFAULT);
+    expect(resolveRoomAmbient(Number.NaN)).toBe(ROOM_AMBIENT_DEFAULT);
+  });
+
+  it("snaps to objects unless it was turned off", () => {
+    expect(resolveRoomMapSnapToObjects(undefined)).toBe(true);
+    expect(resolveRoomMapSnapToObjects(false)).toBe(false);
+    expect(resolveRoomMapSnapToObjects("false")).toBe(true);
   });
 });

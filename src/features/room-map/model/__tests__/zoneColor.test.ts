@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getZoneColor, TYPE_DOT_COLOR, ZONE_TOKENS } from "../zoneColor";
+import { getZoneColor, TYPE_DOT_COLOR, ZONE_TOKENS, zoneHex } from "../zoneColor";
 
 describe("getZoneColor", () => {
   it("hands out the palette in order for the first six zones", () => {
@@ -30,13 +30,23 @@ describe("TYPE_DOT_COLOR", () => {
     }
   });
 
-  it("covers all five row types", () => {
+  it("covers every row type", () => {
     expect(Object.keys(TYPE_DOT_COLOR).sort()).toEqual([
+      "decor",
       "furniture",
       "hue",
       "image",
       "tv",
       "usb",
     ]);
+  });
+});
+
+describe("zoneHex", () => {
+  it("reads a token or a stored hex as hex, and anything else as the zone's swatch", () => {
+    expect(zoneHex("var(--lm-zone-2)", 0)).toBe("#10b981");
+    expect(zoneHex("#123abc", 0)).toBe("#123abc");
+    expect(zoneHex("tomato", 2)).toBe("#a855f7");
+    expect(zoneHex(null, 7)).toBe("#10b981");
   });
 });

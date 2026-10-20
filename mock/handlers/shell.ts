@@ -55,24 +55,22 @@ export function removeShellStateKeys(keys: readonly string[]): void {
   ensureSeeded();
   const next: Record<string, unknown> = { ...shellStateBacking };
   for (const key of keys) delete next[key];
-  shellStateBacking = next;
-  shellStateRevision += 1;
-  mutate((w) => {
-    w.shellState = next as Partial<ShellState>;
-  });
-  announceShellStateChange({ set: {}, remove: [...keys], revision: shellStateRevision, writerId: "rust" });
+  commitAsRust(next, {}, [...keys]);
 }
 
 /** Sets shell-state keys the way Rust's own writes do, announced like {@link removeShellStateKeys}. */
 export function patchShellStateAsRust(set: Record<string, unknown>): void {
   ensureSeeded();
-  const next: Record<string, unknown> = { ...shellStateBacking, ...set };
+  commitAsRust({ ...shellStateBacking, ...set }, set, []);
+}
+
+function commitAsRust(next: Record<string, unknown>, set: Record<string, unknown>, remove: string[]): void {
   shellStateBacking = next;
   shellStateRevision += 1;
   mutate((w) => {
     w.shellState = next as Partial<ShellState>;
   });
-  announceShellStateChange({ set, remove: [], revision: shellStateRevision, writerId: "rust" });
+  announceShellStateChange({ set, remove, revision: shellStateRevision, writerId: "rust" });
 }
 
 function ensureSeeded(): void {
@@ -110,8 +108,8 @@ export const shellHandlers = {
       isPrimary: index === 0,
     })),
 
-  // Flat `code`, no envelope. Three of the result types in this file keep the
-  // code at the top level rather than under `status` — preview and capture —
+  // Flat `code`, no envelope. The capture result types in this file keep the
+  // code at the top level rather than under `status` —
   // and guessing the envelope is how the first version of this file went wrong.
   [CAPTURE_COMMANDS.GET_SCREEN_CAPTURE_PERMISSION]: () => ({
     code: getWorld().capture.permissionGranted
@@ -124,26 +122,13 @@ export const shellHandlers = {
     message: null,
   }),
 
-  // These address separate webview windows. The status codes let the calling
-  // state machine advance and the buttons be exercised; no window appears, and
-  // that gap is real.
-  [PREVIEW_COMMANDS.OPEN_TWIN_OVERLAY]: () => ({
-    ok: true,
-    code: "TWIN_OVERLAY_OPENED" as const,
-    message: "Opened",
-  }),
-  [PREVIEW_COMMANDS.CLOSE_TWIN_OVERLAY]: () => ({
-    ok: true,
-    code: "TWIN_OVERLAY_CLOSED" as const,
-    message: "Closed",
-  }),
   // `previewOnly` derivation mirrors `start_led_test_pattern`'s target
-  // resolution (`src-tauri/src/commands/lighting_mode.rs:3040-3046`):
+  // resolution (`src-tauri/src/commands/lighting_mode/led_test_pattern.rs`):
   // empty/absent `targets` defaults to wanting USB, "hue" opts a target in.
   // A registered WLED sink satisfies the USB channel exactly like a
   // connected serial port does (`UsbOutputPlan::Wled`), and Hue only counts
   // once a stream is actually running with mapped channels —
-  // `snapshot_hue_output_context` (`hue/state_store.rs:451-463`) reads
+  // `snapshot_hue_output_context` (`commands/hue/state_store.rs`) reads
   // `owner.active_stream`, which is `Some` only while genuinely `Running`.
   // `w.hue.streaming` is the mock's proxy for that same fact — see
   // `hueRuntimeFault` in `./hue.ts` and the identical reasoning in
@@ -263,9 +248,7 @@ export const shellHandlers = {
  * Tauri routes plugin traffic through `invoke` as `plugin:<name>|<method>`.
  * These are not in any `*COMMANDS` map, so they are matched by prefix rather
  * than by the exhaustiveness guard.
- */
-
-/**
+ *
  * `plugin:window|*` and `plugin:webview|*` have well over forty methods between
  * them and the app touches a moving subset, so they are answered by shape
  * rather than enumerated: getters return a plausible value, setters return
@@ -339,9 +322,9 @@ export const pluginHandlers: Record<string, Handler> = {
   "plugin:process|restart": () => null,
   // `plugin:event|*` is deliberately absent. Answering `listen` here made the
   // shim resolve before `mockIPC`'s event registry ever saw the call, so every
-  // Tauri event was silently dead — including `ambilight://edge-signal`, which
+  // Tauri event was silently dead — including the twin's old per-LED event, which
   // meant the signal readout showed zeros in *every* scenario and the mock
   // could not tell the bug it was built to reproduce from its own limitation.
-  // Leaving them unhandled lets mockIPC own them in the browser and lets
-  // passthrough reach the real subscription under `tauri:mock`.
+  // Leaving them unhandled lets `eventBridge.ts` own them in the browser and
+  // lets passthrough reach the real subscription under `tauri:mock`.
 };

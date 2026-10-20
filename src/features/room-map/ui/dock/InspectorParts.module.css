@@ -1,0 +1,215 @@
+@layer components {
+  .rows {
+    display: grid;
+    grid-template-rows: 32px 32px;
+    gap: 6px;
+    width: 100%;
+    min-width: 0;
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .mark {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    color: var(--lm-ink-dim);
+  }
+  .mark svg { max-width: 24px; max-height: 24px; }
+
+  .disc {
+    display: grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--lm-ink-faint);
+    border-radius: 50%;
+    color: var(--lm-bg);
+    font: 700 8px/1 var(--lm-sans);
+  }
+  .discGhost {
+    border-style: dashed;
+    background: transparent;
+    color: var(--lm-ink-dim);
+  }
+
+  .title {
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--lm-ink);
+  }
+
+  /* A value at rest, a field on intent — the DecimalField's tint and underline. */
+  .nameBox {
+    position: relative;
+    display: flex;
+    flex: 1 1 120px;
+    min-width: 96px;
+    border-radius: 7px;
+    transition: background var(--lm-dur-quick);
+  }
+  .nameBox:hover:has(.name:not(:disabled)) { background: rgb(255 255 255 / 4%); }
+  .nameEditing,
+  .nameEditing:hover:has(.name:not(:disabled)) { background: rgb(255 255 255 / 6%); }
+  .nameBox::after {
+    content: "";
+    position: absolute;
+    right: 8px;
+    bottom: 4px;
+    left: 8px;
+    height: 1px;
+    background: var(--lm-amber);
+    transform: scaleX(0);
+    transition: transform var(--lm-dur-base) var(--lm-ease-out);
+    pointer-events: none;
+  }
+  .nameEditing::after { transform: scaleX(1); }
+  .name {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+    height: 32px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--lm-ink);
+    font: 600 12px/1 var(--lm-sans);
+    text-overflow: ellipsis;
+    outline: none;
+    caret-color: var(--lm-amber);
+  }
+  .name:disabled { color: var(--lm-ink-dim); cursor: not-allowed; }
+
+  .spacer { flex: 1 1 0; min-width: 0; }
+
+  .note {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .noteFit { flex: 0 0 auto; }
+  .noteCallout { align-items: center; min-width: 0; }
+  .noteCallout > span:first-child { margin-top: 0; }
+  .noteCallout :global(p) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .actions {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 0;
+    margin-left: auto;
+  }
+  /* The object's own actions, then a rule, then the one that only closes the panel. */
+  .actionsRule {
+    width: 1px;
+    height: 16px;
+    margin: 0 4px;
+    background: var(--lm-line-2);
+  }
+  .action {
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--lm-ink-faint);
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+  }
+  .action svg { width: 14px; height: 14px; }
+  .action:hover:not(:disabled) { color: var(--lm-ink); background: rgb(255 255 255 / 4%); }
+  .action[aria-pressed="true"] { color: var(--lm-amber); }
+  .danger:hover:not(:disabled) { color: var(--lm-red); }
+  .action:focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--lm-focus-ring-inset);
+  }
+  .action:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .fields {
+    display: flex;
+    flex: 1 1 auto;
+    gap: 4px;
+    min-width: 0;
+  }
+  /* One width for every number, so X sits over X from one kind to the next; a full row shares out. */
+  .fields > * { flex: 0 1 124px; min-width: 96px; }
+  .fields > .fieldTip { display: grid; flex: 0 0 auto; place-items: center; min-width: 0; margin-left: -4px; }
+  .fixed { flex: 0 0 auto; }
+  .fixed > * { flex: 0 0 124px; }
+
+  /* A connection read in a word, its width held so what follows never moves when it lands. */
+  .status {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    width: 190px;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .status > .meta {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* A quiet text action in a row: grey, warming on hover. */
+  .link {
+    flex-shrink: 0;
+    height: 32px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    font: 500 12px/1 var(--lm-sans);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+  }
+  .link:hover:not(:disabled) { color: var(--lm-ink); background: rgb(255 255 255 / 4%); }
+  .link:focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--lm-focus-ring-inset);
+  }
+
+  /* A small fact beside the name: a light count, a channel id. */
+  .meta {
+    flex-shrink: 0;
+    font-family: var(--lm-mono);
+    font-size: 10.5px;
+    color: var(--lm-ink-faint);
+    white-space: nowrap;
+  }
+
+  :global(:root[data-reduced-motion]) .nameBox,
+  :global(:root[data-reduced-motion]) .nameBox::after,
+  :global(:root[data-reduced-motion]) .action,
+  :global(:root[data-reduced-motion]) .link { transition: none; }
+
+  @media (forced-colors: active) {
+    .nameEditing { outline: 2px solid Highlight; }
+    .nameBox::after { background: Highlight; }
+    .action[aria-pressed="true"] { outline: 1px solid Highlight; }
+    /* The fill and the zone's ring are what tell lights and zones apart. */
+    .disc { border-color: CanvasText; forced-color-adjust: none; }
+    .link:focus-visible,
+    .action:focus-visible { outline: 2px solid Highlight; }
+  }
+}

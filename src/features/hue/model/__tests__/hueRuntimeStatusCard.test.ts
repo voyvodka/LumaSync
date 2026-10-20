@@ -62,16 +62,6 @@ describe("buildHueRuntimeStatusCard", () => {
     ]);
   });
 
-  it("keeps compact trigger-source hint in the status model", () => {
-    const model = buildHueRuntimeStatusCard({
-      status: createStatus({
-        triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
-      }),
-    });
-
-    expect(model.triggerSourceKey).toBe("hue:runtime.triggerSource.device_surface");
-  });
-
   it("does not crash when runtime status code is missing", () => {
     const model = buildHueRuntimeStatusCard({
       status: createStatus({
@@ -84,7 +74,7 @@ describe("buildHueRuntimeStatusCard", () => {
 
   // Was asserted with `HUE-NET-01`, which no producer can put on a runtime
   // status; the family mapping itself is still covered in deriveFamilyActionHints.
-  it("produces variant: error when state is Failed", () => {
+  it("offers retry and reconnect when a transient failure ran out of attempts", () => {
     const model = buildHueRuntimeStatusCard({
       status: createStatus({
         state: "Failed",
@@ -92,7 +82,6 @@ describe("buildHueRuntimeStatusCard", () => {
       }),
     });
 
-    expect(model.variant).toBe("error");
     expect(model.actionHints).toEqual([
       HUE_RUNTIME_ACTION_HINT.RETRY,
       HUE_RUNTIME_ACTION_HINT.RECONNECT,

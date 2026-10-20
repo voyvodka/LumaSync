@@ -3,12 +3,15 @@ import { describe, expect, it } from "vitest";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 import { HUE_CHANNEL_HEIGHT_ORIGIN } from "@/shared/contracts/roomMap";
 import {
+  hueToPlanMetres,
+  planMetresToHue,
   moveHueChannelToWorld,
   nudgeHueChannel,
   hueChannelZRange,
   resolveHueChannelWorld,
   resolveHueChannelWorldZ,
   setHueChannelWorldZ,
+  zoneRelativeAt,
 } from "../hueChannelPosition";
 
 const ZONE: HueZone = {
@@ -146,5 +149,41 @@ describe("hueChannelZRange", () => {
     const range = hueChannelZRange(BOUND, [high]);
     expect(range.max).toBe(1);
     expect(range.min).toBeCloseTo(0.3, 6);
+  });
+});
+
+describe("zoneRelativeAt", () => {
+  it("keeps a light the zone already holds where it stands", () => {
+    const inside: HueChannelPlacement = { channelIndex: 2, x: 0.45, y: -0.1, z: 0.25 };
+    const at = zoneRelativeAt(inside, [ZONE], ZONE);
+    expect(at.x).toBeCloseTo(0.2);
+    expect(at.y).toBeCloseTo(0.2);
+    expect(at.z).toBeCloseTo(0.5);
+  });
+
+  it("reads a bound light where its zone puts it, not its stale absolute pair", () => {
+    expect(zoneRelativeAt(BOUND, [ZONE], ZONE)).toEqual({ x: 0.5, y: -0.5, z: 0 });
+  });
+
+  it("brings a light from outside to the nearest point inside", () => {
+    const outside: HueChannelPlacement = { channelIndex: 2, x: -0.9, y: 0.9, z: 0 };
+    expect(zoneRelativeAt(outside, [ZONE], ZONE)).toEqual({ x: -1, y: 1, z: 0 });
+  });
+});
+
+describe("hueToPlanMetres / planMetresToHue", () => {
+  it("puts the cube's corners on the plan's: left wall at x 0, the TV wall at y 0", () => {
+    expect(hueToPlanMetres({ x: -1, y: 1 }, 5, 4)).toEqual({ x: 0, y: 0 });
+    expect(hueToPlanMetres({ x: 1, y: -1 }, 5, 4)).toEqual({ x: 5, y: 4 });
+    expect(hueToPlanMetres({ x: 0, y: 0 }, 5, 4)).toEqual({ x: 2.5, y: 2 });
+  });
+
+  it("round-trips a position", () => {
+    const back = planMetresToHue(1.25, 3, 5, 4);
+    expect(back.x).toBeCloseTo(-0.5, 9);
+    expect(back.y).toBeCloseTo(-0.5, 9);
+    const plan = hueToPlanMetres(back, 5, 4);
+    expect(plan.x).toBeCloseTo(1.25, 9);
+    expect(plan.y).toBeCloseTo(3, 9);
   });
 });

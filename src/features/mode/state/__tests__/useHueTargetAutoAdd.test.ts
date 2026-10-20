@@ -1,6 +1,7 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { hueCredentialEvents } from "@/features/hue/hueCredentialEvents";
 import { useHueTargetAutoAdd, type HueTargetAutoAddInput } from "../useHueTargetAutoAdd";
 
 function mount(initial: Partial<HueTargetAutoAddInput> = {}) {
@@ -47,6 +48,57 @@ describe("useHueTargetAutoAdd", () => {
     const { view, input, onSelectTargets } = mount({ ready: false });
 
     view.rerender({ ...input, ready: false, hueConfigured: true });
+
+    expect(onSelectTargets).not.toHaveBeenCalled();
+  });
+
+  it("adds Hue when a configured bridge is paired again", () => {
+    const { onSelectTargets } = mount({ hueConfigured: true });
+
+    hueCredentialEvents.emit({ reason: "paired" });
+
+    expect(onSelectTargets).toHaveBeenCalledExactlyOnceWith(["usb", "hue"]);
+  });
+
+  it("ignores a pairing before the launch restore has answered", () => {
+    const { onSelectTargets } = mount({ ready: false, hueConfigured: true });
+
+    hueCredentialEvents.emit({ reason: "paired" });
+
+    expect(onSelectTargets).not.toHaveBeenCalled();
+  });
+
+  it("leaves a Hue that is already selected alone when it is paired again", () => {
+    const { onSelectTargets } = mount({ hueConfigured: true, selectedOutputTargets: ["usb", "hue"] });
+
+    hueCredentialEvents.emit({ reason: "paired" });
+
+    expect(onSelectTargets).not.toHaveBeenCalled();
+  });
+
+  it("leaves a first pairing to the area that completes it", () => {
+    const { view, input, onSelectTargets } = mount();
+
+    hueCredentialEvents.emit({ reason: "paired" });
+    expect(onSelectTargets).not.toHaveBeenCalled();
+
+    view.rerender({ ...input, hueConfigured: true });
+    expect(onSelectTargets).toHaveBeenCalledExactlyOnceWith(["usb", "hue"]);
+  });
+
+  it("does not add Hue back when only the area changes", () => {
+    const { onSelectTargets } = mount({ hueConfigured: true });
+
+    hueCredentialEvents.emit({ reason: "area-selected" });
+
+    expect(onSelectTargets).not.toHaveBeenCalled();
+  });
+
+  it("stops listening once unmounted", () => {
+    const { view, onSelectTargets } = mount({ hueConfigured: true });
+
+    view.unmount();
+    hueCredentialEvents.emit({ reason: "paired" });
 
     expect(onSelectTargets).not.toHaveBeenCalled();
   });

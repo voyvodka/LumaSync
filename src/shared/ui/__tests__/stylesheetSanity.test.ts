@@ -4,7 +4,7 @@
 
 /// <reference types="node" />
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -51,10 +51,26 @@ describe("stylesheet sanity", () => {
     expect(body).not.toMatch(/linear-gradient|radial-gradient/);
   });
 
+  it("keeps fields and copied text selectable under a chrome that is not", () => {
+    const base = stripComments(readFileSync(join(SRC, "styles", "base.css"), "utf8"));
+    expect(base).toMatch(/\nbody \{\s*-webkit-user-select: none;\s*user-select: none;\s*\}/);
+    const optIn = /:where\(((?:[^()]|\([^()]*\))*)\) \{\s*-webkit-user-select: text;\s*user-select: text;/.exec(base);
+    expect(optIn).not.toBeNull();
+    for (const selector of ["input", "textarea", "[contenteditable]", "code", "pre", "[data-selectable]"]) {
+      expect(optIn![1]).toContain(selector);
+    }
+    // The opt-in has no specificity, so a field's own `none` would win over it.
+    const fieldsOff = cssFiles
+      .filter(({ css }) => /\b(input|textarea)\b[^{}]*\{[^}]*user-select:\s*none/.test(css))
+      .map(({ file }) => relative(SRC, file).split(sep).join("/"));
+    expect(fieldsOff).toEqual([]);
+  });
+
   it("keeps the twin overlay root transparent", () => {
     // The twin is a see-through window over the desktop; any paint here is a
     // full-screen opaque frame.
-    const twin = ruleBody(stylesCss, ".lm-twin-root");
+    const twinCss = readFileSync(join(SRC, "features", "preview", "ui", "LedTwinOverlay.module.css"), "utf8");
+    const twin = ruleBody(twinCss, ".root");
     expect(twin).toMatch(/background:\s*transparent\s*;/);
   });
 
@@ -127,7 +143,7 @@ describe("stylesheet sanity", () => {
     // Global sheets are the ordered list in styles.css; anything else is scoped to
     // its component. The two exceptions load outside that list on purpose.
     const loose = cssFiles
-      .map(({ file }) => file.slice(SRC.length + 1))
+      .map(({ file }) => relative(SRC, file).split(sep).join("/"))
       .filter((file) => !file.startsWith("styles/") && !file.endsWith(".module.css"));
     expect(loose.sort()).toEqual(["fonts.css", "styles.css"]);
   });
@@ -137,7 +153,7 @@ describe("stylesheet sanity", () => {
   it("guards reduced motion on the root attribute, never the media query", () => {
     const onMedia = cssFiles
       .filter(({ css }) => /prefers-reduced-motion/.test(css))
-      .map(({ file }) => file.slice(SRC.length + 1));
+      .map(({ file }) => relative(SRC, file).split(sep).join("/"));
     expect(onMedia).toEqual([]);
     expect(stylesCss).toMatch(/@custom-variant motion-reduce \(&:where\(:root\[data-reduced-motion\] \*\)\);/);
   });

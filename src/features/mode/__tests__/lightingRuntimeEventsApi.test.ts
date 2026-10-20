@@ -22,6 +22,7 @@ function snapshot(revision: number): LightingRuntimeSnapshot {
   return {
     revision,
     mode: { kind: "off" },
+    brightness: 1,
     active: false,
     activeTargets: [],
     selectedTargets: [],

@@ -90,18 +90,16 @@ const staticHandlers = {
   ...pluginHandlers,
 };
 
-// `staticHandlers` now carries a per-command args type (the command map in `src/shared/contracts/ipc.ts`), so a
-// handful of its members no longer structurally match the generic `Handler`
+// `staticHandlers` carries a per-command args type (the command map in `src/shared/contracts/ipc.ts`), so a
+// handful of its members do not structurally match the generic `Handler`
 // signature the dispatcher calls through — that mismatch is exactly the
 // protection `TypedHandlers` exists to add, and it is already enforced by the
-// `satisfies` check on the object literal above. The cast through `unknown`
-// only erases that precision for the runtime dispatch table; it does not
-// bypass the compile-time check on the handlers themselves.
+// `satisfies TypedHandlers` check on each command handler map. The cast
+// through `unknown` only erases that precision for the runtime dispatch table;
+// it does not bypass the compile-time check on the handlers themselves.
 export function handlerFor(command: string): Handler | undefined {
   return (staticHandlers as unknown as Record<string, Handler>)[command] ?? windowPluginHandler(command);
 }
-
-export const handlers: Record<string, Handler> = staticHandlers as unknown as Record<string, Handler>;
 
 // --- The guard -------------------------------------------------------------
 //

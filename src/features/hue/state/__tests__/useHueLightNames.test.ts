@@ -31,7 +31,7 @@ function channels(ids: string[][]): HueAreaChannelInfo[] {
 
 const answered = (lights: Array<[string, string]>) => ({
   status: { code: "HUE_LIGHT_NAMES_OK" as const, message: "", details: null },
-  lights: lights.map(([id, name]) => ({ id, name })),
+  lights: lights.map(([id, name]) => ({ id, name, archetype: null })),
 });
 
 describe("useHueLightNames", () => {

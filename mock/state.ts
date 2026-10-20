@@ -13,13 +13,13 @@
  * refresh would make anyone stop composing and go back to presets.
  */
 
-import type { SerialCommandStatusCode } from "../src/shared/contracts/device";
-import type { LightingModeConfig } from "../src/shared/contracts/mode";
 import type {
   FirmwareProfile,
   LedChipType,
+  SerialCommandStatusCode,
   WledProtocol,
 } from "../src/shared/contracts/device";
+import type { LightingModeConfig } from "../src/shared/contracts/mode";
 import type { TelemetryQueueHealth } from "../src/shared/contracts/telemetry";
 import type { ShellState } from "../src/shared/contracts/shell";
 import type { ScenarioId } from "./scenarios";
@@ -158,6 +158,9 @@ export interface MockWorld {
     lastCaptureErrorCode: string | null;
     lastCaptureErrorAtSecs: number | null;
     captureTargetFps: number;
+    lastOutputErrorCode: string | null;
+    lastOutputErrorAtSecs: number | null;
+    workerStopped: boolean;
   };
   /** Every shell-state write fails, reproducing the persist banners. */
   persistFails: boolean;

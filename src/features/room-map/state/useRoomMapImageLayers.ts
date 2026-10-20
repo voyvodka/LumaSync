@@ -2,7 +2,6 @@ import { useCallback, useState } from "react";
 import {
   ROOM_MAP_BACKGROUND_ERROR,
   type RoomMapBackgroundErrorCode,
-  type RoomMapConfig,
 } from "@/shared/contracts/roomMap";
 import { imageLayerObjectId } from "../model/objectId";
 import { copyBackgroundImage } from "../roomMapApi";
@@ -12,7 +11,6 @@ import type { RoomMapPatch } from "./roomMapReducer";
 import type { ApplyOptions } from "./useRoomMapState";
 
 export interface UseRoomMapImageLayersArgs {
-  config: RoomMapConfig;
   apply: (patch: RoomMapPatch, options?: ApplyOptions) => void;
   select: (objectId: string | null) => void;
 }
@@ -23,22 +21,16 @@ export interface UseRoomMapImageLayersReturn {
   imageError: string | null;
   /** The coded reason for `imageError`, when the backend gave one the UI words differently. */
   imageErrorCode: RoomMapBackgroundErrorCode | null;
-  handleUpdateImageOpacity: (imageId: string, opacity: number) => void;
-  handleUpdateImageScale: (imageId: string, sx: number, sy: number) => void;
-  handleUpdateImageAspectLock: (imageId: string, locked: boolean) => void;
-  handleResetImageScale: (imageId: string) => void;
-  handleRenameImage: (imageId: string, label: string) => void;
 }
 
-/** Shared by every continuous control over one image-layer field, so the dock
- *  slider and the property-bar slider coalesce into the same undo step. */
+/** Shared by every continuous control over one image-layer field — the inspector's slider and
+ *  stepped fields, the canvas wheel — so a run of them is one undo step. */
 export function imageLayerGestureKey(imageId: string, field: string): string {
   return `image:${imageId}:${field}`;
 }
 
-/** Background image layer import plus the opacity / scale / rename handlers. */
+/** Background image layer import; the inspector patches the rest. */
 export function useRoomMapImageLayers({
-  config,
   apply,
   select,
 }: UseRoomMapImageLayersArgs): UseRoomMapImageLayersReturn {
@@ -68,60 +60,9 @@ export function useRoomMapImageLayers({
     }
   }, [apply, select]);
 
-  const handleUpdateImageOpacity = useCallback(
-    (imageId: string, opacity: number) => {
-      // A slider: every tick lands, but the drag is one undo step and one save.
-      apply(
-        { imageLayers: config.imageLayers.map((l) => (l.id === imageId ? { ...l, opacity } : l)) },
-        { gesture: imageLayerGestureKey(imageId, "opacity") },
-      );
-    },
-    [config.imageLayers, apply],
-  );
-
-  const handleUpdateImageScale = useCallback(
-    (imageId: string, sx: number, sy: number) => {
-      apply({ imageLayers: config.imageLayers.map((l) => (l.id === imageId ? { ...l, scaleX: sx, scaleY: sy } : l)) });
-    },
-    [config.imageLayers, apply],
-  );
-
-  const handleUpdateImageAspectLock = useCallback(
-    (imageId: string, locked: boolean) => {
-      // Just toggle the flag — keep current scaleX/scaleY as-is
-      apply({ imageLayers: config.imageLayers.map((l) => (l.id === imageId ? { ...l, aspectLocked: locked } : l)) });
-    },
-    [config.imageLayers, apply],
-  );
-
-  const handleResetImageScale = useCallback(
-    (imageId: string) => {
-      const layer = config.imageLayers.find((l) => l.id === imageId);
-      if (!layer) return;
-      // Reset aspect ratio only — unify scaleY to scaleX, keep current size
-      const s = layer.scaleX ?? layer.scale;
-      apply({ imageLayers: config.imageLayers.map((l) => (l.id === imageId ? { ...l, scaleX: s, scaleY: s } : l)) });
-    },
-    [config.imageLayers, apply],
-  );
-
-  const handleRenameImage = useCallback(
-    (imageId: string, label: string) => {
-      apply({
-        imageLayers: config.imageLayers.map((l) => (l.id === imageId ? { ...l, label } : l)),
-      });
-    },
-    [config.imageLayers, apply],
-  );
-
   return {
     handleAddImage,
     imageError,
     imageErrorCode,
-    handleUpdateImageOpacity,
-    handleUpdateImageScale,
-    handleUpdateImageAspectLock,
-    handleResetImageScale,
-    handleRenameImage,
   };
 }

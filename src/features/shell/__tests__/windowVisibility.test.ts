@@ -1,3 +1,4 @@
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { MainWindowVisibility } from "@/shared/contracts/shell";
@@ -16,7 +17,7 @@ vi.mock("../windowVisibilityEventsApi", () => ({
   },
 }));
 
-import { __resetWindowVisibilityForTests, isWindowVisible, subscribeWindowVisible } from "../windowVisibility";
+import { __resetWindowVisibilityForTests, isWindowVisible, subscribeWindowVisible, useWindowPresence } from "../windowVisibility";
 
 function setDocumentVisibility(state: DocumentVisibilityState) {
   Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
@@ -46,6 +47,22 @@ describe("windowVisibility", () => {
     await flush();
     expect(isWindowVisible()).toBe(false);
     expect(seen).toHaveBeenLastCalledWith(false);
+  });
+
+  it("tells covered by another window or Space from put away", async () => {
+    const { result, unmount } = renderHook(() => useWindowPresence());
+    await act(flush);
+    expect(result.current).toBe("visible");
+
+    setDocumentVisibility("hidden");
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    expect(result.current).toBe("covered");
+
+    act(() => pushWindowVisibility?.({ visible: false }));
+    expect(result.current).toBe("hidden");
+
+    unmount();
+    expect(unlistenMock).toHaveBeenCalledOnce();
   });
 
   it("follows Rust's pushes", async () => {

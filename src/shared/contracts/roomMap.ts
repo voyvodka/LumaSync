@@ -104,6 +104,48 @@ export interface HueChannelPlacement {
    * `HueZone.center + HueZone.scale * zoneRelativePosition`.
    */
   zoneRelativePosition?: ZoneRelativePosition | null;
+  /** The plan direction a one-sided light throws its light, in degrees clockwise with 0 toward the
+   *  plan's top (the TV wall, Hue `y=+1`) — `FurniturePlacement.rotation`'s frame. Absent ⇒ turned to
+   *  its nearest wall. Drawing only: the stream and room-aware sampling never read it. Read through
+   *  `resolveHueFacing`. */
+  facing?: number | null;
+  /** The fixture the room draws in place of the one the bridge's archetype names — a plain bulb in
+   *  a lamp the bridge cannot know about. Absent ⇒ from the bridge. Read through `resolveHueFixture`. */
+  fixture?: HueFixture | null;
+}
+
+/** The fixtures the 3D room draws a Hue light as. */
+export const HUE_FIXTURES = {
+  PLAY_BAR: "playBar",
+  LIGHTSTRIP: "lightstrip",
+  FLOOR_LAMP: "floorLamp",
+  SIGNE: "signe",
+  TABLE_LAMP: "tableLamp",
+  PENDANT: "pendant",
+  CEILING: "ceiling",
+  GO: "go",
+  IRIS: "iris",
+  BLOOM: "bloom",
+  SPOT: "spot",
+  WALL: "wall",
+  TUBE: "tube",
+  BULB: "bulb",
+} as const;
+
+export type HueFixture = (typeof HUE_FIXTURES)[keyof typeof HUE_FIXTURES];
+
+const HUE_FIXTURE_VALUES = new Set<string>(Object.values(HUE_FIXTURES));
+
+/** The stored fixture when it is a known one, else none (from the bridge); a newer build's stays stored. */
+export function resolveHueFixture(channel: HueChannelPlacement): HueFixture | undefined {
+  const fixture: unknown = channel.fixture;
+  return typeof fixture === "string" && HUE_FIXTURE_VALUES.has(fixture) ? (fixture as HueFixture) : undefined;
+}
+
+/** The stored facing in [0, 360) when it is a number, else none (turned to its nearest wall). */
+export function resolveHueFacing(channel: HueChannelPlacement): number | undefined {
+  const facing: unknown = channel.facing;
+  return typeof facing === "number" && Number.isFinite(facing) ? ((facing % 360) + 360) % 360 : undefined;
 }
 
 /** Never index `hueChannels` by array position — `channelIndex` is bridge-assigned
@@ -170,6 +212,9 @@ export function mergeHueChannels(
 // ---------------------------------------------------------------------------
 
 export interface UsbStripPlacement {
+  /** The placement's own key: unique on the map, the editor's object id and the save-merge key.
+   *  Not a `LedStrip.id`, even when the two are equal — the strip a placement draws is the one on
+   *  its `portName`. */
   stripId: string;
   /** Starting corner position on room perimeter */
   startX: number;
@@ -190,23 +235,278 @@ export interface UsbStripPlacement {
    * blocking the user.
    */
   portName?: string;
+  /** The strip's height above the floor in metres; absent ⇒ at the skirting. Drawing-only: Rust
+   *  reads a strip's id and port alone. Read through `resolveStripMountHeight`. */
+  mountHeightMeters?: number | null;
+  /** The tape's LEDs per metre; set, the strip's drawn length follows `ledCount` (`fitStripLength`).
+   *  Drawing-only, read through `resolveStripDensity`. */
+  ledsPerMeter?: number | null;
+  /** Where the strip turns between its start and end, in room metres, at most `MAX_STRIP_CORNERS`:
+   *  bent round a corner or a desk edge, or folded into a small space. Drawing-only, read through
+   *  `resolveStripCorners`; a strip moves through `translateStrip`, which carries them. */
+  corners?: RoomCorner[] | null;
+}
+
+export const MAX_STRIP_CORNERS = 8;
+
+/** The stored corners when every one is a finite point and there are no more than the cap; any bad
+ *  entry reads the strip as straight rather than half-bent. */
+export function resolveStripCorners(strip: UsbStripPlacement): RoomCorner[] {
+  const stored: unknown = strip.corners;
+  if (!Array.isArray(stored) || stored.length === 0 || stored.length > MAX_STRIP_CORNERS) return [];
+  const corners: RoomCorner[] = [];
+  for (const corner of stored as unknown[]) {
+    const { x, y } = (corner ?? {}) as { x?: unknown; y?: unknown };
+    if (typeof x !== "number" || typeof y !== "number" || !Number.isFinite(x) || !Number.isFinite(y)) return [];
+    corners.push({ x, y });
+  }
+  return corners;
+}
+
+/** The strip's run as points: its start, each corner, its end. */
+export function stripPoints(strip: UsbStripPlacement): RoomCorner[] {
+  return [{ x: strip.startX, y: strip.startY }, ...resolveStripCorners(strip), { x: strip.endX, y: strip.endY }];
+}
+
+export function stripRunLength(strip: UsbStripPlacement): number {
+  const points = stripPoints(strip);
+  let length = 0;
+  for (let i = 1; i < points.length; i++) length += Math.hypot(points[i]!.x - points[i - 1]!.x, points[i]!.y - points[i - 1]!.y);
+  return length;
+}
+
+/** The middle of the box round the strip's run: where a straight strip's midpoint was. */
+export function stripCentre(strip: UsbStripPlacement): RoomCorner {
+  const points = stripPoints(strip);
+  const xs = points.map((p) => p.x);
+  const ys = points.map((p) => p.y);
+  return { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 };
+}
+
+/** The strip moved whole, its corners with it, each point to the millimetre. */
+export function translateStrip<T extends UsbStripPlacement>(strip: T, dx: number, dy: number): T {
+  const mm = (v: number) => Math.round(v * 1000) / 1000;
+  const corners = resolveStripCorners(strip);
+  return {
+    ...strip,
+    startX: mm(strip.startX + dx),
+    startY: mm(strip.startY + dy),
+    endX: mm(strip.endX + dx),
+    endY: mm(strip.endY + dy),
+    ...(corners.length > 0 ? { corners: corners.map((c) => ({ x: mm(c.x + dx), y: mm(c.y + dy) })) } : {}),
+  };
+}
+
+const MAX_STRIP_DENSITY = 300;
+
+/** The stored density when it is a usable one (finite, 1 to 300 LEDs per metre), else none. */
+export function resolveStripDensity(strip: UsbStripPlacement): number | undefined {
+  const density: unknown = strip.ledsPerMeter;
+  return typeof density === "number" && Number.isFinite(density) && density >= 1 && density <= MAX_STRIP_DENSITY ? density : undefined;
+}
+
+/** The strip's length in metres from its LEDs and density, or none without a density. */
+export function stripLengthFromDensity(strip: UsbStripPlacement): number | undefined {
+  const density = resolveStripDensity(strip);
+  return density === undefined ? undefined : strip.ledCount / density;
+}
+
+/** The strip with its end moved along its run so it is as long as its LEDs at its density: past its
+ *  last corner the last leg grows, short of it the corners beyond the new end go. One with no
+ *  density, or no run to follow, comes back as it was. */
+export function fitStripLength<T extends UsbStripPlacement>(strip: T): T {
+  const length = stripLengthFromDensity(strip);
+  const points = stripPoints(strip);
+  if (length === undefined || stripRunLength(strip) < 1e-6) return strip;
+  const round = (v: number) => Math.round(v * 1000) / 1000;
+  let walked = 0;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!;
+    const b = points[i]!;
+    const leg = Math.hypot(b.x - a.x, b.y - a.y);
+    const last = i === points.length - 1;
+    if (leg < 1e-6 && !last) continue;
+    if (walked + leg >= length || last) {
+      // An end left on its last corner has no way of its own; it carries on the way the run came in.
+      let from = a;
+      for (let j = i - 1; leg < 1e-6 && j > 0; j--) {
+        const p = points[j - 1]!;
+        if (Math.hypot(a.x - p.x, a.y - p.y) >= 1e-6) {
+          from = p;
+          break;
+        }
+      }
+      const way = Math.hypot(a.x - from.x, a.y - from.y);
+      const dir = leg >= 1e-6 ? { x: (b.x - a.x) / leg, y: (b.y - a.y) / leg } : way >= 1e-6 ? { x: (a.x - from.x) / way, y: (a.y - from.y) / way } : { x: 0, y: 0 };
+      const corners = points.slice(1, i);
+      return {
+        ...strip,
+        endX: round(a.x + dir.x * (length - walked)),
+        endY: round(a.y + dir.y * (length - walked)),
+        ...(resolveStripCorners(strip).length > 0 ? { corners: corners.length > 0 ? corners : null } : {}),
+      };
+    }
+    walked += leg;
+  }
+  return strip;
+}
+
+/** The stored height when it is a usable one (finite, not below the floor), else none. No cap: a
+ *  room can be 8 m tall, so the 3D room holds it under its own ceiling. */
+export function resolveStripMountHeight(strip: UsbStripPlacement): number | undefined {
+  const height: unknown = strip.mountHeightMeters;
+  return typeof height === "number" && Number.isFinite(height) && height >= 0 ? height : undefined;
 }
 
 // ---------------------------------------------------------------------------
 // Furniture Placement
 // ---------------------------------------------------------------------------
 
+/** Every kind of piece the room map holds; `other` is a plain box. A value from a newer build reads
+ *  as `other` (`resolveFurnitureType`) rather than failing a reader. */
+export const FURNITURE_TYPES = {
+  SOFA: "sofa",
+  TABLE: "table",
+  CHAIR: "chair",
+  BED: "bed",
+  STORAGE: "storage",
+  PLANT: "plant",
+  RUG: "rug",
+  KITCHEN: "kitchen",
+  OTHER: "other",
+} as const;
+
+export type FurnitureType = (typeof FURNITURE_TYPES)[keyof typeof FURNITURE_TYPES];
+
+/** A model the user picked over the automatic reading of a piece's size and neighbours. Which
+ *  types take which is `FURNITURE_CATALOGUE`. */
+export const FURNITURE_VARIANTS = {
+  STRAIGHT: "straight",
+  CORNER_LEFT: "cornerLeft",
+  CORNER_RIGHT: "cornerRight",
+  DINING: "dining",
+  OFFICE: "office",
+  ARMCHAIR: "armchair",
+  BENCH: "bench",
+  DESK: "desk",
+  COFFEE: "coffee",
+  SIDE: "side",
+  SIDEBOARD: "sideboard",
+  BOOKSHELF: "bookshelf",
+  WARDROBE: "wardrobe",
+  NIGHTSTAND: "nightstand",
+  TV_UNIT: "tvUnit",
+  TOPIARY: "topiary",
+  LEAFY: "leafy",
+  PALM: "palm",
+  RECTANGLE: "rectangle",
+  ROUND: "round",
+  STOOL: "stool",
+  BEANBAG: "beanbag",
+  DRESSER: "dresser",
+  COUNTER: "counter",
+  ISLAND: "island",
+  FRIDGE: "fridge",
+} as const;
+
+export type FurnitureVariant = (typeof FURNITURE_VARIANTS)[keyof typeof FURNITURE_VARIANTS];
+
+/** One curated palette: fabrics for what is upholstered, woods for what is built. */
+export const FURNITURE_TONES = {
+  SLATE: "slate",
+  CARAMEL: "caramel",
+  SAGE: "sage",
+  CHARCOAL: "charcoal",
+  CREAM: "cream",
+  BRICK: "brick",
+  OAK: "oak",
+  WALNUT: "walnut",
+  WHITE: "white",
+  BLACK: "black",
+} as const;
+
+export type FurnitureTone = (typeof FURNITURE_TONES)[keyof typeof FURNITURE_TONES];
+
+export interface FurnitureKindSpec {
+  variants: readonly FurnitureVariant[];
+  tones: readonly FurnitureTone[];
+}
+
+const V = FURNITURE_VARIANTS;
+const FABRIC_TONES = [
+  FURNITURE_TONES.SLATE,
+  FURNITURE_TONES.CARAMEL,
+  FURNITURE_TONES.SAGE,
+  FURNITURE_TONES.CHARCOAL,
+  FURNITURE_TONES.CREAM,
+  FURNITURE_TONES.BRICK,
+] as const;
+const WOOD_TONES = [FURNITURE_TONES.OAK, FURNITURE_TONES.WALNUT, FURNITURE_TONES.WHITE, FURNITURE_TONES.BLACK] as const;
+
+/** What each type can be drawn as and coloured with. */
+export const FURNITURE_CATALOGUE = {
+  sofa: { variants: [V.STRAIGHT, V.CORNER_LEFT, V.CORNER_RIGHT], tones: FABRIC_TONES },
+  table: { variants: [V.DESK, V.COFFEE, V.DINING, V.SIDE], tones: WOOD_TONES },
+  chair: { variants: [V.DINING, V.OFFICE, V.ARMCHAIR, V.BENCH, V.STOOL, V.BEANBAG], tones: FABRIC_TONES },
+  bed: { variants: [], tones: FABRIC_TONES },
+  storage: { variants: [V.SIDEBOARD, V.BOOKSHELF, V.WARDROBE, V.NIGHTSTAND, V.TV_UNIT, V.DRESSER], tones: WOOD_TONES },
+  plant: { variants: [V.TOPIARY, V.LEAFY, V.PALM], tones: [FURNITURE_TONES.CREAM, FURNITURE_TONES.BRICK, FURNITURE_TONES.CHARCOAL, FURNITURE_TONES.WHITE] },
+  rug: { variants: [V.RECTANGLE, V.ROUND], tones: FABRIC_TONES },
+  kitchen: { variants: [V.COUNTER, V.ISLAND, V.FRIDGE], tones: WOOD_TONES },
+  other: { variants: [], tones: WOOD_TONES },
+} satisfies Record<FurnitureType, FurnitureKindSpec>;
+
 export interface FurniturePlacement {
   id: string;
-  type: "sofa" | "table" | "chair" | "other";
+  type: FurnitureType;
+  /** Top-left corner of the unrotated footprint, in room metres; `rotation` turns it about its
+   *  centre. */
   x: number;
   y: number;
   width: number;
+  /** Footprint depth along y, in metres — not the piece's height (`topMeters`). */
   height: number;
   /** Rotation in degrees (0-360) */
   rotation?: number;
   label?: string;
   locked?: boolean;
+  /** Absent ⇒ the model is read from the piece's size and neighbours. One the type does not take
+   *  reads as absent and is kept as stored, so a newer build's choice survives an edit here. */
+  variant?: FurnitureVariant;
+  /** Absent ⇒ the model's own colour. Kept as stored when the type does not take it, as above. */
+  tone?: FurnitureTone;
+  /** Top of the piece above the floor, in metres. Absent ⇒ the model's own height. */
+  topMeters?: number;
+}
+
+const FURNITURE_TYPE_VALUES = new Set<string>(Object.values(FURNITURE_TYPES));
+
+/** The stored type as a known one; anything else (a newer build's kind) reads as `other`. */
+export function resolveFurnitureType(stored: unknown): FurnitureType {
+  return typeof stored === "string" && FURNITURE_TYPE_VALUES.has(stored)
+    ? (stored as FurnitureType)
+    : FURNITURE_TYPES.OTHER;
+}
+
+/** The stored variant when the piece's type takes it, else none. */
+export function resolveFurnitureVariant(item: Pick<FurniturePlacement, "type" | "variant">): FurnitureVariant | undefined {
+  const variants: readonly string[] = FURNITURE_CATALOGUE[resolveFurnitureType(item.type)].variants;
+  return item.variant !== undefined && variants.includes(item.variant) ? item.variant : undefined;
+}
+
+/** The tallest piece the room map draws; a stored height past it is out of reach of any room. */
+const MAX_FURNITURE_TOP_METRES = 3;
+
+/** The stored height when it is a usable one (finite, above the floor, under the cap), else none. */
+export function resolveFurnitureTop(item: FurniturePlacement): number | undefined {
+  const top: unknown = item.topMeters;
+  return typeof top === "number" && Number.isFinite(top) && top > 0 && top <= MAX_FURNITURE_TOP_METRES ? top : undefined;
+}
+
+/** The stored tone when the piece's type takes it, else none. */
+export function resolveFurnitureTone(item: FurniturePlacement): FurnitureTone | undefined {
+  const tones: readonly string[] = FURNITURE_CATALOGUE[resolveFurnitureType(item.type)].tones;
+  return item.tone !== undefined && tones.includes(item.tone) ? item.tone : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -229,6 +529,57 @@ export interface TvAnchorPlacement {
   /** Screen centre above the floor, in metres. Absent ⇒ 40% of the room height,
    * resolved at runtime rather than written, so it follows a room-height edit. */
   mountHeightMeters?: number;
+  /** Absent ⇒ a monitor when a desk stands under it, else a TV. Frontend-only: never mirrored in
+   * Rust, which reads the anchor's place and mount height alone. */
+  screenKind?: ScreenKind;
+  /** Absent ⇒ 16:9. Frontend-only like `screenKind`: the screen's height is drawn, never sampled. */
+  screenAspect?: ScreenAspect;
+  /** Absent ⇒ strips near the screen; null ⇒ none; a string ⇒ that strip. Frontend-only like
+   * `screenKind`; absent must keep meaning proximity, or stored files need a migration. */
+  backlightStripId?: string | null;
+}
+
+/** What the captured screen is drawn as. */
+export const SCREEN_KINDS = {
+  TV: "tv",
+  MONITOR: "monitor",
+} as const;
+
+export type ScreenKind = (typeof SCREEN_KINDS)[keyof typeof SCREEN_KINDS];
+
+const SCREEN_KIND_VALUES = new Set<string>(Object.values(SCREEN_KINDS));
+
+/** Anything but a strip id or null reads as absent. */
+export function resolveBacklightBinding(stored: unknown): string | null | undefined {
+  if (stored === null) return null;
+  return typeof stored === "string" && stored.length > 0 ? stored : undefined;
+}
+
+/** The stored screen kind when it is a known one, else none (Auto). */
+export function resolveScreenKind(stored: unknown): ScreenKind | undefined {
+  return typeof stored === "string" && SCREEN_KIND_VALUES.has(stored) ? (stored as ScreenKind) : undefined;
+}
+
+export const SCREEN_ASPECTS = {
+  R16_9: "16:9",
+  R16_10: "16:10",
+  R21_9: "21:9",
+  R32_9: "32:9",
+  R4_3: "4:3",
+} as const;
+
+export type ScreenAspect = (typeof SCREEN_ASPECTS)[keyof typeof SCREEN_ASPECTS];
+
+const SCREEN_ASPECT_VALUES = new Set<string>(Object.values(SCREEN_ASPECTS));
+
+export function resolveScreenAspect(stored: unknown): ScreenAspect {
+  return typeof stored === "string" && SCREEN_ASPECT_VALUES.has(stored) ? (stored as ScreenAspect) : SCREEN_ASPECTS.R16_9;
+}
+
+/** Height over width — the inverse of how an aspect is written. */
+export function screenHeightPerWidth(aspect: ScreenAspect): number {
+  const [w, h] = aspect.split(":").map(Number) as [number, number];
+  return h / w;
 }
 
 /** Mirrors `DEFAULT_TV_MOUNT_HEIGHT_FRACTION` in `commands/room_affinity.rs`;
@@ -247,6 +598,116 @@ export interface RoomDimensions {
   depthMeters: number;
   /** Height in meters (ceiling) */
   heightMeters: number;
+}
+
+/** A corner of the room's outline on the plan, in metres from the top-left (y down from the TV wall). */
+export interface RoomCorner {
+  x: number;
+  y: number;
+}
+
+/** How far a stored corner may sit off the room's edge, or off its wall's line, and still be read. */
+const ROOM_FOOTPRINT_TOLERANCE_M = 0.001;
+/** The shortest wall an outline may have. */
+export const ROOM_FOOTPRINT_MIN_WALL_M = 0.1;
+
+const rectangleOf = ({ widthMeters: w, depthMeters: d }: RoomDimensions): RoomCorner[] => [
+  { x: 0, y: 0 },
+  { x: w, y: 0 },
+  { x: w, y: d },
+  { x: 0, y: d },
+];
+
+/** Whether two axis-aligned walls share any point, ends included. */
+function wallsMeet(a: RoomCorner, b: RoomCorner, c: RoomCorner, d: RoomCorner): boolean {
+  const overlap = (p1: number, p2: number, q1: number, q2: number) =>
+    Math.max(Math.min(p1, p2), Math.min(q1, q2)) <= Math.min(Math.max(p1, p2), Math.max(q1, q2));
+  return overlap(a.x, b.x, c.x, d.x) && overlap(a.y, b.y, c.y, d.y);
+}
+
+/**
+ * The room's outline: a stored footprint when it is a usable orthogonal polygon — 4, 6 or 8
+ * corners, walls that turn at every corner and are at least 10 cm long, no wall touching another
+ * but its neighbours, and a bounding box that is exactly the room's dimensions — else the plain
+ * rectangle. Never scaled to fit and never written back: a footprint that disagrees with the
+ * dimensions is ignored rather than trusted, since `dimensions` is what Rust samples the room by.
+ * The answer is snapped onto its walls and the room's edges, walks with the room on its right and
+ * starts at the top-left-most corner, so every reading of one shape is the same list.
+ */
+export function resolveRoomFootprint(config: Pick<RoomMapConfig, "footprint" | "dimensions">): RoomCorner[] {
+  const rectangle = rectangleOf(config.dimensions);
+  const stored: unknown = config.footprint;
+  if (!Array.isArray(stored) || ![4, 6, 8].includes(stored.length)) return rectangle;
+  const raw: RoomCorner[] = [];
+  for (const corner of stored as unknown[]) {
+    const { x, y } = (corner ?? {}) as { x?: unknown; y?: unknown };
+    if (typeof x !== "number" || typeof y !== "number" || !Number.isFinite(x) || !Number.isFinite(y)) return rectangle;
+    raw.push({ x, y });
+  }
+  const n = raw.length;
+  const tol = ROOM_FOOTPRINT_TOLERANCE_M;
+  const at = (i: number) => raw[((i % n) + n) % n]!;
+
+  // Each wall is level or plumb and turns at its end; its length is judged once it is snapped.
+  const level: boolean[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = at(i);
+    const b = at(i + 1);
+    const flat = Math.abs(a.y - b.y) <= tol;
+    const upright = Math.abs(a.x - b.x) <= tol;
+    if (flat === upright) return rectangle;
+    level.push(flat);
+  }
+  for (let i = 0; i < n; i++) if (level[i] === level[(i + 1) % n]) return rectangle;
+
+  // Onto the walls' lines: a corner takes its level wall's y and its plumb wall's x — onto the
+  // room's edge when within the tolerance, else to the millimetre — so reading the answer again
+  // gives the same numbers.
+  const place = (value: number, edge: number) =>
+    Math.abs(value) <= tol ? 0 : Math.abs(value - edge) <= tol ? edge : Math.round(value * 1000) / 1000;
+  const { widthMeters: w, depthMeters: d } = config.dimensions;
+  const corners = raw.map((_, i) => {
+    const incoming = i - 1;
+    const levelIn = level[(incoming + n) % n];
+    const flatWall = levelIn ? [at(incoming), at(i)] : [at(i), at(i + 1)];
+    const plumbWall = levelIn ? [at(i), at(i + 1)] : [at(incoming), at(i)];
+    const y = (flatWall[0]!.y + flatWall[1]!.y) / 2;
+    const x = (plumbWall[0]!.x + plumbWall[1]!.x) / 2;
+    return { x: place(x, w), y: place(y, d) };
+  });
+
+  // On the snapped corners, so an answer read again is judged by the same lengths.
+  for (let i = 0; i < n; i++) {
+    const a = corners[i]!;
+    const b = corners[(i + 1) % n]!;
+    if (Math.abs(a.x - b.x) + Math.abs(a.y - b.y) < ROOM_FOOTPRINT_MIN_WALL_M - 1e-9) return rectangle;
+  }
+
+  const xs = corners.map((c) => c.x);
+  const ys = corners.map((c) => c.y);
+  if (Math.min(...xs) !== 0 || Math.max(...xs) !== w || Math.min(...ys) !== 0 || Math.max(...ys) !== d) return rectangle;
+
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue;
+      if (wallsMeet(corners[i]!, corners[(i + 1) % n]!, corners[j]!, corners[(j + 1) % n]!)) return rectangle;
+    }
+  }
+
+  let area2 = 0;
+  for (let i = 0; i < n; i++) {
+    const a = corners[i]!;
+    const b = corners[(i + 1) % n]!;
+    area2 += a.x * b.y - b.x * a.y;
+  }
+  const walk = area2 > 0 ? corners : [...corners].reverse();
+  let start = 0;
+  for (let i = 1; i < n; i++) {
+    const c = walk[i]!;
+    const s = walk[start]!;
+    if (c.y < s.y || (c.y === s.y && c.x < s.x)) start = i;
+  }
+  return [...walk.slice(start), ...walk.slice(0, start)];
 }
 
 // ---------------------------------------------------------------------------
@@ -275,15 +736,19 @@ export interface RoomGeometry {
 
 /**
  * Hue Entertainment Area zone descriptor. A `HueZone` represents a named
- * 3D-positioned subset of an entertainment area's channels — the user
- * authors the zone as a physical bounding box (center + per-axis scale)
- * and channels reference the zone via `HueChannelPlacement.zoneId`. The
- * runtime sampler resolves world-space coordinates as
- * `world = center + scale * zoneRelativePosition`.
+ * 3D-positioned subset of an entertainment area's channels, and channels
+ * reference the zone via `HueChannelPlacement.zoneId`. The runtime sampler
+ * resolves world-space coordinates as `world = center + scale * zoneRelativePosition`,
+ * so a bound light moves and grows with its zone.
  *
  * Coordinate system: same Hue native space as `HueChannelPlacement` —
- * `centerX/Y/Z` and `scaleX/Y/Z` are in `[-1, 1]`. The bridge per-area
- * channel cap (10) applies to `channelIndices`.
+ * `centerX/Y/Z` in `[-1, 1]`, each scale in `[0.05, 1]` and `|center| + scale
+ * <= 1` on every axis (Rust refuses anything else). The room map keeps a zone a
+ * cube in metres: each axis's scale is one edge over that axis's side of the
+ * room, so the scales differ and the ceiling caps the edge. Rust does not know
+ * the room and checks only the band and the bounds. The bridge
+ * stores no zone; only the resolved channel positions reach it. The bridge
+ * per-area channel cap (10) applies to `channelIndices`.
  *
  * `borderColor` is a UI hint for the dashed bounds box and channel ring
  * tint; the runtime sampler never reads it.
@@ -303,11 +768,11 @@ export interface HueZone {
   centerY: number;
   /** Zone center Z in Hue native space ([-1, 1]). */
   centerZ: number;
-  /** Per-axis zone-to-world scale. `1.0` ⇒ zone covers full Hue space. */
+  /** Zone-to-world scale along X. `1.0` ⇒ the zone spans the room's width. */
   scaleX: number;
-  /** Per-axis zone-to-world scale. */
+  /** Along Y: the same edge in metres as `scaleX`, over the room's depth. */
   scaleY: number;
-  /** Per-axis zone-to-world scale. */
+  /** Along Z: the same edge in metres as `scaleX`, over the room's height. */
   scaleZ: number;
   /**
    * Entertainment-area channel indices (0-based, bounded by the bridge's
@@ -558,11 +1023,8 @@ export const HUE_ZONE_STATUS_CODES = {
    */
   HUE_ZONE_CHANNEL_NOT_IN_AREA: "HUE_ZONE_CHANNEL_NOT_IN_AREA",
   /**
-   * Zone scale exceeds the room or undershoots the slider floor (per-axis
-   * `[0.05, 1.0]` clamp). The previous uniform
-   * aspect-ratio lock was dropped, zones are authored as physical 1:1
-   * metric squares, so a non-square room deliberately writes asymmetric
-   * `scaleX` / `scaleY`.
+   * Zone scale exceeds the room, undershoots the floor (`[0.05, 1.0]`), or
+   * is not finite.
    */
   HUE_ZONE_OVERSIZED: "HUE_ZONE_OVERSIZED",
 } as const;
@@ -726,7 +1188,174 @@ export interface RoomMapConfig {
   originX?: number;
   /** Custom room origin Y position in metres (defaults to room center) */
   originY?: number;
+  /** The room's outline when it is not the plain rectangle of `dimensions` (an L, U or T); read
+   *  through `resolveRoomFootprint`. The editor's alone: Rust samples the room by `dimensions`. A
+   *  writer deletes the key for the plain rectangle, and changes it and `dimensions` in one apply. */
+  footprint?: RoomCorner[];
+  /** What the room is finished in — its floor and walls — for the 3D view alone; absent ⇒ oak and
+   *  warm white. Read through `resolveRoomSurfaces`; a writer spreads the stored value, so a newer
+   *  build's choice survives an edit of the other. */
+  surfaces?: RoomSurfaces;
+  /** The room's own build — columns, beams, windows, doors, niches and the ceiling's own lights — for
+   *  the plan and the 3D view alone; Rust carries it untouched, so nothing in it is ever streamed.
+   *  Read through `resolveRoomStructures`, which skips a kind or an entry this build cannot draw and
+   *  never writes back; an edit goes by id on the stored array, so those survive it. A
+   *  resize moves every entry's `x`/`y` and `x1`…`y2` by name, an unknown kind's too: a kind keeps
+   *  its plan points under those names and gives them no other meaning. */
+  structures?: RoomStructure[];
 }
+
+/** The floor's finish, as one choice: a wood or parquet, carpet, a tile or concrete. The keys' order
+ *  is Room settings' order, light to dark with the woods first; nothing stores an index. */
+export const FLOOR_FINISHES = {
+  OAK: "oak",
+  WALNUT: "walnut",
+  ASH: "ash",
+  HERRINGBONE: "herringbone",
+  CARPET: "carpet",
+  TILE_LIGHT: "tileLight",
+  TILE_DARK: "tileDark",
+  CHECKER: "checker",
+  TERRACOTTA: "terracotta",
+  CONCRETE: "concrete",
+} as const;
+export type FloorFinish = (typeof FLOOR_FINISHES)[keyof typeof FLOOR_FINISHES];
+
+/** The walls' paint, from a named palette the lights read against. The keys' order is Room
+ *  settings' order, light to dark. */
+export const WALL_COLORS = {
+  WARM_WHITE: "warmWhite",
+  COOL_WHITE: "coolWhite",
+  GREIGE: "greige",
+  BLUSH: "blush",
+  SAGE: "sage",
+  CLAY: "clay",
+  OCHRE: "ochre",
+  FOREST: "forest",
+  NAVY: "navy",
+  CHARCOAL: "charcoal",
+} as const;
+export type WallColor = (typeof WALL_COLORS)[keyof typeof WALL_COLORS];
+
+export interface RoomSurfaces {
+  /** Absent, or a finish this build does not know (kept as stored) ⇒ oak. */
+  floor?: FloorFinish;
+  /** Absent, or a colour this build does not know (kept as stored) ⇒ warm white. */
+  walls?: WallColor;
+}
+
+const FLOOR_FINISH_VALUES = new Set<string>(Object.values(FLOOR_FINISHES));
+const WALL_COLOR_VALUES = new Set<string>(Object.values(WALL_COLORS));
+
+/** The room's surfaces as this build draws them: every field filled, anything unknown read as the
+ *  default. Read-only — it never writes back what it does not know. */
+export function resolveRoomSurfaces(config: Pick<RoomMapConfig, "surfaces">): Required<RoomSurfaces> {
+  const stored: { floor?: unknown; walls?: unknown } = config.surfaces ?? {};
+  return {
+    floor: typeof stored.floor === "string" && FLOOR_FINISH_VALUES.has(stored.floor) ? (stored.floor as FloorFinish) : FLOOR_FINISHES.OAK,
+    walls: typeof stored.walls === "string" && WALL_COLOR_VALUES.has(stored.walls) ? (stored.walls as WallColor) : WALL_COLORS.WARM_WHITE,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Room structures
+// ---------------------------------------------------------------------------
+
+export const STRUCTURE_KINDS = {
+  COLUMN: "column",
+  BEAM: "beam",
+  WINDOW: "window",
+  DOOR: "door",
+  NICHE: "niche",
+  LIGHT: "light",
+} as const;
+export type StructureKind = (typeof STRUCTURE_KINDS)[keyof typeof STRUCTURE_KINDS];
+
+export interface StructureBase {
+  id: string;
+  label?: string;
+  locked?: boolean;
+}
+
+/** Standing on the floor up to the ceiling; `x`/`y` its centre, `width` × `depth` its footprint. */
+export interface ColumnStructure extends StructureBase {
+  kind: typeof STRUCTURE_KINDS.COLUMN;
+  x: number;
+  y: number;
+  width: number;
+  depth: number;
+  /** Degrees clockwise on the plan, as a piece of furniture turns. */
+  rotation?: number;
+  /** Absent ⇒ square. */
+  shape?: "square" | "round";
+}
+
+/** Under the ceiling from one end to the other, `dropMeters` deep. */
+export interface BeamStructure extends StructureBase {
+  kind: typeof STRUCTURE_KINDS.BEAM;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  width: number;
+  dropMeters: number;
+}
+
+/** Set in a wall: `x`/`y` its middle, read onto the nearest wall, and `width` along it. */
+interface WallItemBase extends StructureBase {
+  x: number;
+  y: number;
+  width: number;
+}
+
+export interface WindowStructure extends WallItemBase {
+  kind: typeof STRUCTURE_KINDS.WINDOW;
+  sillMeters: number;
+  heightMeters: number;
+}
+
+export interface DoorStructure extends WallItemBase {
+  kind: typeof STRUCTURE_KINDS.DOOR;
+  heightMeters: number;
+  /** As seen from inside the room. */
+  hinge: "left" | "right";
+  swing: "in" | "out";
+}
+
+export interface NicheStructure extends WallItemBase {
+  kind: typeof STRUCTURE_KINDS.NICHE;
+  bottomMeters: number;
+  heightMeters: number;
+  /** Into the wall, behind its face. */
+  depth: number;
+}
+
+/** The ceiling's own fixtures a decor light can be: its own set, so a fixture added for Hue lights
+ *  does not widen it unseen. */
+export const DECOR_LIGHT_FIXTURES = {
+  PENDANT: HUE_FIXTURES.PENDANT,
+  CEILING: HUE_FIXTURES.CEILING,
+  SPOT: HUE_FIXTURES.SPOT,
+  BULB: HUE_FIXTURES.BULB,
+} as const satisfies Record<string, HueFixture>;
+export type DecorLightFixture = (typeof DECOR_LIGHT_FIXTURES)[keyof typeof DECOR_LIGHT_FIXTURES];
+
+/** A light the house has and LumaSync does not drive: drawn lit in the 3D room, never streamed. */
+export interface LightStructure extends StructureBase {
+  kind: typeof STRUCTURE_KINDS.LIGHT;
+  x: number;
+  y: number;
+  fixture: DecorLightFixture;
+  /** Below the ceiling; absent ⇒ where the fixture hangs. */
+  dropMeters?: number;
+  /** Absent ⇒ 2700; read within `SOLID_KELVIN_RANGE`. */
+  kelvin?: number;
+}
+
+export const DECOR_LIGHT_KELVIN = 2700;
+
+export type RoomStructure = ColumnStructure | BeamStructure | WindowStructure | DoorStructure | NicheStructure | LightStructure;
+export type WallStructure = WindowStructure | DoorStructure | NicheStructure;
 
 // ---------------------------------------------------------------------------
 // Defaults

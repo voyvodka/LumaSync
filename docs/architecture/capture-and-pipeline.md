@@ -50,23 +50,145 @@ first, and Wayland is not viable), several Hue areas on one bridge (closed), sev
 drop order (`lighting_mode/runtime.rs`) — the last reference to a capture source is dropped on the
 command thread, never the worker, or a rapid mode switch crashes macOS — must hold for every source.
 
+**Effects are drawn at each light, not on a screen, and are a mode of their own.** The first effects
+drew a screen-space frame and let the strip and Hue sample it. On Hue that failed visibly: each
+channel averages a box 30% of the frame wide, a rainbow drawn around the centre averaged to grey, and
+a two-channel area showed two slow blobs. So the Effect mode's engine (`lighting_mode/effects/`)
+colours every light where it is. The pipeline's effect stage replaces the analysis for an effect —
+no sampling, no scene stage, no border crop — and writes the strip's and Hue's smoothing targets
+straight from what it drew; `sample` takes nothing from the tick frame the effect's source
+(`effect_source.rs`) hands the worker so its pacing and loop run unchanged.
+
+- *Lights.* Every strip LED and Hue channel is an emitter in the room map's cube (`[-1, 1]`, y the
+  depth with +1 the TV wall): strip LEDs on the screen's rectangle — the room map's TV anchor when
+  there is one, a virtual screen on the TV wall when not — and Hue channels where the room map or
+  the bridge puts them. Each has an order `u` along its output (Hue: its rank around the screen,
+  evenly spaced, so a travelling effect hops lamp to lamp without a dark gap) and a seed. Extents
+  are taken over all of them, so a wave crosses the strip and the room's lamps as one field. Nothing
+  derives a sampling region from a light's distance to a surface.
+- *A few lamps are never all dark.* An effect drawn for many lights went fully dark for seconds on a
+  two-bulb area: a scanner's head in the gap between the lamps, a chase whose gaps lined up for
+  both, a twinkle round where neither lit, a sunrise's first minutes. A set of at most eight whole
+  lamps (`is_sparse`: every channel its own light) gets its own rules. The scanner walks the lamps'
+  order and a chase makes the lamps its slots, so they take turns. The floor itself is held where
+  it counts — on the smoothed, corrected Hue output (`hold_hue_floor`), not only in the engine: a
+  floor set in the engine's light reached the wire about a fifth short (sRGB out, the correction's
+  gamma 2.2 back in), and a smoother handing over between two lamps dipped under it. When even the
+  brightest lamp would show under 2 % on the wire (after brightness), every lamp is raised by one
+  factor, so the frame keeps its shape and nothing jumps when another lamp becomes the brightest;
+  the engine seeds an all-black frame with the palette's colours. Hue's own dimming floor is
+  0.2–5 % by model and the entertainment stream documents nothing below it, so 2 % of the peak
+  channel is a working floor, not a measured one, and a deep colour shows dimmer than a pale one at
+  it. A strip and a Hue gradient light (its segments share one light, so it is a strip of its own)
+  keep the native look, as does an area of nine or more lamps. Brightness 0 is off and stays off.
+- *Patterns and palettes.* A pattern (`patterns.rs`) gives each light a palette position and a
+  perceptual level; the level is applied in linear light. Palettes blend in OKLCh — lightness and
+  chroma move evenly and the hue takes the short way — because a straight OKLab line between distant
+  hues cuts through grey. A palette that does not wrap plays there and back under a moving pattern,
+  so nothing jumps from the last stop to the first. Effects and palettes are listed once, in
+  `src/shared/contracts/effectCatalogue.json`, which the frontend imports and Rust reads.
+- *Time.* Loops accumulate (`loops += dt × rate(speed)`), so a speed change never jumps; sunrise
+  counts real seconds and natural light reads the local time. The clock lives on the runtime owner
+  (`effect_clock`), so a worker rebuild carries the effect on; the payload is re-read every step, so
+  a retune changes it in place. Stochastic patterns use seeded smooth noise per light.
+- *Smoothing.* Hue gets its own short smoothing under an effect (τ ≈ 200 ms) because the bridge does
+  not blend between 50 ms updates; the strip gets none, the patterns being continuous.
+- *Cost.* `effect_budget_report` (ignored; run in release) measured 3–19 µs median per step for 164
+  or 300 LEDs plus six Hue channels, inside the 40–74 µs of the Ambilight path.
+
+Nothing is captured, so no screen-recording permission is asked for and none of the capture notices
+can fire; the worker is told it is drawn (`WorkerPacing::drawn`) and paced at the output rate, while
+the preview still reports it live. It is its own `LightingModeKind` rather than an Ambilight source,
+or the capture preflight, the retune fast path and the tray check would all have taken an effect for
+Ambilight. The payload reads one field at a time: an unknown kind is Off, an unknown effect the wave,
+an unknown palette or direction the effect's default, so a mode saved by a newer build still reads.
+
 **Test patterns are synthetic frames, not a window that capture then sees.** The LED test renders
 its pattern straight into a `CapturedFrame` (`test_pattern.rs`, `SyntheticFrameSource`) with capture
 off. That gives the strip exact bytes — the scene stage and the black-border crop are bypassed —
 needs no screen-recording permission, and runs the same pipeline rather than a fork of it. The
 original concept drew a full-screen animation for capture to sample, which needs the twin and the
 popup excluded from capture on every platform (`SCContentFilter`, `SetWindowDisplayAffinity`).
-The cost is that a test says nothing about capture or its latency.
+The cost is that a test says nothing about capture or its latency. The LED preview's scenes are that
+original concept, built now that the exclusion exists: a full-screen window capture sees, through
+the whole pipeline and the user's own settings — black-border crop and scene stage included — with
+the twin and the popup kept out (`ui-and-shell.md`). They are kept out of the capture-rate history:
+what they measure is a test, not the user's screen.
+
+**The latency scene measures pipeline delay, and says only that.** The scene flips the whole
+screen between black and white every 500 ms; the worker (`lighting_mode/latency.rs`) takes a frame
+on the far side of a flip as the start of a sample and the first send after it — the strip's
+write, or with no strip the hand-off to the Hue sender, whose own 50 ms pace is not in the number —
+as its end, and reports the median of the last fifteen to the
+popup on `preview://latency`. A flip whose send has not come within 500 ms, or that the next flip
+overtakes, counts as dropped rather than slow. The scene runs with smoothing off — the alpha at 1 and the saved presets cleared, since a preset
+wins over an alpha in the worker's live settings — no black-border crop, no scene-adaptive stage and Hue snapping, because each would hold the flip back and the
+number would measure them instead. On macOS the frame's time is when the display showed it
+(`SCStreamFrameInfo.displayTime`, host clock), so the compositor's hand-off is inside the number;
+elsewhere it is when the frame reached the app, a few milliseconds later. The strip's own response
+and the display's are outside it: those need a camera or a photodiode, so the popup calls the number
+"pipeline delay" and claims nothing about light.
+
+**The preview keeps its own windows out of the capture.** The twin is drawn over the very display
+Ambilight samples, so without this the strip would light from its own picture.
+`preview/exclusion.rs` holds the per-platform rule:
+- **macOS.** While a session is open, the capture filter leaves out every window of this app
+  (`set_own_windows_excluded` in `ambilight_capture.rs`). Outside a session the app is captured as
+  before. The filter goes by application, not window, so a window built after the update is
+  covered from its first frame; a per-window filter can only name windows already on screen. The
+  update blocks until ScreenCaptureKit confirms and runs before any preview window is built. It is
+  skipped when no stream runs, because listing the shareable content raises the Screen Recording
+  prompt, which only a capture start may do. A stream that starts later builds its filter from the
+  same flag, under the lock that registers it.
+- **Windows 10 2004 and later.** Each preview window is content-protected
+  (`WDA_EXCLUDEFROMCAPTURE`). Earlier builds treat that flag as `WDA_MONITOR` and show the window
+  black in the capture, so it is never set there (`RtlGetVersion`; `GetVersionEx` reports what the
+  manifest claims).
+- **Linux, and Windows before 2004.** Nothing can exclude a window, so the twin hides while a live
+  capture source exists (`capture_active`, `on_capture_active_changed`). The popup stays in the
+  capture: hiding the only control left would strand the preview. Whether the twin is on screen —
+  the popup's switch and this hold — is decided in one place, `sync_twin_visibility`, on the main
+  thread from the state as it is when it runs: a switch and a capture start on two threads can
+  ask in either order, and the last to run must leave the current state. The popup is told
+  (`twinHeldForCapture`), so a twin switched on but off screen says why.
+
+Unverified on hardware: app-level exclusion covering later windows, and WDA on a transparent
+WebView2 window and its child windows.
+
+**One frame, a stage per strip.** The pipeline holds one stage per strip it drives: each samples the
+frame with its own LED sequence and window, keeps its own scene-stage state (a strip's spread and
+lean are its own lights', not the room's) and its own smoother. The frame-wide parts are shared — the
+border cache, the scene stage's view of the frame and its α, Hue and an effect — so a second strip
+adds its sampling and smoothing and nothing else, and each strip runs exactly as it would alone
+(`each_strip_runs_as_it_would_alone`). The worker gives each output its own sink and send gate,
+steps at the fastest gate's interval, counts one send per step however many strips took it, and
+reports the slowest strip's cost. Until the fan-out lands the mode apply hands it one strip, so one
+strip runs byte for byte as before; an effect draws on the first stage only, and the twin shows it.
 
 **Every sampler crops the same black borders.** `BlackBorderCache` re-detects letterbox and
-pillarbox bars at most every 2.5 s, and the strip, the scene stage and Hue all sample inside those
+pillarbox bars at most every 0.5 s, and the strip, the scene stage and Hue all sample inside those
 insets: `sample_frame_within_insets` maps each LED onto the picture rectangle and keeps its window
 out of the bars, so on a 2.39:1 film the top and bottom LEDs take the picture's edge instead of
-black. `AmbilightFramePipeline::sample_strip` is where the cache is refreshed, because it is the
-first thing the pipeline sees of a frame; the three consumers therefore read one answer per frame.
+black. `AmbilightFramePipeline::sample` is where the cache is refreshed, because it is the
+first thing the pipeline sees of a frame; the consumers therefore read one answer per frame, however
+many strips sample it (`two_strips_share_one_border_detection_per_frame`).
 From the per-LED sampler in 1.4.0 until this was fixed the strip sampled the whole frame while Hue
-was cropped. Three edges are deliberate:
+was cropped. These edges are deliberate:
 
+- The detector reads what real films put in the bars, not only clean black
+  (`detect_black_borders`). A black frame — a fade, a cut through black — measures nothing
+  (`None`) and the crop stays. On a flat dark edge the threshold follows that edge's own black, so
+  limited-range video's 16 is still bar; an uneven one (a dim game, a dark interface) keeps the
+  fixed threshold, and an edge brighter than 24 means no bar. A line is picture only with two
+  samples on it, so a cursor or one bright pixel in a bar is not. Bars come in pairs: a dark band
+  on one side only is a dark shot, and a pair that disagrees takes the shallower depth, so no
+  picture is cropped — except a bottom bar whose extra content stays in the middle of the width
+  with bar again above it, which reads as subtitles and takes the top's depth.
+- The cache moves an axis — the letterbox rows or the pillarbox columns, each on its own — only
+  when three reads in a row agree on a new depth to within a scan step (about 1.5 s), so a subtitle
+  or a shot does not make the edge LEDs jump; the first read after detection is switched on is
+  taken at once. When the crop moves, the scene stage skips that frame's change measure
+  (`forget_previous_frame`): a histogram read in a different rectangle would look like a cut.
 - The setting is read after capture, so switching detection off reaches the strip one frame after
   Hue and the scene stage.
 - The worker's warm-up frame is sampled before the pipeline exists and is never cropped; the
@@ -81,11 +203,24 @@ was cropped. Three edges are deliberate:
 `src/features/preview/__tests__/ledScreenGeometry.golden.json`, read by `cargo test` through
 `include_str!` and by vitest. Rust is the authority — it decides what the LEDs show — and the
 fixture is regenerated from it by the ignored `write_led_screen_geometry_golden` test. The twin
-overlay draws each dot at its LED's sampling position, pulled in from the viewport edge. Two
-consequences are the sampler's, not the twin's: `bottomMissing` does not move bottom LEDs (they
-spread across the whole bottom edge, while the calibration editor draws the physical gap — so a
-gap wider than the bottom LEDs leaves the middle ones sampling screen that has no LED under it), and
-a one-LED edge samples its local-0 corner.
+overlay draws each dot at its LED's sampling position, pulled in from the viewport edge. Each
+edge's pitches spread end to end, and the bottom counts the stand gap (`bottomMissing`) among them
+(`StripShape`): its LEDs sit either side of the gap where LED Setup draws them, the right-hand run
+`floor(bottom / 2)` long, so each samples the screen above where it really is. Spreading them over
+the whole edge instead, as the sampler once did, put the LEDs beside the stand under screen several
+pitches away and showed the twin a strip with no gap. A one-LED edge samples the middle of its edge,
+where LED Setup draws it: its lone LED stands for the whole edge, and it used to take the edge's
+start corner, which is a colour from a neighbouring edge's end. A strip with no layout on record
+runs as one LED (the legacy single-zone path), and since it shows one colour for the whole strip it
+samples the whole picture inside any black bars (`WHOLE_FRAME_SAMPLE_WINDOW` via
+`sample_window_for`: a window that reaches the whole content rectangle from the LED's place). It
+once took the top-left corner, so a red corner tile lit a strip whose screen was blue. With neither a layout nor a
+strip output (Hue alone) there is no strip at all (`strip_for_worker`): the fallback LED there was
+sampled every frame for nothing and stood in an effect's bounds as a light that does not exist. The
+twin's Hue lamps follow the same rule: `TwinLayout.lamps` puts each where it samples the screen, from
+the room map's placements over the stream's channels as the worker's sample table reads them
+(`hue_lamp_screen_points`), and lines them up along the bottom only when no room map places them —
+the bridge's own x/y are depth and side, not a place on the screen.
 
 **The macOS screen-recording permission is probed, never inferred.**
 `src-tauri/src/commands/screen_capture_permission.rs` owns two CoreGraphics calls with very
@@ -166,7 +301,13 @@ deprecated alias kept so pre-v1.4 call sites compile.
 **Capture rate follows the output plan.** `capture_interval_for` in `lighting_mode/pacing.rs`: 20 Hz with
 Hue alone — the bridge takes 20 frames a second, so more would be read back and thrown away — and
 30 Hz when a strip (serial or WLED) is in the plan, never faster than a serial strip's link takes a
-frame. 30 rather than 60: with the strip smoothed between frames on every output step, the next
+frame. With several strips one capture feeds them all, so it runs at the fastest strip's pace (a
+WLED strip counts as 30 Hz) and a slower serial strip skips frames at its own send gate rather than
+holding the others to its wire — `two_strips_keep_their_own_send_gates_for_ten_minutes` pins it. The link budget the telemetry reports is the slowest strip's,
+and a strip beside the mode's that cannot start is left out rather than failing the run. The capture
+interval is chosen before the strips open, from every strip asked for, so a fast strip that then
+fails to start leaves the capture at its pace until the run is replanned — a few wasted frames, never
+a slower one. 30 rather than 60: with the strip smoothed between frames on every output step, the next
 frame is new information arriving ~8 ms sooner on average, at 1.5 times the capture cost on
 Windows, where every frame is a full-resolution GPU readback. ScreenCaptureKit and WGC are asked
 for the rate; X11 is polled at it. The scene stage's per-frame rates (the change envelope's
@@ -211,15 +352,26 @@ things, in this order, per frame:
    edge. Chroma is related over a wider neighbourhood than luminance, because chromatic contrast
    sensitivity is low-pass and luminance sensitivity is not — smoothing hue across neighbours is
    nearly free perceptually, smoothing brightness the same way flattens visible structure.
-3. **Ambience blend.** The stage keeps a slow memory of the frame mean (the room's ambience colour)
-   and mixes a little of it into every light. How much depends on two things: *what the frame is*
-   (a flat frame leans more, since nothing is lost; a structured one keeps its region colours) and
-   *where the light is* — `screen_affinity`, `1.0` for a strip LED on the screen edge and lower for
-   a Hue channel placed away from the TV wall. A bulb behind the viewer therefore shows mostly the
-   room's colour with a hint of its side of the screen, instead of a hard sample of the bottom of
-   the frame; that is the "defensible colour for a light with no screen region" the product bar
-   asks for. Without a TV anchor, affinity for Hue comes from the bridge's own `y`; with one, the room
-   map supplies a metre-based value through the same per-light `f32` (`room-map.md`).
+3. **Ambience blend.** The stage keeps a slow memory of the room's ambience colour and mixes a
+   little of it into every light. How much depends on two things: *what the frame is* (a flat frame
+   leans more, since nothing is lost; a structured one keeps its region colours) and *where the
+   light is* — `screen_affinity`, `1.0` for a strip LED on the screen edge and lower for a Hue
+   channel placed away from the TV wall. A bulb behind the viewer therefore shows mostly the room's
+   colour with a hint of its side of the screen, instead of a hard sample of the bottom of the
+   frame; that is the "defensible colour for a light with no screen region" the product bar asks
+   for. Without a TV anchor, affinity for Hue comes from the bridge's own `y`; with one, the room map
+   supplies a metre-based value through the same per-light `f32` (`room-map.md`).
+
+   The ambience colour is the frame's chroma-weighted mean held at the plain mean's luminance: in
+   the same stride-8 pass each sample counts `1 + 2·(max − min)/255`, the weighted mean gives the
+   hue, and it is rescaled to the plain mean's Y, capped so no channel leaves the gamut. A plain mean
+   went grey wherever neutral areas diluted the frame's colour — a fifth of the screen in red over
+   grey averaged to a pale pink — and that colour is most of what a light far from the screen shows.
+   Keeping the plain luminance stops one saturated element from setting the room's brightness, and a
+   uniform frame comes out as its plain mean exactly. It is one continuous method for every frame and
+   every light, never a choice between methods; hue cancellation (teal and orange, red and blue) is
+   not something any weighted mean undoes, and is not attempted. The extra work is a max/min and
+   three multiply-adds per sample inside the pass that already computes the plain mean.
 4. **Alpha as a continuous function of change.** The change signal is run through an envelope with
    instant attack and slow release; alpha is interpolated between a floor (30 % of the preset) and
    the preset ceiling by that envelope. A hard cut lifts every sink to the ceiling for a few frames
@@ -245,8 +397,9 @@ setting, and it is read once when the worker starts.
 Everything the worker computes after capture is one type, `AmbilightFramePipeline` in
 `src-tauri/src/commands/lighting_mode/frame_pipeline.rs`: per frame the black-border cache, strip
 sampling, the scene stage and the smoothing targets; per output step the smoothers and Hue's colour
-pipeline. Time is an argument, never read inside. The worker keeps only the I/O and the timing
-around it — capture, waking, the sends, telemetry, the twin feed. That split is what lets the real
+pipeline. Smoothing time is an argument; the pipeline reads the clock only to stamp when an
+analysis finished, which the worker reports as capture time. The worker keeps only the I/O and the
+timing around it — capture, waking, the sends, telemetry, the twin feed. That split is what lets the real
 code be measured with no display and no hardware, from `lighting_mode/frame_pipeline_tests.rs`.
 
 **Timing, locally.** An `#[ignore]`d report runs the pipeline plus the serial encoder over synthetic
@@ -294,14 +447,14 @@ serial writer with a counting port behind it, asserts:
   rebuild; the thread-local build counters in `led_output/correction.rs` and `ambilight_scene.rs`
   can.
 
-`CorrectedWledSink` has its own pin, `WLED_ALLOCS_PER_FRAME` (four: the corrected strip, the
-datagram list, the chunk list, one datagram), over a loopback socket nothing reads.
+`CorrectedWledSink` has its own pin, `WLED_ALLOCS_PER_FRAME` (none: its buffers are reused), over a
+loopback socket nothing reads.
 
 A change that genuinely needs another per-frame allocation raises `ALLOCS_PER_FRAME` in the same
 PR and says why. The worker's check of the Hue output slot (`hue.md`, "The worker follows the live
 stream") is one relaxed atomic load per frame; it locks and clones only on the frame after a Hue
 start, reconnect, restart or stop. Outside the guard: the Hue send's `to_vec()` (the sender thread takes an owned
-`Vec`), the twin-overlay feed (`the_edge_signal_is_built_and_sent_only_while_a_twin_is_open`), and
+`Vec`), the twin feed (`the_twin_frame_is_built_and_sent_only_while_a_twin_is_subscribed`; its LED and lamp buffers are reused, but the channel takes an owned body), and
 capture itself.
 
 **Equivalence.** `worker_output_matches_reference_*` drives the real threaded worker, and
@@ -323,6 +476,7 @@ pipeline to one answer at 20, 25 and 60 output steps a second.
 - **Worker lifecycle is traceable in the log and should be read before guessing.** `[apply_mode_change]` for mode activation, `[ambilight-worker]` for the capture worker, `[stop-worker]` and `[stop_previous]` for teardown.
 - **A frontend payload arriving without an LED count falls back to the persisted value.** The line `led_calibration fallback engaged — payload_total_leds=0` means the frontend sent nothing usable and the backend read `shell-state.json` instead. The fallback is deliberate — an invalid external input gets an explicit fallback, never a silent default — but it firing on every startup would mean something upstream is wrong.
 - **Windows' capture-control `Drop` detaches its stop onto its own thread.** `CaptureControl::stop()` both signals and joins the WGC message-loop thread, an indeterminate wait. That `Drop` runs on the thread executing the mode command during a mode switch, so calling `stop()` inline would freeze the caller — and with it every mode command queued behind it — falsifying the non-blocking contract the macOS sibling (`MacOSLiveFrameSource`) already honours. No grace-period sleep is needed the way macOS needs 150 ms: that sleep guards a DispatchQueue ref-count race specific to `SCStream`, which `windows-capture` has no equivalent of.
+- **Windows asks to capture without its yellow frame; whether it gets that is the OS's call.** WGC's default draws a frame round the captured display for the whole session, so with Ambilight on the screen sat inside a yellow-orange line. The session asks for `DrawBorderSettings::WithoutBorder`, gated on `is_border_settings_supported()` the same way as the cursor setting below: where `GraphicsCaptureSession.IsBorderRequired` is absent, `windows-capture` refuses that setting with `BorderConfigUnsupported`, and only that error starts the session again with the frame (`[ambilight-capture/windows] this build cannot drop the capture frame` in the log); any other start error is reported as it is. Where the property exists, Microsoft documents that setting it to `false` takes `GraphicsCaptureAccess.RequestAccessAsync(GraphicsCaptureAccessKind.Borderless)` first, and `windows-capture` 2.0.1 never requests it. Without that access the set succeeds and is ignored, so no error surfaces and the frame stays: whether it is gone on a given build is checked by eye, not read from the log. Requesting the access ourselves is the next step if a build keeps the frame.
 - **The Windows frame includes the cursor; the macOS frame does not.** ScreenCaptureKit is configured with `with_shows_cursor(false)`. WGC gets `CursorCaptureSettings::Default`, which leaves the session's cursor capture at the system default, and that default is on, so a pointer parked at a screen edge can land in an edge LED's sample. `WithoutCursor` is not a drop-in fix: where `GraphicsCaptureSession.IsCursorCaptureEnabled` is absent (older Windows 10 builds), `windows-capture` refuses to start the session with `CursorConfigUnsupported`, so the setting has to be gated on `is_cursor_settings_supported()`.
 - **A capture failure *after* a successful start can only travel through telemetry.** The command already returned `AMBILIGHT_MODE_STARTED`, so no status code is left to carry it. `RuntimeTelemetrySnapshot.last_capture_error_code` holds the reason, sticky for the worker's lifetime, and `last_capture_error_at_secs` is what separates "failing now" from "failed once and recovered" — read them together or a display unplugged an hour ago looks identical to one unplugged a second ago. The failure branch of the worker loop carries its own `flush_if_due` for exactly this reason: the success branch owns the only other flush, so without it a sustained outage would freeze telemetry at the last good frame.
 - **The UI learns about a stall by push, not by polling telemetry.** `get_runtime_telemetry` is only polled while Settings → Appearance "Show stats for nerds" is on, and it is off by default, so the stall notice (and the Lights page's serial link-budget note) cannot ride that poll. Each flush instead derives a `RuntimeHealth` — the failure reason while it is younger than `CAPTURE_FAILURE_ONGOING_MAX_AGE_SECS`, plus the link budget — and `RuntimeTelemetryWindow` emits `telemetry://health-changed` to the main window only when it differs from what that worker last sent: once at the worker's first flush (which also overwrites whatever the previous worker left), once when a stall starts, once when it clears. A worker that ends having reported something sends the empty value from its `Drop`. The emitter is a process-wide sink registered in `lib.rs` setup, because the worker is handed only the snapshot `Arc`; a worker started before registration publishes nothing. The frontend attaches one listener per window for the app's lifetime and seeds it with a single `get_runtime_telemetry` read, which covers a WebView reload in the middle of a stall — the worker will not repeat itself until something changes. Cost: nothing per frame; one comparison per one-second flush, and an event only on a change.
@@ -330,7 +484,7 @@ pipeline to one answer at 20, 25 and 60 output steps a second.
 - **The capture-rate history is kept in Rust so it is there when the readout opens.** Five minutes of one-per-flush samples (`epochMs`, `fps`, `targetFps`) live in the app-lifetime telemetry store, not the worker, so they span mode changes; a stopped worker adds nothing and the readout draws that as a gap, never as zero. A synthetic test pattern records none — it captures nothing. `targetFps` is the rate capture was *asked* for (`capture_interval_for`: 20 for Hue alone, about 30 with a strip), a ceiling rather than a goal: capture counts distinct frames, so a still screen reads well under it with nothing wrong. Judging the rate against it — the status bar's fixed 45/25 thresholds do not, and a Hue-only session can never read above "low" — still has to allow for that. The timestamps are wall clock, for display; `Instant` does not advance while a Mac sleeps, so an age-based scheme would join samples from either side of a sleep into one line.
 - **The fast-path guard is a list of everything read at worker construction, and adding a field to `LightingModeConfig` means adding it there too.** `apply_mode_change` retunes a running ambilight worker in place — cheap, and the only way a brightness drag is not a worker restart per commit. It can only do that for values the worker reads *live*, from `AmbilightLiveSettings` atomics. `led_calibration`, `color_correction`, `firmware_profile` and `chip_type` are read once, when the encoder and sink are built, so each has to break fast-path equality or the change is silently swallowed: the command returns `AMBILIGHT_MODE_UPDATED`, the UI shows the new setting, and the strip keeps being driven the old way. `chip_type` shipped missing from that list, so selecting SK6812 RGBW left the encoder emitting three bytes per pixel. A frontend-side `force` flag does not help — it only bypasses the frontend's own signature dedupe so the invoke happens at all. `color_order` stays off it as one of those atomics; the one non-atomic field deliberately *not* on the list is `room_geometry`: the worker re-reads it live from the `RoomGeometryLive` cell (one relaxed atomic load per frame, a lock and table rebuild only when its generation moves), and the fast path writes that cell instead — putting it on the list would restart the worker, and the Hue stream with it, on every room-map drag commit. A new field is either on the list or read live through a cell like this one; there is no third option.
 - **A running test pattern retunes in place; only its geometry forces a rebuild.** `SyntheticFrameSource` re-reads its pattern and speed from a shared `TestPatternLive` cell every frame, the same way `pattern_phase` already survives a rebuild — so `apply_mode_change` treats a test-to-test change as a fast-path update and writes the cell instead of tearing the worker down. Everything else the source bakes in at construction — the frame size (from `display_aspect`) and the LED sequence — still restarts it, and so does live→test or test→live, because the frame source itself has to change. Before this, every commit of a colour drag was one full worker teardown, which is the only reason the frontend throttle existed; lowering that throttle without the cell would have multiplied rebuilds rather than smoothing anything.
-- **Revealing the control popup hides the main shell, and only the preview that hid it may bring it back.** The preview owns the screen while it runs, so `show_led_control_popup` hides `main` — but it records whether it actually hid anything, because the tray opens the preview with the shell already away and closing it must not conjure a window the user never had. `hide_led_control_popup` and the popup's red-X path in `lib.rs` both restore, so the flag is read-and-cleared in one step: whichever gets there second must be inert, or it would raise a window the user had since put away. Note that hiding `main` fires `visibilitychange`, which parks the Hue health monitor and pauses telemetry until it is shown again — harmless during a test, and worth knowing before reading a gap in the logs as a fault.
-- **The worker join happens under the runtime lock on purpose, and moving it out would trade a stall for a crash.** `stop_previous` calls `LightingWorkerRuntime::stop` while the caller still holds `LightingRuntimeState::runtime`, so a ~100–300 ms join delays anything else wanting that lock. That reads like an oversight and is not one. `stop()` takes `self` **by value**, and the ordering is the point: signal `cancel`, join the worker thread so it drops its `Arc` clone, and only then let `self` drop — which releases the last `_frame_source` reference **on the command thread** (a blocking-pool thread since the mode commands went async — see the next entry — and the shutdown's lighting thread on quit; never the worker). That is what keeps `SCStream::stop_capture` off the worker thread, and off it is the difference between a clean teardown and a macOS crash on rapid mode switches. Releasing the lock between stop and start would also let a new `SCStream` be created while the old one is still tearing down — the exact rapid stop/recreate cycle `AmbilightLiveSettings` exists to avoid. The contention is small in practice: besides the mode-change paths themselves (the lighting transaction, the test-pattern start and stop), the one holder is `preview_snapshot`, a status read, and runtime telemetry polls a different lock entirely. The retired `get_lighting_mode_status` used to be a holder too; as a sync command it ran on the main thread and froze the window for as long as a join held the lock, so status reads (`get_lighting_runtime`) take the published runtime snapshot instead ([`lighting-transaction.md`](lighting-transaction.md)). **Do not "fix" this without first moving the frame-source drop somewhere provably safe.**
+- **Opening the preview hides the main shell, and only the session that hid it brings it back.** The preview owns the screen while it runs, so `open_preview` hides `main` — but the session records whether it actually hid anything, because the tray opens the preview with the shell already away and closing it must not conjure a window the user never had. Every way out (`close_preview`, the popup or twin going away, the tray's rescue) runs `end_session`, which takes the session out under its lock before touching a window, so a second ending finds nothing and cannot raise a window the user had since put away. Note that hiding `main` fires `visibilitychange`, which parks the Hue health monitor and pauses telemetry until it is shown again — harmless during a preview, and worth knowing before reading a gap in the logs as a fault.
+- **The worker join happens under the runtime lock on purpose, and moving it out would trade a stall for a crash.** `stop_previous` calls `LightingWorkerRuntime::stop` while the caller still holds `LightingRuntimeState::runtime`, so a ~100–300 ms join delays anything else wanting that lock. That reads like an oversight and is not one. `stop()` takes `self` **by value**, and the ordering is the point: signal `cancel`, join the worker thread so it drops its `Arc` clone, and only then let `self` drop — which releases the last `_frame_source` reference **on the command thread** (a blocking-pool thread since the mode commands went async — see the next entry — and the shutdown's lighting thread on quit; never the worker). That is what keeps `SCStream::stop_capture` off the worker thread, and off it is the difference between a clean teardown and a macOS crash on rapid mode switches. Releasing the lock between stop and start would also let a new `SCStream` be created while the old one is still tearing down — the exact rapid stop/recreate cycle `AmbilightLiveSettings` exists to avoid. The contention is small in practice: besides the mode-change paths themselves (the lighting transaction, the test-pattern start and stop), the other holders are brief reads — the preview feed's `twin_view`, the scene and test-pattern guards (`scene_active`, `test_pattern_active`), the strip-loss checks (`drives_serial`, `drives_wled`) and a committed transaction's `accepting_for_running` — and runtime telemetry polls a different lock entirely. The retired `get_lighting_mode_status` used to be a holder too; as a sync command it ran on the main thread and froze the window for as long as a join held the lock, so status reads (`get_lighting_runtime`) take the published runtime snapshot instead ([`lighting-transaction.md`](lighting-transaction.md)). **Do not "fix" this without first moving the frame-source drop somewhere provably safe.**
 - **The mode commands are async and take turns, in arrival order.** The bare `set_lighting_mode` and `stop_lighting` (since retired for the lighting transaction, which takes the same turn) and the test-pattern start/stop used to be sync commands, which Tauri runs on the main thread: a worker join, capture setup, the up-to-1 s first-frame wait and the ~2 s bootloader settle froze the whole UI for up to ~3 s. They now run their body on the blocking pool through `run_mode_transition`. The main thread had also been serialising them for free, and their callers relied on that — quick adjustments were fire-and-forget at 20 Hz, so several commits queued behind one slow transition (drags now go to `retune_lighting`, which waits for no transition; `lighting-transaction.md`). The runtime lock alone does not replace it: the payload hydration, the connection snapshot and the preview broadcast all sit outside it, and a std mutex wakes waiters in any order, so the last drag value could land first and the strip settle on a stale one. Hence a second lock, `LightingRuntimeState::transitions`, a `tokio::sync::Mutex` held across the whole blocking body: it is fair (granted in the order `lock()` was called) and may be held across the `.await` on `spawn_blocking`, which a std guard must never be. The shutdown path calls `stop_lighting_blocking` *outside* it — quit must not wait out a queue of mode changes — and the runtime lock still orders it against the one transition in flight. It sets `LightingRuntimeState::closing` first, and `apply_mode_change` refuses any start under the runtime lock once it is set (`LIGHTING_MODE_SHUTTING_DOWN`), so a transition that reaches the lock after the quit's stop cannot bring a worker back up behind it. Nothing in capture setup needs the main thread: `CGRequestScreenCaptureAccess`, `SCShareableContent` and the stream start already run off it in the CI capture probe (`smoke_bench.rs`), the `SCStream` stop is detached onto its own thread, and `list_displays` from the test-pattern start reaches Tauri's monitor API, which dispatches to the main thread and waits, as any window getter off it does. `ipc_tests/lighting_commands.rs` holds the turn from a test and proves a queued apply neither runs nor applies a mode until it is released, that five commits and a stop apply in the order sent, and that the shutdown stop does not queue.
 - **The per-frame budget is shared with whatever else runs per frame.** Anything added to this path competes with capture, colour work, and the send itself. Measure against the existing runtime telemetry before shipping, not after.

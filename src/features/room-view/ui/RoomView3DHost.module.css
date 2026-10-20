@@ -1,0 +1,35 @@
+@layer components {
+  /* Here, not in the lazy view, so the slot is already night while three.js is on its way. */
+  .stage {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 45% at 50% 46%, var(--lm-room-sky-mid, var(--lm-room-night-mid)) 0%, transparent 100%),
+      linear-gradient(180deg, var(--lm-room-sky-top, var(--lm-room-night)) 0%, var(--lm-room-sky-mid, var(--lm-room-night-mid)) 48%, var(--lm-room-night-edge) 92%);
+    transition:
+      --lm-room-sky-top 900ms var(--lm-ease-out),
+      --lm-room-sky-mid 900ms var(--lm-ease-out);
+  }
+
+  :global(:root[data-reduced-motion]) .stage { transition: none; }
+
+  @media (forced-colors: active) {
+    .stage { background: Canvas; }
+  }
+
+  .waiting {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    color: var(--lm-ink-faint);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--lm-dur-base) var(--lm-ease-out);
+  }
+  .waiting[data-shown] { opacity: 1; }
+
+  :global(:root[data-reduced-motion]) .waiting { transition: none; }
+}

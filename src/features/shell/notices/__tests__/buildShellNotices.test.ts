@@ -35,7 +35,7 @@ describe("buildShellNotices", () => {
       calibrationRequired: true,
       captureStalled: { bucket: CAPTURE_FAILURE_BUCKET.DISPLAY, reason: "" },
       stopFailedTargets: ["hue"],
-      previewOpenFailure: "CONTROL_POPUP_FAILED",
+      previewOpenFailure: "PREVIEW_OPEN_FAILED",
       hueLeftOut: HUE_LEFT_OUT_REASON.AUTH,
       usbDisconnected: true,
       usbUnsupported: true,
@@ -322,17 +322,23 @@ describe("buildShellNotices", () => {
       }
     });
 
+    // At launch the check usually ends within a second; a line that came and went pushed the page.
+    it("says it is checking only once the check has run long enough", () => {
+      expect(build({ availability: "checking", outputCheckingDue: false, uiMode: "compact" })).toEqual([]);
+    });
+
     it.each(["compact", "full"] as const)(
       "grades no output and calibration as error conditions and checking as info (%s)",
       (uiMode) => {
-        for (const [input, id] of [
-          [{ availability: "none" as const }, SHELL_NOTICE_IDS.OUTPUT_NONE],
-          [{ calibrationRequired: true }, SHELL_NOTICE_IDS.CALIBRATION_REQUIRED],
+        // No output is amber: nothing failed, there is nothing to light yet.
+        for (const [input, id, severity] of [
+          [{ availability: "none" as const }, SHELL_NOTICE_IDS.OUTPUT_NONE, NOTICE_SEVERITY.WARNING],
+          [{ calibrationRequired: true }, SHELL_NOTICE_IDS.CALIBRATION_REQUIRED, NOTICE_SEVERITY.ERROR],
         ] as const) {
           const notice = byId({ ...input, uiMode }, id);
           expect([notice.tier, notice.severity, notice.kind, notice.dismissible]).toEqual([
             NOTICE_TIER.ERROR_CONDITION,
-            NOTICE_SEVERITY.ERROR,
+            severity,
             "condition",
             false,
           ]);
@@ -590,4 +596,28 @@ describe("buildShellNotices", () => {
       expect(build({ updateChecking: true })).toEqual([]);
     });
   });
+
+  describe("a lit mode whose output is not getting the light", () => {
+    it("says a failing send while it fails, naming the output, with the way to Devices", () => {
+      const [notice] = build({ outputFailing: "WLED_SEND_FAILED", localTransport: "wled" });
+      expect(notice?.id).toBe(SHELL_NOTICE_IDS.OUTPUT_FAILING);
+      expect(notice?.tier).toBe(NOTICE_TIER.ERROR_CONDITION);
+      expect(notice?.dismissible).toBe(false);
+      expect(notice?.action?.label).toBe("shell:notices.actions.devices");
+    });
+
+    it("says a stopped worker, and leaves out the failing send it explains", () => {
+      const notices = build({ workerStopped: true, outputFailing: "LED_OUTPUT_WRITE_FAILED" });
+      expect(notices.map((n) => n.id)).toContain(SHELL_NOTICE_IDS.WORKER_STOPPED);
+      expect(notices.map((n) => n.id)).not.toContain(SHELL_NOTICE_IDS.OUTPUT_FAILING);
+    });
+
+    it("warns once about a WLED device and a layout that disagree on the LED count", () => {
+      const [notice] = build({ wledLengthMismatch: { panelLeds: 120, frameLeds: 60 } });
+      expect(notice?.id).toBe(SHELL_NOTICE_IDS.WLED_LENGTH_MISMATCH);
+      expect(notice?.severity).toBe(NOTICE_SEVERITY.WARNING);
+      expect(notice?.dismissible).toBe(true);
+    });
+  });
 });
+

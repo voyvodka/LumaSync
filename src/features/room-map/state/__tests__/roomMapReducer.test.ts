@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_ROOM_MAP, type RoomMapConfig } from "@/shared/contracts/roomMap";
+import { DEFAULT_ROOM_MAP, type RoomMapConfig, stripCentre } from "@/shared/contracts/roomMap";
 import { furnitureObjectId } from "../../model/objectId";
 import {
   GESTURE_COALESCE_MS,
@@ -42,6 +42,23 @@ describe("roomMapReducer — apply", () => {
     expect(s.config.furniture[0]?.x).toBe(3);
   });
 
+  // An arrow held against a wall left an undo step that did nothing, and a save.
+  it("takes an edit that changes nothing as no edit at all", () => {
+    const before = loaded();
+    expect(run(before, moveSofa(SOFA.x))).toBe(before);
+  });
+
+  it("hands an updater the map from before the gesture it joins", () => {
+    const fromBase = (at: number, dx: number): RoomMapAction => ({
+      type: "apply",
+      patch: (_cfg, base) => ({ furniture: base.furniture.map((f) => ({ ...f, x: f.x + dx })) }),
+      gesture: { key: "scrub", at },
+    });
+    const s = run(loaded(), fromBase(0, 2), fromBase(100, 3));
+    expect(s.config.furniture[0]?.x).toBe(SOFA.x + 3);
+    expect(run(s, { type: "apply", patch: (_cfg, base) => ({ furniture: base.furniture.map((f) => ({ ...f, x: f.x + 1 })) }) }).config.furniture[0]?.x).toBe(SOFA.x + 4);
+  });
+
   it("asks for an immediate save outside a gesture", () => {
     const before = loaded();
     const s = run(before, moveSofa(2));
@@ -75,6 +92,34 @@ describe("roomMapReducer — apply", () => {
     let s = loaded();
     for (let i = 0; i < MAX_HISTORY + 10; i++) s = roomMapReducer(s, moveSofa(i));
     expect(s.past).toHaveLength(MAX_HISTORY);
+  });
+});
+
+describe("roomMapReducer — the bound backlight", () => {
+  const strip = { stripId: "far", startX: 0, startY: 3, endX: 1, endY: 3, ledCount: 60 };
+  const tv = { x: 2, y: 0, width: 1.2, height: 0.1 };
+
+  it("keeps the bound strip behind the screen through a bind, a move and a resize, each one undo step", () => {
+    const bound = run(loaded({ usbStrips: [strip], tvAnchor: tv }), { type: "apply", patch: { tvAnchor: { ...tv, backlightStripId: "far" } } });
+    expect(stripCentre(bound.config.usbStrips[0]!)).toEqual({ x: 2.6, y: 0.05 });
+    const moved = run(bound, { type: "apply", patch: (cfg) => ({ tvAnchor: { ...cfg.tvAnchor!, x: 3 } }) });
+    expect(stripCentre(moved.config.usbStrips[0]!).x).toBeCloseTo(3.6);
+    const wider = run(moved, { type: "apply", patch: (cfg) => ({ tvAnchor: { ...cfg.tvAnchor!, x: 2.8, width: 1.6 } }) });
+    expect(stripCentre(wider.config.usbStrips[0]!).x).toBeCloseTo(3.6);
+    const undone = run(wider, { type: "undo" }, { type: "undo" });
+    expect(stripCentre(undone.config.usbStrips[0]!).x).toBeCloseTo(2.6);
+  });
+
+  it("takes the strip back behind the screen when it is dragged off on its own", () => {
+    const bound = run(loaded({ usbStrips: [strip], tvAnchor: { ...tv, backlightStripId: "far" } }), { type: "apply", patch: {} });
+    const dragged = run(bound, { type: "apply", patch: (cfg) => ({ usbStrips: cfg.usbStrips.map((s) => ({ ...s, startY: 2, endY: 2 })) }) });
+    expect(stripCentre(dragged.config.usbStrips[0]!).y).toBeCloseTo(0.05);
+  });
+
+  it("takes a locked bound strip along when the screen moves", () => {
+    const bound = run(loaded({ usbStrips: [{ ...strip, locked: true }], tvAnchor: { ...tv, backlightStripId: "far" } }), { type: "apply", patch: {} });
+    const moved = run(bound, { type: "apply", patch: (cfg) => ({ tvAnchor: { ...cfg.tvAnchor!, x: 3 } }) });
+    expect(stripCentre(moved.config.usbStrips[0]!).x).toBeCloseTo(3.6);
   });
 });
 
@@ -172,6 +217,15 @@ describe("roomMapReducer — selection", () => {
     expect(cleared.selection.objectId).toBe(furnitureObjectId("sofa"));
     const zoned = roomMapReducer(withObject, { type: "selectHueZone", hueZoneId: "z1" });
     expect(zoned.selection).toEqual({ objectId: null, hueZoneId: "z1" });
+  });
+
+  it("clears both the object and the zone, where a plain deselect leaves the zone", () => {
+    const zoned = run(loaded(), { type: "selectHueZone", hueZoneId: "z1" });
+    expect(roomMapReducer(zoned, { type: "select", objectId: null }).selection.hueZoneId).toBe("z1");
+    expect(roomMapReducer(zoned, { type: "clearSelection" }).selection).toEqual({ objectId: null, hueZoneId: null });
+
+    const idle = loaded();
+    expect(roomMapReducer(idle, { type: "clearSelection" })).toBe(idle);
   });
 
   it("does not touch history or saving", () => {

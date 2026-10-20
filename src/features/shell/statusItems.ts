@@ -75,6 +75,8 @@ export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusI
     onOpenDevices,
   } = input;
   const localConnected = localSink !== null;
+  // Bound, but its probe goes unanswered: the panel is off or off the network.
+  const localSilent = localSink?.transport === "wled" && localSink.reachable === false;
   const hueWaiting = hueHeldOut === "waiting";
   const hueLeftOut = hueHeldOut === "leftOut";
   const devices = t("settings:nav.sections.devices");
@@ -108,13 +110,22 @@ export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusI
     {
       id: localSink?.transport === "wled" ? "wled" : "usb",
       label: localSink?.transport === "wled" ? "WLED" : "USB",
-      state: localConnected
-        ? t("shell:statusBar.state.ok")
-        : localEverConfigured
-          ? t("shell:statusBar.state.off")
-          : "—",
-      kind: localConnected ? "ok" : localEverConfigured ? "off" : "idle",
-      attention: localConnected ? undefined : { hint: localHint, action: devices, onAction: () => onOpenDevices("strips") },
+      state: localSilent
+        ? t("shell:statusBar.state.noAnswer")
+        : localConnected
+          ? t("shell:statusBar.state.ok")
+          : localEverConfigured
+            ? t("shell:statusBar.state.off")
+            : "—",
+      kind: localSilent ? "error" : localConnected ? "ok" : localEverConfigured ? "off" : "idle",
+      attention:
+        localConnected && !localSilent
+          ? undefined
+          : {
+              hint: localSilent ? t("shell:statusBar.hint.wledSilent") : localHint,
+              action: devices,
+              onAction: () => onOpenDevices("strips"),
+            },
     },
     {
       id: "hue",

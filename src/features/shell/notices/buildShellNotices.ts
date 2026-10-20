@@ -20,7 +20,7 @@ import {
 } from "@/shared/contracts/capture";
 import { HUE_SOLID_COLOR_STATUS, type HueRuntimeTarget, type HueSolidColorStatusCode } from "@/shared/contracts/hue";
 import { HUE_LEFT_OUT_REASON, type HueLeftOutReason } from "@/shared/contracts/lighting";
-import { CONTROL_POPUP_STATUS, TWIN_OVERLAY_STATUS } from "@/shared/contracts/preview";
+import { PREVIEW_STATUS } from "@/shared/contracts/preview";
 import { SECTION_IDS, type SectionId, type UIMode } from "@/shared/contracts/shell";
 
 import {
@@ -39,12 +39,23 @@ export interface ShellNoticeInput {
   /** LED Setup is open over Devices. */
   ledSetupOpen: boolean;
   availability: OutputAvailability;
+  /**
+   * The check has run long enough to say so. At launch it usually ends within a second, and a line
+   * that came and went in that time pushed the page down and back up under the pointer.
+   */
+  outputCheckingDue: boolean;
   hueProbeGaveUp: boolean;
   hueProbeChecking: boolean;
   calibrationRequired: boolean;
   /** A `permission`-bucket failure is the lasting condition, every other bucket an event. */
   startFailure: CaptureFailureNotice | null;
   captureStalled: CaptureFailureNotice | null;
+  /** A send to the strip or WLED device is failing now: its code, else `null`. */
+  outputFailing: string | null;
+  /** The lighting worker stopped on a panic while the mode reads as running. */
+  workerStopped: boolean;
+  /** The bound WLED device and the strip layout disagree on the LED count. */
+  wledLengthMismatch: { panelLeds: number; frameLeds: number } | null;
   stopFailedTargets: HueRuntimeTarget[] | null;
   previewOpenFailure: PreviewOpenFailure | null;
   hueLeftOut: HueLeftOutReason | null;
@@ -124,10 +135,7 @@ const START_FAILED_MESSAGE: Record<Exclude<CaptureFailureBucket, "permission" | 
 };
 
 const PREVIEW_OPEN_FAILED_MESSAGE: Record<PreviewOpenFailure, TranslationKey> = {
-  [TWIN_OVERLAY_STATUS.OPEN_FAILED]: "shell:notices.messages.previewOpenFailed.overlay",
-  [TWIN_OVERLAY_STATUS.DISPLAY_NOT_FOUND]: "shell:notices.messages.previewOpenFailed.display",
-  [TWIN_OVERLAY_STATUS.UNSUPPORTED_PLATFORM_LIVE]: "shell:notices.messages.previewOpenFailed.unsupported",
-  [CONTROL_POPUP_STATUS.FAILED]: "shell:notices.messages.previewOpenFailed.popup",
+  [PREVIEW_STATUS.OPEN_FAILED]: "shell:notices.messages.previewOpenFailed.failed",
 };
 
 const ONBOARDING_MESSAGE: Record<Exclude<OnboardingStep, "complete">, TranslationKey> = {
@@ -175,6 +183,8 @@ export function buildShellNotices(
   const permission =
     input.startFailure?.bucket === CAPTURE_FAILURE_BUCKET.PERMISSION ? input.startFailure : null;
   const startFailure = permission === null ? input.startFailure : null;
+  // A stopped worker sends nothing, so it also explains any failing output.
+  const outputFailing = input.workerStopped ? null : input.outputFailing;
   // A start failure means no worker exists, so the two can never co-fire; the
   // start notice wins to keep that invariant obvious if one ever does.
   const stalled = input.startFailure === null ? input.captureStalled : null;
@@ -228,6 +238,47 @@ export function buildShellNotices(
       dismissible: false,
       source: stalled.bucket,
       testId: "capture-stalled-notice",
+    });
+  }
+  if (input.workerStopped) {
+    notices.push({
+      id: SHELL_NOTICE_IDS.WORKER_STOPPED,
+      tier: NOTICE_TIER.ERROR_CONDITION,
+      severity: NOTICE_SEVERITY.ERROR,
+      kind: "condition",
+      message: t("shell:notices.messages.workerStopped"),
+      dismissible: false,
+      source: "worker-stopped",
+      testId: "worker-stopped-notice",
+    });
+  }
+  if (outputFailing) {
+    notices.push({
+      id: SHELL_NOTICE_IDS.OUTPUT_FAILING,
+      tier: NOTICE_TIER.ERROR_CONDITION,
+      severity: NOTICE_SEVERITY.ERROR,
+      kind: "condition",
+      message: t("shell:notices.messages.outputFailing", { output: localOutputLabel }),
+      action: devicesAction("strips"),
+      dismissible: false,
+      source: outputFailing,
+      testId: "output-failing-notice",
+    });
+  }
+  if (input.wledLengthMismatch) {
+    notices.push({
+      id: SHELL_NOTICE_IDS.WLED_LENGTH_MISMATCH,
+      tier: NOTICE_TIER.WARNING,
+      severity: NOTICE_SEVERITY.WARNING,
+      kind: "event",
+      message: t("shell:notices.messages.wledLengthMismatch", {
+        panel: input.wledLengthMismatch.panelLeds,
+        frame: input.wledLengthMismatch.frameLeds,
+      }),
+      action: devicesAction("strips"),
+      dismissible: true,
+      source: input.wledLengthMismatch,
+      testId: "wled-length-mismatch-notice",
     });
   }
   if (startFailure) {
@@ -411,7 +462,8 @@ export function buildShellNotices(
     notices.push({
       id: SHELL_NOTICE_IDS.OUTPUT_NONE,
       tier: NOTICE_TIER.ERROR_CONDITION,
-      severity: NOTICE_SEVERITY.ERROR,
+      // Amber, not red: nothing failed, there is simply nothing to light yet — the stage says the same.
+      severity: NOTICE_SEVERITY.WARNING,
       kind: "condition",
       message: input.hueProbeGaveUp
         ? t("shell:notices.messages.outputNoneStopped")
@@ -444,7 +496,7 @@ export function buildShellNotices(
     });
   }
 
-  if (onLights && input.availability === "checking") {
+  if (onLights && input.availability === "checking" && input.outputCheckingDue) {
     notices.push({
       id: SHELL_NOTICE_IDS.OUTPUT_CHECKING,
       tier: NOTICE_TIER.INFO,

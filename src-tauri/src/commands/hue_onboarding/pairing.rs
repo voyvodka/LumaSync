@@ -17,7 +17,7 @@ use super::super::hue::transport::{
 use super::super::hue_http::{classify_hue_response, HueHttpFault};
 use super::super::status::CommandStatus;
 use super::discovery::verify_hue_bridge_ip_input;
-use super::{command_status, identity_mismatch_status, send_clip_v1, NO_APP_KEY_DETAILS};
+use super::{identity_mismatch_status, send_clip_v1, NO_APP_KEY_DETAILS};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -80,7 +80,7 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
         Err(error) => {
             warn!("Hue pairing client init failed: {error}");
             return HuePairBridgeResponse {
-                status: command_status(
+                status: CommandStatus::new(
                     "HUE_PAIRING_FAILED",
                     "Could not initialize Hue pairing client.",
                     Some(error),
@@ -169,7 +169,7 @@ pub(crate) async fn pair_bridge_at(
         Err(PairingTransportError::RateLimited) => {
             warn!("Hue bridge pairing rate-limited at {bridge_ip}");
             HuePairBridgeResponse {
-                status: command_status(
+                status: CommandStatus::new(
                     "HUE_PAIRING_RATE_LIMITED",
                     "Bridge throttled pairing attempts. Wait a minute before retrying.",
                     None,
@@ -181,7 +181,7 @@ pub(crate) async fn pair_bridge_at(
         Err(PairingTransportError::BridgeBusy { detail }) => {
             warn!("Hue bridge pairing reported bridge busy at {bridge_ip}: {detail}");
             HuePairBridgeResponse {
-                status: command_status(
+                status: CommandStatus::new(
                     "HUE_PAIRING_BRIDGE_BUSY",
                     "Bridge is busy pairing another client. Try again in a moment.",
                     Some(detail),
@@ -201,7 +201,7 @@ pub(crate) async fn pair_bridge_at(
         Err(PairingTransportError::Generic(error)) => {
             warn!("Hue bridge pairing failed at {bridge_ip}");
             HuePairBridgeResponse {
-                status: command_status(
+                status: CommandStatus::new(
                     "HUE_PAIRING_FAILED",
                     "Pairing request failed. Press bridge link button, then retry within 30 seconds.",
                     Some(error),
@@ -263,7 +263,7 @@ pub async fn migrate_hue_credentials(
     .unwrap_or_else(|join_error| {
         // No backend: the caller keeps its plaintext copy unless told otherwise.
         HueCredentialMigrationResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 super::super::hue::credential_store::MigrationOutcome::Failed.status_code(),
                 "Hue credential keychain migration did not complete.",
                 Some(join_error.to_string()),
@@ -299,7 +299,7 @@ fn migrate_hue_credentials_blocking(
     );
 
     HueCredentialMigrationResponse {
-        status: command_status(
+        status: CommandStatus::new(
             outcome.status_code(),
             "Hue credential keychain migration completed.",
             None,
@@ -329,7 +329,7 @@ pub async fn validate_hue_credentials(
     let username = effective_hue_app_key(&username);
     if username.is_empty() {
         return HueValidateCredentialsResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "HUE_CREDENTIAL_INVALID",
                 "No stored Hue application key. Re-pair the bridge to continue.",
                 Some(NO_APP_KEY_DETAILS.to_string()),
@@ -342,7 +342,7 @@ pub async fn validate_hue_credentials(
         Ok(client) => client,
         Err(error) => {
             return HueValidateCredentialsResponse {
-                status: command_status(
+                status: CommandStatus::new(
                     "HUE_CREDENTIAL_CHECK_FAILED",
                     "Could not initialize Hue credential validation client.",
                     Some(error),
@@ -386,7 +386,7 @@ pub(crate) async fn validate_app_key_at(
                 Err(HueHttpFault::AuthInvalid) => {
                     error!("Hue credentials rejected by bridge {bridge_ip}");
                     return HueValidateCredentialsResponse {
-                        status: command_status(
+                        status: CommandStatus::new(
                             "HUE_CREDENTIAL_INVALID",
                             "Bridge rejected the stored application key. Re-pair required.",
                             None,
@@ -426,7 +426,7 @@ pub(crate) async fn validate_app_key_at(
             result
         }
         Err(error) => HueValidateCredentialsResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "HUE_CREDENTIAL_CHECK_FAILED",
                 "Could not validate Hue credentials. Check bridge reachability and retry.",
                 Some(error),
@@ -454,7 +454,7 @@ pub fn parse_pairing_payload(payload: &str) -> HuePairBridgeResponse {
     let parsed = serde_json::from_str::<Value>(payload);
     let Ok(value) = parsed else {
         return HuePairBridgeResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "HUE_PAIRING_FAILED",
                 "Pairing response could not be parsed.",
                 parsed.err().map(|e| e.to_string()),
@@ -467,7 +467,7 @@ pub fn parse_pairing_payload(payload: &str) -> HuePairBridgeResponse {
     let array = value.as_array();
     let Some(first_item) = array.and_then(|items| items.first()) else {
         return HuePairBridgeResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "HUE_PAIRING_FAILED",
                 "Pairing response was empty.",
                 Some("Bridge did not return success/error payload.".to_string()),
@@ -503,7 +503,7 @@ pub fn parse_pairing_payload(payload: &str) -> HuePairBridgeResponse {
 
     match (username, client_key) {
         (Some(username), Some(client_key)) => HuePairBridgeResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "HUE_PAIRING_OK",
                 "Hue bridge pairing succeeded. Credentials are ready to persist.",
                 None,
@@ -515,7 +515,7 @@ pub fn parse_pairing_payload(payload: &str) -> HuePairBridgeResponse {
             credential_storage_backend: None,
         },
         _ => HuePairBridgeResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "HUE_PAIRING_FAILED",
                 "Pairing succeeded partially but credentials were incomplete.",
                 Some("Missing username/clientkey in bridge success payload.".to_string()),
@@ -534,27 +534,27 @@ pub fn parse_pairing_payload(payload: &str) -> HuePairBridgeResponse {
 fn pairing_error_status(error_type: Option<i64>, description: &str) -> CommandStatus {
     let description_lower = description.to_lowercase();
     match error_type {
-        Some(101) => command_status(
+        Some(101) => CommandStatus::new(
             "HUE_PAIRING_LINK_BUTTON_NOT_PRESSED",
             "Press the bridge link button and retry within 30 seconds.",
             None,
         ),
-        Some(7) if description_lower.contains("devicetype") => command_status(
+        Some(7) if description_lower.contains("devicetype") => CommandStatus::new(
             "HUE_PAIRING_DEVICETYPE_INVALID",
             "Bridge rejected the pairing request format.",
             Some(description.to_string()),
         ),
-        Some(429) => command_status(
+        Some(429) => CommandStatus::new(
             "HUE_PAIRING_RATE_LIMITED",
             "Bridge throttled pairing attempts. Wait a minute before retrying.",
             Some(description.to_string()),
         ),
-        Some(503) => command_status(
+        Some(503) => CommandStatus::new(
             "HUE_PAIRING_BRIDGE_BUSY",
             "Bridge is busy pairing another client. Try again in a moment.",
             Some(description.to_string()),
         ),
-        _ => command_status(
+        _ => CommandStatus::new(
             "HUE_PAIRING_FAILED",
             "Bridge rejected pairing request.",
             if description.is_empty() {
@@ -573,7 +573,7 @@ pub fn parse_bridge_resource_payload(payload: &str) -> HueValidateCredentialsRes
     let parsed = serde_json::from_str::<Value>(payload);
     let Ok(value) = parsed else {
         return HueValidateCredentialsResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "HUE_CREDENTIAL_CHECK_FAILED",
                 "Credential validation response could not be parsed.",
                 parsed.err().map(|error| error.to_string()),
@@ -592,7 +592,7 @@ pub fn parse_bridge_resource_payload(payload: &str) -> HueValidateCredentialsRes
         });
     if let Some(bridge_id) = bridge_id {
         return HueValidateCredentialsResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "HUE_CREDENTIAL_VALID",
                 "Hue credentials are valid.",
                 Some(format!("bridgeId={bridge_id}")),
@@ -605,7 +605,7 @@ pub fn parse_bridge_resource_payload(payload: &str) -> HueValidateCredentialsRes
     // an `error.type == 1` envelope, and v2 may put one in `errors[]`.
     if super::super::hue_http::is_hue_unauthorized_body(payload) {
         return HueValidateCredentialsResponse {
-            status: command_status(
+            status: CommandStatus::new(
                 "HUE_CREDENTIAL_INVALID",
                 "Hue credentials are invalid or expired. Re-pair required.",
                 None,
@@ -615,7 +615,7 @@ pub fn parse_bridge_resource_payload(payload: &str) -> HueValidateCredentialsRes
     }
 
     HueValidateCredentialsResponse {
-        status: command_status(
+        status: CommandStatus::new(
             "HUE_CREDENTIAL_CHECK_FAILED",
             "Credential validation returned an unexpected payload.",
             Some("Response did not include a bridge_id or an authorization error.".to_string()),

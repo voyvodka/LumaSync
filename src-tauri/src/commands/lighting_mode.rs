@@ -18,29 +18,33 @@ use std::sync::atomic::AtomicUsize;
 
 mod config;
 pub(crate) mod config_check;
+mod effect_source;
+mod effects;
 mod frame_pipeline;
 pub mod hue_driver;
 mod hydrate;
+pub mod latency;
 pub mod led_test_pattern;
 mod live;
 pub mod outputs;
 mod pacing;
 pub mod preview;
+pub mod preview_scene;
 mod runtime;
 mod sampling;
 pub(crate) mod smoothing;
 pub mod snapshot;
+mod strip_set;
 pub mod transition;
 pub mod tuning;
 mod usb_output;
 mod worker;
 
 pub use config::{
-    AmbilightPayload, LightingModeCommandResult, LightingModeConfig, LightingModeKind,
-    SolidColorPayload,
+    AmbilightPayload, EffectPayload, LightingModeCommandResult, LightingModeConfig,
+    LightingModeKind, SolidColorPayload,
 };
 pub use led_test_pattern::{start_led_test_pattern, stop_led_test_pattern};
-pub use preview::get_led_preview_status;
 pub use runtime::LightingRuntimeState;
 pub use transition::stop_lighting_blocking;
 
@@ -86,6 +90,15 @@ mod away_tests;
 mod transition_tests;
 
 #[cfg(test)]
+mod usb_output_tests;
+
+#[cfg(test)]
+mod effect_tests;
+
+#[cfg(test)]
+mod effect_engine_tests;
+
+#[cfg(test)]
 mod lighting_mode_tests;
 
 #[cfg(test)]
@@ -98,10 +111,18 @@ mod live_tests;
 mod pacing_tests;
 
 #[cfg(test)]
+mod preview_scene_tests;
+#[cfg(test)]
 mod preview_tests;
 
 #[cfg(test)]
 mod led_test_pattern_tests;
+
+#[cfg(test)]
+mod strip_set_tests;
+
+#[cfg(test)]
+mod fan_out_tests;
 
 #[cfg(test)]
 mod test_support;

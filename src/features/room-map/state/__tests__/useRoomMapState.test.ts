@@ -4,16 +4,32 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ShellState } from "@/shared/contracts/shell";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
+
+import { isCubeZone } from "../../model/zoneCube";
 import { GESTURE_COALESCE_MS } from "../roomMapReducer";
 import { useRoomMapState } from "../useRoomMapState";
 
 const mockLoad = vi.fn();
 const mockSave = vi.fn();
+// What the store holds: the last load, with every write the hook makes laid over it. `update` runs
+// the hook's updater against it and hands the partial to `mockSave`, as the real store writes it.
+let stored: ShellState = {} as ShellState;
 
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
-    load: () => mockLoad(),
+    load: async () => {
+      const state = await mockLoad();
+      stored = { ...(state ?? {}) };
+      return state;
+    },
     save: (partial: Partial<ShellState>) => mockSave(partial),
+    update: async (fn: (current: ShellState) => Partial<ShellState> | null) => {
+      const partial = fn(stored);
+      if (partial === null) return stored;
+      await mockSave(partial);
+      stored = { ...stored, ...partial };
+      return stored;
+    },
   },
 }));
 
@@ -50,7 +66,7 @@ describe("useRoomMapState — load", () => {
 
   it("loads the persisted roomMap without writing it back or making it undoable", async () => {
     const persisted = makePersistedConfig();
-    mockLoad.mockResolvedValue({ roomMap: persisted, roomMapVersion: 3 } as ShellState);
+    mockLoad.mockResolvedValue({ roomMap: persisted } as ShellState);
     const { result } = renderHook(() => useRoomMapState());
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.config).toEqual(persisted);
@@ -58,23 +74,69 @@ describe("useRoomMapState — load", () => {
     expect(mockSave).not.toHaveBeenCalled();
   });
 
-  it("logs and reports a failed load", async () => {
+  it("logs and reports a failed load, and reads the map again on a reload", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-    mockLoad.mockRejectedValue(new Error("store unavailable"));
+    mockLoad.mockRejectedValueOnce(new Error("store unavailable"));
     const { result } = renderHook(() => useRoomMapState());
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.error).toContain("store unavailable");
+    expect(result.current.loadFailed).toBe(true);
     expect(result.current.config).toEqual(DEFAULT_ROOM_MAP);
     expect(consoleError).toHaveBeenCalledWith(
       expect.stringContaining("[LumaSync] Room map load failed: store unavailable"),
     );
     consoleError.mockRestore();
+
+    mockLoad.mockResolvedValueOnce({ roomMap: { ...DEFAULT_ROOM_MAP, dimensions: { widthMeters: 7, depthMeters: 4, heightMeters: 2.6 } } });
+    act(() => result.current.reload());
+    await waitFor(() => expect(result.current.config.dimensions.widthMeters).toBe(7));
+    expect(result.current.loadFailed).toBe(false);
+  });
+});
+
+describe("useRoomMapState — another writer", () => {
+  // The USB roster adds a strip on a connect while the editor is open; the editor's next save
+  // used to write its own copy of the whole map and take that strip away again.
+  it("keeps a strip another writer stored while the editor was open", async () => {
+    const own = { stripId: "own", startX: 0, startY: 0, endX: 1, endY: 0, ledCount: 60 };
+    const added = { ...own, stripId: "added", portName: "/dev/cu.usbserial-1" };
+    mockLoad.mockResolvedValue({ roomMap: { ...makePersistedConfig(), usbStrips: [own] } } as ShellState);
+    const { result } = renderHook(() => useRoomMapState());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    stored = { ...stored, roomMap: { ...stored.roomMap!, usbStrips: [own, added] } };
+
+    act(() => result.current.apply({ dimensions: { widthMeters: 8, depthMeters: 6, heightMeters: 3 } }));
+
+    await waitFor(() => expect(roomMapSaves()).toHaveLength(1));
+    const saved = roomMapSaves()[0][0].roomMap as RoomMapConfig;
+    expect(saved.usbStrips.map((strip) => strip.stripId)).toEqual(["own", "added"]);
+    expect(saved.dimensions.widthMeters).toBe(8);
+  });
+});
+
+describe("useRoomMapState — a failed save", () => {
+  // A save queued behind one that fails used to write only its own change, against a baseline that
+  // never reached the file — the failed edit was lost for good.
+  it("makes the next save write the whole map", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockLoad.mockResolvedValue({ roomMap: makePersistedConfig() } as ShellState);
+    const { result } = renderHook(() => useRoomMapState());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    mockSave.mockRejectedValueOnce(new Error("disk full"));
+
+    act(() => result.current.apply({ dimensions: { widthMeters: 8, depthMeters: 6, heightMeters: 3 } }));
+    act(() => result.current.apply({ furniture: [] }));
+
+    await waitFor(() => expect(roomMapSaves()).toHaveLength(2));
+    const second = roomMapSaves()[1][0].roomMap as RoomMapConfig;
+    expect(second.dimensions.widthMeters).toBe(8);
+    expect(second.furniture).toEqual([]);
+    consoleError.mockRestore();
   });
 });
 
 describe("useRoomMapState — saving", () => {
-  it("saves a plain apply at once, with the next version", async () => {
-    mockLoad.mockResolvedValue({ roomMapVersion: 3 } as ShellState);
+  it("saves a plain apply at once", async () => {
+    mockLoad.mockResolvedValue({} as ShellState);
     const { result } = renderHook(() => useRoomMapState());
     await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -108,12 +170,29 @@ describe("useRoomMapState — saving", () => {
     const { result } = renderHook(() => useRoomMapState());
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    act(() => result.current.reset());
+    act(() => result.current.apply({ furniture: [{ id: "bed", type: "bed", x: 0, y: 0, width: 1.6, height: 2 }] }));
 
     await waitFor(() => expect(result.current.error).toContain("disk full"));
     expect(consoleError).toHaveBeenCalledWith(
       expect.stringContaining("[LumaSync] Room map save failed: disk full"),
     );
+    consoleError.mockRestore();
+  });
+
+  // The alert said the map was not saved and offered nothing to do about it.
+  it("writes the map again on a retry, and clears the error when it lands", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockLoad.mockResolvedValue({ roomMap: makePersistedConfig() } as ShellState);
+    mockSave.mockRejectedValueOnce(new Error("disk full"));
+    const { result } = renderHook(() => useRoomMapState());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => result.current.reset());
+    await waitFor(() => expect(result.current.error).toContain("disk full"));
+
+    act(() => result.current.retrySave());
+    await waitFor(() => expect(result.current.error).toBeNull());
+    expect(roomMapSaves()[roomMapSaves().length - 1]?.[0]).toMatchObject({ roomMap: result.current.config });
     consoleError.mockRestore();
   });
 
@@ -242,7 +321,9 @@ describe("useRoomMapState — reset", () => {
     expect(config.furniture).toEqual([]);
     expect(config.dimensions).toEqual(DEFAULT_ROOM_MAP.dimensions);
     expect(config.hueChannels).toEqual(persisted.hueChannels);
-    expect(config.zones).toEqual(persisted.zones);
+    // Kept, and made a cube in the default room's metres.
+    expect(config.zones.map((z) => [z.id, z.channelIndices])).toEqual([["zone-a", [0]]]);
+    expect(isCubeZone(config.zones[0]!, config.dimensions)).toBe(true);
     expect(config.usbStrips.map((s) => s.stripId)).toEqual(["usb-linked"]);
     expect(config.usbStrips[0].ledCount).toBe(164);
     // Still one undoable step.

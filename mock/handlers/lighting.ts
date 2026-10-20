@@ -1,5 +1,5 @@
 /**
- * The lighting transaction's fixtures: a small version of `outputs.rs` over
+ * The lighting transaction's fixtures: a small version of `outputs/` over
  * the mode apply and stop in `./device.ts` and the Hue fixtures in `./hue.ts`.
  * It keeps the rules a caller can see — Hue up before the mode, Off stops Hue
  * too, a `[usb, hue]` start the Hue gate refuses runs on USB, a choice is
@@ -44,6 +44,24 @@ let selection: HueRuntimeTarget[] | null = null;
 let heldOut: HueLeftOutReason | null = null;
 /** The newest choice's answer, which every later snapshot carries. */
 let lastOutcome: LightingOutcome | null = null;
+/** As Rust's `StoredTuning.brightness`: one for every mode; `null` until a choice or retune sets it. */
+let shared: number | null = null;
+
+/** The brightness `mode` chose: its own kind's payload, when it carries one. */
+function chosenBrightness(mode: LightingModeConfig | null | undefined): number | undefined {
+  if (mode?.kind === "solid") return mode.solid?.brightness;
+  if (mode?.kind === "ambilight") return mode.ambilight?.brightness;
+  if (mode?.kind === "effect") return mode.effect?.brightness;
+  return undefined;
+}
+
+function sharedBrightness(): number {
+  return shared ?? chosenBrightness(getWorld().lighting.mode) ?? 1;
+}
+
+function atShared<T extends { brightness: number }>(payload: T | null | undefined): T | undefined {
+  return payload ? { ...payload, brightness: sharedBrightness() } : undefined;
+}
 
 const CHOICES: readonly LightingOrigin[] = [LIGHTING_ORIGIN.USER, LIGHTING_ORIGIN.TRAY, LIGHTING_ORIGIN.POPUP];
 
@@ -60,6 +78,7 @@ function snapshot(): LightingRuntimeSnapshot {
   return {
     revision,
     mode,
+    brightness: sharedBrightness(),
     active: mode.kind !== "off",
     activeTargets: mode.kind === "off" ? [] : targets.filter((t) => t !== "hue" || hue.streaming),
     selectedTargets: selection ?? savedTargets(),
@@ -86,6 +105,7 @@ function emptyOutcome(): ApplyOutputsOutcome {
     stopFailed: [],
     droppedTargets: [],
     modeEnded: false,
+    wledAdvisory: null,
   };
 }
 
@@ -161,8 +181,11 @@ export const lightingRuntimeHandlers = {
 
     const current = getWorld().lighting.mode;
     const kind = request.mode?.kind ?? current.kind;
-    const solid = request.mode?.solid ?? current.solid;
-    const ambilight = request.mode?.ambilight ?? current.ambilight;
+    // A payload of the chosen kind chose the brightness too; the kind alone keeps the shared one.
+    shared = chosenBrightness(request.mode) ?? sharedBrightness();
+    const solid = atShared(request.mode?.solid ?? current.solid);
+    const ambilight = atShared(request.mode?.ambilight ?? current.ambilight);
+    const effect = atShared(request.mode?.effect ?? current.effect);
 
     if (kind === "off") {
       if (current.kind !== "off") stopLightingMode();
@@ -179,7 +202,7 @@ export const lightingRuntimeHandlers = {
       if (run.includes("hue") && !getWorld().hue.streaming) {
         outcome.hueStartCode = hueHandlers[HUE_COMMANDS.START_STREAM]().status.code;
       }
-      const payload = (targets: HueRuntimeTarget[]): LightingModeConfig => ({ kind, solid, ambilight, targets });
+      const payload = (targets: HueRuntimeTarget[]): LightingModeConfig => ({ kind, solid, ambilight, effect, targets });
       let applied = applyLightingMode(payload(run));
       if (applied.status.code === "HUE_NOT_READY" && run.includes("usb") && run.length > 1) {
         if (outcome.hueStartCode === HUE_RUNTIME_STATUS.TRANSIENT_RETRY_SCHEDULED) stopHueIfStreaming();
@@ -204,12 +227,14 @@ export const lightingRuntimeHandlers = {
         );
       }
       mutate((w) => {
-        w.lighting.mode = { ...w.lighting.mode, solid, ambilight };
+        w.lighting.mode = { ...w.lighting.mode, solid, ambilight, effect };
       });
     }
 
     if (choice && request.mode) {
-      writeShellStateKey("lightingMode", { kind, solid, ambilight, targets: savedTargets() });
+      writeShellStateKey("lightingMode", { kind, solid, ambilight, effect, targets: savedTargets() });
+      // As Rust's persist_mode: a lit choice is also the one the power button brings back.
+      if (kind !== "off") patchShellStateAsRust({ lastLitKind: kind });
     }
     return reply(
       outcome.hueLeftOut ? "OUTPUTS_APPLIED_PARTIAL" : "OUTPUTS_APPLIED",
@@ -221,15 +246,23 @@ export const lightingRuntimeHandlers = {
 
   [LIGHTING_RUNTIME_COMMANDS.RETUNE_LIGHTING]: (args) => {
     const mode = getWorld().lighting.mode;
-    const kind = args.tuning.solid ? "solid" : args.tuning.ambilight ? "ambilight" : null;
+    const kind = args.tuning.solid
+      ? "solid"
+      : args.tuning.ambilight
+        ? "ambilight"
+        : args.tuning.effect
+          ? "effect"
+          : null;
     if (kind === null || mode.kind !== kind) {
       return { status: status("RETUNE_NOT_RUNNING", "Nothing of that kind is running") };
     }
+    shared = (args.tuning.solid ?? args.tuning.ambilight ?? args.tuning.effect)?.brightness ?? shared;
     mutate((w) => {
       w.lighting.mode = {
         ...w.lighting.mode,
         solid: args.tuning.solid ?? w.lighting.mode.solid,
         ambilight: args.tuning.ambilight ?? w.lighting.mode.ambilight,
+        effect: args.tuning.effect ?? w.lighting.mode.effect,
       };
     });
     publish();

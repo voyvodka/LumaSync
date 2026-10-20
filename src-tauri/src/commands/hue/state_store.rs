@@ -58,6 +58,13 @@ pub enum HueRuntimeState {
     Failed,
 }
 
+impl HueRuntimeState {
+    /// A stream is up, coming up, or being brought back.
+    pub(crate) fn is_active(&self) -> bool {
+        matches!(self, Self::Starting | Self::Running | Self::Reconnecting)
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum HueRuntimeTriggerSource {
@@ -247,6 +254,10 @@ pub(crate) struct HueRuntimeOwner {
     /// dead-end the monitor and strand the runtime in `Reconnecting` with
     /// `active_stream = None` forever. Keying off this flag lets the monitor
     /// still perform the restart in that case.
+    ///
+    /// Two readers besides the claim: the dead-sender probe leaves a death a
+    /// claimed reconnect has already counted alone, and a stop that overtakes
+    /// a reconnect mid-build waits for it to clear before touching the lights.
     pub(crate) reconnect_in_progress: bool,
     pub(crate) last_status: HueRuntimeStatus,
     /// Most recent solid color the user asked for. Persists across reconnects
@@ -465,7 +476,7 @@ impl Default for HueRuntimeStateStore {
 }
 
 impl HueRuntimeStateStore {
-    pub(crate) fn with_runtime(owner: HueRuntimeOwner) -> Self {
+    fn with_runtime(owner: HueRuntimeOwner) -> Self {
         let output_live = Arc::clone(&owner.output_live);
         Self {
             runtime: Arc::new(Mutex::new(owner)),
@@ -530,10 +541,7 @@ pub(crate) fn status_with(
 
 pub(crate) fn make_result(owner: &HueRuntimeOwner) -> HueRuntimeCommandResult {
     HueRuntimeCommandResult {
-        active: matches!(
-            owner.state,
-            HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
-        ),
+        active: owner.state.is_active(),
         status: owner.last_status.clone(),
         last_solid_color: owner.last_solid_color.clone(),
     }

@@ -12,8 +12,8 @@ export async function persistSuccessfulPort(
   try {
     await deps.persistLastSuccessfulPort(portName);
   } catch (err) {
-    // Persistence failures should not break an active connection, but we
-    // still log so the silent-catch ban is honoured (project AGENTS.md).
+    // A failed save must not break a live connection; it is still logged
+    // (docs/architecture/contracts-and-state.md, "Failures are never swallowed").
     console.error("[LumaSync] persistLastSuccessfulPort failed:", err);
   }
 }

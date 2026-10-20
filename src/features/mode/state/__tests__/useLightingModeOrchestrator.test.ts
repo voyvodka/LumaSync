@@ -44,9 +44,20 @@ let revision = 0;
 
 function snapshot(overrides: Partial<LightingRuntimeSnapshot> = {}): LightingRuntimeSnapshot {
   revision += 1;
+  // As Rust publishes it: a lit mode's own payload is the shared brightness.
+  const mode = overrides.mode;
+  const chosen =
+    mode?.kind === "solid"
+      ? mode.solid?.brightness
+      : mode?.kind === "ambilight"
+        ? mode.ambilight?.brightness
+        : mode?.kind === "effect"
+          ? mode.effect?.brightness
+          : undefined;
   return {
     revision,
     mode: { kind: "off" },
+    brightness: chosen ?? 1,
     active: false,
     activeTargets: [],
     selectedTargets: ["usb"],
@@ -76,6 +87,7 @@ function reply(
       stopFailed: [],
       droppedTargets: [],
       modeEnded: false,
+      wledAdvisory: null,
       ...outcome,
     },
   };
@@ -136,10 +148,24 @@ describe("useLightingModeOrchestrator", () => {
       await settle(view);
 
       publish(running({ kind: "solid", solid: { r: 9, g: 8, b: 7, brightness: 0.5 } }));
-      publish(snapshot());
+      // Off carries no payload; Rust still says the shared brightness.
+      publish(snapshot({ brightness: 0.5 }));
 
       expect(view.result.current.lightingMode.kind).toBe("off");
       expect(view.result.current.lightingMode.solid).toEqual({ r: 9, g: 8, b: 7, brightness: 0.5 });
+    });
+
+    it("keeps the last effect through another mode, so choosing Effect again brings it back", async () => {
+      const breathe = { id: "breathe", speed: 0.2, brightness: 0.6 } as const;
+      const { view } = mount();
+      await settle(view);
+
+      publish(running({ kind: "effect", effect: breathe }));
+      publish(running({ kind: "ambilight", ambilight: { brightness: 1 } }));
+
+      expect(view.result.current.lightingMode.kind).toBe("ambilight");
+      // One brightness for every mode: the effect comes back at the one Ambilight runs at.
+      expect(view.result.current.lightingMode.effect).toEqual({ ...breathe, brightness: 1 });
     });
   });
 
@@ -227,12 +253,18 @@ describe("useLightingModeOrchestrator", () => {
 
       await act(() =>
         view.result.current.restoreAtBoot({
-          lightingMode: { kind: "off", ambilight: { brightness: 0.3 } },
+          lightingMode: {
+            kind: "off",
+            ambilight: { brightness: 0.3 },
+            effect: { id: "cycle", speed: 0.1, brightness: 1 },
+          },
         }),
       );
 
       expect(applyOutputsMock).toHaveBeenCalledWith({ origin: "boot" });
-      expect(view.result.current.lightingMode.ambilight).toEqual({ brightness: 0.3 });
+      // Each at the shared brightness the snapshot says, not the one saved with it.
+      expect(view.result.current.lightingMode.ambilight).toEqual({ brightness: 1 });
+      expect(view.result.current.lightingMode.effect).toEqual({ id: "cycle", speed: 0.1, brightness: 1 });
     });
   });
 
@@ -279,6 +311,35 @@ describe("useLightingModeOrchestrator", () => {
 
       expect(retuneLightingMock).toHaveBeenCalledTimes(1);
       expect(applyOutputsMock).not.toHaveBeenCalled();
+    });
+
+    it("send nothing when the snapshot only echoes this window's own retune", async () => {
+      const { view } = mount();
+      await settle(view);
+      publish(running({ kind: "solid", solid: { r: 1, g: 2, b: 3, brightness: 1 } }));
+      const red = { kind: "solid" as const, solid: { r: 255, g: 0, b: 0, brightness: 0.5 } };
+
+      await act(() => view.result.current.handleLightingModeChange(red));
+      publish(running(red));
+      await act(() => view.result.current.handleLightingModeChange({ ...red, solid: { ...red.solid } }));
+
+      expect(retuneLightingMock).toHaveBeenCalledTimes(1);
+    });
+
+    // The popup has its own coalescer: its retune reaches this window only as a snapshot.
+    it("send a value again once another window changed what runs", async () => {
+      const { view } = mount();
+      await settle(view);
+      const red = { kind: "solid" as const, solid: { r: 255, g: 0, b: 0, brightness: 0.5 } };
+      publish(running({ kind: "solid", solid: { r: 1, g: 2, b: 3, brightness: 0.5 } }));
+
+      await act(() => view.result.current.handleLightingModeChange(red));
+      publish(running(red));
+      publish(running({ kind: "solid", solid: { r: 0, g: 0, b: 255, brightness: 0.5 } }));
+      await act(() => view.result.current.handleLightingModeChange({ ...red, solid: { ...red.solid } }));
+
+      expect(retuneLightingMock).toHaveBeenCalledTimes(2);
+      expect(retuneLightingMock.mock.calls[1][0]).toEqual({ solid: red.solid });
     });
 
     it("retune the kind a choice in flight is bringing up, rather than choose it again", async () => {
@@ -393,6 +454,39 @@ describe("useLightingModeOrchestrator", () => {
 
       expect(view.result.current.usbLeftOutNotice).toBe(true);
       expect(view.result.current.startFailedNotice).toBeNull();
+    });
+
+    it("says the WLED device and the layout disagree on the LED count, until an apply finds them agreeing", async () => {
+      applyOutputsMock.mockResolvedValue(
+        reply("OUTPUTS_APPLIED", running({ kind: "solid" }), {
+          applyStatus: { code: "SOLID_MODE_APPLIED", message: "", details: null },
+          wledAdvisory: {
+            code: "WLED_LIVE_LED_COUNT_MISMATCH",
+            message: "",
+            frameLedCount: 60,
+            sinkLedCount: 120,
+          },
+        }),
+      );
+      const { view } = mount();
+      await settle(view);
+
+      await act(() => view.result.current.handleLightingModeChange({ kind: "solid" }));
+      expect(view.result.current.wledLengthMismatchNotice).toEqual({ panelLeds: 120, frameLeds: 60 });
+      // The same mismatch again is the same occurrence: a dismissed notice stays dismissed.
+      const raised = view.result.current.wledLengthMismatchNotice;
+      const applies = applyOutputsMock.mock.calls.length;
+      await act(() => view.result.current.handleLightingModeChange({ kind: "off" }));
+      expect(applyOutputsMock.mock.calls.length).toBe(applies + 1);
+      expect(view.result.current.wledLengthMismatchNotice).toBe(raised);
+
+      applyOutputsMock.mockResolvedValue(
+        reply("OUTPUTS_APPLIED", running({ kind: "solid" }), {
+          applyStatus: { code: "SOLID_MODE_APPLIED", message: "", details: null },
+        }),
+      );
+      await act(() => view.result.current.handleLightingModeChange({ kind: "effect" }));
+      expect(view.result.current.wledLengthMismatchNotice).toBeNull();
     });
 
     // A strip-only choice with no strip used to be refused without a word.

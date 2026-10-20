@@ -2,7 +2,7 @@ import type { Catalogue } from "@/features/i18n/catalogue";
 import type enCommon from "@/locales/en/common";
 
 const common: Catalogue<typeof enCommon> = {
-  hintFor: "{{label}} hakkında",
+  hintFor: "Bilgi: {{label}}",
   opensInBrowser: "tarayıcında açılır",
   mode: {
     title: "LED modu",
@@ -10,8 +10,8 @@ const common: Catalogue<typeof enCommon> = {
       off: "Kapalı",
       ambilight: "Ambilight",
       solid: "Sabit",
+      effect: "Efekt",
     },
-    colorModelRgb: "RGB",
     solidColor: "Sabit renk",
     brightness: "Parlaklık",
   },
@@ -23,25 +23,12 @@ const common: Catalogue<typeof enCommon> = {
       ok: "Tamam",
     },
   },
-  compact: {
-    sections: {
-      mode: "Mod",
-      scene: "Sahne",
-    },
-    scenes: {
-      movie: "Film",
-      game: "Oyun",
-      music: "Müzik",
-      chill: "Sakin",
-      read: "Okuma",
-    },
-  },
   ui: {
     colorPicker: {
       rootAriaLabel: "Renk seçici",
       hueLabel: "Renk tonu",
       svLabel: "Doygunluk ve parlaklık",
-      hexLabel: "HEX",
+      hexLabel: "Hex",
       hexPlaceholder: "RRGGBB",
       recentColors: "Son kullanılanlar",
       recentItemAriaLabel: "{{hex}} rengini kullan",

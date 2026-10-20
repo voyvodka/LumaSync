@@ -10,7 +10,9 @@ use std::time::{Duration, Instant};
 use super::live::AmbilightLiveSettings;
 use super::pacing::resolve_quality_config;
 use super::runtime::LightingRuntimeOwner;
-use super::transition::{apply_mode_change, set_active_port, stop_previous, Outgoing};
+use super::strip_set::StripSpec;
+use super::transition::{apply_mode_change, set_active_ports, stop_previous, Outgoing};
+use super::tuning::solid_output_for;
 use super::usb_output::UsbOutputPlan;
 use super::worker::start_ambilight_worker;
 use super::{
@@ -76,16 +78,7 @@ impl AmbilightFrameSource for FakeFrameSource {
 
 fn owner_with_fake_sender() -> LightingRuntimeOwner {
     LightingRuntimeOwner {
-        active_mode: LightingModeConfig::default(),
-        active_port: None,
-        active_usb_plan: None,
-        worker: None,
-        ambilight_live: None,
-        room_geometry_live: None,
         output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
-        preview: Default::default(),
-        closing: Default::default(),
-        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FakeFrameSource {
                 frame: CapturedFrame::new(
@@ -96,32 +89,26 @@ fn owner_with_fake_sender() -> LightingRuntimeOwner {
                 fail_with_unavailable: false,
             }))
         }),
+        ..Default::default()
     }
 }
 
 fn owner_with_unavailable_capture() -> LightingRuntimeOwner {
     LightingRuntimeOwner {
-        active_mode: LightingModeConfig::default(),
-        active_port: None,
-        active_usb_plan: None,
-        worker: None,
-        ambilight_live: None,
-        room_geometry_live: None,
         output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
-        preview: Default::default(),
-        closing: Default::default(),
-        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FakeFrameSource {
                 frame: CapturedFrame::new(1, 1, vec![[0, 0, 0]]),
                 fail_with_unavailable: true,
             }))
         }),
+        ..Default::default()
     }
 }
 
 fn ambilight_mode() -> LightingModeConfig {
     LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Ambilight,
         solid: None,
         ambilight: Some(AmbilightPayload {
@@ -141,12 +128,14 @@ fn ambilight_mode() -> LightingModeConfig {
 
 fn solid_mode() -> LightingModeConfig {
     LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Solid,
         solid: Some(SolidColorPayload {
             r: 32,
             g: 64,
             b: 128,
             brightness: 0.6,
+            kelvin: None,
         }),
         ambilight: None,
         targets: None,
@@ -189,16 +178,7 @@ fn shared_runtime_telemetry() -> SharedRuntimeTelemetry {
 fn owner_with_recording_sender() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
     let recorder: Arc<FakeLedSender> = Arc::new(FakeLedSender::default());
     let owner = LightingRuntimeOwner {
-        active_mode: LightingModeConfig::default(),
-        active_port: None,
-        active_usb_plan: None,
-        worker: None,
-        ambilight_live: None,
-        room_geometry_live: None,
         output_bridge: LedOutputBridge::from_sender(recorder.clone()),
-        preview: Default::default(),
-        closing: Default::default(),
-        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FakeFrameSource {
                 frame: CapturedFrame::new(
@@ -209,18 +189,20 @@ fn owner_with_recording_sender() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
                 fail_with_unavailable: false,
             }))
         }),
+        ..Default::default()
     };
     (owner, recorder)
 }
 
 // -----------------------------------------------------------------------
-// set_active_port — release the old port's cached session only on switch
+// set_active_ports — release an old port's cached session only on switch
 // -----------------------------------------------------------------------
 
 fn nothing_running() -> Outgoing {
     Outgoing {
         mode: LightingModeConfig::default(),
         plan: None,
+        strips: Vec::new(),
     }
 }
 
@@ -228,17 +210,18 @@ fn lighting(port: &str, total_leds: u16) -> Outgoing {
     Outgoing {
         mode: ambilight_mode_with_calibration(total_leds),
         plan: Some(UsbOutputPlan::Serial(port.to_string())),
+        strips: Vec::new(),
     }
 }
 
-/// The black frame `set_active_port` paints on `COM_A` when the mode that lit it had `total_leds`.
+/// The black frame `set_active_ports` paints on `COM_A` when the mode that lit it had `total_leds`.
 fn black_frame_on_release(total_leds: u16) -> Vec<u8> {
     let (mut owner, recorder) = owner_with_recording_sender();
-    set_active_port(&mut owner, "COM_A".to_string(), &nothing_running());
+    set_active_ports(&mut owner, vec!["COM_A".to_string()], &nothing_running());
 
-    set_active_port(
+    set_active_ports(
         &mut owner,
-        "COM_B".to_string(),
+        vec!["COM_B".to_string()],
         &lighting("COM_A", total_leds),
     );
 
@@ -259,9 +242,13 @@ fn a_released_port_the_outgoing_mode_lit_is_blanked_through_its_session() {
 #[test]
 fn a_released_port_nothing_lit_is_only_let_go() {
     let (mut owner, recorder) = owner_with_recording_sender();
-    set_active_port(&mut owner, "COM_A".to_string(), &nothing_running());
+    set_active_ports(&mut owner, vec!["COM_A".to_string()], &nothing_running());
 
-    set_active_port(&mut owner, "COM_B".to_string(), &lighting("COM_C", 60));
+    set_active_ports(
+        &mut owner,
+        vec!["COM_B".to_string()],
+        &lighting("COM_C", 60),
+    );
 
     assert!(recorder.writes.lock().expect("writes").is_empty());
     assert_eq!(recorder.disconnected_ports(), vec!["COM_A".to_string()]);
@@ -271,8 +258,8 @@ fn a_released_port_nothing_lit_is_only_let_go() {
 fn set_active_port_preserves_same_port_but_releases_a_different_one() {
     let (mut owner, recorder) = owner_with_recording_sender();
 
-    set_active_port(&mut owner, "COM_A".to_string(), &nothing_running());
-    assert_eq!(owner.active_port.as_deref(), Some("COM_A"));
+    set_active_ports(&mut owner, vec!["COM_A".to_string()], &nothing_running());
+    assert_eq!(owner.active_ports, vec!["COM_A".to_string()]);
     assert!(
         recorder.disconnected_ports().is_empty(),
         "first-ever port assignment has nothing to release"
@@ -280,7 +267,7 @@ fn set_active_port_preserves_same_port_but_releases_a_different_one() {
 
     // Same port again — a mode restart on the port already in use. The
     // cached session must be left alone (DTR invariant).
-    set_active_port(&mut owner, "COM_A".to_string(), &nothing_running());
+    set_active_ports(&mut owner, vec!["COM_A".to_string()], &nothing_running());
     assert!(
         recorder.disconnected_ports().is_empty(),
         "re-assigning the SAME port must not release its cached session"
@@ -289,8 +276,8 @@ fn set_active_port_preserves_same_port_but_releases_a_different_one() {
     // A genuine switch — COM_A's cached session must be released so
     // another app (e.g. the Arduino IDE) can open it, and COM_B becomes
     // the new active port without being touched itself.
-    set_active_port(&mut owner, "COM_B".to_string(), &nothing_running());
-    assert_eq!(owner.active_port.as_deref(), Some("COM_B"));
+    set_active_ports(&mut owner, vec!["COM_B".to_string()], &nothing_running());
+    assert_eq!(owner.active_ports, vec!["COM_B".to_string()]);
     assert_eq!(
         recorder.disconnected_ports(),
         vec!["COM_A".to_string()],
@@ -394,6 +381,63 @@ fn solid_mode_routes_to_wled_sink_and_never_touches_the_serial_bridge() {
 }
 
 #[test]
+fn a_solid_retune_on_wled_moves_the_running_hold_to_the_new_colour() {
+    let socket = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind a receiver");
+    socket
+        .set_read_timeout(Some(Duration::from_millis(1500)))
+        .expect("read timeout");
+    let config = WledSinkConfig {
+        ip: "127.0.0.1".parse().expect("valid IPv4"),
+        port: socket.local_addr().expect("receiver address").port(),
+        led_count: 4,
+        protocol: WledProtocol::Drgb,
+    };
+    let mut owner = owner_with_fake_sender();
+    let result = apply_mode_change(
+        &mut owner,
+        solid_mode(),
+        false,
+        None,
+        Some(config),
+        None,
+        None,
+        None,
+        None,
+    );
+    assert_eq!(result.status.code, "SOLID_MODE_APPLIED");
+    assert!(owner.solid_hold.is_some(), "Solid on WLED runs a hold");
+
+    let blue = SolidColorPayload {
+        r: 0,
+        g: 0,
+        b: 255,
+        brightness: 1.0,
+        kelvin: None,
+    };
+    solid_output_for(&owner, UsbOutputPlan::Wled(config))
+        .send(&blue)
+        .expect("the retune's own frame");
+
+    // DRGB: protocol byte, timeout byte, then RGB per LED.
+    let mut buf = [0u8; 64];
+    let mut next = || {
+        let (len, _) = socket.recv_from(&mut buf).expect("a frame");
+        buf[..len].to_vec()
+    };
+    let retuned = loop {
+        let frame = next();
+        if frame[2..5] == [0, 0, 255] {
+            break frame;
+        }
+    };
+    assert_eq!(
+        next(),
+        retuned,
+        "the hold must resend the retuned colour, not the one Solid started with"
+    );
+}
+
+#[test]
 fn solid_mode_usb_gate_passes_when_only_a_wled_sink_is_registered() {
     // No serial device connected this session; only WLED is registered.
     // Before the registry was wired in, this combination hit the
@@ -443,7 +487,7 @@ fn switching_ports_through_apply_mode_change_releases_the_old_port_only() {
 
     assert_eq!(apply(&mut owner, "COM_B").status.code, "SOLID_MODE_APPLIED");
     assert_eq!(recorder.disconnected_ports(), vec!["COM_A".to_string()]);
-    assert_eq!(owner.active_port.as_deref(), Some("COM_B"));
+    assert_eq!(owner.active_ports, vec!["COM_B".to_string()]);
 }
 
 #[test]
@@ -532,7 +576,7 @@ fn a_preview_only_test_pattern_never_writes_to_an_unconnected_port() {
     wait_for_worker_count(0);
 
     assert_eq!(writes, 0, "a preview-only test must not open the port");
-    assert_eq!(owner.active_port, None);
+    assert!(owner.active_ports.is_empty());
 }
 
 #[test]
@@ -541,15 +585,21 @@ fn set_ambilight_stops_previous_then_starts_new_runtime() {
     let mut owner = owner_with_fake_sender();
     owner = LightingRuntimeOwner {
         active_mode: ambilight_mode(),
-        active_port: Some("COM1".to_string()),
-        active_usb_plan: None,
+        active_ports: vec!["COM1".to_string()],
         worker: Some(
             start_ambilight_worker(
                 owner.output_bridge.clone(),
-                Some(UsbOutputPlan::Serial("COM1".to_string())),
-                None,
+                vec![StripSpec {
+                    plan: Some(UsbOutputPlan::Serial("COM1".to_string())),
+                    layout: None,
+                    profile: crate::commands::led_output::FirmwareProfile::default(),
+                    chip: crate::commands::led_output::LedChipType::default(),
+                    correction: crate::commands::led_output::ColorCorrectionConfig::default(),
+                    color_order: None,
+                }],
                 AmbilightLiveSettings::new(0.8, false, 0.35, 1.0),
                 (owner.frame_source_factory)(super::runtime::AmbilightCaptureRequest {
+                    effect: None,
                     display_id: None,
                     led_calibration: None,
                     test_pattern: None,
@@ -561,22 +611,15 @@ fn set_ambilight_stops_previous_then_starts_new_runtime() {
                 shared_runtime_telemetry(),
                 None,
                 None,
-                crate::commands::led_output::ColorCorrectionConfig::default(),
-                crate::commands::led_output::FirmwareProfile::default(),
-                crate::commands::led_output::LedChipType::default(),
                 None,
                 super::live::RoomGeometryLive::new(None),
                 super::worker::WorkerPacing::live(Duration::from_millis(50)),
             )
             .expect("worker start should succeed"),
         ),
-        ambilight_live: None,
-        room_geometry_live: None,
         output_bridge: owner.output_bridge,
         frame_source_factory: owner.frame_source_factory,
-        preview: Default::default(),
-        closing: Default::default(),
-        hue_gate_waived: false,
+        ..Default::default()
     };
     let mut trace = Vec::new();
 
@@ -912,6 +955,7 @@ fn ambilight_calibration_with_total_leds(
 
 fn ambilight_mode_with_calibration(total_leds: u16) -> LightingModeConfig {
     LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Ambilight,
         solid: None,
         ambilight: Some(AmbilightPayload {
@@ -935,16 +979,7 @@ fn ambilight_mode_with_calibration(total_leds: u16) -> LightingModeConfig {
 fn owner_with_recording_sender_for_ambilight() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
     let recorder: Arc<FakeLedSender> = Arc::new(FakeLedSender::default());
     let owner = LightingRuntimeOwner {
-        active_mode: LightingModeConfig::default(),
-        active_port: None,
-        active_usb_plan: None,
-        worker: None,
-        ambilight_live: None,
-        room_geometry_live: None,
         output_bridge: LedOutputBridge::from_sender(recorder.clone()),
-        preview: Default::default(),
-        closing: Default::default(),
-        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FakeFrameSource {
                 frame: CapturedFrame::new(
@@ -960,6 +995,7 @@ fn owner_with_recording_sender_for_ambilight() -> (LightingRuntimeOwner, Arc<Fak
                 fail_with_unavailable: false,
             }))
         }),
+        ..Default::default()
     };
     (owner, recorder)
 }
@@ -1035,22 +1071,14 @@ fn ambilight_mode_with_30_led_calibration_emits_per_led_usb_packet() {
 fn owner_with_red_frame() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
     let recorder: Arc<FakeLedSender> = Arc::new(FakeLedSender::default());
     let owner = LightingRuntimeOwner {
-        active_mode: LightingModeConfig::default(),
-        active_port: None,
-        active_usb_plan: None,
-        worker: None,
-        ambilight_live: None,
-        room_geometry_live: None,
         output_bridge: LedOutputBridge::from_sender(recorder.clone()),
-        preview: Default::default(),
-        closing: Default::default(),
-        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FakeFrameSource {
                 frame: CapturedFrame::new(4, 4, vec![[255, 0, 0]; 16]),
                 fail_with_unavailable: false,
             }))
         }),
+        ..Default::default()
     };
     (owner, recorder)
 }
@@ -1169,6 +1197,7 @@ fn solid_writes_in_the_requested_color_order() {
             g: 0,
             b: 0,
             brightness: 1.0,
+            kelvin: None,
         }),
         targets: Some(vec!["usb".to_string()]),
         led_calibration: Some(ambilight_calibration_with_total_leds(4)),
@@ -1244,7 +1273,7 @@ fn a_retune_after_the_driven_output_moved_restarts_the_worker_on_the_new_one() {
     let result = apply_driving(&mut owner, mode.clone(), "COM-B");
 
     assert_eq!(result.status.code, "AMBILIGHT_MODE_STARTED");
-    assert_eq!(owner.active_port.as_deref(), Some("COM-B"));
+    assert_eq!(owner.active_ports, vec!["COM-B".to_string()]);
     assert_eq!(
         owner.active_usb_plan,
         Some(UsbOutputPlan::Serial("COM-B".to_string()))
@@ -1284,4 +1313,112 @@ fn a_retune_on_the_same_output_still_updates_in_place() {
 
     assert_eq!(result.status.code, "AMBILIGHT_MODE_UPDATED");
     let _ = apply_on(&mut owner, LightingModeConfig::default());
+}
+
+// ---------------------------------------------------------------------------
+// Effect mode
+// ---------------------------------------------------------------------------
+
+fn effect_mode(effect: super::EffectPayload) -> LightingModeConfig {
+    LightingModeConfig {
+        kind: LightingModeKind::Effect,
+        effect: Some(effect),
+        targets: Some(vec!["usb".to_string()]),
+        led_calibration: Some(ambilight_calibration_with_total_leds(8)),
+        ..LightingModeConfig::default()
+    }
+}
+
+fn apply_effect(owner: &mut LightingRuntimeOwner, mode: LightingModeConfig) -> String {
+    apply_mode_change(
+        owner,
+        mode,
+        true,
+        Some("COM-EFFECT"),
+        None,
+        None,
+        Some(SharedRuntimeTelemetry::default()),
+        None,
+        None,
+    )
+    .status
+    .code
+}
+
+/// An effect runs on the Ambilight worker from its drawn frames — no capture,
+/// so no screen permission — and a change of effect or speed reaches the
+/// running worker instead of rebuilding it.
+#[test]
+fn an_effect_drives_the_strip_and_retunes_in_place() {
+    let _guard = acquire_worker_test_guard();
+    let recorder = Arc::new(FakeLedSender::default());
+    let mut owner = LightingRuntimeOwner {
+        output_bridge: LedOutputBridge::from_sender(recorder.clone()),
+        ..LightingRuntimeOwner::default()
+    };
+
+    let rainbow = super::config::DEFAULT_EFFECT;
+    assert_eq!(
+        apply_effect(&mut owner, effect_mode(rainbow.clone())),
+        "EFFECT_MODE_STARTED"
+    );
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while recorder.writes.lock().unwrap().is_empty() {
+        assert!(
+            Instant::now() < deadline,
+            "the effect never reached the strip"
+        );
+        thread::sleep(Duration::from_millis(10));
+    }
+    let live = Arc::clone(
+        owner
+            .ambilight_live
+            .as_ref()
+            .expect("the worker's settings"),
+    );
+
+    let breathe = super::EffectPayload {
+        id: super::config::EffectId::Breathe,
+        speed: 0.9,
+        brightness: 0.4,
+        ..super::config::DEFAULT_EFFECT
+    };
+    assert_eq!(
+        apply_effect(&mut owner, effect_mode(breathe.clone())),
+        "EFFECT_MODE_UPDATED"
+    );
+    assert!(Arc::ptr_eq(&live, owner.ambilight_live.as_ref().unwrap()));
+    assert_eq!(live.read_brightness(), 0.4);
+    let slot = owner.effect_live.as_ref().expect("the effect's cell");
+    assert_eq!(*slot.lock().unwrap(), breathe);
+
+    assert_eq!(
+        apply_effect(&mut owner, LightingModeConfig::default()),
+        "LIGHTING_MODE_STOPPED"
+    );
+    assert!(owner.effect_live.is_none());
+}
+
+/// A worker that never starts names the effect, not Ambilight, and leaves no
+/// effect cell behind for a later start to find.
+#[test]
+fn an_effect_that_cannot_start_reports_its_own_failure() {
+    let _guard = acquire_worker_test_guard();
+    let mut owner = owner_with_unavailable_capture();
+
+    let failed = apply_mode_change(
+        &mut owner,
+        effect_mode(super::config::DEFAULT_EFFECT),
+        true,
+        Some("COM-EFFECT"),
+        None,
+        None,
+        Some(SharedRuntimeTelemetry::default()),
+        None,
+        None,
+    );
+
+    assert_eq!(failed.status.code, "EFFECT_MODE_START_FAILED");
+    assert_eq!(failed.mode.kind, LightingModeKind::Off);
+    assert!(owner.effect_live.is_none());
 }

@@ -15,7 +15,7 @@ import type { ModeGuardReason } from "./modeGuard";
  * The Hue ones still travel as props until the Hue health store replaces them.
  */
 export interface LightingControlState {
-  /** What runs, with the last colour and Ambilight settings kept through Off. */
+  /** What runs, with each mode's last settings kept through Off. */
   lightingMode: LightingModeConfig;
   /** The outputs the user chose, running or not. */
   outputTargets: HueRuntimeTarget[];
@@ -28,6 +28,8 @@ export interface LightingControlState {
   /** The shell boot has settled. Before it the saved pairing is unread, so the
    *  output gate reports checking rather than "no reachable output". */
   bootstrapDone: boolean;
+  /** The launch restore has set the selection; a write before it would save over the stored one. */
+  lightingRestored: boolean;
 }
 
 /** Apply, retune and release all go through the orchestrator's transaction. */
@@ -75,6 +77,17 @@ export function useLightingControlState<S>(
   isEqual?: (a: S, b: S) => boolean,
 ): S {
   return useStoreSelector(useLightingControl().store, selector, isEqual);
+}
+
+const NO_STORE: Store<LightingControlState | null> = { get: () => null, set: () => {}, subscribe: () => () => {} };
+const runningMode = (state: LightingControlState | null) => state?.lightingMode ?? null;
+
+/** `null` outside the provider, where the other hooks throw. */
+export function useRunningLightingMode(): LightingModeConfig | null {
+  const control = useContext(LightingControlContext);
+  // Read-only here, so the wider type is safe: nothing below calls `set`.
+  const store = (control?.store as Store<LightingControlState | null> | undefined) ?? NO_STORE;
+  return useStoreSelector(store, runningMode);
 }
 
 /** The whole state as it is now, for a one-off read (a copy at a press); subscribes to nothing. */

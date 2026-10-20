@@ -18,7 +18,8 @@ import { followMotionPreference } from "./features/shell/motionPreference";
 import { GlobalErrorBoundaryWithI18n } from "./features/shell/GlobalErrorBoundary";
 import { TwinErrorBoundary } from "./features/preview/ui/TwinErrorBoundary";
 import {
-  LED_CONTROL_POPUP_LABEL,
+  LED_CONTROL_POPUP_LABEL_PREFIX,
+  LED_PREVIEW_SCENE_LABEL_PREFIX,
   LED_TWIN_OVERLAY_LABEL_PREFIX,
 } from "./shared/contracts/preview";
 
@@ -73,37 +74,11 @@ function bridgeConsoleToTauri() {
 
 bridgeConsoleToTauri();
 
-// FE-2 — clear the twin window's background synchronously, before bootstrap
-// runs, so it never flashes the opaque app gradient. See
-// docs/architecture/ui-and-shell.md. Only the twin is touched.
-function neutralizeTwinBackgroundEarly() {
-  let label = "";
-  try {
-    label = getCurrentWindow().label;
-  } catch (err) {
-    console.error(
-      "[LumaSync] could not resolve window label for early twin transparency:",
-      err,
-    );
-    return;
-  }
-  if (!label.startsWith(LED_TWIN_OVERLAY_LABEL_PREFIX)) return;
-
-  document.documentElement.style.background = "transparent";
-  // A dark `color-scheme` can hand an unpainted root a dark canvas instead of
-  // leaving it clear; the twin has no native controls to theme.
-  document.documentElement.style.colorScheme = "normal";
-  if (document.body) document.body.style.background = "transparent";
-  const root = document.getElementById("root");
-  if (root) root.style.background = "transparent";
-}
-
-neutralizeTwinBackgroundEarly();
-
 const WINDOW_KIND = {
   MAIN: "main",
   POPUP: "popup",
   TWIN: "twin",
+  SCENE: "scene",
 } as const;
 type WindowKind = (typeof WINDOW_KIND)[keyof typeof WINDOW_KIND];
 
@@ -115,25 +90,47 @@ function resolveWindowKind(): WindowKind {
     console.error("[LumaSync] could not resolve window label; defaulting to main App:", err);
   }
   if (label.startsWith(LED_TWIN_OVERLAY_LABEL_PREFIX)) return WINDOW_KIND.TWIN;
-  if (label === LED_CONTROL_POPUP_LABEL) return WINDOW_KIND.POPUP;
+  if (label.startsWith(LED_CONTROL_POPUP_LABEL_PREFIX)) return WINDOW_KIND.POPUP;
+  if (label.startsWith(LED_PREVIEW_SCENE_LABEL_PREFIX)) return WINDOW_KIND.SCENE;
   return WINDOW_KIND.MAIN;
 }
 
+const windowKind = resolveWindowKind();
+
+// Clear the twin window's background synchronously, before bootstrap
+// runs, so it never flashes the opaque app gradient. See
+// docs/architecture/ui-and-shell.md. The scene window, transparent like the
+// twin, is painted black instead: the capture must see black, not the app.
+function neutralizeTwinBackgroundEarly(kind: WindowKind) {
+  if (kind !== WINDOW_KIND.TWIN && kind !== WINDOW_KIND.SCENE) return;
+
+  const background = kind === WINDOW_KIND.SCENE ? "black" : "transparent";
+  document.documentElement.style.background = background;
+  // A dark `color-scheme` can hand an unpainted root a dark canvas instead of
+  // leaving it clear; the twin has no native controls to theme.
+  document.documentElement.style.colorScheme = "normal";
+  if (document.body) document.body.style.background = background;
+  const root = document.getElementById("root");
+  if (root) root.style.background = background;
+}
+
+neutralizeTwinBackgroundEarly(windowKind);
+
 /**
  * Import only this window's root tree.
- *
- * The display id for the twin overlay is read from the Rust-injected
- * `window.__LUMASYNC_TWIN_DISPLAY_ID__` global (mirrors the calibration
- * overlay's `__LUMASYNC_OVERLAY_PREVIEW__`).
  */
 async function loadWindowRoot(kind: WindowKind): Promise<ComponentType> {
   switch (kind) {
     case WINDOW_KIND.TWIN: {
       const { LedTwinOverlay } = await import("./features/preview/ui/LedTwinOverlay");
       return function TwinRoot() {
-        const displayId = (window as unknown as { __LUMASYNC_TWIN_DISPLAY_ID__?: string })
-          .__LUMASYNC_TWIN_DISPLAY_ID__;
-        return <LedTwinOverlay displayId={displayId} scope="test" />;
+        return <LedTwinOverlay />;
+      };
+    }
+    case WINDOW_KIND.SCENE: {
+      const { SceneApp } = await import("./features/preview/ui/SceneApp");
+      return function SceneRoot() {
+        return <SceneApp />;
       };
     }
     case WINDOW_KIND.POPUP: {
@@ -158,7 +155,6 @@ function failedRoot(error: unknown): ComponentType {
   };
 }
 
-const windowKind = resolveWindowKind();
 // Started before the language read, so the chunk and the shell-state IPC run
 // in parallel. Never rejects: see `failedRoot`.
 const windowRoot = loadWindowRoot(windowKind).catch((err: unknown) => {
@@ -172,7 +168,7 @@ const windowRoot = loadWindowRoot(windowKind).catch((err: unknown) => {
  */
 function renderRoot(Root: ComponentType) {
   const tree =
-    windowKind === WINDOW_KIND.TWIN ? (
+    windowKind === WINDOW_KIND.TWIN || windowKind === WINDOW_KIND.SCENE ? (
       // TwinErrorBoundary renders nothing on failure — an opaque fallback
       // here would blanket the display. See docs/architecture/ui-and-shell.md.
       <TwinErrorBoundary>
@@ -197,19 +193,20 @@ async function bootstrap() {
   const state = shellStore.load();
   followMotionPreference(state);
 
-  // 1. Resolve language (honours I18N-02: English default on first launch)
   const language = await resolveInitialLanguage(() => state);
-
-  // 2. Initialise i18next with resolved language
   await initI18n(language);
   markStartup("language ready");
   // The popup is hidden and reused, never rebuilt, so it would keep the
   // language it was created in; the main window switches itself.
   if (windowKind === WINDOW_KIND.POPUP) followSavedLanguage();
 
-  // 3. Mount React once this window's root module is in
   const root = await windowRoot;
   markStartup("root module in");
+  // The scenes row opens on the stored list, not the seeded one sliding to it.
+  if (windowKind === WINDOW_KIND.MAIN) {
+    const { hydrateScenes } = await import("./features/scenes/state/scenesStore");
+    await state.then(hydrateScenes, () => hydrateScenes());
+  }
   renderRoot(root);
 }
 

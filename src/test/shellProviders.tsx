@@ -38,6 +38,7 @@ export const DEFAULT_LIGHTING_STATE: LightingControlState = {
   calibration: undefined,
   localSink: null,
   bootstrapDone: true,
+  lightingRestored: true,
 };
 
 /** A paired, reachable bridge with nothing streaming. */
@@ -85,6 +86,7 @@ export function renderWithShellStores(
     isModalOpen: false,
     checkFailedNotice: null,
     upToDateAt: null,
+    checkedAt: null,
     ...options.updater,
   });
   const lightingActions: LightingControlActions = {

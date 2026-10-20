@@ -1,95 +1,163 @@
 import { useTranslation } from "react-i18next";
 
-import type { UsbStripPlacement } from "@/shared/contracts/roomMap";
-import { Header, InspectorNumberField } from "./InspectorPrimitives";
+import { resolveStripDensity, resolveStripMountHeight, type UsbStripPlacement } from "@/shared/contracts/roomMap";
+import { IconLed } from "@/shared/ui/icons";
+import { InfoTip } from "@/shared/ui/InfoTip/InfoTip";
+import { StateWord } from "@/shared/ui/StateWord/StateWord";
+
 import { TYPE_DOT_COLOR } from "../../model/zoneColor";
+import { DecimalField } from "../DecimalField";
+import { Actions, FieldRow, InspectorRows, Mark, Meta, RowLink, Spacer, Status, Title } from "../dock/InspectorParts";
+import { GlyphHeight } from "./fieldGlyphs";
 
 /**
- * Connection status the inspector renders next to the LED count.
- * `unknown` ⇒ no port snapshot has loaded yet (initial mount race).
- * `connected` / `disconnected` come from the local-output registry.
+ * Whether the strip's port is the one connected. `unknown` ⇒ no port snapshot has loaded yet, and
+ * the slot stays empty rather than guessing. `unlinked` ⇒ the strip names no port.
  */
-export type UsbStripConnectionStatus = "connected" | "disconnected" | "unknown";
+export type UsbStripConnectionStatus = "connected" | "disconnected" | "unlinked" | "unknown";
 
 export function UsbStripInspector({
   strip,
   connectionStatus,
-  connectedPort,
+  port,
   onUpdate,
+  onMove,
   onToggleLock,
+  onDuplicate,
+  onDelete,
+  onClose,
   onManage,
+  height,
+  onStickToWall,
+  fitTo,
+  onFitLength,
+  onAddCorner,
+  onStraighten,
 }: {
   strip: UsbStripPlacement;
   connectionStatus: UsbStripConnectionStatus;
-  connectedPort: string | null;
-  onUpdate: (patch: Partial<UsbStripPlacement>) => void;
+  /** The port the strip is on, or the connected one for a strip that names none. */
+  port: string | null;
+  onUpdate: (patch: Partial<UsbStripPlacement>, held?: boolean) => void;
+  /** Moves the strip by its start point; the end keeps its offset. */
+  onMove: (x: number, y: number) => void;
   onToggleLock: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onClose: () => void;
   onManage?: () => void;
+  /** The height field, where the 3D room draws the strip by it (not behind the screen). */
+  height?: { placeholder: string; max: number };
+  /** Lays the strip along its nearest wall; absent when it is there already or cannot move. */
+  onStickToWall?: () => void;
+  /** The length its LEDs at its density make, in metres, when the drawn run is not that long. */
+  fitTo?: number;
+  onFitLength?: () => void;
+  /** Bends the strip in the middle of its longest leg; absent at the cap or when it cannot move. */
+  onAddCorner?: () => void;
+  /** Takes its corners out; absent when it has none. */
+  onStraighten?: () => void;
 }) {
   const { t } = useTranslation();
   const locked = !!strip.locked;
 
   return (
-    <>
-      <Header
-        typeLabel={t("roomMap:inspector.typeUsb")}
-        name={t("roomMap:objectPanel.ledLabel", { count: String(strip.ledCount) })}
-        dotColor={TYPE_DOT_COLOR.usb}
-      />
-
-      {/* Linked port + live status badge */}
-      <div className="lm-room-dock-field">
-        <span className="lm-room-dock-field-label">
-          {t("roomMap:inspector.usbPortLabel")}
-        </span>
-        <span
-          className={`lm-room-dock-conn-chip lm-room-dock-conn-chip--${connectionStatus}`}
-          role="status"
-          aria-live="polite"
-        >
-          <span className="lm-room-dock-conn-chip-dot" aria-hidden />
-          <span className="lm-room-dock-conn-chip-tx">
-            {connectionStatus === "connected"
-              ? (connectedPort ?? t("roomMap:inspector.usbConnectedFallback"))
-              : connectionStatus === "disconnected"
-                ? t("roomMap:inspector.usbConnectionDisconnected")
-                : t("roomMap:inspector.usbConnectionUnknown")}
-          </span>
-        </span>
-      </div>
-
-      <InspectorNumberField
-        id={`usb-leds-${strip.stripId}`}
-        label={t("roomMap:inspector.usbLedCountLabel")}
-        value={strip.ledCount}
-        step={1}
-        min={1}
-        max={1000}
-        disabled={locked}
-        onCommit={(next) => onUpdate({ ledCount: Math.round(next) })}
-      />
-
-      <div className="lm-room-dock-field-actions">
-        <button
-          type="button"
-          className="lm-room-dock-inspect-action"
-          onClick={onToggleLock}
-          aria-pressed={locked}
-        >
-          {locked ? t("roomMap:objectPanel.unlock") : t("roomMap:objectPanel.lock")}
-        </button>
-        {onManage ? (
-          <button
-            type="button"
-            className="lm-room-dock-inspect-action"
-            onClick={onManage}
-          >
-            {t("roomMap:inspector.usbManage")}
-          </button>
-        ) : null}
-      </div>
-
-      <p className="lm-room-dock-field-hint">{t("roomMap:inspector.usbHint")}</p>
-    </>
+    <InspectorRows
+      first={
+        <>
+          <Mark>
+            <span style={{ color: TYPE_DOT_COLOR.usb, display: "grid" }}>
+              <IconLed />
+            </span>
+          </Mark>
+          <Title>{t("roomMap:objectPanel.ledLabel", { count: String(strip.ledCount) })}</Title>
+          <Status>
+            {connectionStatus !== "unknown" && (
+              <StateWord tone={connectionStatus === "connected" ? "live" : "idle"}>
+                {connectionStatus === "connected"
+                  ? t("roomMap:inspector.usbConnectedFallback")
+                  : connectionStatus === "unlinked"
+                    ? t("roomMap:inspector.usbNoPort")
+                    : t("roomMap:inspector.usbConnectionDisconnected")}
+              </StateWord>
+            )}
+            {port && <Meta>{port}</Meta>}
+          </Status>
+          {fitTo !== undefined && onFitLength && (
+            <RowLink onClick={onFitLength}>{t("roomMap:inspector.usbFitLength", { metres: fitTo.toFixed(2) })}</RowLink>
+          )}
+          {onStickToWall && <RowLink onClick={onStickToWall}>{t("roomMap:inspector.usbStickToWall")}</RowLink>}
+          {onAddCorner && <RowLink onClick={onAddCorner}>{t("roomMap:inspector.usbAddCorner")}</RowLink>}
+          {onStraighten && <RowLink onClick={onStraighten}>{t("roomMap:inspector.usbStraighten")}</RowLink>}
+          {onManage && <RowLink onClick={onManage}>{t("roomMap:inspector.usbManage")}</RowLink>}
+          <Spacer />
+          <Actions locked={locked} onToggleLock={onToggleLock} onDuplicate={onDuplicate} onDelete={onDelete} onClose={onClose} />
+        </>
+      }
+      second={
+        <>
+          <FieldRow>
+            <DecimalField
+              first
+              label={t("roomMap:inspector.xLabel")}
+              prefix="X"
+              value={strip.startX}
+              unit="m"
+              disabled={locked}
+              onCommit={(x) => onMove(x, strip.startY)}
+            />
+            <DecimalField
+              label={t("roomMap:inspector.yLabel")}
+              prefix="Y"
+              value={strip.startY}
+              unit="m"
+              disabled={locked}
+              onCommit={(y) => onMove(strip.startX, y)}
+            />
+            <DecimalField
+              label={t("roomMap:inspector.usbLedCountLabel")}
+              value={strip.ledCount}
+              decimals={0}
+              step={1}
+              min={1}
+              max={1000}
+              unit="LED"
+              disabled={locked}
+              onCommit={(ledCount, held) => onUpdate({ ledCount }, held)}
+            />
+            <DecimalField
+              optional
+              label={t("roomMap:inspector.usbDensityLabel")}
+              value={resolveStripDensity(strip)}
+              placeholder="–"
+              decimals={0}
+              step={1}
+              min={1}
+              max={300}
+              unit="LED/m"
+              disabled={locked}
+              onCommit={(ledsPerMeter, held) => onUpdate({ ledsPerMeter: ledsPerMeter ?? null }, held)}
+            />
+            {height && (
+              <DecimalField
+                optional
+                label={t("roomMap:inspector.usbHeightLabel")}
+                prefix={<GlyphHeight />}
+                value={resolveStripMountHeight(strip)}
+                placeholder={height.placeholder}
+                min={0}
+                max={height.max}
+                unit="m"
+                disabled={locked}
+                onCommit={(mountHeightMeters, held) => onUpdate({ mountHeightMeters: mountHeightMeters ?? null }, held)}
+              />
+            )}
+          </FieldRow>
+          <InfoTip label={t("common:hintFor", { label: t("roomMap:inspector.usbLedCountLabel") })}>
+            {[t("roomMap:inspector.usbHint"), t("roomMap:inspector.usbDensityHint"), t("roomMap:inspector.usbCornerHint"), height ? t("roomMap:inspector.usbHeightHint") : null].filter(Boolean).join(" ")}
+          </InfoTip>
+        </>
+      }
+    />
   );
 }

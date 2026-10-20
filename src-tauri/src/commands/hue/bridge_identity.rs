@@ -173,7 +173,7 @@ fn hex(bytes: &[u8]) -> String {
 /// `None` checks validity against the system clock. Everything returned is
 /// public — the bridge hands this chain to anyone who connects — so the bridge
 /// id and fingerprint are safe to log.
-pub(crate) fn inspect_presented_chain(
+fn inspect_presented_chain(
     leaf_der: &[u8],
     intermediates_der: &[&[u8]],
     at_unix: Option<u64>,
@@ -257,7 +257,7 @@ fn store_pin(store: &dyn PinStore, bridge_id: &str, record: &PinRecord) {
 /// learned on the way. A pin that cannot be read or written degrades to
 /// trust-on-every-use for self-signed bridges; a Signify-signed one is checked
 /// against the roots regardless.
-pub(crate) fn admit(
+fn admit(
     presented: &PresentedCertificate,
     trust: &BridgeTrust,
     store: &dyn PinStore,

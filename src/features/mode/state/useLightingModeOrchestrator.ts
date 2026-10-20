@@ -20,10 +20,9 @@ import {
 } from "@/shared/contracts/lightingRuntime";
 import {
   LIGHTING_MODE_KIND,
-  normalizeAmbilightPayload,
   normalizeOutputTargets,
-  normalizeSolidColorPayload,
   type AmbilightPayload,
+  type EffectPayload,
   type LightingModeConfig,
   type SolidColorPayload,
 } from "@/shared/contracts/mode";
@@ -38,7 +37,7 @@ import {
   usbLeftOut,
   type ChoiceAnswer,
 } from "./modeApplyOutcome";
-import { createRetuneCoalescer } from "./retuneCoalescer";
+import { createRetuneCoalescer, tuningOf } from "./retuneCoalescer";
 import { useLightingRuntime } from "./useLightingRuntime";
 
 /** How long the "stop failed for these targets" toast stays up. */
@@ -75,7 +74,7 @@ export interface LightingModeOrchestratorInput {
 }
 
 export interface LightingModeOrchestrator {
-  /** What runs, with the last colour and Ambilight settings kept through Off. */
+  /** What runs, with each mode's last settings kept through Off. */
   lightingMode: LightingModeConfig;
   selectedOutputTargets: HueRuntimeTarget[];
   activeOutputTargets: HueRuntimeTarget[];
@@ -90,6 +89,8 @@ export interface LightingModeOrchestrator {
   hueNotStartedNotice: HueLeftOutReason | null;
   /** A choice ran on Hue without the strip it also named, which is not connected. */
   usbLeftOutNotice: boolean;
+  /** The last apply found the bound WLED device's LED count and the layout's apart. */
+  wledLengthMismatchNotice: { panelLeds: number; frameLeds: number } | null;
   /**
    * Why Hue is out of the running mode, for the status chip. Raised with the
    * notice but not dismissed with it: it holds until Hue joins, or the user
@@ -123,6 +124,7 @@ function choiceOf(mode: LightingModeConfig): LightingModeConfig {
     kind: mode.kind,
     ...(mode.solid ? { solid: mode.solid } : {}),
     ...(mode.ambilight ? { ambilight: mode.ambilight } : {}),
+    ...(mode.effect ? { effect: mode.effect } : {}),
   };
 }
 
@@ -147,6 +149,10 @@ export function useLightingModeOrchestrator({
   const [hueLeftOutNotice, setHueLeftOutNotice] = useState<HueLeftOutReason | null>(null);
   const [hueNotStartedNotice, setHueNotStartedNotice] = useState<HueLeftOutReason | null>(null);
   const [usbLeftOutNotice, setUsbLeftOutNotice] = useState(false);
+  const [wledLengthMismatchNotice, setWledLengthMismatchNotice] = useState<{
+    panelLeds: number;
+    frameLeds: number;
+  } | null>(null);
   const [bootHueRetryNotice, setBootHueRetryNotice] = useState<BootHueRetryState | null>(null);
   const [pendingChoices, setPendingChoices] = useState(0);
   // The kind the newest choice asked for, while it is in flight: a nudge of
@@ -154,19 +160,29 @@ export function useLightingModeOrchestrator({
   const requestedKindRef = useRef<LightingModeConfig["kind"] | null>(null);
   const choiceSeqRef = useRef(0);
 
-  // The snapshot says what runs; Off carries no payload. The last colour and
-  // Ambilight settings seen are kept so the controls show them while Off.
-  const rememberedRef = useRef<{ solid?: SolidColorPayload; ambilight?: AmbilightPayload }>({});
+  // The snapshot says what runs; Off carries no payload. Each mode's last
+  // settings seen are kept so the controls show them while Off.
+  const rememberedRef = useRef<{
+    solid?: SolidColorPayload;
+    ambilight?: AmbilightPayload;
+    effect?: EffectPayload;
+  }>({});
   const running = snapshot?.mode ?? OFF;
+  // One brightness for every mode: a remembered payload shows the shared value, not the one it ran at.
+  const brightness = snapshot?.brightness;
   const lightingMode = useMemo<LightingModeConfig>(() => {
     if (running.solid) rememberedRef.current.solid = running.solid;
     if (running.ambilight) rememberedRef.current.ambilight = running.ambilight;
+    if (running.effect) rememberedRef.current.effect = running.effect;
+    const shared = <T extends { brightness: number }>(payload: T | null | undefined) =>
+      payload && brightness !== undefined ? { ...payload, brightness } : (payload ?? undefined);
     return {
       ...running,
-      solid: running.solid ?? rememberedRef.current.solid,
-      ambilight: running.ambilight ?? rememberedRef.current.ambilight,
+      solid: shared(running.solid ?? rememberedRef.current.solid),
+      ambilight: shared(running.ambilight ?? rememberedRef.current.ambilight),
+      effect: shared(running.effect ?? rememberedRef.current.effect),
     };
-  }, [running]);
+  }, [running, brightness]);
   const lightingModeRef = useRef(lightingMode);
   lightingModeRef.current = lightingMode;
 
@@ -179,6 +195,9 @@ export function useLightingModeOrchestrator({
   const bootHueRetry = snapshot?.bootHueRetry ?? null;
 
   const retunes = useMemo(() => createRetuneCoalescer((tuning) => retuneLighting(tuning)), []);
+  useEffect(() => {
+    retunes.observe(tuningOf(lightingMode));
+  }, [retunes, lightingMode]);
 
   // The notice follows the held-out reason: raised when it appears or
   // changes, taken down when Hue joins or a choice answers it afresh.
@@ -255,6 +274,18 @@ export function useLightingModeOrchestrator({
         setHueNotStartedNotice(result.outcome.hueNotStarted);
       }
       if (usbLeftOut(result) || isOutputsApplied(result)) setUsbLeftOutNotice(usbLeftOut(result));
+      // Only an apply knows it: one that ran says afresh, a reply with no apply leaves it.
+      if (result.outcome.applyStatus !== null) {
+        const advisory = result.outcome.wledAdvisory;
+        // The notice's identity is its occurrence: the same mismatch again keeps it, so a × holds.
+        setWledLengthMismatchNotice((current) =>
+          advisory === null
+            ? null
+            : current?.panelLeds === advisory.sinkLedCount && current.frameLeds === advisory.frameLedCount
+              ? current
+              : { panelLeds: advisory.sinkLedCount, frameLeds: advisory.frameLedCount },
+        );
+      }
 
       const apply = result.outcome.applyStatus;
       if (apply?.code === LIGHTING_MODE_STATUS.SOLID_MODE_HUE_OUTPUT_SKIPPED) {
@@ -329,11 +360,8 @@ export function useLightingModeOrchestrator({
       // A nudge within the running kind never waits for a transition, and a
       // drag commits many of them: they go through the coalescer as retunes.
       if (next.kind === currentKind && next.kind !== LIGHTING_MODE_KIND.OFF) {
-        if (next.kind === LIGHTING_MODE_KIND.SOLID && next.solid) {
-          retunes.push({ solid: normalizeSolidColorPayload(next.solid) });
-        } else if (next.kind === LIGHTING_MODE_KIND.AMBILIGHT && next.ambilight) {
-          retunes.push({ ambilight: normalizeAmbilightPayload(next.ambilight) });
-        }
+        const tuning = tuningOf(next);
+        if (tuning) retunes.push(tuning);
         return;
       }
 
@@ -420,6 +448,7 @@ export function useLightingModeOrchestrator({
       // Off carries no payload in the snapshot; the saved mode has both.
       if (saved.lightingMode?.solid) rememberedRef.current.solid = saved.lightingMode.solid;
       if (saved.lightingMode?.ambilight) rememberedRef.current.ambilight = saved.lightingMode.ambilight;
+      if (saved.lightingMode?.effect) rememberedRef.current.effect = saved.lightingMode.effect;
       await send({ origin: LIGHTING_ORIGIN.BOOT }, { boot: true });
     },
     [send],
@@ -438,6 +467,7 @@ export function useLightingModeOrchestrator({
     hueLeftOutNotice,
     hueNotStartedNotice,
     usbLeftOutNotice,
+    wledLengthMismatchNotice,
     hueHeldOutReason,
     bootHueRetryNotice,
     lastOutcome: snapshot === null ? undefined : snapshot.lastOutcome,

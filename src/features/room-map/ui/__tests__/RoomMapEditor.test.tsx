@@ -1,20 +1,22 @@
 /**
- * RoomMapEditor — regression tests
- *
- * Covers the mousemove handler stability fix from commit fe351c2:
- * "fix(ui): prevent event listener thrashing in RoomMapEditor mousemove handler"
- *
- * The perf fix moved mousemove + mouseleave handlers into a stable useEffect
- * (deps: [canvasContainerRef]) inside the MouseCoordinateDisplay sub-component,
- * replacing the previous pattern that added/removed the listener on every render.
- *
- * Previously existing stub tests are preserved at the bottom.
+ * RoomMapEditor — the plan face: keys, the dock stand-in, room resizing and what an edit saves.
  */
 import type React from "react";
 import { render, act, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-import { RoomMapEditor } from "../RoomMapEditor";
+import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
+
+import { resolveHueChannelWorld } from "../../model/hueChannelPosition";
+import { isCubeZone, zoneEdge } from "../../model/zoneCube";
+
+import { __resetEditStage } from "../RoomMapEditor";
+import { __resetRoomViewFailure, RoomMapSurface, type RoomMapSurfaceProps } from "../RoomMapSurface";
+
+// The editor on the surface that owns its map; the 3D face and its switch are RoomMapSurface's tests.
+const RoomMapEditor = (props: Omit<RoomMapSurfaceProps, "view3dAvailable">) => (
+  <RoomMapSurface view3dAvailable={false} {...props} />
+);
 
 // ---------------------------------------------------------------------------
 // Module-level mocks
@@ -34,6 +36,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
+    onSaved: () => () => {},
     load: vi.fn().mockResolvedValue({
       roomMap: null,
       roomMapShowGrid: true,
@@ -55,6 +58,19 @@ const persistState = vi.hoisted(() => ({
   configOverride: {} as Record<string, unknown>,
   apply: vi.fn(),
   undo: vi.fn(),
+  replace: vi.fn<(config: unknown) => void>(),
+}));
+
+const TEMPLATE = vi.hoisted(() => ({
+  dimensions: { widthMeters: 12, depthMeters: 8, heightMeters: 2.6 },
+  furniture: [
+    { id: "a", type: "sofa", x: 1, y: 1, width: 2, height: 0.9 },
+    { id: "b", type: "bed", x: 5, y: 3, width: 1.6, height: 2 },
+  ],
+  usbStrips: [],
+  hueChannels: [],
+  zones: [],
+  imageLayers: [],
 }));
 
 vi.mock("../../state/useRoomMapState", async () => {
@@ -64,6 +80,7 @@ vi.mock("../../state/useRoomMapState", async () => {
       // Selection is real state, as it is in the reducer, so a click on the TV
       // stub re-renders the editor with the TV selected.
       const [selectedId, select] = useState<string | null>(null);
+      const [activeHueZoneId, selectHueZone] = useState<string | null>(null);
       return {
         config: {
           dimensions: { widthMeters: 5, depthMeters: 4 },
@@ -80,15 +97,19 @@ vi.mock("../../state/useRoomMapState", async () => {
           ...persistState.configOverride,
         },
         selectedId,
-        activeHueZoneId: null,
+        activeHueZoneId,
         apply: persistState.apply,
         adopt: vi.fn(),
-        replace: vi.fn(),
+        replace: persistState.replace,
         reset: vi.fn(),
         undo: persistState.undo,
         redo: vi.fn(),
         select,
-        selectHueZone: vi.fn(),
+        selectHueZone,
+        clearSelection: () => {
+          select(null);
+          selectHueZone(null);
+        },
         // canUndo: true bypasses the isEmpty && !canUndo early-return to TemplateSelector
         canUndo: true,
         canRedo: false,
@@ -104,52 +125,30 @@ vi.mock("../RoomMapCanvas", () => ({
     children,
     panOffset,
     panMode,
+    onCanvasClick,
   }: {
     children?: React.ReactNode;
     panOffset: { x: number; y: number };
     panMode?: boolean;
+    onCanvasClick: () => void;
   }) => (
     <div
       data-testid="room-map-canvas"
+      data-room-map-viewport=""
       data-pan-x={panOffset.x}
       data-pan-y={panOffset.y}
       data-pan-mode={String(Boolean(panMode))}
     >
+      <button type="button" data-testid="empty-ground" onClick={onCanvasClick} />
       {children}
     </div>
   ),
 }));
 
-vi.mock("../RoomMapToolbar", () => ({
-  RoomMapToolbar: ({ onToggleSettings }: { onToggleSettings: () => void }) => (
-    <div data-testid="room-map-toolbar">
-      <button type="button" data-testid="toggle-settings" onClick={onToggleSettings} />
-    </div>
-  ),
-}));
-
-vi.mock("../RoomMapSettingsPopover", () => ({
-  RoomMapSettingsPopover: ({
-    dimensions,
-    onDimensionsChange,
-  }: {
-    dimensions: { widthMeters: number; depthMeters: number; heightMeters: number };
-    onDimensionsChange: (d: { widthMeters: number; depthMeters: number; heightMeters: number }) => void;
-  }) => (
-    <button
-      type="button"
-      data-testid="grow-room"
-      onClick={() => onDimensionsChange({ ...dimensions, widthMeters: 7, depthMeters: 6 })}
-    />
-  ),
-}));
-
-vi.mock("../RoomMapEmptyHint", () => ({
-  RoomMapEmptyHint: () => null,
-}));
-
 vi.mock("../objects/FurnitureObject", () => ({
-  FurnitureObject: () => null,
+  FurnitureObject: ({ placement, grouped, onSelect }: { placement: { id: string }; grouped: boolean; onSelect: (id: string, additive: boolean) => void }) => (
+    <i data-testid="plan-piece" data-piece={placement.id} data-grouped={grouped || undefined} onClick={() => onSelect(placement.id, true)} />
+  ),
 }));
 
 vi.mock("../objects/TvAnchorObject", () => ({
@@ -166,12 +165,63 @@ vi.mock("../HueChannelOverlay", () => ({
   HueChannelOverlay: () => null,
 }));
 
-vi.mock("../RoomDockPanel", () => ({
-  // A real field inside the editor root, standing in for the dock inspector's.
-  RoomDockPanel: () => (
-    <div data-testid="room-dock-panel">
-      <input data-testid="dock-field" type="number" defaultValue={60} />
-    </div>
+vi.mock("../dock/RoomDock", () => ({
+  // A real field and a control inside the editor root, standing in for the dock's, and stand-ins
+  // for the inspector's width field on the first piece and the room panel's size fields.
+  RoomDock: ({
+    config,
+    actions,
+    add,
+    room,
+    selectedId,
+    activeHueZoneId,
+    onSelectZone,
+    onSelect,
+    templates,
+  }: {
+    templates?: { onPreview: (template: unknown) => void; onApply: (template: unknown) => void };
+    onSelect: (id: string) => void;
+    add: { onAddZone: (keyboard: boolean) => void };
+    selectedId: string | null;
+    activeHueZoneId: string | null;
+    onSelectZone: (zoneId: string) => void;
+    config: { furniture: Array<{ id: string }> };
+    actions: { onUpdateFurniture: (id: string, patch: Record<string, unknown>) => void };
+    room: {
+      dimensions: { widthMeters: number; depthMeters: number; heightMeters: number };
+      onDimensionsChange: (d: { widthMeters: number; depthMeters: number; heightMeters: number }) => void;
+    };
+  }) => (
+    <section
+      data-testid="room-dock"
+      data-room-dock=""
+      data-selected={selectedId ?? ""}
+      data-zone={activeHueZoneId ?? ""}
+      data-furniture={config.furniture.length}
+    >
+      <button type="button" data-testid="preview-template" onClick={() => templates?.onPreview(TEMPLATE)} />
+      <button type="button" data-testid="leave-template" onClick={() => templates?.onPreview(null)} />
+      <button type="button" data-testid="apply-template" onClick={() => templates?.onApply(TEMPLATE)} />
+      <button type="button" data-testid="dock-tab" />
+      <button type="button" data-testid="pick-zone" onClick={() => onSelectZone("zone-1")} />
+      <button type="button" data-testid="add-zone" onClick={() => add.onAddZone(false)} />
+      <button type="button" data-testid="add-zone-key" onClick={() => add.onAddZone(true)} />
+      <button type="button" data-testid="pick-image" onClick={() => onSelect("img-layer-1")} />
+      <input data-testid="dock-field" type="text" defaultValue={60} />
+      <button
+        type="button"
+        data-testid="widen-first"
+        onClick={() => {
+          const first = config.furniture[0];
+          if (first) actions.onUpdateFurniture(first.id, { width: 3 });
+        }}
+      />
+      <button
+        type="button"
+        data-testid="grow-room"
+        onClick={() => room.onDimensionsChange({ ...room.dimensions, widthMeters: 7, depthMeters: 6 })}
+      />
+    </section>
   ),
 }));
 
@@ -191,16 +241,48 @@ vi.mock("../ContextMenu", () => ({
   ContextMenu: () => null,
 }));
 
-vi.mock("../LeftToolbar", () => ({
-  LeftToolbar: () => <div data-testid="left-toolbar" />,
-}));
-
-vi.mock("../PropertyBar", () => ({
-  PropertyBar: () => null,
-}));
-
 vi.mock("../TemplateSelector", () => ({
   TemplateSelector: () => null,
+}));
+
+// The 3D room as what it hands the editor: the pick, and a WebGL failure.
+const room3d = vi.hoisted(() => ({
+  pick: null as ((objectId: string | null) => void) | null,
+  fail: null as ((error: unknown) => void) | null,
+  camera: undefined as { kind: string } | undefined,
+  config: null as Record<string, unknown> | null,
+  zones: null as { active: string | null; others: readonly string[] } | null | undefined,
+  hover: null as ((objectId: string | null, x: number, y: number) => void) | null,
+}));
+
+vi.mock("@/features/room-view/ui/RoomView3DHost", () => ({
+  // False here so the inspector's model choice stays as the other tests expect; a test passes
+  // `view3dAvailable` itself.
+  ROOM_VIEW_3D_AVAILABLE: false,
+  preloadRoomView3D: () => {},
+  RoomView3DHost: ({
+    config,
+    onPick,
+    onFail,
+    cameraCommand,
+    zones,
+    onHover,
+  }: {
+    onHover?: (objectId: string | null, x: number, y: number) => void;
+    zones?: { active: string | null; others: readonly string[] } | null;
+    config: Record<string, unknown>;
+    onPick?: (objectId: string | null) => void;
+    onFail: (error: unknown) => void;
+    cameraCommand?: { kind: string };
+  }) => {
+    room3d.config = config;
+    room3d.pick = onPick ?? null;
+    room3d.camera = cameraCommand;
+    room3d.fail = onFail;
+    room3d.zones = zones;
+    room3d.hover = onHover ?? null;
+    return <div data-testid="room-view-3d" />;
+  },
 }));
 
 // ---------------------------------------------------------------------------
@@ -244,90 +326,9 @@ describe("RoomMapEditor — canvas container observation", () => {
       rerender(<RoomMapEditor />);
     });
 
-    // The container div is the one MouseCoordinateDisplay measures against.
-    const canvasContainer = container.querySelector(".relative.flex-1");
+    const canvasContainer = container.querySelector('[data-testid="room-map-stage"]');
     expect(canvasContainer).not.toBeNull();
     expect(StubResizeObserver.observed).toContain(canvasContainer);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// MouseCoordinateDisplay event-listener stability tests
-// ---------------------------------------------------------------------------
-
-describe("RoomMapEditor — MouseCoordinateDisplay event-listener stability (F8)", () => {
-  let addEventListenerSpy: ReturnType<typeof vi.spyOn>;
-  let removeEventListenerSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    // Spy on HTMLDivElement prototype so we capture calls on the canvas
-    // container div (the one with ref={canvasContainerRef}) that
-    // MouseCoordinateDisplay's useEffect attaches its handlers to.
-    addEventListenerSpy = vi.spyOn(HTMLDivElement.prototype, "addEventListener");
-    removeEventListenerSpy = vi.spyOn(HTMLDivElement.prototype, "removeEventListener");
-  });
-
-  afterEach(() => {
-    addEventListenerSpy.mockRestore();
-    removeEventListenerSpy.mockRestore();
-  });
-
-  it("stable handler invariant: mousemove listener count does not grow across re-renders", async () => {
-    const { rerender } = render(<RoomMapEditor />);
-
-    const countAfterMount = addEventListenerSpy.mock.calls.filter(
-      (call: unknown[]) => call[0] === "mousemove"
-    ).length;
-
-    // Three re-renders with prop changes. canvasContainerRef is stable across
-    // re-renders (same underlying DOM node), so the useEffect in
-    // MouseCoordinateDisplay must not fire again and must not register additional
-    // listeners. If thrashing is re-introduced, each rerender would bump the count.
-    await act(async () => {
-      rerender(<RoomMapEditor hueReachable={true} />);
-      rerender(<RoomMapEditor hueReachable={false} />);
-      rerender(<RoomMapEditor hueReachable={true} />);
-    });
-
-    const countAfterRerenders = addEventListenerSpy.mock.calls.filter(
-      (call: unknown[]) => call[0] === "mousemove"
-    ).length;
-
-    expect(countAfterRerenders).toBe(countAfterMount);
-  });
-
-  it("cleanup on unmount: mousemove listener removed exactly once", async () => {
-    const { unmount } = render(<RoomMapEditor />);
-
-    const removalsBeforeUnmount = removeEventListenerSpy.mock.calls.filter(
-      (call: unknown[]) => call[0] === "mousemove"
-    ).length;
-
-    act(() => { unmount(); });
-
-    const removalsAfterUnmount = removeEventListenerSpy.mock.calls.filter(
-      (call: unknown[]) => call[0] === "mousemove"
-    ).length;
-
-    // One removal = clean teardown. Zero = leaked. >1 = thrashing re-introduced.
-    expect(removalsAfterUnmount - removalsBeforeUnmount).toBe(1);
-  });
-
-  it("mouseleave listener added and removed symmetrically with mousemove", async () => {
-    const { unmount } = render(<RoomMapEditor />);
-
-    const addedCount = addEventListenerSpy.mock.calls.filter(
-      (call: unknown[]) => call[0] === "mouseleave",
-    ).length;
-
-    act(() => { unmount(); });
-
-    const removedCount = removeEventListenerSpy.mock.calls.filter(
-      (call: unknown[]) => call[0] === "mouseleave",
-    ).length;
-
-    expect(addedCount).toBeGreaterThanOrEqual(1);
-    expect(removedCount).toBe(addedCount);
   });
 });
 
@@ -361,7 +362,7 @@ describe("RoomMapEditor — arrow keys route to pan or nudge by selection", () =
   /** The editor root owns `onKeyDown`; it is the outermost div React renders. */
   function renderEditor() {
     const { container } = render(<RoomMapEditor />);
-    const root = container.firstElementChild as HTMLElement;
+    const root = container.querySelector(".lm-room-editor") as HTMLElement;
     const canvas = () => container.querySelector('[data-testid="room-map-canvas"]') as HTMLElement;
     return { container, root, canvas };
   }
@@ -415,6 +416,18 @@ describe("RoomMapEditor — arrow keys route to pan or nudge by selection", () =
     // replacement, so the next edit cannot reinstate a bare `none`.
     expect(root.style.outline).toBe("");
   });
+
+  // WebKit rang the whole room with :focus-visible each time an action handed focus back to it.
+  it("is ringed when Tab brings focus to it, not when an action hands focus back", async () => {
+    const { root } = renderEditor();
+    await act(async () => {});
+    act(() => root.focus());
+    expect(root).not.toHaveAttribute("data-tabbed");
+    fireEvent.keyUp(root, { key: "Tab" });
+    expect(root).toHaveAttribute("data-tabbed");
+    act(() => root.blur());
+    expect(root).not.toHaveAttribute("data-tabbed");
+  });
 });
 
 class StubResizeObserver {
@@ -448,7 +461,7 @@ describe("RoomMapEditor — editor shortcuts stand aside for form fields", () =>
       getByTestId("select-tv").click();
     });
     return {
-      root: container.firstElementChild as HTMLElement,
+      root: container.querySelector(".lm-room-editor") as HTMLElement,
       field: getByTestId("dock-field"),
       getByTestId,
     };
@@ -479,7 +492,7 @@ describe("RoomMapEditor — editor shortcuts stand aside for form fields", () =>
 
     let notPrevented = true;
     act(() => {
-      notPrevented = fireEvent.keyDown(field, { key: "z", metaKey: true });
+      notPrevented = fireEvent.keyDown(field, { key: "z", code: "KeyZ", metaKey: true });
     });
 
     expect(persistState.undo).not.toHaveBeenCalled();
@@ -513,6 +526,90 @@ describe("RoomMapEditor — editor shortcuts stand aside for form fields", () =>
 });
 
 // ---------------------------------------------------------------------------
+// Bare keys belong to the canvas, not to a control that has focus
+// ---------------------------------------------------------------------------
+
+describe("RoomMapEditor — bare keys stay on the canvas", () => {
+  let realResizeObserver: typeof globalThis.ResizeObserver;
+
+  beforeEach(() => {
+    realResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = StubResizeObserver as unknown as typeof globalThis.ResizeObserver;
+    persistState.apply.mockClear();
+    persistState.undo.mockClear();
+  });
+
+  afterEach(() => {
+    globalThis.ResizeObserver = realResizeObserver;
+  });
+
+  async function renderEditor() {
+    const view = render(<RoomMapEditor />);
+    await act(async () => {});
+    return view;
+  }
+
+  it("does not pan the map for an arrow on a dock control", async () => {
+    const { getByTestId } = await renderEditor();
+    const before = getByTestId("room-map-canvas").dataset.panX;
+
+    act(() => {
+      fireEvent.keyDown(getByTestId("dock-tab"), { key: "ArrowRight" });
+    });
+
+    expect(getByTestId("room-map-canvas").dataset.panX).toBe(before);
+  });
+
+  it("does not delete the selected object for Delete on a dock control", async () => {
+    const { getByTestId } = await renderEditor();
+    act(() => {
+      getByTestId("select-tv").click();
+    });
+
+    act(() => {
+      fireEvent.keyDown(getByTestId("dock-tab"), { key: "Delete" });
+    });
+
+    expect(persistState.apply).not.toHaveBeenCalledWith({ tvAnchor: undefined });
+  });
+
+  it("still deletes for Delete on an object inside the canvas", async () => {
+    const { getByTestId } = await renderEditor();
+    act(() => {
+      getByTestId("select-tv").click();
+    });
+
+    act(() => {
+      fireEvent.keyDown(getByTestId("select-tv"), { key: "Delete" });
+    });
+
+    expect(persistState.apply).toHaveBeenCalledWith({ tvAnchor: undefined });
+  });
+
+  it("keeps Cmd+Z editor-wide, the dock included", async () => {
+    const { getByTestId } = await renderEditor();
+
+    act(() => {
+      fireEvent.keyDown(getByTestId("dock-tab"), { key: "z", code: "KeyZ", metaKey: true });
+    });
+
+    expect(persistState.undo).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a space on a button to press the button instead of entering pan mode", async () => {
+    const { getByTestId } = await renderEditor();
+
+    let notPrevented = false;
+    act(() => {
+      notPrevented = fireEvent.keyDown(getByTestId("dock-tab"), { key: " " });
+    });
+
+    expect(getByTestId("room-map-canvas").dataset.panMode).toBe("false");
+    expect(notPrevented).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Room resize
 // ---------------------------------------------------------------------------
 
@@ -538,9 +635,6 @@ describe("RoomMapEditor — resizing the room", () => {
     const { getByTestId } = render(<RoomMapEditor />);
 
     act(() => {
-      getByTestId("toggle-settings").click();
-    });
-    act(() => {
       getByTestId("grow-room").click();
     });
 
@@ -552,5 +646,358 @@ describe("RoomMapEditor — resizing the room", () => {
     // Channels are fractions of the room and follow it with no write; adding
     // the metre shift once pushed x from 0.5 to 1.5, outside [-1, 1].
     expect(patch).not.toHaveProperty("hueChannels");
+  });
+
+  it("keeps a Hue zone a cube of its edge in the grown room, its light where the bridge has it", async () => {
+    // A 2 m cube in a 5 × 4 × 2.5 m room, its light half way to its east side.
+    const zone = { id: "z", name: "Sofa", entertainmentAreaId: "a", centerX: 0, centerY: 0, centerZ: 0, scaleX: 0.4, scaleY: 0.5, scaleZ: 0.8, channelIndices: [0] };
+    persistState.configOverride = {
+      dimensions: { widthMeters: 5, depthMeters: 4, heightMeters: 2.5 },
+      zones: [zone],
+      hueChannels: [{ channelIndex: 0, x: 0.2, y: 0, z: 0, zoneId: "z", zoneRelativePosition: { x: 0.5, y: 0, z: 0 } }],
+    };
+    const view = await act(async () => render(<RoomMapEditor />));
+
+    await act(async () => {
+      view.getByTestId("grow-room").click();
+    });
+
+    const calls = persistState.apply.mock.calls;
+    const patch = calls[calls.length - 1]?.[0] as { zones: HueZone[]; hueChannels: HueChannelPlacement[] };
+    const grown = { widthMeters: 7, depthMeters: 6, heightMeters: 2.5 };
+    expect(isCubeZone(patch.zones[0]!, grown)).toBe(true);
+    expect(zoneEdge(patch.zones[0]!, grown)).toBeCloseTo(2);
+    expect(resolveHueChannelWorld(patch.hueChannels[0]!, patch.zones).x).toBeCloseTo(0.2);
+  });
+});
+
+describe("RoomMapEditor — an edit keeps what a newer build stored", () => {
+  let realResizeObserver: typeof globalThis.ResizeObserver;
+
+  beforeEach(() => {
+    realResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = StubResizeObserver as unknown as typeof globalThis.ResizeObserver;
+    persistState.apply.mockClear();
+  });
+
+  afterEach(() => {
+    globalThis.ResizeObserver = realResizeObserver;
+    persistState.configOverride = {};
+  });
+
+  it("saves a piece of an unknown kind whole, with only the edited field changed", async () => {
+    const stored = { id: "f", type: "hammock", x: 1, y: 1, width: 1, height: 1, variant: "swing", tone: "teal", topMeters: 2.2 };
+    persistState.configOverride = { furniture: [stored] };
+    const { getByTestId } = render(<RoomMapEditor />);
+    await act(async () => {});
+
+    act(() => getByTestId("widen-first").click());
+
+    expect(persistState.apply).toHaveBeenLastCalledWith(
+      { furniture: [{ ...stored, width: 3 }] },
+      { gesture: "furniture:f:width" },
+    );
+  });
+});
+
+describe("RoomMapEditor — letting go of a selection", () => {
+  let realResizeObserver: typeof globalThis.ResizeObserver;
+
+  beforeEach(() => {
+    realResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = StubResizeObserver as unknown as typeof globalThis.ResizeObserver;
+  });
+
+  afterEach(() => {
+    globalThis.ResizeObserver = realResizeObserver;
+  });
+
+  function renderWithZoneAndTv() {
+    const view = render(<RoomMapEditor />);
+    act(() => view.getByTestId("pick-zone").click());
+    act(() => view.getByTestId("select-tv").click());
+    const dock = view.getByTestId("room-dock");
+    expect(dock.dataset.selected).toBe("tv");
+    expect(dock.dataset.zone).toBe("zone-1");
+    return { ...view, dock, root: view.container.querySelector(".lm-room-editor") as HTMLElement };
+  }
+
+  it("steps back one at a time on Escape: the object, then the zone it was picked over", () => {
+    const { root, dock } = renderWithZoneAndTv();
+    act(() => {
+      fireEvent.keyDown(root, { key: "Escape" });
+    });
+    expect(dock.dataset.selected).toBe("");
+    expect(dock.dataset.zone).toBe("zone-1");
+    act(() => {
+      fireEvent.keyDown(root, { key: "Escape" });
+    });
+    expect(dock.dataset.zone).toBe("");
+  });
+
+  // `select(null)` alone left the zone selected, so the palette never came back.
+  it("lets go of both on a click on empty ground", () => {
+    const { getByTestId, dock } = renderWithZoneAndTv();
+    act(() => getByTestId("empty-ground").click());
+    expect(dock.dataset.selected).toBe("");
+    expect(dock.dataset.zone).toBe("");
+  });
+
+  it("opens no plan menu for a right-click in the dock", () => {
+    const { getByTestId } = renderWithZoneAndTv();
+    // Not prevented: the plan's menu is the canvas's, and a popover's right-click bubbles here too.
+    expect(fireEvent.contextMenu(getByTestId("dock-tab"))).toBe(true);
+    expect(fireEvent.contextMenu(getByTestId("select-tv"))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Editing in 3D
+// ---------------------------------------------------------------------------
+
+describe("RoomMapEditor — the 3D room as the editing stage", () => {
+  const openEdit = async () => {
+    const view = render(<RoomMapSurface view3dAvailable />);
+    await act(async () => {});
+    // The editor reads its grid settings as it mounts; flushed here, they land inside act.
+    await act(async () => (view.getByRole("radio", { name: "roomMap:face.edit" }) as HTMLElement).click());
+    return view;
+  };
+  const stageRadio = (view: ReturnType<typeof render>, name: string) => view.getByRole("radio", { name }) as HTMLElement;
+
+  afterEach(() => {
+    __resetEditStage();
+    __resetRoomViewFailure();
+    room3d.pick = null;
+    room3d.fail = null;
+    room3d.camera = undefined;
+  });
+
+  // The maintainer wants the room laid out in 3D: Edit opened on the plan alone.
+  it("opens Edit on the 3D room with the dock, and the plan a switch away that the next Edit remembers", async () => {
+    const view = await openEdit();
+    expect(view.getByTestId("room-view-3d")).toBeInTheDocument();
+    expect(view.queryByTestId("room-map-canvas")).toBeNull();
+    expect(view.getByTestId("room-dock")).toBeInTheDocument();
+    expect(stageRadio(view, "roomMap:stage.room")).toHaveAttribute("aria-checked", "true");
+    // The stage it opens on is there at once; only a switch fades the next one in.
+    const stage = view.getByTestId("room-map-stage");
+    expect(stage).toHaveAttribute("data-stage", "room");
+    expect(stage).not.toHaveAttribute("data-switched");
+
+    await act(async () => stageRadio(view, "roomMap:stage.plan").click());
+    expect(view.getByTestId("room-map-canvas")).toBeInTheDocument();
+    expect(view.queryByTestId("room-view-3d")).toBeNull();
+    expect(stage).toHaveAttribute("data-stage", "plan");
+    expect(stage).toHaveAttribute("data-switched");
+
+    view.unmount();
+    const again = await openEdit();
+    expect(again.getByTestId("room-map-canvas")).toBeInTheDocument();
+  });
+
+  it("selects what is picked in the room for the dock's card, and lets go on empty floor", async () => {
+    const view = await openEdit();
+    act(() => room3d.pick?.("tv"));
+    expect(view.getByTestId("room-dock")).toHaveAttribute("data-selected", "tv");
+    act(() => room3d.pick?.(null));
+    expect(view.getByTestId("room-dock")).toHaveAttribute("data-selected", "");
+  });
+
+  it("keeps a zone picked from the list in the 3D room, outlined there, and through a stage switch", async () => {
+    const view = await openEdit();
+    await act(async () => view.getByTestId("pick-zone").click());
+    expect(view.getByTestId("room-view-3d")).toBeInTheDocument();
+    expect(view.getByTestId("room-dock")).toHaveAttribute("data-zone", "zone-1");
+    expect(room3d.zones?.active).toBe("zone-1");
+    await act(async () => stageRadio(view, "roomMap:stage.plan").click());
+    await act(async () => stageRadio(view, "roomMap:stage.room").click());
+    expect(view.getByTestId("room-dock")).toHaveAttribute("data-zone", "zone-1");
+  });
+
+  it("names what is under the pointer in the 3D room, and lets go off it", async () => {
+    const view = await openEdit();
+    act(() => room3d.hover?.("tv", 200, 200));
+    expect(view.getByText("roomMap:objectPanel.tvLabel")).toBeInTheDocument();
+    act(() => room3d.hover?.(null, 0, 0));
+    expect(view.queryByText("roomMap:objectPanel.tvLabel")).toBeNull();
+  });
+
+  it("adds a zone in the 3D room, where it is drawn now", async () => {
+    const view = await openEdit();
+    await act(async () => view.getByTestId("add-zone").click());
+    expect(view.getByTestId("room-view-3d")).toBeInTheDocument();
+  });
+
+  it("arms a draw on the plan instead of adding a zone, and Escape or the 3D room disarms it", async () => {
+    const view = await openEdit();
+    await act(async () => stageRadio(view, "roomMap:stage.plan").click());
+    persistState.apply.mockClear();
+    await act(async () => view.getByTestId("add-zone").click());
+    expect(view.getByTestId("zone-draw-layer")).toBeInTheDocument();
+    expect(view.getByTestId("carry-hint")).toHaveAttribute("data-hint", "draw");
+    expect(persistState.apply).not.toHaveBeenCalled();
+    await act(async () => fireEvent.keyDown(window, { key: "Escape" }));
+    expect(view.queryByTestId("zone-draw-layer")).toBeNull();
+    await act(async () => view.getByTestId("add-zone").click());
+    await act(async () => stageRadio(view, "roomMap:stage.room").click());
+    await act(async () => stageRadio(view, "roomMap:stage.plan").click());
+    expect(view.queryByTestId("zone-draw-layer")).toBeNull();
+  });
+
+  it("adds a zone at once from the keyboard, which cannot drag one, and ends a draw on a pick", async () => {
+    const view = await openEdit();
+    await act(async () => stageRadio(view, "roomMap:stage.plan").click());
+    await act(async () => view.getByTestId("add-zone-key").click());
+    expect(view.queryByTestId("zone-draw-layer")).toBeNull();
+    await act(async () => view.getByTestId("add-zone").click());
+    expect(view.getByTestId("zone-draw-layer")).toBeInTheDocument();
+    await act(async () => view.getByTestId("pick-zone").click());
+    expect(view.queryByTestId("zone-draw-layer")).toBeNull();
+  });
+
+  it("ends a draw when a template is shown, so the drawn zone never lands on it", async () => {
+    const view = await openEdit();
+    await act(async () => stageRadio(view, "roomMap:stage.plan").click());
+    await act(async () => view.getByTestId("add-zone").click());
+    expect(view.getByTestId("zone-draw-layer")).toBeInTheDocument();
+    await act(async () => view.getByTestId("preview-template").click());
+    expect(view.queryByTestId("zone-draw-layer")).toBeNull();
+  });
+
+  it("opens the plan for an image picked from the list, and closes its card going back to 3D", async () => {
+    const view = await openEdit();
+    await act(async () => view.getByTestId("pick-image").click());
+    expect(view.getByTestId("room-map-canvas")).toBeInTheDocument();
+    expect(view.getByTestId("room-dock")).toHaveAttribute("data-selected", "img-layer-1");
+    await act(async () => stageRadio(view, "roomMap:stage.room").click());
+    expect(view.getByTestId("room-dock")).toHaveAttribute("data-selected", "");
+  });
+
+  // ⌘0 fitted the hidden plan: in 3D it is the camera's "Whole room".
+  it("sends ⌘0 to the camera in the 3D room", async () => {
+    const view = await openEdit();
+    const root = view.container.querySelector(".lm-room-editor") as HTMLElement;
+    await act(async () => fireEvent.keyDown(root, { key: "0", code: "Digit0", metaKey: true }));
+    expect(room3d.camera).toMatchObject({ kind: "reset" });
+  });
+
+  it("falls back to the plan with no stage switch when the 3D room cannot open", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const view = await openEdit();
+    await act(async () => room3d.fail?.(new Error("no WebGL")));
+    expect(view.getByTestId("room-map-canvas")).toBeInTheDocument();
+    expect(view.queryByRole("radio", { name: "roomMap:stage.plan" })).toBeNull();
+  });
+
+  // A drawer closed with nothing previewed left the plan following templates: the next resize refitted it.
+  it("leaves a later room resize unfitted after a drawer closed without a preview", async () => {
+    const view = await openEdit();
+    await act(async () => stageRadio(view, "roomMap:stage.plan").click());
+    await act(async () => view.getByTestId("leave-template").click());
+    const canvas = view.getByTestId("room-map-canvas");
+    const pan = [canvas.dataset.panX, canvas.dataset.panY];
+    persistState.configOverride = { dimensions: { widthMeters: 9, depthMeters: 7 } };
+    view.rerender(<RoomMapSurface view3dAvailable />);
+    await act(async () => {});
+    expect([canvas.dataset.panX, canvas.dataset.panY]).toEqual(pan);
+    persistState.configOverride = {};
+  });
+
+  it("keeps a group selection through a preview", async () => {
+    persistState.configOverride = {
+      furniture: [
+        { id: "m1", type: "chair", x: 1, y: 1, width: 0.5, height: 0.5 },
+        { id: "m2", type: "chair", x: 2, y: 1, width: 0.5, height: 0.5 },
+      ],
+    };
+    const view = await openEdit();
+    await act(async () => stageRadio(view, "roomMap:stage.plan").click());
+    const piece = (id: string) => view.container.querySelector(`[data-piece="${id}"]`) as HTMLElement;
+    await act(async () => piece("m1").click());
+    await act(async () => piece("m2").click());
+    expect(piece("m2")).toHaveAttribute("data-grouped");
+    await act(async () => view.getByTestId("preview-template").click());
+    await act(async () => view.getByTestId("leave-template").click());
+    expect(piece("m1")).toHaveAttribute("data-grouped");
+    expect(piece("m2")).toHaveAttribute("data-grouped");
+    persistState.configOverride = {};
+  });
+
+  it("resizes the saved room, not the template on show", async () => {
+    persistState.apply.mockClear();
+    persistState.configOverride = { furniture: [{ id: "mine", type: "chair", x: 1, y: 1, width: 0.5, height: 0.5 }] };
+    const view = await openEdit();
+    await act(async () => view.getByTestId("preview-template").click());
+    await act(async () => view.getByTestId("grow-room").click());
+    const patch = persistState.apply.mock.calls[0]![0] as { dimensions: { widthMeters: number }; furniture: Array<{ id: string; x: number }> };
+    expect(patch.furniture.map((f) => f.id)).toEqual(["mine"]);
+    // The saved room is 5 m wide: a metre more each side of its middle.
+    expect(patch.furniture[0]!.x).toBeCloseTo(2);
+    persistState.configOverride = {};
+  });
+
+  it("edits a saved piece from the inspector without writing the template on show", async () => {
+    persistState.apply.mockClear();
+    persistState.configOverride = { furniture: [{ id: "mine", type: "chair", x: 1, y: 1, width: 0.5, height: 0.5 }] };
+    const view = await openEdit();
+    await act(async () => view.getByTestId("preview-template").click());
+    await act(async () => view.getByTestId("widen-first").click());
+    const patch = persistState.apply.mock.calls[0]![0] as { furniture: Array<{ id: string; width: number }> };
+    expect(patch.furniture.map((f) => [f.id, f.width])).toEqual([["mine", 3]]);
+    persistState.configOverride = {};
+  });
+
+  // The drawer's cards sit in a portal, and their keys still bubble to the editor through React.
+  it("leaves Cmd+Z unanswered while a template is previewed", async () => {
+    persistState.undo.mockClear();
+    const view = await openEdit();
+    const root = view.container.querySelector(".lm-room-editor") as HTMLElement;
+    await act(async () => view.getByTestId("preview-template").click());
+    await act(async () => fireEvent.keyDown(root, { key: "z", code: "KeyZ", metaKey: true }));
+    expect(persistState.undo).not.toHaveBeenCalled();
+    await act(async () => view.getByTestId("leave-template").click());
+    await act(async () => fireEvent.keyDown(root, { key: "z", code: "KeyZ", metaKey: true }));
+    expect(persistState.undo).toHaveBeenCalledOnce();
+  });
+
+  // Laid out again from the template, the room came back as new objects and the 3D morph restarted.
+  it("applies the very room it previewed", async () => {
+    persistState.replace.mockClear();
+    persistState.configOverride = {
+      usbStrips: [{ stripId: "strip-1", portName: "/dev/cu.usb", ledCount: 60, startX: 0, startY: 0, endX: 1, endY: 0 }],
+    };
+    const view = await openEdit();
+    await act(async () => view.getByTestId("preview-template").click());
+    const shown = room3d.config!;
+    await act(async () => view.getByTestId("apply-template").click());
+    const applied = persistState.replace.mock.calls[0]![0] as Record<string, unknown>;
+    expect(Object.keys(applied).filter((key) => applied[key] !== shown[key])).toEqual([]);
+    persistState.configOverride = {};
+  });
+
+  it("shows a template the drawer rests on without saving it, and lays it out as one step when applied", async () => {
+    persistState.apply.mockClear();
+    persistState.replace.mockClear();
+    persistState.configOverride = { furniture: [{ id: "mine", type: "chair", x: 1, y: 1, width: 0.5, height: 0.5 }] };
+    const view = await openEdit();
+    const stage = view.getByTestId("room-map-stage");
+    await act(async () => stageRadio(view, "roomMap:stage.plan").click());
+    await act(async () => view.getByTestId("preview-template").click());
+    expect(view.getAllByTestId("plan-piece")).toHaveLength(2);
+    expect(view.getByTestId("room-dock")).toHaveAttribute("data-furniture", "1");
+    expect(stage).toHaveAttribute("data-previewing");
+    await act(async () => view.getByTestId("leave-template").click());
+    expect(view.getAllByTestId("plan-piece")).toHaveLength(1);
+    expect(stage).not.toHaveAttribute("data-previewing");
+    expect(persistState.apply).not.toHaveBeenCalled();
+    expect(persistState.replace).not.toHaveBeenCalled();
+
+    await act(async () => view.getByTestId("preview-template").click());
+    await act(async () => view.getByTestId("apply-template").click());
+    expect(persistState.replace).toHaveBeenCalledOnce();
+    expect(persistState.replace).toHaveBeenCalledWith(expect.objectContaining({ furniture: TEMPLATE.furniture }));
+    expect(persistState.apply).not.toHaveBeenCalled();
+    persistState.configOverride = {};
   });
 });

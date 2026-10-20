@@ -14,6 +14,33 @@ function clampUnit(value: number): number {
   return Math.max(-1, Math.min(1, value));
 }
 
+/** A Hue cube coordinate in [-1, 1] as metres along a room side of `roomSizeM`.
+ *  x: -1 is the left wall, +1 the right. y: +1 is the TV wall (the canvas top),
+ *  -1 the back wall behind the viewer. z: -1 is the floor, +1 the ceiling. */
+export function hueToMetres(hueVal: number, roomSizeM: number): number {
+  return ((hueVal + 1) / 2) * roomSizeM;
+}
+
+/** A cube position as metres from the room's top-left corner on the plan, where the canvas draws
+ *  the dot: x from the left wall, y from the TV wall. */
+export function hueToPlanMetres(
+  world: { x: number; y: number },
+  roomWidthM: number,
+  roomDepthM: number,
+): { x: number; y: number } {
+  return { x: hueToMetres(world.x, roomWidthM), y: hueToMetres(-world.y, roomDepthM) };
+}
+
+/** `hueToPlanMetres` reversed. */
+export function planMetresToHue(
+  x: number,
+  y: number,
+  roomWidthM: number,
+  roomDepthM: number,
+): { x: number; y: number } {
+  return { x: (x / roomWidthM) * 2 - 1, y: 1 - (y / roomDepthM) * 2 };
+}
+
 /** The zone a channel is bound to, or `null` when it uses absolute placement. */
 export function findBoundZone(
   channel: HueChannelPlacement,
@@ -123,4 +150,29 @@ export function nudgeHueChannel(
 ): HueChannelPlacement {
   const world = resolveHueChannelWorld(channel, zones);
   return moveHueChannelToWorld(channel, zones, world.x + dx, world.y + dy);
+}
+
+/** Where a light joining `zone` sits in it: where it stands now, or the nearest point inside when it
+ *  stands outside. Joining at the centre moved a light the zone already held. */
+export function zoneRelativeAt(
+  channel: HueChannelPlacement,
+  zones: readonly HueZone[],
+  zone: HueZone,
+): { x: number; y: number; z: number } {
+  const world = resolveHueChannelWorld(channel, zones);
+  const rel = (v: number, centre: number, scale: number) => (scale === 0 ? 0 : clampUnit((v - centre) / scale));
+  return {
+    x: rel(world.x, zone.centerX, zone.scaleX),
+    y: rel(world.y, zone.centerY, zone.scaleY),
+    z: rel(resolveHueChannelWorldZ(channel, zones), zone.centerZ, zone.scaleZ),
+  };
+}
+
+/** Out of its zone, standing where the zone had it. */
+export function detachHueChannel(channel: HueChannelPlacement, zones: readonly HueZone[]): HueChannelPlacement {
+  if (!channel.zoneId) return channel;
+  const world = resolveHueChannelWorld(channel, zones);
+  const z = resolveHueChannelWorldZ(channel, zones);
+  const { zoneId: _zone, zoneRelativePosition: _rel, ...rest } = channel;
+  return { ...rest, x: world.x, y: world.y, z };
 }

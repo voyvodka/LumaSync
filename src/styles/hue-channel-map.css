@@ -18,3 +18,74 @@
     forced-color-adjust: none;
   }
 }
+
+/* A light overhead, in the dashed ring a ceiling plan draws what is above the floor in. */
+.lm-room-hue-overhead {
+  width: 24px;
+  height: 24px;
+  margin: -12px 0 0 -12px;
+  border: 1px dashed var(--lm-ink-dim);
+  border-radius: 50%;
+}
+.lm-room-hue-overhead--selected {
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+}
+@media (forced-colors: active) {
+  .lm-room-hue-overhead {
+    border-color: CanvasText;
+  }
+}
+
+/* Which way a one-sided light throws its light: a wedge off the dot's centre, turned inline. */
+.lm-room-hue-beam {
+  width: 22px;
+  height: 16px;
+  margin-top: -8px;
+  transform-origin: 0 50%;
+  background: radial-gradient(ellipse at 0 50%, rgb(255 214 160 / 60%), transparent 72%);
+  clip-path: polygon(0 50%, 100% 0, 100% 100%);
+}
+@media (forced-colors: active) {
+  .lm-room-hue-beam {
+    background: CanvasText;
+    forced-color-adjust: none;
+  }
+}
+
+/* Replaces the dot's `title`, which waited a second and covered the dot. */
+.lm-room-hue-name {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgb(14 14 20 / 86%);
+  box-shadow: inset 0 0 0 1px var(--lm-line-2);
+  color: var(--lm-ink);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 4px) scale(var(--lm-hue-name-scale, 1));
+  transform-origin: 50% 0;
+  transition: opacity var(--lm-dur-quick) var(--lm-ease-out);
+}
+[data-object-id]:hover > .lm-room-hue-name,
+[data-object-id]:focus-within > .lm-room-hue-name,
+.lm-room-hue-name[data-shown] {
+  opacity: 1;
+}
+:root[data-reduced-motion] .lm-room-hue-name {
+  transition: none;
+}
+@media (forced-colors: active) {
+  .lm-room-hue-name {
+    background: Canvas;
+    color: CanvasText;
+    box-shadow: inset 0 0 0 1px CanvasText;
+  }
+}

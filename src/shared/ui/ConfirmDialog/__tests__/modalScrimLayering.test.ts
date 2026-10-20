@@ -30,8 +30,19 @@ describe("modal scrim layering", () => {
     }
   });
 
+  it("dims the page by one token, so the modals stay the same depth", () => {
+    for (const [css, selector] of [
+      [updateModalCss, ".scrim"],
+      [confirmDialogCss, ".scrim"],
+    ] as const) {
+      const block = css.slice(css.indexOf(`${selector} {`));
+      expect(/background:\s*([^;]+);/.exec(block.slice(0, block.indexOf("}")))?.[1]).toBe("var(--lm-scrim)");
+    }
+  });
+
   it("pins the scrim offset to the title bar's real height", () => {
-    const declared = /--lm-titlebar-h:\s*(\d+)px/.exec(stylesCss)?.[1];
+    // The bar keeps its height on screen at any interface size, so the offset carries the chrome scale.
+    const declared = /--lm-titlebar-h:\s*calc\((\d+)px \* var\(--lm-chrome-scale, 1\)\)/.exec(stylesCss)?.[1];
     const source = /TITLE_BAR_HEIGHT_PX = (\d+)/.exec(titleBarSource)?.[1];
     expect(declared).toBe(source);
   });

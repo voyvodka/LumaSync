@@ -1,6 +1,6 @@
-//! Synthetic test-pattern frame source (v1.6 LED Preview — Phase 1).
+//! Synthetic test-pattern frame source for the LED preview.
 //!
-//! Phase 1 is **TEST MODE with screen capture OFF**. Instead of grabbing real
+//! A test runs with **screen capture off**. Instead of grabbing real
 //! screen pixels, [`SyntheticFrameSource`] renders a procedural SCREEN-SPACE
 //! [`CapturedFrame`] (640 px long axis, display aspect) for each
 //! `capture_frame()` call and hands it to
@@ -16,9 +16,6 @@
 //! intentionally NOT baked into the rendered frame — it flows through the
 //! worker's existing brightness path (LumaSync v1 header byte + the twin's
 //! post-EWMA scalar) so a synthetic run dims identically to live ambilight.
-//!
-//! Phase 2 (capture-exclusion via `SCContentFilter` exclude /
-//! `SetWindowDisplayAffinity`) is explicitly OUT OF SCOPE here.
 
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
@@ -29,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use super::ambilight_capture::{AmbilightCaptureError, AmbilightFrameSource, CapturedFrame};
 use super::led_calibration::{
     build_led_sequence, led_to_screen_pos, LedCalibrationConfig, LedSegment, LedSegmentCounts,
-    LedSequenceItem,
+    LedSequenceItem, StripShape,
 };
 
 /// Long axis of the rendered synthetic frame. Mirrors the macOS/Windows
@@ -111,9 +108,9 @@ impl TestPatternSpeed {
 
 /// Discriminated union of synthetic test patterns (discriminator `kind`).
 ///
-/// Mirrors the TS `LedTestPattern` union exactly: `solid`/`chase` carry an
-/// explicit RGB triple; `rainbow`/`spiral`/`gamut` are fully procedural;
-/// `channelProbe` lights one wire slot (0..=2) across the whole strip.
+/// Mirrors the TS `LedTestPattern` union exactly: `solid` carries an
+/// explicit RGB triple; `channelProbe` lights one wire slot (0..=2) across
+/// the whole strip; `guide` is LED Setup's picture of the layout.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum TestPatternKind {
@@ -122,39 +119,20 @@ pub enum TestPatternKind {
         g: u8,
         b: u8,
     },
-    Chase {
-        r: u8,
-        g: u8,
-        b: u8,
-    },
-    Rainbow,
-    Spiral,
-    Gamut,
     /// Full-frame pure red / green / blue by `slot`. `start_led_test_pattern`
     /// pins the identity colour order for it and rejects a slot above 2.
     ChannelProbe {
         slot: u8,
     },
-}
-
-impl TestPatternKind {
-    /// Stable discriminator string, matching the TS `LedTestPatternKind`
-    /// union. Used to stamp `EdgeSignalPayload.pattern`.
-    pub fn tag(&self) -> &'static str {
-        match self {
-            TestPatternKind::Solid { .. } => "solid",
-            TestPatternKind::Chase { .. } => "chase",
-            TestPatternKind::Rainbow => "rainbow",
-            TestPatternKind::Spiral => "spiral",
-            TestPatternKind::Gamut => "gamut",
-            TestPatternKind::ChannelProbe { .. } => "channelProbe",
-        }
-    }
+    /// LED Setup's guide: LED #1 green, each edge's end LEDs blue, the two
+    /// beside the stand gap red, and a white light running in strip order —
+    /// the start, the direction, the corners and the gap at a glance.
+    Guide,
 }
 
 /// Resolved synthetic-pattern request carried from `start_led_test_pattern`
-/// into the frame-source factory and stored on the lighting runtime for
-/// `get_led_preview_status`.
+/// into the frame-source factory and stored on the lighting runtime, where a
+/// refresh and a retune read whether a test is running.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TestPatternConfig {
     pub kind: TestPatternKind,
@@ -225,7 +203,7 @@ pub struct SyntheticFrameSource {
     total_leds: u16,
     /// Strip layout, so the comet can paint one exact block per LED.
     sequence: Vec<LedSequenceItem>,
-    counts: LedSegmentCounts,
+    shape: StripShape,
     width: u32,
     height: u32,
     phase: f32,
@@ -251,15 +229,18 @@ impl SyntheticFrameSource {
             .map(|c| c.total_leds)
             .filter(|n| *n > 0)
             .unwrap_or(FALLBACK_TOTAL_LEDS);
-        let (sequence, counts) = match calibration.as_ref() {
-            Some(cal) => (build_led_sequence(cal), cal.counts.clone()),
+        let (sequence, shape) = match calibration.as_ref() {
+            Some(cal) => (build_led_sequence(cal), StripShape::of(cal)),
             None => (
                 Vec::new(),
-                LedSegmentCounts {
-                    top: 0,
-                    right: 0,
-                    bottom: 0,
-                    left: 0,
+                StripShape {
+                    counts: LedSegmentCounts {
+                        top: 0,
+                        right: 0,
+                        bottom: 0,
+                        left: 0,
+                    },
+                    bottom_missing: 0,
                 },
             ),
         };
@@ -275,7 +256,7 @@ impl SyntheticFrameSource {
             speed: config.speed,
             total_leds,
             sequence,
-            counts,
+            shape,
             width,
             height,
             phase,
@@ -320,26 +301,16 @@ impl SyntheticFrameSource {
             TestPatternKind::Solid { r, g, b } => {
                 pixels_rgb.resize(w * h, [r, g, b]);
             }
-            TestPatternKind::Chase { r, g, b } => {
-                render_comet(
+            TestPatternKind::Guide => {
+                render_guide(
                     &mut pixels_rgb,
                     w,
                     h,
                     &self.sequence,
-                    &self.counts,
+                    &self.shape,
                     self.phase,
                     self.tail_fraction(),
-                    [r, g, b],
                 );
-            }
-            TestPatternKind::Rainbow => {
-                render_rainbow(&mut pixels_rgb, w, h, self.phase);
-            }
-            TestPatternKind::Spiral => {
-                render_spiral(&mut pixels_rgb, w, h, self.phase);
-            }
-            TestPatternKind::Gamut => {
-                render_gamut(&mut pixels_rgb, w, h);
             }
             TestPatternKind::ChannelProbe { slot } => {
                 pixels_rgb.resize(w * h, channel_probe_color(slot));
@@ -372,19 +343,22 @@ impl AmbilightFrameSource for SyntheticFrameSource {
 // ---------------------------------------------------------------------------
 
 /// Fraction along its own segment for a strip item, matching `led_to_screen_pos`.
-fn segment_fraction(item: &LedSequenceItem, counts: &LedSegmentCounts) -> f32 {
-    let count = item.segment.count(counts);
-    if item.local_index == 0 || count <= 1 {
+fn segment_fraction(item: &LedSequenceItem, shape: &StripShape) -> f32 {
+    let pitches = shape.pitches(item.segment);
+    let pitch = shape.pitch_of(item);
+    if pitches <= 1 {
+        0.5
+    } else if pitch == 0 {
         0.0
     } else {
-        item.local_index as f32 / (count - 1) as f32
+        pitch as f32 / (pitches - 1) as f32
     }
 }
 
 /// Arc position of an LED, derived from its segment rather than its pixel so a
 /// corner LED cannot be attributed to the neighbouring edge by a distance tie.
-fn led_arc(item: &LedSequenceItem, counts: &LedSegmentCounts, w: f32, h: f32) -> f32 {
-    let frac = segment_fraction(item, counts);
+fn led_arc(item: &LedSequenceItem, shape: &StripShape, w: f32, h: f32) -> f32 {
+    let frac = segment_fraction(item, shape);
     let total = 2.0 * (w + h);
     match item.segment {
         LedSegment::Top => frac * w / total,
@@ -409,7 +383,7 @@ fn render_comet(
     w: usize,
     h: usize,
     sequence: &[LedSequenceItem],
-    counts: &LedSegmentCounts,
+    shape: &StripShape,
     phase: f32,
     tail: f32,
     rgb: [u8; 3],
@@ -420,11 +394,9 @@ fn render_comet(
         return;
     }
     let tail = tail.clamp(0.001, 0.5);
-    let (wf, hf) = ((w - 1) as f32, (h - 1) as f32);
-    let depth = ((EDGE_THICKNESS * h.min(w) as f32) as usize).max(2);
 
     for item in sequence {
-        let behind = (phase - led_arc(item, counts, w as f32, h as f32)).rem_euclid(1.0);
+        let behind = (phase - led_arc(item, shape, w as f32, h as f32)).rem_euclid(1.0);
         if behind >= tail {
             continue;
         }
@@ -437,41 +409,102 @@ fn render_comet(
             (rgb[2] as f32 * intensity).round() as u8,
         ];
 
-        let (nx, ny) = led_to_screen_pos(item, counts);
-        let cx = (nx * wf).round() as usize;
-        let cy = (ny * hf).round() as usize;
-        let count = item.segment.count(counts).max(2) as f32;
-        let horizontal = matches!(item.segment, LedSegment::Top | LedSegment::Bottom);
-        // Half a pitch either side — the LED owns its own cell and no more.
-        let half = if horizontal {
-            (wf / (count - 1.0) / 2.0).max(1.0) as usize
-        } else {
-            (hf / (count - 1.0) / 2.0).max(1.0) as usize
-        };
+        paint_led(pixels, w, h, item, shape, color);
+    }
+}
 
-        let (x0, x1, y0, y1) = if horizontal {
-            let y0 = if ny < 0.5 { 0 } else { h.saturating_sub(depth) };
-            (
-                cx.saturating_sub(half),
-                (cx + half + 1).min(w),
-                y0,
-                (y0 + depth).min(h),
-            )
-        } else {
-            let x0 = if nx < 0.5 { 0 } else { w.saturating_sub(depth) };
-            (
-                x0,
-                (x0 + depth).min(w),
-                cy.saturating_sub(half),
-                (cy + half + 1).min(h),
-            )
-        };
+/// Fills one LED's cell — half a pitch either side of where it samples, as
+/// deep as the edge band — with `color`, so whatever the sampler averages
+/// there is exactly that.
+fn paint_led(
+    pixels: &mut [[u8; 3]],
+    w: usize,
+    h: usize,
+    item: &LedSequenceItem,
+    shape: &StripShape,
+    color: [u8; 3],
+) {
+    let (wf, hf) = ((w - 1) as f32, (h - 1) as f32);
+    let depth = ((EDGE_THICKNESS * h.min(w) as f32) as usize).max(2);
+    let (nx, ny) = led_to_screen_pos(item, shape);
+    let cx = (nx * wf).round() as usize;
+    let cy = (ny * hf).round() as usize;
+    let count = shape.pitches(item.segment).max(2) as f32;
+    let horizontal = matches!(item.segment, LedSegment::Top | LedSegment::Bottom);
+    // Half a pitch either side — the LED owns its own cell and no more.
+    let half = if horizontal {
+        (wf / (count - 1.0) / 2.0).max(1.0) as usize
+    } else {
+        (hf / (count - 1.0) / 2.0).max(1.0) as usize
+    };
 
-        for row in y0..y1 {
-            let base = row * w;
-            for col in x0..x1 {
-                pixels[base + col] = color;
-            }
+    let (x0, x1, y0, y1) = if horizontal {
+        let y0 = if ny < 0.5 { 0 } else { h.saturating_sub(depth) };
+        (
+            cx.saturating_sub(half),
+            (cx + half + 1).min(w),
+            y0,
+            (y0 + depth).min(h),
+        )
+    } else {
+        let x0 = if nx < 0.5 { 0 } else { w.saturating_sub(depth) };
+        (
+            x0,
+            (x0 + depth).min(w),
+            cy.saturating_sub(half),
+            (cy + half + 1).min(h),
+        )
+    };
+
+    for row in y0..y1 {
+        let base = row * w;
+        for col in x0..x1 {
+            pixels[base + col] = color;
+        }
+    }
+}
+
+const GUIDE_START: [u8; 3] = [0, 255, 0];
+const GUIDE_EDGE_END: [u8; 3] = [0, 80, 255];
+const GUIDE_GAP: [u8; 3] = [255, 0, 0];
+const GUIDE_LIGHT: [u8; 3] = [255, 255, 255];
+
+/// What the guide marks an LED with, if anything: LED #1 first, then the
+/// LEDs beside the stand gap, then each edge's two ends.
+fn guide_mark(strip_index: usize, item: &LedSequenceItem, shape: &StripShape) -> Option<[u8; 3]> {
+    if strip_index == 0 {
+        return Some(GUIDE_START);
+    }
+    let count = item.segment.count(&shape.counts);
+    let gap = item.segment == LedSegment::Bottom && count >= 2 && shape.bottom_missing > 0;
+    let right_run = count / 2;
+    if gap && (item.local_index + 1 == right_run || item.local_index == right_run) {
+        return Some(GUIDE_GAP);
+    }
+    if item.local_index == 0 || item.local_index + 1 == count {
+        return Some(GUIDE_EDGE_END);
+    }
+    None
+}
+
+/// The layout at a glance: the running light shows the direction, the marks
+/// stay put over it.
+fn render_guide(
+    pixels: &mut Vec<[u8; 3]>,
+    w: usize,
+    h: usize,
+    sequence: &[LedSequenceItem],
+    shape: &StripShape,
+    phase: f32,
+    tail: f32,
+) {
+    render_comet(pixels, w, h, sequence, shape, phase, tail, GUIDE_LIGHT);
+    if sequence.is_empty() || w < 2 || h < 2 {
+        return;
+    }
+    for (strip_index, item) in sequence.iter().enumerate() {
+        if let Some(mark) = guide_mark(strip_index, item, shape) {
+            paint_led(pixels, w, h, item, shape, mark);
         }
     }
 }
@@ -480,10 +513,6 @@ fn render_comet(
 // Pattern renderers
 // ---------------------------------------------------------------------------
 
-/// Angular hue wheel that rotates around the screen centre with time. Sampling
-/// the perimeter therefore cycles through the spectrum *around the ring* and
-/// the whole rainbow appears to rotate — not a linear left→right sweep (which
-/// left the side edges a constant colour and read as a flat horizontal slide).
 /// Out-of-range slots never reach here (the command rejects them); blue is
 /// only the total-function fallback.
 fn channel_probe_color(slot: u8) -> [u8; 3] {
@@ -492,76 +521,6 @@ fn channel_probe_color(slot: u8) -> [u8; 3] {
         1 => [0, 255, 0],
         _ => [0, 0, 255],
     }
-}
-
-fn render_rainbow(pixels: &mut Vec<[u8; 3]>, w: usize, h: usize, phase: f32) {
-    let cx = w as f32 / 2.0;
-    let cy = h as f32 / 2.0;
-    for y in 0..h {
-        let dy = y as f32 - cy;
-        for x in 0..w {
-            let dx = x as f32 - cx;
-            let angle = dy.atan2(dx) / (2.0 * std::f32::consts::PI) + 0.5; // [0,1)
-            let hue = (angle + phase).rem_euclid(1.0);
-            pixels.push(hsv_to_rgb(hue, 1.0, 1.0));
-        }
-    }
-}
-
-/// Rotating spiral: hue from polar angle + radius, advanced by time.
-fn render_spiral(pixels: &mut Vec<[u8; 3]>, w: usize, h: usize, phase: f32) {
-    let cx = (w as f32 - 1.0) / 2.0;
-    let cy = (h as f32 - 1.0) / 2.0;
-    let max_r = (cx * cx + cy * cy).sqrt().max(1.0);
-    for y in 0..h {
-        let dy = y as f32 - cy;
-        for x in 0..w {
-            let dx = x as f32 - cx;
-            let angle = dy.atan2(dx) / (2.0 * std::f32::consts::PI) + 0.5; // [0,1)
-            let radius = (dx * dx + dy * dy).sqrt() / max_r; // [0,1]
-            let hue = (angle + radius * 2.0 - phase).rem_euclid(1.0);
-            pixels.push(hsv_to_rgb(hue, 1.0, 1.0));
-        }
-    }
-}
-
-/// Static colour-gamut wheel: hue from polar angle, saturation from radius.
-fn render_gamut(pixels: &mut Vec<[u8; 3]>, w: usize, h: usize) {
-    let cx = (w as f32 - 1.0) / 2.0;
-    let cy = (h as f32 - 1.0) / 2.0;
-    let max_r = (cx * cx + cy * cy).sqrt().max(1.0);
-    for y in 0..h {
-        let dy = y as f32 - cy;
-        for x in 0..w {
-            let dx = x as f32 - cx;
-            let angle = dy.atan2(dx) / (2.0 * std::f32::consts::PI) + 0.5;
-            let sat = ((dx * dx + dy * dy).sqrt() / max_r).clamp(0.0, 1.0);
-            pixels.push(hsv_to_rgb(angle, sat, 1.0));
-        }
-    }
-}
-
-/// HSV → RGB (all components in `[0, 1]`), returning 8-bit channels.
-fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [u8; 3] {
-    let h = h.rem_euclid(1.0) * 6.0;
-    let i = h.floor();
-    let f = h - i;
-    let p = v * (1.0 - s);
-    let q = v * (1.0 - s * f);
-    let t = v * (1.0 - s * (1.0 - f));
-    let (r, g, b) = match i as i32 % 6 {
-        0 => (v, t, p),
-        1 => (q, v, p),
-        2 => (p, v, t),
-        3 => (p, q, v),
-        4 => (t, p, v),
-        _ => (v, p, q),
-    };
-    [
-        (r * 255.0).round().clamp(0.0, 255.0) as u8,
-        (g * 255.0).round().clamp(0.0, 255.0) as u8,
-        (b * 255.0).round().clamp(0.0, 255.0) as u8,
-    ]
 }
 
 // ---------------------------------------------------------------------------
@@ -618,6 +577,68 @@ mod tests {
         }
     }
 
+    /// The guide, sampled the way the worker samples it: LED #1 green, the two
+    /// beside the stand red, each edge's ends blue, the rest dark or lit only
+    /// by the running light.
+    #[test]
+    fn the_guide_marks_the_start_the_gap_and_the_edge_ends_on_the_strip() {
+        let cal = LedCalibrationConfig {
+            counts: LedSegmentCounts {
+                top: 16,
+                right: 14,
+                bottom: 16,
+                left: 14,
+            },
+            bottom_missing: 3,
+            total_leds: 60,
+            start_anchor: "bottom-gap-left".to_string(),
+            ..lopsided_calibration()
+        };
+        let mut src = create_synthetic_frame_source(
+            cfg(TestPatternKind::Guide, TestPatternSpeed::Med),
+            Some(cal.clone()),
+            None,
+            None,
+        );
+        let frame = src.capture_frame().expect("synthetic frame");
+        let sequence = build_led_sequence(&cal);
+        let colors = crate::commands::led_calibration::sample_frame_for_sequence(
+            &frame,
+            &sequence,
+            &StripShape::of(&cal),
+            crate::commands::lighting_mode::SYNTHETIC_SAMPLE_WINDOW,
+        );
+        let at = |segment: LedSegment, local: u16| {
+            let index = sequence
+                .iter()
+                .position(|i| i.segment == segment && i.local_index == local)
+                .expect("an LED there");
+            (index, colors[index])
+        };
+
+        assert_eq!(colors[0], GUIDE_START, "LED #1");
+        assert_eq!(
+            at(LedSegment::Bottom, 8).0,
+            0,
+            "LED #1 is the gap's left side"
+        );
+        assert_eq!(
+            at(LedSegment::Bottom, 7).1,
+            GUIDE_GAP,
+            "the gap's right side"
+        );
+        for (segment, local) in [
+            (LedSegment::Top, 0),
+            (LedSegment::Top, 15),
+            (LedSegment::Right, 0),
+            (LedSegment::Right, 13),
+            (LedSegment::Bottom, 0),
+            (LedSegment::Left, 13),
+        ] {
+            assert_eq!(at(segment, local).1, GUIDE_EDGE_END, "{segment:?} {local}");
+        }
+    }
+
     #[test]
     fn solid_fills_every_pixel_with_requested_color() {
         let mut src = source(
@@ -639,10 +660,8 @@ mod tests {
     #[test]
     fn pixel_count_matches_dimensions_for_every_pattern() {
         for kind in [
-            TestPatternKind::Chase { r: 255, g: 0, b: 0 },
-            TestPatternKind::Rainbow,
-            TestPatternKind::Spiral,
-            TestPatternKind::Gamut,
+            TestPatternKind::Guide,
+            TestPatternKind::ChannelProbe { slot: 1 },
         ] {
             let mut src = source(kind, TestPatternSpeed::Fast);
             let frame = src.capture_frame().expect("frame");
@@ -652,19 +671,6 @@ mod tests {
                 "pixel buffer must equal width*height"
             );
         }
-    }
-
-    #[test]
-    fn kind_tag_matches_contract_strings() {
-        assert_eq!(TestPatternKind::Solid { r: 0, g: 0, b: 0 }.tag(), "solid");
-        assert_eq!(TestPatternKind::Chase { r: 0, g: 0, b: 0 }.tag(), "chase");
-        assert_eq!(TestPatternKind::Rainbow.tag(), "rainbow");
-        assert_eq!(TestPatternKind::Spiral.tag(), "spiral");
-        assert_eq!(TestPatternKind::Gamut.tag(), "gamut");
-        assert_eq!(
-            TestPatternKind::ChannelProbe { slot: 0 }.tag(),
-            "channelProbe"
-        );
     }
 
     #[test]
@@ -698,9 +704,12 @@ mod tests {
         let solid: TestPatternKind =
             serde_json::from_str(r#"{"kind":"solid","r":1,"g":2,"b":3}"#).expect("solid");
         assert_eq!(solid, TestPatternKind::Solid { r: 1, g: 2, b: 3 });
-        let rainbow: TestPatternKind =
-            serde_json::from_str(r#"{"kind":"rainbow"}"#).expect("rainbow");
-        assert_eq!(rainbow, TestPatternKind::Rainbow);
+        let guide: TestPatternKind = serde_json::from_str(r#"{"kind":"guide"}"#).expect("guide");
+        assert_eq!(guide, TestPatternKind::Guide);
+        assert!(
+            serde_json::from_str::<TestPatternKind>(r#"{"kind":"rainbow"}"#).is_err(),
+            "the preview's old patterns are gone"
+        );
     }
 
     #[test]
@@ -738,7 +747,7 @@ mod tests {
     /// ~1.8x the speed of the long ones.
     #[test]
     fn perimeter_arc_is_weighted_by_edge_length() {
-        let counts = lopsided_calibration().counts;
+        let counts = StripShape::of(&lopsided_calibration());
         let (w, h) = (16.0_f32, 9.0_f32);
         let perimeter = 2.0 * (w + h);
         let at = |seg, idx| led_arc(&seq_item(seg, idx), &counts, w, h);
@@ -766,7 +775,7 @@ mod tests {
 
     #[test]
     fn perimeter_arc_walks_the_canonical_strip_order() {
-        let counts = lopsided_calibration().counts;
+        let counts = StripShape::of(&lopsided_calibration());
         let (w, h) = (16.0_f32, 9.0_f32);
         // top L→R, right T→B, bottom R→L, left B→T — strictly increasing.
         let stops = [
@@ -803,7 +812,7 @@ mod tests {
             w as usize,
             h as usize,
             &sequence,
-            &cal.counts,
+            &StripShape::of(&cal),
             phase,
             tail,
             [255, 255, 255],
@@ -812,21 +821,14 @@ mod tests {
         crate::commands::led_calibration::sample_frame_for_sequence(
             &frame,
             &sequence,
-            &cal.counts,
+            &StripShape::of(&cal),
             crate::commands::lighting_mode::SYNTHETIC_SAMPLE_WINDOW,
         )
     }
 
     #[test]
     fn comet_lights_a_subset_of_the_perimeter() {
-        let mut src = source(
-            TestPatternKind::Chase {
-                r: 200,
-                g: 200,
-                b: 200,
-            },
-            TestPatternSpeed::Slow,
-        );
+        let mut src = source(TestPatternKind::Guide, TestPatternSpeed::Slow);
         let frame = src.capture_frame().expect("frame");
         let lit = lit_pixels(&frame.pixels_rgb);
         assert!(lit > 0, "comet must light some pixels");
@@ -849,7 +851,7 @@ mod tests {
                 w as usize,
                 h as usize,
                 &sequence,
-                &cal.counts,
+                &StripShape::of(&cal),
                 phase,
                 0.02,
                 [200, 0, 0],
@@ -875,7 +877,7 @@ mod tests {
             .find(|i| i.segment == LedSegment::Top && i.local_index == 30)
             .expect("a mid-top LED");
         let (w, h) = frame_size_for_aspect(WIDE);
-        let phase = led_arc(head, &cal.counts, w as f32, h as f32);
+        let phase = led_arc(head, &StripShape::of(&cal), w as f32, h as f32);
 
         let sampled = sampled_comet(phase, 0.015);
         let head_color = sampled[head.index];
@@ -894,7 +896,7 @@ mod tests {
             .find(|i| i.segment == LedSegment::Top && i.local_index == 30)
             .expect("a mid-top LED");
         let (w, h) = frame_size_for_aspect(WIDE);
-        let phase = led_arc(head, &cal.counts, w as f32, h as f32);
+        let phase = led_arc(head, &StripShape::of(&cal), w as f32, h as f32);
         let sampled = sampled_comet(phase, 0.015);
 
         let at = |offset: i32| {
@@ -920,7 +922,7 @@ mod tests {
                 .iter()
                 .find(|i| i.segment == segment && i.local_index == local)
                 .expect("led");
-            let phase = led_arc(head, &cal.counts, w as f32, h as f32);
+            let phase = led_arc(head, &StripShape::of(&cal), w as f32, h as f32);
             sampled_comet(phase, 0.03)
                 .iter()
                 .filter(|c| c[0] > 0)
@@ -945,7 +947,7 @@ mod tests {
             TestPatternSpeed::Fast,
         ] {
             let src = SyntheticFrameSource::new(
-                cfg(TestPatternKind::Chase { r: 255, g: 0, b: 0 }, speed),
+                cfg(TestPatternKind::Guide, speed),
                 Some(lopsided_calibration()),
                 None,
                 None,
@@ -964,10 +966,7 @@ mod tests {
     #[test]
     fn a_stalled_worker_widens_the_tail() {
         let mut src = SyntheticFrameSource::new(
-            cfg(
-                TestPatternKind::Chase { r: 255, g: 0, b: 0 },
-                TestPatternSpeed::Fast,
-            ),
+            cfg(TestPatternKind::Guide, TestPatternSpeed::Fast),
             Some(lopsided_calibration()),
             None,
             None,
@@ -984,10 +983,7 @@ mod tests {
         let mut cal = lopsided_calibration();
         cal.total_leds = total_leds;
         let src = SyntheticFrameSource::new(
-            cfg(
-                TestPatternKind::Chase { r: 1, g: 1, b: 1 },
-                TestPatternSpeed::Slow,
-            ),
+            cfg(TestPatternKind::Guide, TestPatternSpeed::Slow),
             Some(cal),
             None,
             None,
@@ -1033,10 +1029,7 @@ mod tests {
                 let mut cal = lopsided_calibration();
                 cal.total_leds = total;
                 SyntheticFrameSource::new(
-                    cfg(
-                        TestPatternKind::Chase { r: 1, g: 1, b: 1 },
-                        TestPatternSpeed::Slow,
-                    ),
+                    cfg(TestPatternKind::Guide, TestPatternSpeed::Slow),
                     Some(cal),
                     None,
                     None,
@@ -1060,7 +1053,7 @@ mod tests {
     fn phase_is_carried_in_from_the_shared_slot() {
         let slot = Arc::new(AtomicU32::new(0.75f32.to_bits()));
         let src = SyntheticFrameSource::new(
-            cfg(TestPatternKind::Rainbow, TestPatternSpeed::Fast),
+            cfg(TestPatternKind::Guide, TestPatternSpeed::Fast),
             Some(lopsided_calibration()),
             Some(Arc::clone(&slot)),
             None,
@@ -1075,7 +1068,7 @@ mod tests {
     fn phase_advances_forward_and_is_published_to_the_slot() {
         let slot = Arc::new(AtomicU32::new(0.5f32.to_bits()));
         let mut src = SyntheticFrameSource::new(
-            cfg(TestPatternKind::Rainbow, TestPatternSpeed::Fast),
+            cfg(TestPatternKind::Guide, TestPatternSpeed::Fast),
             Some(lopsided_calibration()),
             Some(Arc::clone(&slot)),
             None,
@@ -1149,58 +1142,11 @@ mod tests {
     fn a_garbage_slot_value_degrades_to_zero() {
         let slot = Arc::new(AtomicU32::new(f32::NAN.to_bits()));
         let src = SyntheticFrameSource::new(
-            cfg(TestPatternKind::Spiral, TestPatternSpeed::Med),
+            cfg(TestPatternKind::Guide, TestPatternSpeed::Med),
             Some(lopsided_calibration()),
             Some(slot),
             None,
         );
         assert_eq!(src.phase, 0.0);
-    }
-
-    // -------------------------------------------------------------------------
-    // Remaining pattern math
-    // -------------------------------------------------------------------------
-
-    #[test]
-    fn rainbow_produces_non_uniform_pixels_and_animates() {
-        let (w, h) = frame_size_for_aspect(WIDE);
-        let (w, h) = (w as usize, h as usize);
-        let mut frame0: Vec<[u8; 3]> = Vec::new();
-        let mut frame1: Vec<[u8; 3]> = Vec::new();
-        render_rainbow(&mut frame0, w, h, 0.0);
-        render_rainbow(&mut frame1, w, h, 0.3);
-
-        assert_eq!(frame0.len(), w * h);
-        assert_ne!(frame0[0], frame0[w / 2], "hue must vary across the frame");
-        assert_ne!(frame0, frame1, "rainbow must animate with phase");
-    }
-
-    #[test]
-    fn spiral_produces_non_uniform_pixels_radially_and_angularly() {
-        let (w, h) = frame_size_for_aspect(WIDE);
-        let (w, h) = (w as usize, h as usize);
-        let mut pixels: Vec<[u8; 3]> = Vec::new();
-        render_spiral(&mut pixels, w, h, 0.0);
-        assert_eq!(pixels.len(), w * h);
-        let corner = pixels[0];
-        let center = pixels[(h / 2) * w + (w / 2)];
-        assert_ne!(corner, center, "spiral must vary from corner to centre");
-    }
-
-    #[test]
-    fn gamut_is_time_invariant_and_spatially_non_uniform() {
-        let (w, h) = frame_size_for_aspect(WIDE);
-        let (w, h) = (w as usize, h as usize);
-        let mut a: Vec<[u8; 3]> = Vec::new();
-        let mut b: Vec<[u8; 3]> = Vec::new();
-        render_gamut(&mut a, w, h);
-        render_gamut(&mut b, w, h);
-
-        assert_eq!(a, b, "gamut must be time-invariant");
-        let first = a[0];
-        assert!(
-            a.iter().any(|p| p != &first),
-            "gamut colour wheel must have spatial variation"
-        );
     }
 }

@@ -1,0 +1,127 @@
+@layer components {
+  .panel {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .size {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 32px;
+    padding: 0 8px;
+    font-size: 12px;
+    color: var(--lm-ink);
+    cursor: pointer;
+  }
+
+  .slider {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding-left: 8px;
+  }
+  .sliderLabel {
+    flex-shrink: 0;
+    font-size: 12px;
+    color: var(--lm-ink-dim);
+  }
+
+  /* The floor and walls: a short name, then the discs, each the colour the 3D room turns. */
+  .surfaces { display: flex; flex-direction: column; }
+  .surfaceRow {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    min-height: 32px;
+    padding-left: 8px;
+  }
+  .surfaceLabel {
+    flex: 0 0 52px;
+    font-size: 12px;
+    line-height: 32px;
+    color: var(--lm-ink-dim);
+  }
+  /* Two rows of five, light to dark: ten in one row ran out of the panel. */
+  .swatches { display: grid; grid-template-columns: repeat(5, 30px); flex-shrink: 0; }
+  /* 30 px across, 32 px tall to the pointer. */
+  .swatch {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 32px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+  }
+  .swatch:focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--lm-focus-ring);
+  }
+  .swatchDisc {
+    display: block;
+    width: 18px;
+    height: 18px;
+    border: 1px solid var(--lm-line-2);
+    border-radius: 999px;
+    transition: box-shadow var(--lm-dur-quick);
+  }
+  .swatch:hover .swatchDisc { box-shadow: 0 0 0 2px var(--lm-bg), 0 0 0 3px var(--lm-ink-faint); }
+  .swatch[aria-checked="true"] .swatchDisc { box-shadow: 0 0 0 2px var(--lm-bg), 0 0 0 4px var(--lm-amber); }
+  :global(:root[data-reduced-motion]) .swatchDisc { transition: none; }
+  @media (forced-colors: active) {
+    .swatch[aria-checked="true"] .swatchDisc { outline: 2px solid Highlight; outline-offset: 2px; }
+  }
+
+  .rule {
+    width: 100%;
+    margin: 4px 0;
+    border: 0;
+    border-top: 1px solid var(--lm-line);
+  }
+
+  /* Starting over asks first, so the button itself stays a quiet line of red text. */
+  .templates,
+  .reset {
+    align-self: flex-start;
+    height: 32px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--lm-red);
+    font: 500 12px/1 var(--lm-sans);
+    cursor: pointer;
+    transition: background var(--lm-dur-quick);
+  }
+  .templates { color: var(--lm-ink-dim); }
+  .templates:hover {
+    background: var(--lm-panel-2);
+    color: var(--lm-ink);
+  }
+  .reset:hover { background: color-mix(in srgb, var(--lm-red) 10%, transparent); }
+  .templates:focus-visible,
+  .reset:focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--lm-focus-ring-inset);
+  }
+
+  :global(:root[data-reduced-motion]) .templates,
+  :global(:root[data-reduced-motion]) .reset { transition: none; }
+
+  @media (forced-colors: active) {
+    .templates,
+    .reset { color: LinkText; }
+    .templates:focus-visible,
+    .reset:focus-visible { outline: 2px solid Highlight; }
+  }
+}

@@ -159,7 +159,7 @@ describe("createDefaultTestPatternFlow", () => {
 
     const payload = startLedTestPatternMock.mock.calls[0][0];
     expect(payload.ledCalibration).toEqual(edited);
-    expect(payload.pattern.kind).toBe("chase");
+    expect(payload.pattern.kind).toBe("guide");
   });
 
   it("tests the outputs the user last lit, not a hardcoded USB strip", async () => {

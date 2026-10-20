@@ -11,7 +11,9 @@ import {
   type UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
 
+import { resolveHueChannelWorld } from "../hueChannelPosition";
 import { applyRoomTemplate, isRoomMapEmpty } from "../roomTemplate";
+import { isCubeZone, zoneEdge } from "../zoneCube";
 
 const PORT = "/dev/cu.usbserial-1420";
 
@@ -31,18 +33,78 @@ const TV_TEMPLATE = map({
 
 describe("isRoomMapEmpty", () => {
   it("still offers templates when the only strip is the one a connect added", () => {
-    expect(isRoomMapEmpty(map({ usbStrips: [strip({ portName: PORT })] }), 0)).toBe(true);
+    expect(isRoomMapEmpty(map({ usbStrips: [strip({ portName: PORT })] }))).toBe(true);
   });
 
-  it("does not when the user drew a strip, placed a TV or furniture, or Hue channels show", () => {
-    expect(isRoomMapEmpty(map({ usbStrips: [strip()] }), 0)).toBe(false);
-    expect(isRoomMapEmpty(map({ tvAnchor: TV_TEMPLATE.tvAnchor }), 0)).toBe(false);
-    expect(isRoomMapEmpty(map({ furniture: TV_TEMPLATE.furniture }), 0)).toBe(false);
-    expect(isRoomMapEmpty(map(), 2)).toBe(false);
+  it("still offers them with the Hue channels the bridge seeded, which a template keeps", () => {
+    const channel = { channelIndex: 0, x: 1, y: 1, z: 0 } as HueChannelPlacement;
+    expect(isRoomMapEmpty(map({ hueChannels: [channel] }))).toBe(true);
+  });
+
+  it("does not when the user drew a strip, placed a TV or furniture", () => {
+    expect(isRoomMapEmpty(map({ usbStrips: [strip()] }))).toBe(false);
+    expect(isRoomMapEmpty(map({ tvAnchor: TV_TEMPLATE.tvAnchor }))).toBe(false);
+    expect(isRoomMapEmpty(map({ furniture: TV_TEMPLATE.furniture }))).toBe(false);
+    expect(isRoomMapEmpty(map({ structures: [{ id: "c", kind: "column", x: 1, y: 1, width: 0.3, depth: 0.3 }] }))).toBe(false);
+  });
+
+  it("lays out the template's structures, and clears the room's own when it has none", () => {
+    const column = { id: "c", kind: "column" as const, x: 1, y: 1, width: 0.3, depth: 0.3 };
+    expect(applyRoomTemplate(map({ structures: [column] }), map({})).structures).toBeUndefined();
+    expect(applyRoomTemplate(map({}), map({ structures: [column] })).structures).toEqual([column]);
+  });
+
+  it("does not once the room is drawn into another shape, and does for a footprint it cannot read", () => {
+    const base = map({});
+    const { widthMeters: w, depthMeters: d } = base.dimensions;
+    const L = [
+      { x: 0, y: 0 },
+      { x: w, y: 0 },
+      { x: w, y: d / 2 },
+      { x: w / 2, y: d / 2 },
+      { x: w / 2, y: d },
+      { x: 0, y: d },
+    ];
+    expect(isRoomMapEmpty({ ...base, footprint: L })).toBe(false);
+    expect(isRoomMapEmpty({ ...base, footprint: L.slice(0, 5) })).toBe(true);
   });
 });
 
 describe("applyRoomTemplate", () => {
+  it("keeps a Hue zone a cube of its edge in the template's room, its light where the bridge has it", () => {
+    // A 2 m cube in the 5 × 4 × 2.5 m default room, its light half way to its east side.
+    const zone = { id: "z", name: "Sofa", entertainmentAreaId: "a", centerX: 0, centerY: 0, centerZ: 0, scaleX: 0.4, scaleY: 0.5, scaleZ: 0.8, channelIndices: [0] };
+    const channel: HueChannelPlacement = { channelIndex: 0, x: 0.2, y: 0, z: 0, zoneId: "z", zoneRelativePosition: { x: 0.5, y: 0, z: 0 } };
+    const template = map({ dimensions: { widthMeters: 8, depthMeters: 6, heightMeters: 3 } });
+    const out = applyRoomTemplate(map({ zones: [zone], hueChannels: [channel] }), template);
+    expect(isCubeZone(out.zones[0]!, template.dimensions)).toBe(true);
+    expect(zoneEdge(out.zones[0]!, template.dimensions)).toBeCloseTo(2);
+    expect(resolveHueChannelWorld(out.hueChannels[0]!, out.zones).x).toBeCloseTo(0.2);
+  });
+
+  it("leaves the room's outline behind, as Reset does", () => {
+    const L = [
+      { x: 0, y: 0 },
+      { x: 5, y: 0 },
+      { x: 5, y: 2 },
+      { x: 3, y: 2 },
+      { x: 3, y: 4 },
+      { x: 0, y: 4 },
+    ];
+    expect(applyRoomTemplate({ ...map({}), footprint: L }, TV_TEMPLATE).footprint).toBeUndefined();
+  });
+
+  // A template is furniture; the floor and walls the user chose are their room's, not the template's.
+  it("keeps the room's floor and walls", () => {
+    const surfaces = { floor: "walnut" as const, walls: "sage" as const };
+    expect(applyRoomTemplate({ ...map({}), surfaces }, TV_TEMPLATE).surfaces).toEqual(surfaces);
+    // Reset map is the empty template: it clears the layout and leaves the finish, as it leaves the
+    // bridge's Hue lights.
+    expect(applyRoomTemplate({ ...map({}), surfaces }, DEFAULT_ROOM_MAP).surfaces).toEqual(surfaces);
+    // Even a template that named its own: the finish is the room's.
+    expect(applyRoomTemplate({ ...map({}), surfaces }, { ...TV_TEMPLATE, surfaces: { floor: "carpet" } }).surfaces).toEqual(surfaces);
+  });
+
   it("puts the connected strip where the template's strip goes, keeping its port and LED count", () => {
     const connected = strip({ stripId: "usb-conn", portName: PORT });
     const next = applyRoomTemplate(map({ usbStrips: [connected] }), TV_TEMPLATE);
@@ -54,6 +116,11 @@ describe("applyRoomTemplate", () => {
     ]);
   });
 
+  it("keeps the connected tape's density with it", () => {
+    const connected = strip({ stripId: "usb-conn", portName: PORT, ledsPerMeter: 60 });
+    expect(applyRoomTemplate(map({ usbStrips: [connected] }), TV_TEMPLATE).usbStrips[0]?.ledsPerMeter).toBe(60);
+  });
+
   it("keeps a second controller's strip beside it", () => {
     const first = strip({ stripId: "usb-1", portName: PORT });
     const second = strip({ stripId: "usb-2", portName: "/dev/cu.usbserial-9" });
@@ -63,6 +130,20 @@ describe("applyRoomTemplate", () => {
       ["usb-1", PORT],
       ["usb-2", "/dev/cu.usbserial-9"],
     ]);
+  });
+
+  it("binds the template's screen to the connected strip that took its backlight's place", () => {
+    const bound = map({ ...TV_TEMPLATE, tvAnchor: { ...TV_TEMPLATE.tvAnchor!, backlightStripId: "usb-tv" } });
+    const next = applyRoomTemplate(map({ usbStrips: [strip({ stripId: "usb-conn", portName: PORT })] }), bound);
+    expect(next.tvAnchor?.backlightStripId).toBe("usb-conn");
+  });
+
+  it("brings a second controller's strip inside a smaller template's walls", () => {
+    const first = strip({ stripId: "usb-1", portName: PORT });
+    const far = strip({ stripId: "usb-2", portName: "/dev/cu.usbserial-9", startX: 6, endX: 8 });
+    const small = map({ ...TV_TEMPLATE, dimensions: { widthMeters: 4, depthMeters: 3, heightMeters: 2.5 } });
+    const kept = applyRoomTemplate(map({ usbStrips: [first, far] }), small).usbStrips[1]!;
+    expect(Math.max(kept.startX, kept.endX)).toBeLessThanOrEqual(4);
   });
 
   it("keeps connected strips under the empty template", () => {

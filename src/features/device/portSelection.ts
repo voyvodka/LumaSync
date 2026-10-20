@@ -41,17 +41,6 @@ export function resolveInitialSelection(
   return null;
 }
 
-export function canConnectSelectedPort(
-  selectedPort: string | null,
-  isScanning: boolean,
-): boolean {
-  if (isScanning) {
-    return false;
-  }
-
-  return selectedPort !== null;
-}
-
 export interface RefreshSelectionResolution {
   selectedPort: string | null;
   missingSelection: boolean;

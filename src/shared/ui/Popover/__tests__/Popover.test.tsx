@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { createRef } from "react";
+import { createRef, useRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { Popover } from "../Popover";
@@ -80,5 +80,116 @@ describe("Popover", () => {
     view.unmount();
     height.mockRestore();
     vi.unstubAllGlobals();
+  });
+
+  // A long list in a short window — the effect list in the preview popup — fits on neither side:
+  // it opens on the roomier one, no taller than the room there, and scrolls inside.
+  it("caps a popover that fits on neither side to the roomier one", () => {
+    const height = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(700);
+    vi.stubGlobal("innerHeight", 540);
+    const anchor = createRef<HTMLButtonElement>();
+    render(<button ref={anchor} type="button">anchor</button>);
+    vi.spyOn(anchor.current!, "getBoundingClientRect").mockReturnValue(
+      { top: 300, bottom: 330, left: 100, right: 160, width: 60, height: 30, x: 100, y: 300 } as DOMRect,
+    );
+    const view = render(
+      <Popover open onClose={() => {}} anchorRef={anchor} side="below" role="dialog" label="long">
+        <span>long</span>
+      </Popover>,
+    );
+
+    const pop = screen.getByRole("dialog");
+    expect(pop.className).toMatch(/above/);
+    // Above the anchor: 300 - 10 of gap - 8 of margin.
+    expect(pop.style.maxHeight).toBe("282px");
+    expect(pop.style.top).toBe("8px");
+    view.unmount();
+    height.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  it("leaves the scrolling to a child that scrolls itself", () => {
+    const anchor = createRef<HTMLButtonElement>();
+    const ui = (childScrolls: boolean) => (
+      <>
+        <button ref={anchor} type="button">anchor</button>
+        <Popover open onClose={() => {}} anchorRef={anchor} role="dialog" label="list" childScrolls={childScrolls}>
+          <span>row</span>
+        </Popover>
+      </>
+    );
+    const { rerender } = render(ui(false));
+    expect(screen.getByText("row").parentElement!.className).not.toMatch(/childScrolls/);
+
+    rerender(ui(true));
+    expect(screen.getByText("row").parentElement!.className).toMatch(/childScrolls/);
+  });
+
+  // Room settings gains its shape rows after it opens; placed only once, it ran off the window.
+  it("places itself again when its content grows", () => {
+    let fire: () => void = () => {};
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(cb: () => void) {
+          fire = cb;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    let h = 100;
+    const height = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(() => h);
+    vi.stubGlobal("innerHeight", 620);
+    const anchor = createRef<HTMLButtonElement>();
+    render(<button ref={anchor} type="button">anchor</button>);
+    vi.spyOn(anchor.current!, "getBoundingClientRect").mockReturnValue(
+      { top: 400, bottom: 430, left: 100, right: 160, width: 60, height: 30, x: 100, y: 400 } as DOMRect,
+    );
+    const view = render(
+      <Popover open onClose={() => {}} anchorRef={anchor} side="above" role="dialog" label="grows">
+        <span>grows</span>
+      </Popover>,
+    );
+    const pop = screen.getByRole("dialog");
+    expect(pop.style.top).toBe("290px");
+
+    h = 300;
+    act(() => fire());
+    expect(pop.style.top).toBe("90px");
+    view.unmount();
+    height.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  // The room's lights popover holds the effect list: a choice in the list closed both.
+  it("keeps an outer popover open for a press or Esc in one opened inside it", () => {
+    const outerClose = vi.fn<() => void>();
+    function Nested() {
+      const outerAnchor = useRef<HTMLButtonElement | null>(null);
+      const innerAnchor = useRef<HTMLButtonElement | null>(null);
+      const [inner, setInner] = useState(true);
+      return (
+        <>
+          <button ref={outerAnchor} type="button">outer anchor</button>
+          <Popover open onClose={outerClose} anchorRef={outerAnchor} role="dialog" label="outer">
+            <button ref={innerAnchor} type="button">field</button>
+            <Popover open={inner} onClose={() => setInner(false)} anchorRef={innerAnchor} role="listbox" label="inner">
+              <span>choice</span>
+            </Popover>
+          </Popover>
+        </>
+      );
+    }
+    render(<Nested />);
+    fireEvent.pointerDown(screen.getByText("choice"));
+    expect(outerClose).not.toHaveBeenCalled();
+    act(() => {
+      fireEvent.keyDown(document, { key: "Escape" });
+    });
+    expect(outerClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("listbox", { hidden: true })).toHaveAttribute("aria-hidden", "true");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(outerClose).toHaveBeenCalledOnce();
   });
 });

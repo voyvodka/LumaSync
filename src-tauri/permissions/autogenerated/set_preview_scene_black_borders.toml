@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-preview-scene-black-borders"
+description = "Enables the set_preview_scene_black_borders command without any pre-configured scope."
+commands.allow = ["set_preview_scene_black_borders"]
+
+[[permission]]
+identifier = "deny-set-preview-scene-black-borders"
+description = "Denies the set_preview_scene_black_borders command without any pre-configured scope."
+commands.deny = ["set_preview_scene_black_borders"]

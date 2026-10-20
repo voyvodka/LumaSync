@@ -2,7 +2,9 @@ import { memo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TvAnchorPlacement } from "@/shared/contracts/roomMap";
 import { ResizeHandle } from "./ResizeHandle";
-import type { SnapResult } from "../../state/useSnapGuides";
+import { clampInsideRoom, type RoomBox } from "../../model/pieceGeometry";
+import { markDragging, stillAClick, useEscapeCancels } from "./dragIntent";
+import type { SnapDragExtra, SnapResult } from "../../state/useSnapGuides";
 
 const MIN_SIZE_PX = 24;
 
@@ -14,10 +16,16 @@ interface TvAnchorObjectProps {
   snapEnabled: boolean;
   zoom?: number;
   panMode?: boolean;
+  /** The room's box: a drag stops at its walls. */
+  room?: RoomBox;
   onSelect: () => void;
   onChange: (updated: TvAnchorPlacement) => void;
-  onSnapDragMove?: (id: string, x: number, y: number, w: number, h: number) => SnapResult;
+  onSnapDragMove?: (id: string, x: number, y: number, w: number, h: number, extra?: SnapDragExtra) => SnapResult;
   onSnapDragEnd?: () => void;
+  /** In a selection with others: dragging the TV moves them all, and they follow it meanwhile. */
+  grouped?: boolean;
+  onGroupDragMove?: (dx: number, dy: number) => void;
+  onGroupDragEnd?: (dx: number, dy: number) => void;
 }
 
 export const TvAnchorObject = memo(function TvAnchorObject({
@@ -32,6 +40,10 @@ export const TvAnchorObject = memo(function TvAnchorObject({
   onSnapDragEnd,
   zoom = 1,
   panMode = false,
+  room,
+  grouped = false,
+  onGroupDragMove,
+  onGroupDragEnd,
 }: TvAnchorObjectProps) {
   const { t } = useTranslation();
   const [localX, setLocalX] = useState(placement.x);
@@ -80,21 +92,31 @@ export const TvAnchorObject = memo(function TvAnchorObject({
       startX: localX,
       startY: localY,
     };
+    tvRef.current = e.currentTarget;
+  };
+  const tvRef = useRef<HTMLDivElement | null>(null);
+  const inRoom = (x: number, y: number) => {
+    if (!room) return { x, y };
+    const box = clampInsideRoom({ x, y, w: localW, h: localH, r: 0 }, room);
+    return { x: box.x, y: box.y };
   };
 
   const snapResultRef = useRef<SnapResult | null>(null);
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragRef.current.active) return;
+    if (stillAClick(tvRef.current, dragRef.current.startClientX, dragRef.current.startClientY, e.clientX, e.clientY)) return;
+    markDragging(tvRef.current, true);
     const effectivePpm = pxPerMeter * zoom;
-    const dx = (e.clientX - dragRef.current.startClientX) / effectivePpm;
-    const dy = (e.clientY - dragRef.current.startClientY) / effectivePpm;
-    const newX = dragRef.current.startX + dx;
-    const newY = dragRef.current.startY + dy;
+    const { x: newX, y: newY } = inRoom(
+      dragRef.current.startX + (e.clientX - dragRef.current.startClientX) / effectivePpm,
+      dragRef.current.startY + (e.clientY - dragRef.current.startClientY) / effectivePpm,
+    );
     setLocalX(newX);
     setLocalY(newY);
+    onGroupDragMove?.(newX - dragRef.current.startX, newY - dragRef.current.startY);
     if (onSnapDragMove) {
-      snapResultRef.current = onSnapDragMove("tv", newX, newY, localW, localH);
+      snapResultRef.current = onSnapDragMove("tv", newX, newY, localW, localH, { free: e.altKey });
     }
   };
 
@@ -106,25 +128,53 @@ export const TvAnchorObject = memo(function TvAnchorObject({
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragRef.current.active) return;
     dragRef.current.active = false;
-    const effectivePpm = pxPerMeter * zoom;
-    const dx = (e.clientX - dragRef.current.startClientX) / effectivePpm;
-    const dy = (e.clientY - dragRef.current.startClientY) / effectivePpm;
-    let newX = dragRef.current.startX + dx;
-    let newY = dragRef.current.startY + dy;
-    const snap = snapResultRef.current;
-    if (snap) {
-      if (snap.snapX !== null) newX = snap.snapX;
-      if (snap.snapY !== null) newY = snap.snapY;
+    const carried = !!tvRef.current?.hasAttribute("data-dragging");
+    markDragging(tvRef.current, false);
+    if (!carried) {
       snapResultRef.current = null;
-    } else if (snapEnabled && gridStepPx > 0) {
-      newX = snapValue(newX, gridStepPx);
-      newY = snapValue(newY, gridStepPx);
+      onSnapDragEnd?.();
+      setLocalX(placement.x);
+      setLocalY(placement.y);
+      onGroupDragEnd?.(0, 0);
+      return;
     }
+    const effectivePpm = pxPerMeter * zoom;
+    const unsnapped = inRoom(
+      dragRef.current.startX + (e.clientX - dragRef.current.startClientX) / effectivePpm,
+      dragRef.current.startY + (e.clientY - dragRef.current.startClientY) / effectivePpm,
+    );
+    let newX = unsnapped.x;
+    let newY = unsnapped.y;
+    const snap = snapResultRef.current;
+    snapResultRef.current = null;
+    // Per axis: a guide wins where it caught, the grid holds the other.
+    const onGrid = snapEnabled && gridStepPx > 0 && !e.altKey;
+    newX = snap?.snapX ?? (onGrid ? snapValue(newX, gridStepPx) : newX);
+    newY = snap?.snapY ?? (onGrid ? snapValue(newY, gridStepPx) : newY);
+    newX = Math.round(newX * 100) / 100;
+    newY = Math.round(newY * 100) / 100;
     onSnapDragEnd?.();
+    if (onGroupDragEnd) {
+      onGroupDragEnd(newX - dragRef.current.startX, newY - dragRef.current.startY);
+      return;
+    }
     if (newX !== placement.x || newY !== placement.y) {
       onChange({ ...placement, x: newX, y: newY });
     }
   };
+
+  // A drag the system took away (a gesture, a dialog) puts the TV back where it was.
+  const cancelDrag = () => {
+    if (!dragRef.current.active) return;
+    dragRef.current.active = false;
+    markDragging(tvRef.current, false);
+    snapResultRef.current = null;
+    onSnapDragEnd?.();
+    setLocalX(placement.x);
+    setLocalY(placement.y);
+    onGroupDragEnd?.(0, 0);
+  };
+  useEscapeCancels(() => dragRef.current.active, cancelDrag);
 
   // Resize handlers
   const handleResizeDragStart = (_e: React.PointerEvent) => {
@@ -175,6 +225,14 @@ export const TvAnchorObject = memo(function TvAnchorObject({
     setLocalH(newH);
   };
 
+  const handleResizeDragCancel = () => {
+    resizeRef.current.active = false;
+    setLocalX(placement.x);
+    setLocalY(placement.y);
+    setLocalW(placement.width);
+    setLocalH(placement.height);
+  };
+
   const handleResizeDragEnd = () => {
     resizeRef.current.active = false;
     onChange({
@@ -188,7 +246,8 @@ export const TvAnchorObject = memo(function TvAnchorObject({
 
   return (
     <div
-      className={`absolute border-2 bg-violet-500/40 ${
+      data-object-id="tv"
+      className={`absolute border-2 bg-violet-500/40 ${grouped && !selected ? "outline-dashed outline-[1.5px] outline-offset-2 outline-amber" : ""} ${
         selected
           ? placement.locked ? "border-white/40" : "border-white"
           : "border-violet-500"
@@ -205,6 +264,8 @@ export const TvAnchorObject = memo(function TvAnchorObject({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onPointerCancel={cancelDrag}
+      onLostPointerCapture={cancelDrag}
     >
       <span className="pointer-events-none select-none text-[11px] font-semibold text-violet-300">
         {t("roomMap:objectPanel.tvLabel")}
@@ -217,24 +278,28 @@ export const TvAnchorObject = memo(function TvAnchorObject({
             onDragStart={(e) => handleResizeDragStart(e)}
             onDragMove={(dx, dy) => handleResizeDragMove(dx, dy, "nw")}
             onDragEnd={handleResizeDragEnd}
+            onDragCancel={handleResizeDragCancel}
           />
           <ResizeHandle
             corner="ne"
             onDragStart={(e) => handleResizeDragStart(e)}
             onDragMove={(dx, dy) => handleResizeDragMove(dx, dy, "ne")}
             onDragEnd={handleResizeDragEnd}
+            onDragCancel={handleResizeDragCancel}
           />
           <ResizeHandle
             corner="sw"
             onDragStart={(e) => handleResizeDragStart(e)}
             onDragMove={(dx, dy) => handleResizeDragMove(dx, dy, "sw")}
             onDragEnd={handleResizeDragEnd}
+            onDragCancel={handleResizeDragCancel}
           />
           <ResizeHandle
             corner="se"
             onDragStart={(e) => handleResizeDragStart(e)}
             onDragMove={(dx, dy) => handleResizeDragMove(dx, dy, "se")}
             onDragEnd={handleResizeDragEnd}
+            onDragCancel={handleResizeDragCancel}
           />
         </>
       )}

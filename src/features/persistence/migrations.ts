@@ -39,6 +39,8 @@ import { moveHueChannelToWorld } from "@/features/room-map/model/hueChannelPosit
 import { stripsFromLegacy } from "@/features/strips/model/legacyStrips";
 import type { LegacyV7StripKeys } from "@/shared/contracts/strips";
 
+import { cubeZonesV12 } from "./cubeZonesV12";
+
 // ---------------------------------------------------------------------------
 // Legacy ShellState shape — used by the v2 → v3 migration step to read the
 // retired corner fields off untyped persisted state without resurrecting
@@ -67,6 +69,22 @@ type LegacyChannelRegions = {
   hueChannelRegionOverrides?: Record<string, Record<number, string>>;
 };
 
+/** Retired at schemaVersion 9 with the old LED preview: its popup's visibility,
+ *  the twin's test switch, the last test pattern and the discovery hint. The
+ *  rebuilt preview opens with nothing on and saves only where its popup sat. */
+type RetiredPreviewKeys = {
+  ledPreviewPopupVisible?: boolean;
+  ledTwinEnabledTest?: boolean;
+  lastLedTestPattern?: unknown;
+  ledPreviewHintShown?: boolean;
+};
+
+/** Retired at schemaVersion 10: every room-map writer bumped it and nothing read it — the store's
+ *  revision is what guards a write. */
+type RetiredRoomMapKeys = {
+  roomMapVersion?: number;
+};
+
 type LegacyWindowGeometry = {
   windowX?: number | null;
   windowY?: number | null;
@@ -91,50 +109,142 @@ type LegacyWindowGeometry = {
  *   unchanged (idempotent — safe to call on every load).
  * - Otherwise each step (`1 → 2`, `2 → 3`, …) runs in order; later steps
  *   only run when the running version is still below their target.
+ * - `upTo` stops the chain at that version, so a step's test reads its own result.
  */
-export function migrateShellState(state: ShellState): ShellState {
+export function migrateShellState(state: ShellState, upTo: number = SHELL_STATE_SCHEMA_VERSION): ShellState {
   const currentVersion = state.schemaVersion ?? 1;
-  if (currentVersion >= SHELL_STATE_SCHEMA_VERSION) {
+  if (currentVersion >= upTo) {
     return state;
   }
 
   let next = state;
 
   // 1 → 2: fold legacy hueZones into zones:HueZone[], drop logical leftovers
-  if ((next.schemaVersion ?? 1) < 2) {
+  if ((next.schemaVersion ?? 1) < 2 && 2 <= upTo) {
     next = migrateV1ToV2(next);
   }
 
   // 2 → 3: replace corner+size geometry with mode-invariant center point
-  if ((next.schemaVersion ?? 1) < 3) {
+  if ((next.schemaVersion ?? 1) < 3 && 3 <= upTo) {
     next = migrateV2ToV3(next);
   }
 
   // 3 → 4: re-fold hueZones the Lights dock stranded after 1 → 2 had run
-  if ((next.schemaVersion ?? 1) < 4) {
+  if ((next.schemaVersion ?? 1) < 4 && 4 <= upTo) {
     next = migrateV3ToV4(next);
   }
 
   // 4 → 5: stamp each Hue channel placement with its entertainment area
-  if ((next.schemaVersion ?? 1) < 5) {
+  if ((next.schemaVersion ?? 1) < 5 && 5 <= upTo) {
     next = migrateV4ToV5(next);
   }
 
   // 5 → 6: fold the retired region overrides into channel positions
-  if ((next.schemaVersion ?? 1) < 6) {
+  if ((next.schemaVersion ?? 1) < 6 && 6 <= upTo) {
     next = migrateV5ToV6(next);
   }
 
   // 6 → 7: drop the keys nothing read
-  if ((next.schemaVersion ?? 1) < 7) {
+  if ((next.schemaVersion ?? 1) < 7 && 7 <= upTo) {
     next = migrateV6ToV7(next);
   }
 
   // 7 → 8: store the local output as strips
-  if ((next.schemaVersion ?? 1) < 8) {
+  if ((next.schemaVersion ?? 1) < 8 && 8 <= upTo) {
     next = migrateV7ToV8(next);
   }
 
+  // 8 → 9: drop the old LED preview's keys
+  if ((next.schemaVersion ?? 1) < 9 && 9 <= upTo) {
+    next = migrateV8ToV9(next);
+  }
+
+  // 9 → 10: drop the room map counter nothing read
+  if ((next.schemaVersion ?? 1) < 10 && 10 <= upTo) {
+    next = migrateV9ToV10(next);
+  }
+
+  // 10 → 11: zones span floor to ceiling
+  if ((next.schemaVersion ?? 1) < 11 && 11 <= upTo) {
+    next = migrateV10ToV11(next);
+  }
+
+  // 11 → 12: zones become cubes in metres
+  if ((next.schemaVersion ?? 1) < 12 && 12 <= upTo) {
+    next = migrateV11ToV12(next);
+  }
+
+  return next;
+}
+
+// ---------------------------------------------------------------------------
+// 11 → 12 — a zone is a cube in metres
+// ---------------------------------------------------------------------------
+
+/** One edge in metres on all three sides, each bound light kept where it resolved or, past what the
+ *  ceiling-capped cube holds, out of the zone where it stood (`cubeZonesV12`). The kept rooms carry
+ *  zones too, and a room switch copies them back into `roomMap`. */
+function migrateV11ToV12(state: ShellState): ShellState {
+  const next = { ...state, schemaVersion: 12 } as ShellState;
+  if (state.roomMap) next.roomMap = cubeZonesV12(state.roomMap);
+  if (state.roomLayouts) {
+    next.roomLayouts = {
+      ...state.roomLayouts,
+      rooms: state.roomLayouts.rooms.map((room) => (room.config ? { ...room, config: cubeZonesV12(room.config) } : room)),
+    };
+  }
+  return next;
+}
+
+// ---------------------------------------------------------------------------
+// 10 → 11 — a zone spans the room's full height
+// ---------------------------------------------------------------------------
+
+/** Zones were made at `centerZ 0, scaleZ 0.5`, which held a bound light to the middle half of the
+ *  room's height. Each bound light's relative z is rewritten to the world z it resolved to, then
+ *  its zone becomes `(0, 1)`, so no light moves. Channel by channel, through the first zone with
+ *  its id, as both resolvers find it. A zone with a non-finite z cannot come off disk; it is left
+ *  as it is rather than binding lights that resolved unbound. Its own clamp: a step is frozen. */
+function migrateV10ToV11(state: ShellState): ShellState {
+  const next = { ...state, schemaVersion: 11 } as ShellState;
+  const room = state.roomMap;
+  if (!room?.zones?.length) return next;
+  const unit = (v: number) => Math.max(-1, Math.min(1, v));
+  const finite = (z: HueZone) => Number.isFinite(z.centerZ) && Number.isFinite(z.scaleZ);
+  const hueChannels = (room.hueChannels ?? []).map((ch) => {
+    const zone = ch.zoneId ? room.zones.find((z) => z.id === ch.zoneId) : undefined;
+    const rel = ch.zoneRelativePosition;
+    if (!zone || !rel || !Number.isFinite(rel.z) || !finite(zone) || (zone.centerZ === 0 && zone.scaleZ === 1)) return ch;
+    return { ...ch, zoneRelativePosition: { ...rel, z: unit(zone.centerZ + zone.scaleZ * rel.z) } };
+  });
+  const zones = room.zones.map((z) => (finite(z) ? { ...z, centerZ: 0, scaleZ: 1 } : z));
+  return { ...next, roomMap: { ...room, zones, hueChannels } };
+}
+
+// ---------------------------------------------------------------------------
+// 9 → 10 — drop `roomMapVersion`
+// ---------------------------------------------------------------------------
+
+/** Safe to drop: no reader in either language. A v9 build reads it as absent and starts again
+ *  from 0, which nothing compares against. */
+function migrateV9ToV10(state: ShellState): ShellState {
+  const next = { ...state, schemaVersion: 10 } as ShellState & RetiredRoomMapKeys;
+  delete next.roomMapVersion;
+  return next;
+}
+
+// ---------------------------------------------------------------------------
+// 8 → 9 — drop the old LED preview's keys
+// ---------------------------------------------------------------------------
+
+/** Safe to drop: no reader in either language since the preview was rebuilt.
+ *  A v8 build reads each as absent and falls back to its own default. */
+function migrateV8ToV9(state: ShellState): ShellState {
+  const next = { ...state, schemaVersion: 9 } as ShellState & RetiredPreviewKeys;
+  delete next.ledPreviewPopupVisible;
+  delete next.ledTwinEnabledTest;
+  delete next.lastLedTestPattern;
+  delete next.ledPreviewHintShown;
   return next;
 }
 

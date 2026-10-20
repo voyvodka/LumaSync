@@ -26,11 +26,11 @@ import {
   DEVICE_ERROR_CODES,
   DEVICE_EVENTS,
   type SerialPortsChangedEvent,
+  type WledUdpSinkConfig,
 } from "../src/shared/contracts/device";
 import { emitMockEvent } from "./events";
 import { deviceHandlers } from "./handlers/device";
 import { wledSinkEvents } from "../src/features/device/wledSinkEvents";
-import type { WledUdpSinkConfig } from "../src/shared/contracts/device";
 import type { ShellState } from "../src/shared/contracts/shell";
 import { withSerialTransport, withoutWledDevice, withWledTransport } from "../src/features/strips/model/stripWrites";
 import { getWorld, mutate } from "./state";
@@ -54,12 +54,7 @@ export function setSerialConnected(portName: string, connected: boolean): void {
       w.shellState = { ...w.shellState, ...withSerialTransport(w.shellState as ShellState, portName) };
     }
   });
-  const event: SerialPortsChangedEvent = {
-    ports: deviceHandlers[DEVICE_COMMANDS.LIST_PORTS]().ports,
-    appeared: connected ? [portName] : [],
-    lost: connected ? [] : [portName],
-  };
-  void emitMockEvent(DEVICE_EVENTS.SERIAL_PORTS_CHANGED, event);
+  announcePortsChanged(connected ? [portName] : [], connected ? [] : [portName]);
 }
 
 /**
@@ -70,10 +65,15 @@ export function plugPort(port: ReturnType<typeof getWorld>["serial"]["ports"][nu
   mutate((w) => {
     w.serial.ports.push(port);
   });
+  announcePortsChanged([port.name], []);
+}
+
+/** The port watcher's event, with the list as `list_serial_ports` now answers it. */
+function announcePortsChanged(appeared: string[], lost: string[]): void {
   const event: SerialPortsChangedEvent = {
     ports: deviceHandlers[DEVICE_COMMANDS.LIST_PORTS]().ports,
-    appeared: [port.name],
-    lost: [],
+    appeared,
+    lost,
   };
   void emitMockEvent(DEVICE_EVENTS.SERIAL_PORTS_CHANGED, event);
 }

@@ -8,7 +8,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use super::super::frame::{build_huestream_frame, HueColorSender};
-use super::dtls_loop::{dtls_write_failed_during_stop, DtlsSendLoop, HUE_SENDER_MIN_INTERVAL_MS};
+use super::dtls_loop::{
+    dtls_write_failed_during_stop, DtlsLoopExit, DtlsSendLoop, HUE_SENDER_MIN_INTERVAL_MS,
+};
 use super::entertainment::DeactivateToken;
 use super::test_support::bridge_channel;
 
@@ -154,4 +156,64 @@ fn a_write_failure_after_every_sender_handle_dropped_is_the_stop() {
     let (tx, rx) = HueColorSender::with_mailbox(1);
     drop(tx);
     assert!(dtls_write_failed_during_stop(&token, &rx));
+}
+
+struct FailingSocket;
+
+impl std::io::Write for FailingSocket {
+    fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+        Err(std::io::ErrorKind::BrokenPipe.into())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Runs the loop over `socket` with one frame waiting, and says how it ended.
+/// `closed`: every sender handle is gone before it starts.
+fn exit_of<W: std::io::Write>(
+    socket: &mut W,
+    token: &DeactivateToken,
+    closed: bool,
+) -> DtlsLoopExit {
+    let channels = vec![bridge_channel(0)];
+    let metadata = HashMap::new();
+    let counter = AtomicU32::new(0);
+    let (sender, rx) = HueColorSender::with_mailbox(1);
+    sender.try_send(1, 0, 0, 1.0);
+    // A live stream's handle stays until the loop has ended.
+    let _held = (!closed).then_some(sender);
+    DtlsSendLoop {
+        area_id: "area",
+        channels: &channels,
+        light_metadata: &metadata,
+        packet_counter: &counter,
+        deactivate_token: token,
+        min_interval: Duration::ZERO,
+        keepalive: Duration::from_millis(10),
+    }
+    .run(socket, &rx)
+}
+
+#[test]
+fn the_loop_says_how_it_ended() {
+    let live = DeactivateToken::new();
+    assert_eq!(
+        exit_of(&mut FailingSocket, &live, false),
+        DtlsLoopExit::WriteFailed
+    );
+
+    let stopping = DeactivateToken::new();
+    assert!(stopping.try_acquire());
+    assert_eq!(
+        exit_of(&mut FailingSocket, &stopping, false),
+        DtlsLoopExit::WriteFailedDuringStop
+    );
+
+    let written: Arc<Mutex<Vec<Vec<u8>>>> = Arc::default();
+    assert_eq!(
+        exit_of(&mut RecordingSocket(written), &DeactivateToken::new(), true),
+        DtlsLoopExit::Closed
+    );
 }

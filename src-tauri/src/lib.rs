@@ -21,12 +21,13 @@ mod commands {
     pub mod launch;
     pub mod led_calibration;
     pub mod led_output;
-    pub mod led_preview;
     pub mod led_sink;
     pub mod lighting_mode;
     pub mod local_outputs;
+    pub mod main_thread;
     pub mod notifications;
     pub mod platform;
+    pub mod preview;
     pub mod room_affinity;
     pub mod room_map;
     pub mod runtime_quality;
@@ -36,6 +37,7 @@ mod commands {
     pub mod status;
     pub mod test_pattern;
     pub mod updater;
+    pub mod window_drag;
     pub mod window_visibility;
     pub mod wled_discovery;
     pub mod wled_sink;
@@ -91,10 +93,6 @@ use commands::hue_onboarding::{
     migrate_hue_credentials, pair_hue_bridge, validate_hue_credentials, verify_hue_bridge_ip,
 };
 use commands::launch::{get_launch_context, AUTOSTART_TRAY_ARG};
-use commands::led_preview::{
-    close_led_twin_overlay, hide_led_control_popup, open_led_control_popup, open_led_twin_overlay,
-    show_led_control_popup, LedTwinState,
-};
 use commands::lighting_mode::outputs::{
     apply_outputs, get_lighting_runtime, release_hue_output, run_tray_lighting, tray_mode_items,
     TrayLighting, TrayModeItem,
@@ -103,11 +101,20 @@ use commands::lighting_mode::snapshot::{LightingPhase, LightingRuntimeSnapshot};
 use commands::lighting_mode::tuning::retune_lighting;
 use commands::lighting_mode::LightingModeKind;
 use commands::lighting_mode::{
-    get_led_preview_status, start_led_test_pattern, stop_led_test_pattern, LightingRuntimeState,
+    start_led_test_pattern, stop_led_test_pattern, LightingRuntimeState,
 };
 use commands::local_outputs::{disconnect_serial_port, get_local_outputs, LocalOutputRegistry};
 use commands::notifications::{request_notification_permission, show_notification};
 use commands::platform::open_log_dir;
+use commands::preview::feed::subscribe_twin_frames;
+use commands::preview::scene::{
+    set_preview_scene_black_borders, set_preview_scene_brightness, start_preview_scene,
+    stop_preview_scene,
+};
+use commands::preview::session::{
+    close_preview, get_preview_session, open_preview, set_preview_popup_hidden,
+    set_preview_twin_hidden, PreviewSessionState,
+};
 use commands::room_map::hue_zone::{
     assign_channel_to_hue_zone, create_hue_zone, delete_hue_zone, update_hue_zone,
 };
@@ -123,9 +130,11 @@ use commands::shell_state::{
     get_shell_state, patch_shell_state, replace_shell_state, ShellStateStore,
 };
 use commands::updater::{check_for_update, download_and_install_update, PendingUpdate};
+use commands::window_drag::start_window_drag;
 use commands::window_visibility::{get_main_window_visibility, MainWindowVisibilityState};
 use commands::wled_discovery::{
-    connect_wled_sink, discover_wled_devices, forget_wled_device, test_wled_bridge,
+    browse_wled_devices, connect_wled_sink, discover_wled_devices, forget_wled_device,
+    test_wled_bridge,
 };
 use events::{SHELL_CLOSE_TO_TRAY_EVENT, TRAY_SHOW_LED_PREVIEW_EVENT};
 
@@ -141,7 +150,7 @@ struct TrayState<R: Runtime> {
     open_settings: MenuItem<R>,
     status: MenuItem<R>,
     /// In `TrayLighting::ALL` order.
-    modes: [CheckMenuItem<R>; 3],
+    modes: [CheckMenuItem<R>; 4],
     show_led_preview: MenuItem<R>,
     close_overlays: MenuItem<R>,
     quit: MenuItem<R>,
@@ -156,7 +165,7 @@ struct TrayModeView {
     running: LightingModeKind,
     transitioning: bool,
     locked: Vec<LightingModeKind>,
-    shown: Option<[TrayModeItem; 3]>,
+    shown: Option<[TrayModeItem; 4]>,
 }
 
 impl<R: Runtime> TrayState<R> {
@@ -244,11 +253,18 @@ struct TrayLabels {
     lights_off: String,
     ambilight: String,
     solid_color: String,
+    /// Absent from a frontend older than the Effect mode, which pushes three labels.
+    #[serde(default = "default_effect_label")]
+    effect: String,
     /// The modes the main window's own buttons have disabled right now.
     locked_modes: Vec<LightingModeKind>,
     show_led_preview: String,
     close_overlays: String,
     quit: String,
+}
+
+fn default_effect_label() -> String {
+    "Effect".to_string()
 }
 
 // ---------------------------------------------------------------------------
@@ -276,28 +292,23 @@ fn show_and_focus_settings<R: Runtime>(app: &AppHandle<R>) {
 /// Deliberately backend-only. Every other tray item emits to the webview and
 /// lets the frontend act, but a wedge is the worst moment to depend on a round
 /// trip through it — so this closes the windows directly and shows the main
-/// window unconditionally, rather than through `restore_main_after_preview`,
-/// which only acts when the preview is what hid it.
+/// window unconditionally, rather than leaving it to `end_session`, which
+/// brings it back only when the session is what hid it.
 pub(crate) fn close_all_overlays<R: Runtime>(app: &AppHandle<R>) {
-    if let Some(twin_state) = app.try_state::<commands::led_preview::LedTwinState>() {
-        if let Err(error) = commands::led_preview::close_led_twin_overlay(
-            app.clone(),
-            twin_state,
-            commands::led_preview::CloseLedTwinOverlayPayload { display_id: None },
-        ) {
-            log::warn!("[tray] closing the twin overlays failed: {error}");
+    match commands::preview::end_session(app) {
+        Ok(result) if result.status.details.is_some() => {
+            log::warn!(
+                "[tray] closing the preview left a window: {:?}",
+                result.status.details
+            );
         }
+        Ok(_) => {}
+        Err(error) => log::warn!("[tray] closing the preview failed: {error}"),
     }
 
     if let Some(overlay_state) = app.try_state::<commands::calibration::OverlayState>() {
         if let Err(error) = commands::calibration::close_any_display_overlay(app, &overlay_state) {
             log::warn!("[tray] closing the calibration overlay failed: {error}");
-        }
-    }
-
-    if let Some(twin_state) = app.try_state::<commands::led_preview::LedTwinState>() {
-        if let Err(error) = commands::led_preview::hide_led_control_popup(app.clone(), twin_state) {
-            log::warn!("[tray] hiding the control popup failed: {error}");
         }
     }
 
@@ -359,7 +370,12 @@ fn apply_tray_labels<R: Runtime>(
         .status
         .set_text(&labels.status)
         .map_err(|e| e.to_string())?;
-    let mode_labels = [&labels.lights_off, &labels.ambilight, &labels.solid_color];
+    let mode_labels = [
+        &labels.lights_off,
+        &labels.ambilight,
+        &labels.solid_color,
+        &labels.effect,
+    ];
     for (item, label) in tray_state.modes.iter().zip(mode_labels) {
         item.set_text(label).map_err(|e| e.to_string())?;
     }
@@ -403,6 +419,7 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, Tr
         check(initial[0], "Lights Off")?,
         check(initial[1], "Ambilight")?,
         check(initial[2], "Solid Color")?,
+        check(initial[3], "Effect")?,
     ];
     let separator_modes = PredefinedMenuItem::separator(app)?;
     let show_led_preview = MenuItem::with_id(
@@ -432,6 +449,7 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, Tr
             &modes[0],
             &modes[1],
             &modes[2],
+            &modes[3],
             &separator_modes,
             &show_led_preview,
             &close_overlays,
@@ -508,8 +526,12 @@ pub fn run() {
     // then restore the saved UI mode" rule and causes a visible resize flash.
     // `skip_initial_state("main")` keeps the save-on-close behavior but
     // disables the automatic restore so the JS bootstrap owns everything.
+    // Every other window is built at its own size and place: tracked, the
+    // preview's popup came back at a size an older build gave it, and the
+    // overlays at a display's size and visibility from another session.
     builder = builder.plugin(
         tauri_plugin_window_state::Builder::default()
+            .with_filter(|label| label == "main")
             .skip_initial_state("main")
             .build(),
     );
@@ -710,7 +732,9 @@ pub fn run() {
             app.manage(OverlayState::default());
             app.manage(LightingRuntimeState::default());
             app.manage(away::AwayWatch::default());
-            app.manage(LedTwinState::default());
+            app.manage(PreviewSessionState::default());
+            commands::preview::exclusion::install(app.handle());
+            commands::preview::watch_front_app(app.handle());
             app.manage(HueRuntimeStateStore::default());
             app.manage(RuntimeTelemetryState::default());
             app.manage(PendingUpdate::default());
@@ -722,6 +746,8 @@ pub fn run() {
             commands::hue::health::install(app.handle());
             // After the `manage` calls: its first poll reads the serial state and the lighting runtime.
             commands::device_connection::spawn_serial_watch(app.handle().clone());
+            // After the `manage` calls: it reads the local output registry.
+            commands::wled_discovery::spawn_wled_probe(app.handle().clone());
             // After the lighting runtime and `AwayWatch`: a lock heard at once turns the lights off.
             away::watch(app.handle());
 
@@ -893,34 +919,11 @@ pub fn run() {
                 }
                 return;
             }
-            // LED control popup: mirror the main-window pattern — hide, never
-            // destroy, so a re-show is cheap (v1.6 LED Preview).
-            if label == commands::led_preview::LED_CONTROL_POPUP_LABEL {
-                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
-                    let _ = window.hide();
-                    if let Some(state) = window.try_state::<commands::led_preview::LedTwinState>() {
-                        state.mark_control_hidden();
-                        // The red-X bypasses `hide_led_control_popup`, and this
-                        // is the path that would otherwise leave the shell
-                        // hidden with no window to bring it back.
-                        commands::led_preview::restore_main_after_preview(
-                            window.app_handle(),
-                            &state,
-                        );
-                    }
-                    commands::led_preview::emit_preview_state_changed(window.app_handle());
-                }
-                return;
-            }
-            // A twin destroyed outside `close_led_twin_overlay` (display
-            // unplugged) would otherwise pin the 60 Hz enrichment on forever.
-            if label.starts_with(commands::led_preview::LED_TWIN_OVERLAY_LABEL_PREFIX) {
+            // The popup's close or a twin lost with its display ends the session,
+            // so the other window is not stranded and the main window returns.
+            if commands::preview::is_preview_window(label) {
                 if let tauri::WindowEvent::Destroyed = event {
-                    if let Some(state) = window.try_state::<commands::led_preview::LedTwinState>() {
-                        state.forget_twin_label(label);
-                    }
-                    commands::led_preview::emit_preview_state_changed(window.app_handle());
+                    commands::preview::on_session_window_destroyed(window.app_handle(), label);
                 }
             }
         })
@@ -960,16 +963,21 @@ pub fn run() {
             assign_channel_to_hue_zone,
             simulate_hue_fault, // debug: real fault injection, release: returns error stub
             discover_wled_devices,
+            browse_wled_devices,
             connect_wled_sink,
             test_wled_bridge,
             start_led_test_pattern,
             stop_led_test_pattern,
-            get_led_preview_status,
-            open_led_twin_overlay,
-            close_led_twin_overlay,
-            open_led_control_popup,
-            show_led_control_popup,
-            hide_led_control_popup,
+            open_preview,
+            close_preview,
+            get_preview_session,
+            set_preview_popup_hidden,
+            set_preview_twin_hidden,
+            subscribe_twin_frames,
+            start_preview_scene,
+            stop_preview_scene,
+            set_preview_scene_brightness,
+            set_preview_scene_black_borders,
             check_for_update,
             download_and_install_update,
             get_launch_context,
@@ -984,6 +992,7 @@ pub fn run() {
             watch_hue_health,
             retry_hue_health,
             get_main_window_visibility,
+            start_window_drag,
             forget_hue_bridge,
             get_hue_light_names,
             identify_hue_lights,

@@ -9,7 +9,7 @@
     align-items: center;
     justify-content: center;
     padding: 24px 24px 48px;
-    background: rgb(0 0 0 / 55%);
+    background: var(--lm-scrim);
     animation: scrim-in var(--lm-dur-base) var(--lm-ease-out);
   }
   .scrim:focus { outline: none; }

@@ -52,6 +52,7 @@ export const OFFERED_CODES = {
     "PORT_UNSUPPORTED",
   ],
   discover_wled_devices: ["WLED_DISCOVERY_OK", "WLED_DISCOVERY_TIMEOUT", "WLED_DISCOVERY_UNREACHABLE"],
+  browse_wled_devices: ["WLED_BROWSE_OK", "WLED_BROWSE_UNSUPPORTED", "WLED_BROWSE_FAILED"],
   connect_wled_sink: ["WLED_CONNECT_OK", "WLED_BRIDGE_UNREACHABLE", "WLED_LED_COUNT_MISMATCH"],
   // Three live outcomes, and only one means the device echoed `live: true`.
   // Conflating them is the worst lie available here, because it is the code

@@ -6,6 +6,7 @@ import type { DrivenOutputRef, LocalOutputsSnapshot } from "@/shared/contracts/d
 import { HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
 import { DevicesPage } from "../DevicesPage";
 import type * as wledApiModule from "@/features/device/wledApi";
+import type { UseActiveWledSinkDeps } from "@/features/device/useWledSink";
 
 const stopHueMock = vi.fn();
 const stopHueOutputMock = vi.fn(async () => {});
@@ -13,6 +14,7 @@ const useHueOnboardingMock = vi.fn();
 // Mutable so individual tests can override port list without re-declaring the mock.
 const useDeviceConnectionMock = vi.fn();
 let activeWledIpMock: string | null = null;
+const wledSinkDepsMock = vi.fn<(deps: UseActiveWledSinkDeps | undefined) => void>();
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -60,14 +62,17 @@ vi.mock("@/features/device/state/localOutputsStore", () => ({
 // the same mocked `shellStore.load`, so a live one races the scenario's own
 // `mockResolvedValueOnce` and the loser silently gets the default.
 vi.mock("@/features/device/useWledSink", () => ({
-  useActiveWledSink: () => ({
-    activeWledIp: activeWledIpMock,
-    savedSink: null,
-    restoreOutcome: { kind: "idle" },
-    ready: true,
-    markConnected: async () => undefined,
-    forget: async () => ({ code: "WLED_FORGET_OK", message: "", details: null }),
-  }),
+  useActiveWledSink: (deps?: UseActiveWledSinkDeps) => {
+    wledSinkDepsMock(deps);
+    return {
+      activeWledIp: activeWledIpMock,
+      savedSink: null,
+      restoreOutcome: { kind: "idle" },
+      ready: true,
+      markConnected: async () => undefined,
+      forget: async () => ({ code: "WLED_FORGET_OK", message: "", details: null }),
+    };
+  },
 }));
 
 vi.mock("@/features/hue/useHueOnboarding", () => ({
@@ -101,6 +106,10 @@ vi.mock("@/features/device/wledApi", () => ({
   discoverWledDevices: vi.fn<typeof wledApiModule.discoverWledDevices>(),
   connectWledSink: vi.fn<typeof wledApiModule.connectWledSink>(),
   testWledBridge: vi.fn<typeof wledApiModule.testWledBridge>(),
+  browseWledDevices: vi.fn<typeof wledApiModule.browseWledDevices>(async () => ({
+    status: { code: "WLED_BROWSE_OK", message: "", details: null },
+    devices: [],
+  })),
 }));
 
 // Stand-in for the real panel: surfaces the two props the persist-banner tests
@@ -132,7 +141,6 @@ function defaultDeviceConnectionState() {
     isConnecting: false,
     isReconnecting: false,
     isHealthChecking: false,
-    canConnect: false,
     statusCard: null,
     latestHealthCheck: null,
     isConnected: false,
@@ -442,6 +450,19 @@ describe("DevicesPage hue runtime controls", () => {
 
 const SUPPORTED_PORT = { portName: "COM3", product: "CH340", manufacturer: "WCH", isSupported: true };
 
+describe("DevicesPage — a WLED device the user connects", () => {
+  it("is reported through the page's onWledConnected", async () => {
+    useDeviceConnectionMock.mockReturnValue(defaultDeviceConnectionState());
+    useHueOnboardingMock.mockReturnValue(createHueHookState());
+    const onWledConnected = vi.fn<() => void>();
+
+    render(<DevicesPage onStopHueOutput={stopHueOutputMock} onWledConnected={onWledConnected} />);
+    await screen.findByTestId("device-entry-hue");
+
+    expect(wledSinkDepsMock).toHaveBeenLastCalledWith(expect.objectContaining({ onUserConnected: onWledConnected }));
+  });
+});
+
 describe("DevicesPage — adding a controller that is plugged in", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -543,7 +564,8 @@ describe("DevicesPage — a Hue channel save that fails", () => {
 
   it("raises the channel-map banner", async () => {
     const { shellStore } = await import("@/features/persistence/shellStore");
-    vi.mocked(shellStore.save).mockRejectedValueOnce(new Error("disk full"));
+    vi.mocked(shellStore.update).mockRejectedValueOnce(new Error("disk full"));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const user = userEvent.setup();
     render(<DevicesPage onStopHueOutput={stopHueOutputMock} />);
@@ -552,6 +574,48 @@ describe("DevicesPage — a Hue channel save that fails", () => {
     await waitFor(() => {
       expect(screen.getByText("hue:channelMap.saveError")).toBeInTheDocument();
     });
+    consoleError.mockRestore();
+  });
+});
+
+describe("DevicesPage — a Hue channel save beside another room-map writer", () => {
+  const STRIP = { id: "usb-new", portName: "/dev/cu.usbserial-1420", ledCount: 60 };
+
+  beforeEach(async () => {
+    const { shellStore } = await import("@/features/persistence/shellStore");
+    vi.mocked(shellStore.save).mockReset().mockResolvedValue(undefined);
+    useDeviceConnectionMock.mockReturnValue(defaultDeviceConnectionState());
+    useHueOnboardingMock.mockReturnValue(createHueHookState());
+  });
+
+  // A save replaces the whole `roomMap` key, so a strip the USB roster added
+  // between the page's read and its write was reverted.
+  it("writes the channels into the room map as stored, keeping what another writer added", async () => {
+    const { shellStore } = await import("@/features/persistence/shellStore");
+    const { DEFAULT_ROOM_MAP } = await import("@/shared/contracts/roomMap");
+    vi.mocked(shellStore.load).mockResolvedValue({
+      roomMap: { ...DEFAULT_ROOM_MAP, usbStrips: [] },
+    } as never);
+    const written: Array<Record<string, unknown> | null> = [];
+    vi.mocked(shellStore.update).mockImplementation(async (update) => {
+      const patch = update({ roomMap: { ...DEFAULT_ROOM_MAP, usbStrips: [STRIP] } } as never);
+      written.push(patch as Record<string, unknown> | null);
+      return {} as never;
+    });
+
+    try {
+      const user = userEvent.setup();
+      render(<DevicesPage onStopHueOutput={stopHueOutputMock} />);
+      await user.click(await screen.findByText("stub:moveChannel"));
+
+      await waitFor(() => expect(written).toHaveLength(1));
+      expect(written[0]).toMatchObject({ roomMap: { usbStrips: [STRIP] } });
+      expect(written[0]).not.toHaveProperty("roomMapVersion");
+      expect(shellStore.save).not.toHaveBeenCalledWith(expect.objectContaining({ roomMap: expect.anything() }));
+    } finally {
+      vi.mocked(shellStore.load).mockResolvedValue({ roomMap: null } as never);
+      vi.mocked(shellStore.update).mockImplementation(async (update) => update({ roomMap: null } as never) as never);
+    }
   });
 });
 

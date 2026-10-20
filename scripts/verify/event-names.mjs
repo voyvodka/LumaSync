@@ -26,21 +26,22 @@
  *   node scripts/verify/event-names.mjs
  */
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, extname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { createReport } from "./lib/report.mjs";
+import { stripCommentsKeepingLines as stripComments, walkFiles } from "./lib/source.mjs";
+
+const walk = (dir, matchExt) => walkFiles(dir, (name) => matchExt.includes(extname(name)), ["target"]);
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(here, "../..");
 const RUST_EVENTS_FILE = join(ROOT, "src-tauri/src/events.rs");
 const CONTRACTS_DIR = join(ROOT, "src/shared/contracts");
 
-let failures = 0;
-const pass = (msg) => console.log(`  ✔  ${msg}`);
-const fail = (msg) => {
-  failures += 1;
-  console.log(`  ✘  ${msg}`);
-};
+const report = createReport();
+const { pass, fail, check } = report;
 
 // An event name is `scheme://path` (`lighting://mode-changed`) or
 // `word:word-word` (`shell:close-to-tray`) — never a bare word, so this
@@ -57,22 +58,7 @@ const TS_ONLY_ALLOWLIST = new Map([]);
  * legitimately never behind one of our own constants. Empty today. */
 const THIRD_PARTY_LITERAL_ALLOWLIST = new Set([]);
 
-function stripComments(source) {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => "\n".repeat((m.match(/\n/g) ?? []).length))
-    .replace(/(^|[^:"'`])\/\/[^\n]*/g, "$1");
-}
 
-function walk(dir, matchExt, out = []) {
-  for (const name of readdirSync(dir)) {
-    if (name === "node_modules" || name === "target") continue;
-    const full = join(dir, name);
-    const st = statSync(full);
-    if (st.isDirectory()) walk(full, matchExt, out);
-    else if (matchExt.includes(extname(name))) out.push(full);
-  }
-  return out;
-}
 
 /** Text between a call's opening paren (at `openParenIdx`) and its matching
  * close, tracking nested parens (`EventTarget::webview_window(...)` etc). */
@@ -140,10 +126,6 @@ check(
   "harvested 0 event constants from events.rs — the const pattern drifted from this script's regex",
 );
 
-function check(ok, good, bad) {
-  if (ok) pass(good);
-  else fail(bad);
-}
 
 // No other Rust module may declare (not re-export) one of these values again.
 {
@@ -300,5 +282,5 @@ console.log("\n[ No raw event-name literal at an emit/listen call site ]");
 }
 
 // ---------------------------------------------------------------------------
-console.log(`\n${failures === 0 ? "PASS" : "FAIL"} — ${failures} failure(s)\n`);
-process.exit(failures === 0 ? 0 : 1);
+console.log(`\n${report.failures === 0 ? "PASS" : "FAIL"} — ${report.failures} failure(s)\n`);
+process.exit(report.failures === 0 ? 0 : 1);

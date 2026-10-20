@@ -1,6 +1,6 @@
 //! The mode state machine end to end: the target gates, Hue sampling and its
 //! live stream, room geometry, the ambilight fast path, Solid's full-strip
-//! frame, output-stamp hydration and the edge-signal feed.
+//! frame, output-stamp hydration and the twin feed.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -63,16 +63,7 @@ impl AmbilightFrameSource for FakeFrameSource {
 
 fn owner_with_fake_sender() -> LightingRuntimeOwner {
     LightingRuntimeOwner {
-        active_mode: LightingModeConfig::default(),
-        active_port: None,
-        active_usb_plan: None,
-        worker: None,
-        ambilight_live: None,
-        room_geometry_live: None,
         output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
-        preview: Default::default(),
-        closing: Default::default(),
-        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FakeFrameSource {
                 frame: CapturedFrame::new(
@@ -82,6 +73,7 @@ fn owner_with_fake_sender() -> LightingRuntimeOwner {
                 ),
             }))
         }),
+        ..Default::default()
     }
 }
 
@@ -110,16 +102,7 @@ impl AmbilightFrameSource for FailsAfterFirstFrameSource {
 
 fn owner_that_fails_after_first_frame() -> LightingRuntimeOwner {
     LightingRuntimeOwner {
-        active_mode: LightingModeConfig::default(),
-        active_port: None,
-        active_usb_plan: None,
-        worker: None,
-        ambilight_live: None,
-        room_geometry_live: None,
         output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
-        preview: Default::default(),
-        closing: Default::default(),
-        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FailsAfterFirstFrameSource {
                 frame: CapturedFrame::new(
@@ -130,6 +113,7 @@ fn owner_that_fails_after_first_frame() -> LightingRuntimeOwner {
                 served: std::sync::atomic::AtomicBool::new(false),
             }))
         }),
+        ..Default::default()
     }
 }
 
@@ -157,6 +141,7 @@ fn wait_for_workers_drained() {
 
 fn ambilight_with_targets(targets: Option<Vec<String>>) -> LightingModeConfig {
     LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Ambilight,
         solid: None,
         ambilight: Some(AmbilightPayload {
@@ -176,12 +161,14 @@ fn ambilight_with_targets(targets: Option<Vec<String>>) -> LightingModeConfig {
 
 fn solid_with_targets(targets: Option<Vec<String>>) -> LightingModeConfig {
     LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Solid,
         solid: Some(SolidColorPayload {
             r: 255,
             g: 0,
             b: 0,
             brightness: 1.0,
+            kelvin: None,
         }),
         ambilight: None,
         targets,
@@ -263,7 +250,7 @@ fn a_recorded_port_without_a_connection_does_not_arm_serial_output() {
     );
 
     assert_eq!(result.status.code, "DEVICE_NOT_CONNECTED");
-    assert_eq!(owner.active_port, None);
+    assert!(owner.active_ports.is_empty());
 }
 
 #[test]
@@ -307,12 +294,14 @@ fn hue_only_target_returns_hue_not_ready_when_no_hue_output() {
 
 fn solid_hue_only() -> LightingModeConfig {
     LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Solid,
         solid: Some(SolidColorPayload {
             r: 200,
             g: 10,
             b: 40,
             brightness: 1.0,
+            kelvin: None,
         }),
         ambilight: None,
         targets: Some(vec!["hue".to_string()]),
@@ -1045,10 +1034,12 @@ fn a_reconnect_hands_the_running_worker_the_new_sender() {
             Arc::clone(&owner.packet_send_count),
         );
         let signal = Arc::clone(&spawned.shutdown_signal);
+        let token = Arc::clone(&spawned.deactivate_token);
         store_active_stream_context(&mut owner, &request, channels, spawned);
         let _enter = rt.0.as_ref().expect("runtime").enter();
         spawn_reconnect_monitor_with(
             signal,
+            Some(token),
             Arc::clone(&runtime),
             request.clone(),
             ReconnectDeps::assume_ready(Arc::clone(&build)),
@@ -1244,6 +1235,7 @@ fn solid_hue_only_reports_skipped_when_no_lights_resolve() {
 
 fn ambilight_with_payload(payload: AmbilightPayload) -> LightingModeConfig {
     LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Ambilight,
         solid: None,
         ambilight: Some(payload),
@@ -1317,8 +1309,8 @@ fn test_config(kind: TestPatternKind, speed: TestPatternSpeed, aspect: f32) -> T
     }
 }
 
-fn red_chase() -> TestPatternKind {
-    TestPatternKind::Chase { r: 255, g: 0, b: 0 }
+fn guide() -> TestPatternKind {
+    TestPatternKind::Guide
 }
 
 /// R15: a colour or speed change during a running test used to tear the
@@ -1329,8 +1321,7 @@ fn a_running_test_retunes_in_place_instead_of_rebuilding() {
     let _guard = acquire_worker_test_guard();
     let mut owner = owner_with_fake_sender();
 
-    owner.preview.pending_test_pattern =
-        Some(test_config(red_chase(), TestPatternSpeed::Slow, 1.78));
+    owner.preview.pending_test_pattern = Some(test_config(guide(), TestPatternSpeed::Slow, 1.78));
     let started = apply_mode_change(
         &mut owner,
         ambilight_with_payload(AmbilightPayload {
@@ -1353,7 +1344,7 @@ fn a_running_test_retunes_in_place_instead_of_rebuilding() {
         .expect("a synthetic worker must publish its live cell");
 
     owner.preview.pending_test_pattern = Some(test_config(
-        TestPatternKind::Spiral,
+        TestPatternKind::Solid { r: 1, g: 2, b: 3 },
         TestPatternSpeed::Fast,
         1.78,
     ));
@@ -1377,12 +1368,12 @@ fn a_running_test_retunes_in_place_instead_of_rebuilding() {
     );
 
     let cell = slot.lock().expect("live cell");
-    assert_eq!(cell.kind, TestPatternKind::Spiral);
+    assert_eq!(cell.kind, TestPatternKind::Solid { r: 1, g: 2, b: 3 });
     assert_eq!(cell.speed, TestPatternSpeed::Fast);
     drop(cell);
     assert_eq!(
         owner.preview.active_test_pattern.as_ref().map(|c| &c.kind),
-        Some(&TestPatternKind::Spiral),
+        Some(&TestPatternKind::Solid { r: 1, g: 2, b: 3 }),
         "the retune must also move the reported active pattern",
     );
 
@@ -1398,8 +1389,7 @@ fn a_display_aspect_change_still_rebuilds_the_source() {
     let _guard = acquire_worker_test_guard();
     let mut owner = owner_with_fake_sender();
 
-    owner.preview.pending_test_pattern =
-        Some(test_config(red_chase(), TestPatternSpeed::Slow, 1.78));
+    owner.preview.pending_test_pattern = Some(test_config(guide(), TestPatternSpeed::Slow, 1.78));
     let payload = ambilight_with_payload(AmbilightPayload {
         brightness: 0.5,
         ..Default::default()
@@ -1417,8 +1407,7 @@ fn a_display_aspect_change_still_rebuilds_the_source() {
     );
     assert_eq!(started.status.code, "AMBILIGHT_MODE_STARTED");
 
-    owner.preview.pending_test_pattern =
-        Some(test_config(red_chase(), TestPatternSpeed::Slow, 1.6));
+    owner.preview.pending_test_pattern = Some(test_config(guide(), TestPatternSpeed::Slow, 1.6));
     let after = apply_mode_change(
         &mut owner,
         payload,
@@ -1462,8 +1451,7 @@ fn starting_a_test_over_live_ambilight_rebuilds() {
     assert_eq!(live.status.code, "AMBILIGHT_MODE_STARTED");
     assert!(owner.preview.pattern_live.is_none());
 
-    owner.preview.pending_test_pattern =
-        Some(test_config(red_chase(), TestPatternSpeed::Slow, 1.78));
+    owner.preview.pending_test_pattern = Some(test_config(guide(), TestPatternSpeed::Slow, 1.78));
     let to_test = apply_mode_change(
         &mut owner,
         payload,
@@ -1739,16 +1727,7 @@ fn fast_path_explicit_saturation_overrides_running_atomic() {
 fn owner_with_recording_sender() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
     let recorder: Arc<FakeLedSender> = Arc::new(FakeLedSender::default());
     let owner = LightingRuntimeOwner {
-        active_mode: LightingModeConfig::default(),
-        active_port: None,
-        active_usb_plan: None,
-        worker: None,
-        ambilight_live: None,
-        room_geometry_live: None,
         output_bridge: LedOutputBridge::from_sender(recorder.clone()),
-        preview: Default::default(),
-        closing: Default::default(),
-        hue_gate_waived: false,
         frame_source_factory: Arc::new(|_req: super::runtime::AmbilightCaptureRequest| {
             Ok(Box::new(FakeFrameSource {
                 frame: CapturedFrame::new(
@@ -1758,6 +1737,7 @@ fn owner_with_recording_sender() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
                 ),
             }))
         }),
+        ..Default::default()
     };
     (owner, recorder)
 }
@@ -1794,12 +1774,14 @@ fn calibration_with_total_leds(
 
 fn solid_with_calibration(total_leds: u16) -> LightingModeConfig {
     LightingModeConfig {
+        effect: None,
         kind: LightingModeKind::Solid,
         solid: Some(SolidColorPayload {
             r: 255,
             g: 0,
             b: 0,
             brightness: 1.0,
+            kelvin: None,
         }),
         ambilight: None,
         targets: Some(vec!["usb".to_string()]),
@@ -1960,7 +1942,7 @@ fn solid_mode_packet_xor_checksum_is_valid() {
 }
 
 // -----------------------------------------------------------------------
-// v1.6 LED Preview — output-stamp hydration + enrichment gating
+// LED preview — output-stamp hydration + enrichment gating
 // -----------------------------------------------------------------------
 
 const SK6812_SHELL_STATE: &str = r#"{"shell-state":{"selectedChipType":"sk6812-rgbw"}}"#;
@@ -2047,6 +2029,7 @@ fn solid_on_sk6812_writes_four_byte_rgbw_pixels() {
         g: 255,
         b: 255,
         brightness: 1.0,
+        kelvin: None,
     });
     let hydrated = hydrated_like_set_lighting_mode(solid, SK6812_SHELL_STATE);
 
@@ -2125,6 +2108,7 @@ fn solid_on_the_default_setup_applies_the_user_gamma() {
             g: 128,
             b: 128,
             brightness: 1.0,
+            kelvin: None,
         });
         solid.color_correction = Some(ColorCorrectionConfig {
             gamma_r: gamma,
@@ -2197,7 +2181,11 @@ fn hydration_never_overrides_a_stamped_chip_type() {
 /// `apply_mode_change`, with the persisted shell state injected.
 fn restored_after_test(prior: LightingModeConfig, shell_state: String) -> LightingModeConfig {
     let load = || persisted(&shell_state);
-    let mut restore = super::led_test_pattern::restore_mode_after_test(Some(prior), &load);
+    let mut restore = super::led_test_pattern::restore_mode_after_test(
+        Some(prior),
+        &super::tuning::StoredTuning::default(),
+        &load,
+    );
     super::hydrate::hydrate_mode_payload(&mut restore, &load);
     restore
 }
@@ -2313,7 +2301,7 @@ fn a_channel_probe_pins_the_identity_order_over_the_saved_one() {
         Some(LedColorOrder::Rgb)
     );
     assert_eq!(
-        hydrate_test(TestPatternKind::Chase { r: 255, g: 0, b: 0 }),
+        hydrate_test(TestPatternKind::Guide),
         Some(LedColorOrder::Bgr)
     );
 }
@@ -2334,56 +2322,47 @@ fn stopping_a_test_re_reads_the_color_order() {
 }
 
 // -----------------------------------------------------------------------
-// Edge-signal — only the twin overlay listens
+// The twin feed — only a subscribed twin receives it
 // -----------------------------------------------------------------------
 
-/// Drives the real worker, twin gate and emitter. With no twin open the
-/// worker must not hand the emitter anything — the payload is only ever
-/// built as its argument — and no window may receive the event. Once a twin
-/// opens, that twin alone receives frames carrying the strip buffer and the
-/// Hue channel colours; the main window never does.
+/// Drives the real worker, twin gate and sink. With no twin subscribed the
+/// worker must not hand the sink anything — the frame is only ever built as
+/// its argument. Once a twin subscribes, its channel receives frames carrying
+/// every strip LED and every Hue lamp; ending the session stops them.
 #[test]
-fn the_edge_signal_is_built_and_sent_only_while_a_twin_is_open() {
+fn the_twin_frame_is_built_and_sent_only_while_a_twin_is_subscribed() {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::{Duration, Instant};
-    use tauri::{Listener, Manager, WebviewWindowBuilder};
+    use tauri::ipc::{Channel, InvokeResponseBody};
+    use tauri::Manager;
 
-    use crate::commands::led_preview::LedTwinState;
+    use crate::commands::preview::PreviewSessionState;
 
     let _guard = acquire_worker_test_guard();
     let app = tauri::test::mock_app();
-    app.manage(LedTwinState::default());
-    let main = WebviewWindowBuilder::new(&app, crate::MAIN_WINDOW_LABEL, Default::default())
-        .build()
-        .expect("main webview");
+    app.manage(PreviewSessionState::default());
     let twin_label = "led-twin-overlay-test";
-    let twin = WebviewWindowBuilder::new(&app, twin_label, Default::default())
-        .build()
-        .expect("twin webview");
 
-    let main_events = Arc::new(AtomicUsize::new(0));
-    let main_counter = Arc::clone(&main_events);
-    main.listen(super::preview::EDGE_SIGNAL_EVENT, move |_| {
-        main_counter.fetch_add(1, Ordering::SeqCst);
-    });
-    let twin_frames: Arc<Mutex<Vec<serde_json::Value>>> = Arc::default();
-    let twin_sink = Arc::clone(&twin_frames);
-    twin.listen(super::preview::EDGE_SIGNAL_EVENT, move |event| {
-        let frame = serde_json::from_str(event.payload()).expect("payload is JSON");
-        twin_sink.lock().expect("frames lock").push(frame);
+    let frames: Arc<Mutex<Vec<Vec<u8>>>> = Arc::default();
+    let frame_sink = Arc::clone(&frames);
+    let channel = Channel::new(move |body| {
+        if let InvokeResponseBody::Raw(bytes) = body {
+            frame_sink.lock().expect("frames lock").push(bytes);
+        }
+        Ok(())
     });
 
     let built = Arc::new(AtomicUsize::new(0));
     let built_counter = Arc::clone(&built);
-    let real_emitter = super::preview::build_edge_emitter(app.handle());
-    let emitter: super::preview::EdgeSignalEmitter = Arc::new(move |payload| {
+    let real_sink = super::preview::build_twin_sink(app.handle());
+    let sink: super::preview::TwinFrameSink = Arc::new(move |leds, lamps| {
         built_counter.fetch_add(1, Ordering::SeqCst);
-        real_emitter(payload);
+        real_sink(leds, lamps);
     });
 
-    let twin_state = app.state::<LedTwinState>();
+    let session = app.state::<PreviewSessionState>();
     let mut owner = owner_with_fake_sender();
-    owner.preview.preview_gate = Some(twin_state.preview_active());
+    owner.preview.preview_gate = Some(session.twin_open());
     let mode = LightingModeConfig {
         kind: LightingModeKind::Ambilight,
         ambilight: Some(AmbilightPayload {
@@ -2402,61 +2381,52 @@ fn the_edge_signal_is_built_and_sent_only_while_a_twin_is_open() {
         None,
         live(hue_context_with_channels(2)),
         Some(shared_telemetry()),
-        Some(emitter),
+        Some(sink),
         None,
     );
     assert_eq!(started.status.code, "AMBILIGHT_MODE_STARTED");
 
+    session.open_for_test("display-1", twin_label, "led-control-popup-test");
     std::thread::sleep(Duration::from_millis(300));
     assert_eq!(
         built.load(Ordering::SeqCst),
         0,
-        "no twin open: the worker must not build an edge-signal payload"
+        "a twin window that has not subscribed must not cost a frame"
     );
-    assert_eq!(main_events.load(Ordering::SeqCst), 0);
-    assert!(twin_frames.lock().expect("frames lock").is_empty());
 
-    twin_state.record_twin_for_test("display-1", twin_label);
+    session.subscribe_for_test(twin_label, channel);
     let deadline = Instant::now() + Duration::from_secs(5);
     let frame = loop {
-        let with_hue = twin_frames
+        let with_lamps = frames
             .lock()
             .expect("frames lock")
             .iter()
             .rev()
-            .find(|frame| frame.get("hueChannels").is_some())
+            .find(|frame| u32::from_le_bytes(frame[12..16].try_into().unwrap()) > 0)
             .cloned();
-        if let Some(frame) = with_hue {
+        if let Some(frame) = with_lamps {
             break frame;
         }
         assert!(
             Instant::now() < deadline,
-            "an open twin must receive frames carrying hueChannels"
+            "a subscribed twin must receive frames carrying the Hue lamps"
         );
         std::thread::sleep(Duration::from_millis(10));
     };
-    assert_eq!(frame["leds"].as_array().map(Vec::len), Some(12));
-    assert_eq!(frame["ledCount"], 12);
-    assert_eq!(frame["hueChannels"].as_array().map(Vec::len), Some(2));
-    assert_eq!(frame["source"], "live");
-    for dropped in ["top", "bottom", "left", "right"] {
-        assert!(frame.get(dropped).is_none(), "`{dropped}` has no reader");
-    }
-    assert_eq!(
-        main_events.load(Ordering::SeqCst),
-        0,
-        "the main window has no edge-signal listener and must receive nothing"
-    );
+    let field = |at: usize| u32::from_le_bytes(frame[at..at + 4].try_into().unwrap());
+    assert_eq!(field(8), 12, "every strip LED");
+    assert_eq!(field(12), 2, "every Hue lamp");
+    assert_eq!(frame.len(), 16 + (12 + 2) * 3);
 
-    twin_state.forget_twin_label(twin_label);
-    // One tick may already be past the gate when the twin closes.
+    session.close_for_test();
+    // One tick may already be past the gate when the session ends.
     std::thread::sleep(Duration::from_millis(100));
     let after_close = built.load(Ordering::SeqCst);
     std::thread::sleep(Duration::from_millis(300));
     assert_eq!(
         built.load(Ordering::SeqCst),
         after_close,
-        "closing the last twin must stop the feed"
+        "ending the session must stop the feed"
     );
 
     let mut cleanup_trace = None;

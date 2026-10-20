@@ -74,6 +74,7 @@ fn the_runtime_snapshot_answers_in_camel_case() {
     assert_camel_case_keys(&snapshot);
     assert!(snapshot["revision"].is_u64());
     assert_eq!(snapshot["mode"]["kind"], json!("off"));
+    assert_eq!(snapshot["brightness"], json!(1.0));
     assert_eq!(snapshot["phase"], json!("idle"));
 }
 

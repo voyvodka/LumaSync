@@ -1,17 +1,20 @@
 /**
- * LED Preview & Test Experience contracts (v1.6).
+ * LED preview contracts.
  *
- * Single source of truth for the whole preview/test surface:
- *
+ * - **Preview session** — one Rust-owned session opens the control popup and
+ *   the click-through twin over the captured display, hides the main window,
+ *   and puts everything back on any way out (`close_preview`, the popup's
+ *   close, the tray). Opening it changes no light.
  * - **Synthetic-injection test patterns** — Rust generates procedural frames
- *   (solid / chase / rainbow / spiral / gamut) and pushes them through the
- *   *existing* ambilight worker, so a test pattern lights real LEDs + Hue
- *   channels exactly like live capture would.
- * - **Two preview webviews** — a click-through "digital twin" overlay
- *   (label prefix `led-twin-overlay-`) and an interactive control popup
- *   (label `led-control-popup`).
- * - **Per-LED color stream** — enriches `ambilight://edge-signal`
- *   (`EdgeSignalPayload` below); owns the status surface.
+ *   and pushes them through the ambilight worker. LED Setup and Devices use
+ *   them; the preview does not.
+ * - **Twin feed** — the twin subscribes with a `Channel` and receives raw
+ *   frames (`TWIN_FRAME`), each cut for one `TwinLayout` revision; the layout
+ *   follows on `preview://twin-layout` when the running mode's changes.
+ * - **Scenes** — a full-screen window under the twin and the popup plays a
+ *   test scene that Ambilight captures. The scene owns the lights while it
+ *   plays; stopping it brings back the mode it interrupted, and a mode change
+ *   from anywhere ends it.
  */
 
 import type { LedCalibrationConfig } from "./calibration";
@@ -29,18 +32,26 @@ export const PREVIEW_COMMANDS = {
   START_TEST_PATTERN: "start_led_test_pattern",
   /** Stop the active synthetic test pattern and return the worker to idle/live. */
   STOP_TEST_PATTERN: "stop_led_test_pattern",
-  /** Read the current preview/test runtime snapshot (`LedPreviewStatus`). */
-  GET_PREVIEW_STATUS: "get_led_preview_status",
-  /** Open (or focus) the click-through digital-twin overlay window for a display. */
-  OPEN_TWIN_OVERLAY: "open_led_twin_overlay",
-  /** Close the digital-twin overlay window for a display (or all). */
-  CLOSE_TWIN_OVERLAY: "close_led_twin_overlay",
-  /** Create the interactive control popup window (hidden until shown). */
-  OPEN_CONTROL_POPUP: "open_led_control_popup",
-  /** Reveal the control popup near its persisted center. */
-  SHOW_CONTROL_POPUP: "show_led_control_popup",
-  /** Hide the control popup without destroying it (cheap re-show). */
-  HIDE_CONTROL_POPUP: "hide_led_control_popup",
+  /** Open the preview session: popup + twin, main window hidden. Changes no light. */
+  OPEN_PREVIEW: "open_preview",
+  /** End the session from any state; every window it opened goes, the main window comes back. */
+  CLOSE_PREVIEW: "close_preview",
+  /** Hide or show the popup while the session stays open. */
+  SET_POPUP_HIDDEN: "set_preview_popup_hidden",
+  /** The session as it is; the popup reads it on mount, then follows `preview://session`. */
+  GET_SESSION: "get_preview_session",
+  /** Hide or show the twin while the session stays open. */
+  SET_TWIN_HIDDEN: "set_preview_twin_hidden",
+  /** The session's twin takes its frames on a channel; answers the current layout. */
+  SUBSCRIBE_TWIN_FRAMES: "subscribe_twin_frames",
+  /** Play a scene, Ambilight on the user's settings for it; switches a playing one in place. */
+  START_SCENE: "start_preview_scene",
+  /** Stop the scene; the mode it interrupted comes back. */
+  STOP_SCENE: "stop_preview_scene",
+  /** The playing scene's brightness, live and never saved. */
+  SET_SCENE_BRIGHTNESS: "set_preview_scene_brightness",
+  /** The playing scene's black-bar crop, live and never saved; the latency scene keeps it off. */
+  SET_SCENE_BLACK_BORDERS: "set_preview_scene_black_borders",
 } as const;
 
 export type PreviewCommandId = (typeof PREVIEW_COMMANDS)[keyof typeof PREVIEW_COMMANDS];
@@ -51,42 +62,30 @@ export type PreviewCommandId = (typeof PREVIEW_COMMANDS)[keyof typeof PREVIEW_CO
 
 /**
  * Ordered list of synthetic test pattern kinds. `LedTestPattern` carries the
- * per-kind payload; this list + `LedTestPatternKind` are the discriminator
- * surface shared with the enriched `EdgeSignalPayload.pattern` field.
+ * per-kind payload; this list + `LedTestPatternKind` are its discriminator.
  */
-export const LED_TEST_PATTERN_KIND = [
-  "solid",
-  "chase",
-  "rainbow",
-  "spiral",
-  "gamut",
-  "channelProbe",
-] as const;
+export const LED_TEST_PATTERN_KIND = ["solid", "channelProbe", "guide"] as const;
 
 export type LedTestPatternKind = (typeof LED_TEST_PATTERN_KIND)[number];
 
 /**
  * Discriminated union of test patterns (discriminator `kind`).
  *
- * - `solid` / `chase` carry an explicit RGB triple (0..255 per channel).
- * - `rainbow` / `spiral` / `gamut` are fully procedural — the Rust generator
- *   owns their colour math, so no payload travels with them.
+ * - `solid` carries an explicit RGB triple (0..255 per channel).
  * - `channelProbe` paints the whole strip pure red / green / blue for wire
  *   slot 0 / 1 / 2, under the identity colour order whatever the saved
  *   `ledColorOrder` is, so the user can report which colour each slot shows.
  *   Chip type, firmware profile and colour correction still apply. A slot
- *   above 2 is refused with `LED_TEST_PATTERN_INVALID_PARAMS`. Not offered by
- *   the pattern picker — a probe without a slot is not a probe.
+ *   above 2 is refused with `LED_TEST_PATTERN_INVALID_PARAMS`.
+ * - `guide` is LED Setup's: LED #1 green, each edge's end LEDs blue, the two
+ *   beside the stand gap red, and a white light running in strip order.
  */
 export type LedTestPattern =
   | { kind: "solid"; r: number; g: number; b: number }
-  | { kind: "chase"; r: number; g: number; b: number }
-  | { kind: "rainbow" }
-  | { kind: "spiral" }
-  | { kind: "gamut" }
-  | { kind: "channelProbe"; slot: 0 | 1 | 2 };
+  | { kind: "channelProbe"; slot: 0 | 1 | 2 }
+  | { kind: "guide" };
 
-/** Animation cadence for time-varying patterns (chase / rainbow / spiral). */
+/** How fast the guide's light runs. */
 export type TestPatternSpeed = "slow" | "med" | "fast";
 
 // ---------------------------------------------------------------------------
@@ -115,9 +114,8 @@ export interface StartLedTestPatternPayload {
 /**
  * Result of `start_led_test_pattern` / `stop_led_test_pattern`.
  *
- * `previewOnly` is `true` when the pattern is rendered into the twin overlay
- * (and the enriched edge-signal stream) but NOT pushed to a physical sink —
- * e.g. no calibration / no connected device — surfaced together with
+ * `previewOnly` is `true` when no physical sink took the frames (no connected
+ * device) — only an open preview twin shows them — surfaced together with
  * `LED_TEST_PATTERN_PREVIEW_ONLY`.
  */
 export interface LedTestPatternResult {
@@ -127,76 +125,137 @@ export interface LedTestPatternResult {
 }
 
 // ---------------------------------------------------------------------------
-// Twin overlay window
+// Scenes
 // ---------------------------------------------------------------------------
+
+/** The test scenes, in the order the popup offers them. */
+export const SCENE_KINDS = ["edgeTour", "spiral", "sunset", "colorFields", "letterbox", "latency"] as const;
+
+export type SceneKind = (typeof SCENE_KINDS)[number];
+
+// ---------------------------------------------------------------------------
+// Preview session
+// ---------------------------------------------------------------------------
+
+interface LiveSessionFields {
+  /** Display the twin covers — the one Ambilight captures. */
+  displayId: DisplayId;
+  popupHidden: boolean;
+  /** The popup's switch. Never saved: every session opens with the twin. */
+  twinHidden: boolean;
+  /** Off screen while Ambilight captures, whatever the switch says, where
+   * nothing can keep the twin out of the capture (Linux, Windows before 2004). */
+  twinHeldForCapture: boolean;
+}
+
+/** The session as Rust holds it. Never persisted: nothing starts on its own. */
+export type PreviewSession =
+  | { state: "closed" }
+  | ({ state: "live" } & LiveSessionFields)
+  | ({
+      state: "scene";
+      scene: SceneKind;
+      /** The scene's own brightness, 0..1; never saved. */
+      sceneBrightness: number;
+      /** Whether the scene crops black bars: the Ambilight setting at its start, then the
+       * popup's switch; never saved. */
+      sceneBlackBorders: boolean;
+    } & LiveSessionFields);
+
+/** The layout the twin draws: the one the running mode uses, which during a
+ *  LED Setup test is the layout being edited, not the saved one. */
+export interface TwinLayout {
+  displayId: DisplayId;
+  /** Grows with every new layout and never resets; a frame names the one current when it was sent. */
+  layoutRevision: number;
+  /** `null` with no strip set up: the twin draws no LEDs. */
+  leds: LedCalibrationConfig | null;
+  /** The Hue lamps in frame order; empty when the running mode drives no Hue. */
+  lamps: TwinLamp[];
+}
+
+/** Where the twin draws one Hue lamp, `(0, 0)` top-left: where it samples the
+ *  screen when the room map places it, else in a row along the bottom. */
+export interface TwinLamp {
+  /** Entertainment channel. */
+  id: number;
+  x: number;
+  y: number;
+}
+
+/** What the twin passes to `subscribe_twin_frames`: a Tauri `Channel` of raw
+ *  frames, named by shape so the contracts stay free of the Tauri API. */
+export interface TwinFrameChannel {
+  onmessage: (frame: ArrayBuffer) => void;
+  /** How a channel crosses `invoke` (`__CHANNEL__:<id>`); a plain object without it fails in Rust. */
+  toJSON(): string;
+}
+
+/** Result of `subscribe_twin_frames`. */
+export interface TwinSubscribeResult {
+  /** `null` when the caller is not the open session's twin. */
+  layout: TwinLayout | null;
+  status: CommandStatusOf<TwinSubscribeStatusCode>;
+}
 
 /**
- * Which signal the twin overlay mirrors.
- *
- * - `test` — synthetic test-pattern frames (always available, all platforms).
- * - `live` — live ambilight capture frames. Gated on Linux (see
- *   `TWIN_OVERLAY_UNSUPPORTED_PLATFORM_LIVE`) until the live-twin capture path
- *   is validated there.
+ * One twin frame on the channel: a little-endian header of four u32 — seq,
+ * the layout revision current when it was sent, LED count, lamp count — then
+ * packed RGB for every strip LED
+ * and every Hue lamp, as the light looks on a screen. Pinned by
+ * `features/preview/__tests__/twinFrame.golden.json`, which Rust reads too.
  */
-export type TwinScope = "test" | "live";
+export const TWIN_FRAME = {
+  HEADER_BYTES: 16,
+  SEQ_OFFSET: 0,
+  REVISION_OFFSET: 4,
+  LED_COUNT_OFFSET: 8,
+  LAMP_COUNT_OFFSET: 12,
+} as const;
 
-/** Payload for `open_led_twin_overlay`. */
-export interface OpenLedTwinOverlayPayload {
-  /** Display to overlay. Absent ⇒ backend falls back to the selected/primary display. */
-  displayId?: DisplayId;
-  /** Whether the overlay mirrors synthetic test frames or live capture. */
-  scope: TwinScope;
+/** Payload for `set_preview_popup_hidden`. */
+export interface SetPreviewPopupHiddenPayload {
+  hidden: boolean;
 }
 
-/** Payload for `close_led_twin_overlay`. */
-export interface CloseLedTwinOverlayPayload {
-  /** Display whose overlay should close. Absent ⇒ close every open twin overlay. */
-  displayId?: DisplayId;
+/** Payload for `set_preview_twin_hidden`. */
+export interface SetPreviewTwinHiddenPayload {
+  hidden: boolean;
 }
 
-/** Result of the twin overlay open/close commands. */
-export interface TwinOverlayResult {
-  ok: boolean;
-  code: TwinOverlayStatusCode;
-  message: string;
-  reason?: string;
+/** Payload for `start_preview_scene`. */
+export interface StartPreviewScenePayload {
+  kind: SceneKind;
 }
 
-// ---------------------------------------------------------------------------
-// Control popup window
-// ---------------------------------------------------------------------------
-
-/** Result of the control popup open/show/hide commands. */
-export interface ControlPopupResult {
-  ok: boolean;
-  code: ControlPopupStatusCode;
-  message: string;
-  /** Whether the popup window is currently visible after this call resolved. */
-  visible: boolean;
+/**
+ * The latency scene's measurement, after each sample: pipeline delay, from the
+ * moment a frame was captured (on macOS, when the display showed it) to the
+ * moment the output carrying it was sent. The strip's and the display's own
+ * delays are not in it.
+ */
+export interface LatencyResult {
+  /** The newest samples, oldest first, in milliseconds. */
+  samplesMs: number[];
+  medianMs: number;
+  /** Flips that reached no output in time, or were overtaken by the next. */
+  dropped: number;
 }
 
-// ---------------------------------------------------------------------------
-// Preview runtime snapshot (`get_led_preview_status`)
-// ---------------------------------------------------------------------------
+/** Payload for `set_preview_scene_brightness`; outside 0..1 it is clamped. */
+export interface SetPreviewSceneBrightnessPayload {
+  brightness: number;
+}
 
-/** Snapshot of the preview/test runtime, returned by `get_led_preview_status`. */
-export interface LedPreviewStatus {
-  /** Whether a synthetic test pattern is currently being injected. */
-  testActive: boolean;
-  /** What the enriched edge-signal stream currently carries. */
-  source: "test" | "live" | "idle";
-  /** Active synthetic pattern when `source === "test"`. */
-  activePattern?: LedTestPattern;
-  /** Displays that currently have a twin overlay window open. */
-  twinDisplays: DisplayId[];
-  /** Whether the interactive control popup is currently visible. */
-  popupVisible: boolean;
-  /**
-   * Whether the live-scope twin overlay is supported on this platform.
-   * `false` on Linux until the live-twin capture path is validated there;
-   * the UI hides / disables the "live" toggle accordingly.
-   */
-  liveTwinSupported: boolean;
+/** Payload for `set_preview_scene_black_borders`. */
+export interface SetPreviewSceneBlackBordersPayload {
+  enabled: boolean;
+}
+
+/** Result of every session command. */
+export interface PreviewSessionResult {
+  session: PreviewSession;
+  status: CommandStatusOf<PreviewSessionStatusCode>;
 }
 
 // ---------------------------------------------------------------------------
@@ -207,8 +266,8 @@ export const LED_TEST_STATUS = {
   /** Pattern accepted and now streaming to the configured sink(s). */
   PATTERN_STARTED: "LED_TEST_PATTERN_STARTED",
   /**
-   * Pattern accepted but rendered to the twin overlay / edge-signal stream
-   * only — no physical sink received frames (e.g. no device connected).
+   * Pattern accepted but no physical sink received frames (e.g. no device
+   * connected); only an open preview twin shows it.
    * Pair with `LedTestPatternResult.previewOnly === true`.
    */
   PATTERN_PREVIEW_ONLY: "LED_TEST_PATTERN_PREVIEW_ONLY",
@@ -223,52 +282,70 @@ export const LED_TEST_STATUS = {
   PATTERN_NO_CALIBRATION: "LED_TEST_PATTERN_NO_CALIBRATION",
   /** The synthetic generator / worker hand-off failed at runtime. */
   PATTERN_RUNTIME_ERROR: "LED_TEST_PATTERN_RUNTIME_ERROR",
+  /** A preview scene owns the lights; nothing was started. */
+  PATTERN_SCENE_ACTIVE: "LED_TEST_PATTERN_SCENE_ACTIVE",
 } as const;
 
 export type LedTestStatusCode = (typeof LED_TEST_STATUS)[keyof typeof LED_TEST_STATUS];
 
-export const TWIN_OVERLAY_STATUS = {
-  /** Overlay window opened (or an already-open one was focused) for the display. */
-  OPENED: "TWIN_OVERLAY_OPENED",
-  /** Overlay window closed for the requested display (or all). */
-  CLOSED: "TWIN_OVERLAY_CLOSED",
-  /** Window creation / show failed at the webview layer. */
-  OPEN_FAILED: "TWIN_OVERLAY_OPEN_FAILED",
-  /** Destroy failed; `reason` lists the labels. A surviving twin is
-   * click-through and undecorated, so the user cannot dismiss it. */
-  CLOSE_FAILED: "TWIN_OVERLAY_CLOSE_FAILED",
-  /** The requested `displayId` did not match any enumerated display. */
-  DISPLAY_NOT_FOUND: "TWIN_OVERLAY_DISPLAY_NOT_FOUND",
-  /**
-   * A `live`-scope overlay was requested on a platform that does not yet
-   * support live-twin capture (Linux). The UI should fall back to `test`
-   * scope or hide the live toggle.
-   */
-  UNSUPPORTED_PLATFORM_LIVE: "TWIN_OVERLAY_UNSUPPORTED_PLATFORM_LIVE",
+export const PREVIEW_STATUS = {
+  /** Popup and twin up, main window hidden if it was visible. */
+  OPENED: "PREVIEW_OPENED",
+  /** A session was already open; its popup is shown and focused. */
+  ALREADY_OPEN: "PREVIEW_ALREADY_OPEN",
+  /** Session ended; every preview window is gone, a stray from an earlier failure too. */
+  CLOSED: "PREVIEW_CLOSED",
+  /** Nothing to close or change: no session is open and no preview window is left. */
+  NOT_OPEN: "PREVIEW_NOT_OPEN",
+  /** The popup was hidden or shown. */
+  POPUP_UPDATED: "PREVIEW_POPUP_UPDATED",
+  /** The twin was hidden or shown; shown, it gets a fresh frame at once. */
+  TWIN_UPDATED: "PREVIEW_TWIN_UPDATED",
+  /** The twin's channel is registered; the layout comes with the answer. */
+  TWIN_SUBSCRIBED: "PREVIEW_TWIN_SUBSCRIBED",
+  /** The displays could not be read, or a window could not be built; whatever
+   * was built is destroyed again. A saved display that is gone is not a failure:
+   * the twin goes where the capture falls back to. */
+  OPEN_FAILED: "PREVIEW_OPEN_FAILED",
+  /** A window survived its destroy; `details` names it. The twin is click-through
+   * and undecorated, so a survivor would sit over the display undismissable. */
+  CLOSE_FAILED: "PREVIEW_CLOSE_FAILED",
+  /** The scene plays and Ambilight runs for it. */
+  SCENE_STARTED: "PREVIEW_SCENE_STARTED",
+  /** The scene stopped and the mode it interrupted is back. */
+  SCENE_STOPPED: "PREVIEW_SCENE_STOPPED",
+  /** The playing scene's brightness or black-bar switch changed (the latency scene answers it
+   * with its switch still off). */
+  SCENE_UPDATED: "PREVIEW_SCENE_UPDATED",
+  /** The session is open and no scene plays. */
+  SCENE_NOT_RUNNING: "PREVIEW_SCENE_NOT_RUNNING",
+  /** Nothing to light: no strip or WLED panel, and no Hue stream already up. */
+  SCENE_NO_OUTPUT: "PREVIEW_SCENE_NO_OUTPUT",
+  /** Screen recording is not allowed, so Ambilight cannot see the scene. */
+  SCENE_CAPTURE_DENIED: "PREVIEW_SCENE_CAPTURE_DENIED",
+  /** The scene window or Ambilight did not start; `details` says which. The lights are as before. */
+  SCENE_START_FAILED: "PREVIEW_SCENE_START_FAILED",
+  /** A LED Setup or Devices test pattern owns the lights. */
+  SCENE_TEST_PATTERN_ACTIVE: "PREVIEW_SCENE_TEST_PATTERN_ACTIVE",
+  /** The display the session is on is gone. */
+  DISPLAY_NOT_FOUND: "PREVIEW_DISPLAY_NOT_FOUND",
+  /** The lights did not go back to the mode the scene interrupted: its output went away and they
+   * are off, or the stop itself was rejected and the scene may still be playing. */
+  RESTORE_FAILED: "PREVIEW_RESTORE_FAILED",
 } as const;
 
-export type TwinOverlayStatusCode =
-  (typeof TWIN_OVERLAY_STATUS)[keyof typeof TWIN_OVERLAY_STATUS];
+export type PreviewStatusCode = (typeof PREVIEW_STATUS)[keyof typeof PREVIEW_STATUS];
 
-export const CONTROL_POPUP_STATUS = {
-  /** Popup window created (hidden until a subsequent show call). */
-  OPENED: "CONTROL_POPUP_OPENED",
-  /** Popup revealed and focused. */
-  SHOWN: "CONTROL_POPUP_SHOWN",
-  /** Popup hidden without being destroyed (cheap re-show next time). */
-  HIDDEN: "CONTROL_POPUP_HIDDEN",
-  /** Window create / show / hide failed at the webview layer. */
-  FAILED: "CONTROL_POPUP_FAILED",
-} as const;
+/** What the session commands answer: every preview code but the twin's own. */
+export type PreviewSessionStatusCode = Exclude<PreviewStatusCode, typeof PREVIEW_STATUS.TWIN_SUBSCRIBED>;
 
-export type ControlPopupStatusCode =
-  (typeof CONTROL_POPUP_STATUS)[keyof typeof CONTROL_POPUP_STATUS];
+/** What `subscribe_twin_frames` answers. */
+export type TwinSubscribeStatusCode = typeof PREVIEW_STATUS.TWIN_SUBSCRIBED | typeof PREVIEW_STATUS.NOT_OPEN;
 
 /** Thrown as `Err("CODE: detail")` before any status object is built, so a
- * `switch` on {@link TWIN_OVERLAY_STATUS} will never see them. */
+ * `switch` on {@link PREVIEW_STATUS} will never see them. */
 export const PREVIEW_COMMAND_ERRORS = {
-  TWIN_STATE_LOCK_FAILED: "LED_TWIN_STATE_LOCK_FAILED",
-  TWIN_OVERLAY_SERIALIZE: "TWIN_OVERLAY_SERIALIZE",
+  SESSION_LOCK_FAILED: "PREVIEW_SESSION_LOCK_FAILED",
 } as const;
 
 export type PreviewCommandErrorCode =
@@ -278,54 +355,32 @@ export type PreviewCommandErrorCode =
 // Window labels + event names
 // ---------------------------------------------------------------------------
 
-/**
- * Label prefix for twin overlay webview windows. One window per display;
- * the full label is `${LED_TWIN_OVERLAY_LABEL_PREFIX}${displayId}` so the
- * shell can address / close a single display's overlay without ambiguity.
- */
+/** Label prefix for the twin window. The suffix is a counter, not the display
+ * id: a label is reserved until its destroy completes, so a reopen right after
+ * a close would collide on a fixed one. */
 export const LED_TWIN_OVERLAY_LABEL_PREFIX = "led-twin-overlay-" as const;
 
-/** Fixed label for the single interactive control popup webview window. */
-export const LED_CONTROL_POPUP_LABEL = "led-control-popup" as const;
+/** Label prefix for the session's control popup; a counter follows, as for the twin. */
+export const LED_CONTROL_POPUP_LABEL_PREFIX = "led-control-popup-" as const;
 
-/**
- * Tauri event channel emitted whenever the preview runtime state changes
- * (test started/stopped, overlay opened/closed, popup shown/hidden). Carries
- * a `LedPreviewStatus` payload so every preview surface can reconcile without
- * polling `get_led_preview_status`.
- */
-export const PREVIEW_STATE_CHANGED_EVENT = "preview://state-changed" as const;
+/** Label prefix for the scene window; a counter follows, as for the twin. */
+export const LED_PREVIEW_SCENE_LABEL_PREFIX = "led-preview-scene-" as const;
 
-/** Tauri event channel carrying the per-LED feed of the LED twin overlay. */
-export const EDGE_SIGNAL_EVENT = "ambilight://edge-signal" as const;
+/** `TwinLayout`, to the twin, when the running mode's layout changes. */
+export const PREVIEW_TWIN_LAYOUT_EVENT = "preview://twin-layout" as const;
+
+/** `PreviewSession`, to the popup and the scene window, when it changes while
+ * the session is open. The main window gets nothing: it learns the session
+ * ended by being shown again. */
+export const PREVIEW_SESSION_EVENT = "preview://session" as const;
+
+/** `LatencyResult`, to the popup, after each sample of the latency scene. */
+export const PREVIEW_LATENCY_EVENT = "preview://latency" as const;
 
 export const PREVIEW_EVENTS = {
-  STATE_CHANGED: PREVIEW_STATE_CHANGED_EVENT,
-  EDGE_SIGNAL: EDGE_SIGNAL_EVENT,
+  TWIN_LAYOUT: PREVIEW_TWIN_LAYOUT_EVENT,
+  SESSION: PREVIEW_SESSION_EVENT,
+  LATENCY: PREVIEW_LATENCY_EVENT,
 } as const;
 
 export type PreviewEventName = (typeof PREVIEW_EVENTS)[keyof typeof PREVIEW_EVENTS];
-
-/**
- * Per-LED frame the Rust ambilight worker sends to open twin-overlay windows
- * (`lighting_mode/preview.rs`). Sent only while a twin overlay is open, and
- * only to twin windows. This is the exact wire shape; the one listener reads
- * it as a `Partial`, so a frame without a `leds` buffer is ignored rather than
- * trusted.
- */
-export interface EdgeSignalPayload {
-  /** Full per-LED RGB buffer, ordered along the calibrated strip path. */
-  leds: Array<[number, number, number]>;
-  /** Length of `leds` — the calibrated total LED count for this frame. */
-  ledCount: number;
-  /** Per-Hue-channel RGB for the twin's Hue zone markers. Separate from `leds`
-   * because Hue channels are sparse room positions, not contiguous pixels. */
-  hueChannels?: Array<[number, number, number]>;
-  source: "test" | "live";
-  /** Active synthetic pattern kind when `source === "test"`. */
-  pattern?: LedTestPatternKind;
-  /** Monotonically increasing frame sequence number, for drop detection. */
-  seq: number;
-  /** Display the frame was sampled from, threaded through from the capture path. */
-  displayId?: DisplayId;
-}

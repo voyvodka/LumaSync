@@ -122,13 +122,12 @@ describe("ensureStripForPort", () => {
   });
 
   it("writes one entry however often the same port connects", async () => {
-    stateRef.current = { ledStrips: [{ id: "strip-1", enabled: true, transport: null, hardware: {}, layout: LAYOUT }], roomMapVersion: 3 };
+    stateRef.current = { ledStrips: [{ id: "strip-1", enabled: true, transport: null, hardware: {}, layout: LAYOUT }] };
 
     const first = await ensureStripForPort(PORT);
     const second = await ensureStripForPort(PORT);
 
     expect(saveMock).toHaveBeenCalledTimes(1);
-    expect(saveMock.mock.calls[0][0].roomMapVersion).toBe(4);
     expect(first).toEqual([expect.objectContaining({ portName: PORT, ledCount: 118 })]);
     expect(second).toEqual(first);
   });
@@ -150,7 +149,6 @@ describe("syncStripLedCount", () => {
   it("sets the connected port's strip to the saved LED Setup total", async () => {
     stateRef.current = {
       roomMap: roomMap([strip({ stripId: "a", portName: "/dev/other" }), strip({ stripId: "b", portName: PORT })]),
-      roomMapVersion: 4,
     };
 
     await syncStripLedCount(164, PORT);
@@ -158,7 +156,6 @@ describe("syncStripLedCount", () => {
     const strips = stateRef.current.roomMap!.usbStrips;
     expect(strips.find((s) => s.stripId === "b")!.ledCount).toBe(164);
     expect(strips.find((s) => s.stripId === "a")!.ledCount).toBe(42);
-    expect(stateRef.current.roomMapVersion).toBe(5);
   });
 
   it("updates the only strip when no port says which one it is", async () => {
@@ -173,6 +170,17 @@ describe("syncStripLedCount", () => {
     stateRef.current = { roomMap: roomMap([strip({ stripId: "a" }), strip({ stripId: "b" })]) };
     await syncStripLedCount(90, null);
     expect(saveMock).not.toHaveBeenCalled();
+  });
+
+  // A new count from LED Setup is only a count: refitting the strip there would write the geometry
+  // the editor writes.
+  it("writes the count alone, leaving a bent strip's run and density as they were", () => {
+    const corners = [{ x: 2, y: 1 }];
+    const bent = strip({ portName: PORT, corners, ledsPerMeter: 60 });
+    const next = withStripLedCount(roomMap([bent]), 120, PORT);
+    const written = next.roomMap.usbStrips[0]!;
+    expect(written).toEqual({ ...bent, ledCount: 120 });
+    expect(written.corners).toBe(corners);
   });
 
   it("leaves the rest of the map, Hue channels included, as it was", () => {

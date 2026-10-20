@@ -51,8 +51,7 @@ describe("migrateShellState — schemaVersion 1 → 2 (W4-F2)", () => {
 
     const out = migrateShellState(input);
 
-    // After the chained 1 → 2 → 3 run, schemaVersion lands at the latest
-    // version (3). The Hue-zone fold is still observable.
+    // The chain runs to the latest version; the Hue-zone fold is still observable.
     expect(out.schemaVersion).toBe(SHELL_STATE_SCHEMA_VERSION);
     expect(out.roomMap?.zones).toHaveLength(1);
     expect(out.roomMap?.zones[0]).toMatchObject({
@@ -61,10 +60,11 @@ describe("migrateShellState — schemaVersion 1 → 2 (W4-F2)", () => {
       entertainmentAreaId: "ea-living",
       centerX: 0.1,
       centerY: -0.2,
-      centerZ: 0.3,
+      // 11 → 12 makes it a 2 m cube in the 5 × 4 × 2.5 m room, at mid-height with no light to cover.
+      centerZ: 0,
       scaleX: 0.4,
       scaleY: 0.5,
-      scaleZ: 0.6,
+      scaleZ: 0.8,
       channelIndices: [0, 1, 2],
       borderColor: "#ff0",
     });

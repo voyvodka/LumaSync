@@ -1,7 +1,8 @@
 import { useTranslation } from "react-i18next";
 
 import type { LedChipType } from "@/shared/contracts/device";
-import { maxTotal, minTotal, sumCounts, type DisplayAspect, type LayoutDraft } from "../../model/ledLayout";
+import { sumSegmentCounts } from "../../model/contracts";
+import { maxTotal, minTotal, type DisplayAspect, type LayoutDraft } from "../../model/ledLayout";
 import { estimateStripPower } from "../../model/powerEstimate";
 import { NumberField } from "./NumberField";
 
@@ -20,7 +21,7 @@ interface TotalControlProps {
 /** The strip's total LEDs: typing a new one shares it out over the lit edges; the canvas previews it first. */
 export function TotalControl({ draft, display, knownTotal, chipType, onDistribute, onPreview }: TotalControlProps) {
   const { t, i18n } = useTranslation();
-  const total = sumCounts(draft.counts);
+  const total = sumSegmentCounts(draft.counts);
   const floor = minTotal(draft);
   const ceiling = maxTotal(draft, display);
   const lengthPower = (n: number) =>

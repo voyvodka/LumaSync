@@ -1,0 +1,30 @@
+@layer components {
+  /* The new stage is in flow; the leaving one is a still copy laid over the top of the box, so the
+     page below settles to the new stage's height at once and nothing is pushed. */
+  .box { position: relative; min-width: 0; }
+  .live { min-width: 0; }
+  .ghost {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    pointer-events: none;
+    animation: var(--lm-dur-quick) var(--lm-ease-leave) forwards;
+  }
+  .entering { animation: var(--lm-dur-base) var(--lm-ease-out) var(--lm-dur-follow) backwards; }
+
+  /* Direction lives in the class, not in a variable inside the keyframes: WebKit is unreliable
+     with those. */
+  .ghost.next { animation-name: stage-out-next; }
+  .ghost.prev { animation-name: stage-out-prev; }
+  .entering.next { animation-name: stage-in-next; }
+  .entering.prev { animation-name: stage-in-prev; }
+
+  @keyframes stage-out-next { to { opacity: 0; transform: translateX(-12px); } }
+  @keyframes stage-out-prev { to { opacity: 0; transform: translateX(12px); } }
+  @keyframes stage-in-next { from { opacity: 0; transform: translateX(14px); } }
+  @keyframes stage-in-prev { from { opacity: 0; transform: translateX(-14px); } }
+
+  :global(:root[data-reduced-motion]) .ghost { display: none; }
+  :global(:root[data-reduced-motion]) .entering { animation: none; }
+}

@@ -75,7 +75,7 @@ describe("start_led_test_pattern derives previewOnly from the world, not a const
   it("a hue target only counts once the stream is actually running with mapped channels", async () => {
     // Paired, reachable, credentials valid — but never started. Real Rust's
     // `snapshot_hue_output_context` reads `active_stream`, which stays `None`
-    // until a stream has genuinely gone `Running` (`hue/state_store.rs:451-463`).
+    // until a stream has genuinely gone `Running` (`commands/hue/state_store.rs`).
     const world = SCENARIOS.furnished.build();
     world.serial.connectedPort = null;
     world.wled.connectedHost = null;

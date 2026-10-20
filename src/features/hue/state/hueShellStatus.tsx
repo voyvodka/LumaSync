@@ -23,15 +23,6 @@ export interface HueShellStatus {
   streamFailed: boolean;
 }
 
-export const HUE_SHELL_STATUS_NONE: HueShellStatus = {
-  configured: false,
-  reachable: false,
-  probeVerdict: null,
-  streaming: false,
-  reconnecting: false,
-  streamFailed: false,
-};
-
 const HueShellStatusContext = createContext<Store<HueShellStatus> | null>(null);
 
 export function HueShellStatusProvider({

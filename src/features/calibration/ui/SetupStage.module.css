@@ -63,7 +63,8 @@
   @keyframes halo-in { from { opacity: 0; } }
 
   :global(:root[data-reduced-motion]) .halo { animation: none; }
-  :global(:root[data-reduced-motion]) .addStand { transition: none; }
+  :global(:root[data-reduced-motion]) .addStand,
+  :global(:root[data-reduced-motion]) .stage:has(> svg[data-morphing]) > :not(svg) { transition: none; }
 
   @media (forced-colors: active) {
     .halo { display: none; }

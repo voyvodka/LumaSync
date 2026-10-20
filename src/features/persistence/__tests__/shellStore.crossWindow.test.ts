@@ -51,7 +51,7 @@ describe("two windows writing the same shell state", () => {
       main.shellStore.save({ lastSection: "devices" }),
       popup.shellStore.save({ ledPreviewPopupCenterX: 640, ledPreviewPopupCenterY: 400 }),
       main.shellStore.save({ uiMode: "full" }),
-      popup.shellStore.save({ lastLedTestPattern: { kind: "gamut" } }),
+      popup.shellStore.save({ trayHintShown: true }),
     ]);
 
     expect(await main.shellStore.load()).toMatchObject({
@@ -59,7 +59,7 @@ describe("two windows writing the same shell state", () => {
       uiMode: "full",
       ledPreviewPopupCenterX: 640,
       ledPreviewPopupCenterY: 400,
-      lastLedTestPattern: { kind: "gamut" },
+      trayHintShown: true,
     });
     expect(await popup.shellStore.load()).toEqual(await main.shellStore.load());
   });
@@ -72,11 +72,11 @@ describe("two windows writing the same shell state", () => {
     main.shellStore.onSaved((saved) => heardInMain.push(saved));
     popup.shellStore.onSaved((saved) => heardInPopup.push(saved));
 
-    await popup.shellStore.save({ ledTwinEnabledTest: false, lastHueAreaId: undefined });
+    await popup.shellStore.save({ trayHintShown: false, lastHueAreaId: undefined });
     await flush();
 
-    expect(heardInMain).toEqual([{ ledTwinEnabledTest: false, lastHueAreaId: undefined }]);
-    expect(heardInPopup).toEqual([{ ledTwinEnabledTest: false, lastHueAreaId: undefined }]);
+    expect(heardInMain).toEqual([{ trayHintShown: false, lastHueAreaId: undefined }]);
+    expect(heardInPopup).toEqual([{ trayHintShown: false, lastHueAreaId: undefined }]);
   });
 });
 
@@ -105,17 +105,17 @@ describe("the migration write-back", () => {
       if (command === SHELL_COMMANDS.GET_SHELL_STATE && !raced) {
         raced = true;
         // The popup's save lands between the main window's read and write-back.
-        await popup.shellStore.save({ ledPreviewHintShown: true });
+        await popup.shellStore.save({ trayHintShown: true });
       }
       return answer;
     };
 
     const loaded = await main.shellStore.load();
 
-    expect(loaded.ledPreviewHintShown).toBe(true);
+    expect(loaded.trayHintShown).toBe(true);
     expect(backend.state()).toMatchObject({
       schemaVersion: SHELL_STATE_SCHEMA_VERSION,
-      ledPreviewHintShown: true,
+      trayHintShown: true,
     });
     expect(backend.state()).not.toHaveProperty("hueChannelRegionOverrides");
   });
@@ -174,7 +174,6 @@ describe("update, the revision-guarded read-modify-write", () => {
     backend.seed({
       schemaVersion: SHELL_STATE_SCHEMA_VERSION,
       roomMap: { ...DEFAULT_ROOM_MAP, hueChannels: [CHANNEL_A] },
-      roomMapVersion: 1,
     });
   }
 
@@ -202,7 +201,7 @@ describe("update, the revision-guarded read-modify-write", () => {
     await main.shellStore.update((current) => {
       calls += 1;
       const roomMap = current.roomMap ?? DEFAULT_ROOM_MAP;
-      return { roomMap: { ...roomMap, usbStrips: [...roomMap.usbStrips, STRIP] }, roomMapVersion: 2 };
+      return { roomMap: { ...roomMap, usbStrips: [...roomMap.usbStrips, STRIP] }, lastSection: "devices" };
     });
 
     expect(calls).toBe(2);
@@ -211,7 +210,7 @@ describe("update, the revision-guarded read-modify-write", () => {
     expect(stored.roomMap?.usbStrips).toEqual([STRIP]);
     // Its own write reaches its listeners once; the echo is dropped.
     await flush();
-    expect(heard.filter((saved) => (saved as Partial<ShellState>).roomMapVersion === 2)).toHaveLength(1);
+    expect(heard.filter((saved) => (saved as Partial<ShellState>).lastSection === "devices")).toHaveLength(1);
   });
 
   it("writes nothing when the update has nothing to change", async () => {

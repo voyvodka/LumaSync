@@ -11,7 +11,10 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("@/features/persistence/shellStore", () => ({ shellStore: { update: async () => ({}) } }));
+vi.mock("@/features/persistence/shellStore", () => ({
+  // The colour row reads the store; it is not what these tests are about, so its read never lands.
+  shellStore: { update: async () => ({}), load: () => new Promise(() => {}), onSaved: () => () => undefined },
+}));
 vi.mock("../../state/stripFlash", async (importActual) => ({
   ...(await importActual<typeof import("../../state/stripFlash")>()),
   flashStrip: async () => "lit" as const,

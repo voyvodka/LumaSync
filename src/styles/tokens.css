@@ -12,9 +12,16 @@
      palette is dark-only; light variants are intentionally absent
      because the app is dark-mode-primary.
      ───────────────────────────────────────────────────────────────── */
-  /* Mirrors `TITLE_BAR_HEIGHT_PX` — a modal scrim must start below the bar or
-     it swallows the drag region and the window controls. */
-  --lm-titlebar-h: 36px;
+  /* 36px is `TITLE_BAR_HEIGHT_PX`; change both together. A modal scrim must start
+     below the bar or it swallows the drag region and the window controls. The
+     chrome scale keeps the bar at 100 % under any interface size (`useUiZoom`). */
+  --lm-titlebar-h: calc(36px * var(--lm-chrome-scale, 1));
+  /* The 3D room's night backdrop, from behind the room out to the edge. */
+  --lm-room-night:      #1f2744;
+  --lm-room-night-mid:  #121829;
+  --lm-room-night-edge: #090b13;
+  /* What a modal dims the page with — one depth for every dialog. */
+  --lm-scrim:     rgb(0 0 0 / 55%);
   --lm-bg:        #07080a;
   --lm-panel:     #0e1014;
   --lm-panel-2:   #14171d;
@@ -22,19 +29,22 @@
   --lm-line-2:    #252b34;
   --lm-ink:       #eaeef4;
   --lm-ink-dim:   #8a94a3;
-  --lm-ink-faint: #4d5564;
+  /* Quiet text still clears 4.5:1 on --lm-bg and --lm-panel; #4d5564 was 2.67:1. */
+  --lm-ink-faint: #737c8c;
   --lm-amber:     #ffb020;
   --lm-amber-2:   #ff7a1a;
   --lm-cyan:      #22d3ee;
   --lm-green:     #4ade80;
   --lm-red:       #ef5b5b;
+  /* On a red fill: --lm-ink there is 2.85:1, under the 3:1 a glyph needs. */
+  --lm-on-red:    #fff;
   --lm-mono:      "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --lm-sans:      "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
-  /* Room-map zone identity palette. Six perceptually-separated hues used
-     for zone badges (Tailwind .bg-{blue,emerald,purple,amber,rose,cyan}-500
-     in ZoneListPanel.ZONE_COLORS). Mirrored here so JS can read the same
-     hex via CSS custom properties for inline boxShadow rings on Hue dots. */
+  /* Room-map zone identity palette: six perceptually-separated hues, the
+     Tailwind blue/emerald/purple/amber/rose/cyan-500 values. Read from JS as
+     custom properties (`room-map/model/zoneColor.ts`) for zone and object-type
+     colours drawn inline. */
   --lm-zone-1: #3b82f6; /* blue-500   */
   --lm-zone-2: #10b981; /* emerald-500 */
   --lm-zone-3: #a855f7; /* purple-500 */
@@ -47,6 +57,8 @@
      preferred carrier (no layout shift). UI Gap 7 a11y consistency.       */
   --lm-focus-ring:       0 0 0 2px rgba(255, 176, 32, 0.45);
   --lm-focus-ring-inset: inset 0 0 0 2px rgba(255, 176, 32, 0.45);
+  /* A ring outside a 3 px gap of page colour, for a thumb whose resting halo would cover a plain ring. */
+  --lm-focus-ring-gap:   0 0 0 3px var(--lm-bg), 0 0 0 5px rgba(255, 176, 32, 0.45);
   --lm-focus-ring-soft:  0 0 0 2px rgba(255, 176, 32, 0.35), 0 0 0 4px rgba(255, 176, 32, 0.12);
 
   /* Motion. Small, light, answering a change (design-language.md): one set of
@@ -60,4 +72,18 @@
   /* How long an arriving element waits for the leaving one: short enough that
      the two pass each other and nothing blinks. */
   --lm-dur-follow: 0.04s;
+}
+
+/* Registered so the room's sky gradient eases between moods; a typed property ignores a var()
+   fallback, so the stage always sets both. */
+@property --lm-room-sky-top {
+  syntax: "<color>";
+  inherits: false;
+  initial-value: transparent;
+}
+
+@property --lm-room-sky-mid {
+  syntax: "<color>";
+  inherits: false;
+  initial-value: transparent;
 }

@@ -33,6 +33,10 @@ pub struct WledOutputStatus {
     pub ip: String,
     pub led_count: u16,
     pub connected: bool,
+    /// Whether the device answers its `/json/info` probe. For showing only: it
+    /// never moves what the "usb" channel drives (UDP gives no error to go on,
+    /// and dropping the output mid-session on a missed probe would be worse).
+    pub reachable: bool,
 }
 
 /// `LocalOutputStatus` in `src/shared/contracts/device.ts`.
@@ -74,17 +78,6 @@ pub enum DrivenLocal {
     Wled(WledSinkConfig),
 }
 
-impl DrivenLocal {
-    /// `apply_mode_change`'s three channel arguments.
-    pub fn plan_args(driven: Option<&Self>) -> (bool, Option<&str>, Option<WledSinkConfig>) {
-        match driven {
-            Some(Self::Serial(port)) => (true, Some(port.as_str()), None),
-            Some(Self::Wled(config)) => (false, None, Some(*config)),
-            None => (false, None, None),
-        }
-    }
-}
-
 /// What `serial_disconnected` replaced.
 pub struct DisconnectedSerial {
     entry: SerialOutputStatus,
@@ -99,6 +92,10 @@ struct Inner {
     next_connect: u64,
     serial_connected_at: BTreeMap<String, u64>,
     wled_connected_at: u64,
+    /// The bound WLED device answered its last probes (see `wled_reachability`).
+    wled_reachable: bool,
+    /// Moves with every bind, so a probe of an earlier binding cannot mark the current one.
+    wled_generation: u64,
 }
 
 pub struct LocalOutputRegistry {
@@ -115,6 +112,8 @@ impl Default for LocalOutputRegistry {
                 next_connect: 0,
                 serial_connected_at: BTreeMap::new(),
                 wled_connected_at: 0,
+                wled_reachable: true,
+                wled_generation: 0,
             }),
         }
     }
@@ -137,17 +136,21 @@ impl Inner {
                 ip: config.ip.to_string(),
                 led_count: config.led_count,
                 connected: true,
+                reachable: self.wled_reachable,
             }));
         }
         LocalOutputsSnapshot {
             revision: self.revision,
             outputs,
-            driven: driven_in(self).map(|driven| match driven {
-                DrivenLocal::Serial(port_name) => DrivenOutputRef::Serial { port_name },
-                DrivenLocal::Wled(config) => DrivenOutputRef::Wled {
-                    ip: config.ip.to_string(),
-                },
-            }),
+            driven: connected_in(self)
+                .into_iter()
+                .next()
+                .map(|driven| match driven {
+                    DrivenLocal::Serial(port_name) => DrivenOutputRef::Serial { port_name },
+                    DrivenLocal::Wled(config) => DrivenOutputRef::Wled {
+                        ip: config.ip.to_string(),
+                    },
+                }),
         }
     }
 
@@ -174,7 +177,9 @@ impl Inner {
     }
 }
 
-fn driven_in(inner: &Inner) -> Option<DrivenLocal> {
+/// Every connected local output, earliest connected first. The sort is stable, so outputs stamped
+/// alike keep the order they are listed in — serial ports by name, then the WLED device.
+fn connected_in(inner: &Inner) -> Vec<DrivenLocal> {
     let serial = inner
         .serial
         .values()
@@ -190,10 +195,9 @@ fn driven_in(inner: &Inner) -> Option<DrivenLocal> {
     let wled = inner
         .wled
         .map(|config| (inner.wled_connected_at, DrivenLocal::Wled(config)));
-    serial
-        .chain(wled)
-        .min_by_key(|(at, _)| *at)
-        .map(|(_, driven)| driven)
+    let mut outputs: Vec<(u64, DrivenLocal)> = serial.chain(wled).collect();
+    outputs.sort_by_key(|(at, _)| *at);
+    outputs.into_iter().map(|(_, output)| output).collect()
 }
 
 impl LocalOutputRegistry {
@@ -263,6 +267,10 @@ impl LocalOutputRegistry {
             inner.wled_connected_at = inner.stamp();
         }
         inner.wled = Some(config);
+        // Answering until the probe says otherwise: both callers read `/json/info` just before
+        // binding — the add row's discover and the boot restore's probe.
+        inner.wled_reachable = true;
+        inner.wled_generation += 1;
         inner.changed()
     }
 
@@ -279,6 +287,33 @@ impl LocalOutputRegistry {
         }
         inner.wled = Some(config);
         inner.wled_connected_at = connected_at;
+        // Nothing talked to it: what the probe last said still stands.
+        inner.wled_generation += 1;
+        Some(inner.changed())
+    }
+
+    /// The bound WLED device to probe, with the binding it belongs to.
+    pub fn wled_probe_target(&self) -> Option<(std::net::Ipv4Addr, u64)> {
+        let inner = self.lock();
+        inner.wled.map(|config| (config.ip, inner.wled_generation))
+    }
+
+    /// A probe's answer for the device bound as `generation`. A snapshot only when the
+    /// reachability changed for that same binding; a probe that outlived its binding says nothing.
+    pub fn wled_reachability(
+        &self,
+        ip: std::net::Ipv4Addr,
+        generation: u64,
+        reachable: bool,
+    ) -> Option<LocalOutputsSnapshot> {
+        let mut inner = self.lock();
+        let current = inner
+            .wled
+            .is_some_and(|config| config.ip == ip && inner.wled_generation == generation);
+        if !current || inner.wled_reachable == reachable {
+            return None;
+        }
+        inner.wled_reachable = reachable;
         Some(inner.changed())
     }
 
@@ -365,16 +400,22 @@ impl LocalOutputRegistry {
         inner.changed();
     }
 
+    /// What the "usb" channel drives: the earliest connected output.
     pub fn driven(&self) -> Option<DrivenLocal> {
-        driven_in(&self.lock())
+        self.connected_outputs().into_iter().next()
     }
 
-    /// `driven` for a mode apply, which refuses on a poisoned lock rather than plan an output from
-    /// facts a panicking writer may have left half-written.
-    pub fn driven_checked(&self) -> Result<Option<DrivenLocal>, String> {
+    /// Every connected output, earliest connected first.
+    pub fn connected_outputs(&self) -> Vec<DrivenLocal> {
+        connected_in(&self.lock())
+    }
+
+    /// `connected_outputs` for a mode apply, which refuses on a poisoned lock rather than plan an
+    /// output from facts a panicking writer may have left half-written.
+    pub fn connected_outputs_checked(&self) -> Result<Vec<DrivenLocal>, String> {
         self.inner
             .lock()
-            .map(|inner| driven_in(&inner))
+            .map(|inner| connected_in(&inner))
             .map_err(|error| format!("LIGHTING_CONNECTION_STATE_LOCK_FAILED: {error}"))
     }
 

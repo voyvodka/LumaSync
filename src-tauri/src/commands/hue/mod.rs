@@ -15,7 +15,9 @@
 //!   status_refresh_with_evidence / stop_with_timeout
 //! - `reconnect` — StartAbortGuard, store_active_stream_context,
 //!   spawn_reconnect_monitor + internal_restart_stream
-//! - `commands` — the seven `#[tauri::command]` entry points
+//! - `commands` — the six `#[tauri::command]` entry points
+//! - `hue_config` — the start request and room geometry read from the
+//!   persisted state, mirroring the frontend's own derivation
 //! - `area_cache` — single-flight, generation-invalidated cache for the
 //!   entertainment-area snapshot both readiness callers depend on
 //! - `health` — the one background task that owns bridge reachability,

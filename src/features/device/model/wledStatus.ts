@@ -23,6 +23,10 @@ export const WLED_STATUS_COPY = {
   [WLED_STATUS.DISCOVERY_WORKER_FAILED]: "device:page.wled.status.workerFailed",
   [WLED_STATUS.TEST_WORKER_FAILED]: "device:page.wled.status.workerFailed",
   [WLED_STATUS.CONNECT_WORKER_FAILED]: "device:page.wled.status.workerFailed",
+  [WLED_STATUS.BROWSE_OK]: "device:page.wled.status.browseOk",
+  [WLED_STATUS.BROWSE_UNSUPPORTED]: "device:page.wled.status.browseUnsupported",
+  [WLED_STATUS.BROWSE_FAILED]: "device:page.wled.status.browseFailed",
+  [WLED_STATUS.BROWSE_WORKER_FAILED]: "device:page.wled.status.workerFailed",
   [WLED_STATUS.FORGET_OK]: "device:page.wled.status.forgetOk",
   [WLED_STATUS.FORGET_FAILED]: "device:page.wled.status.forgetFailed",
 } as const satisfies Record<WledStatusCode, TranslationKey>;

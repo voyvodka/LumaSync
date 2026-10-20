@@ -1,18 +1,20 @@
 /**
  * HueChannelOverlay regression tests.
  *
- * Bug-driven coverage for zone authoring:
- *  - Bug #50: dragging the zone center moves the dashed bounds box AND
- *    every channel dot bound to the zone in lockstep (imperative DOM
- *    update during pointermove, single state commit on pointerup).
- *  - Bug #52(a): dragging a zone-bound channel never escapes the zone
- *    bounds — clamp pipeline is `world → zone-relative → world`.
+ * Zone authoring:
+ *  - dragging the zone center moves the dashed bounds box AND every
+ *    channel dot bound to the zone in lockstep (imperative DOM update
+ *    during pointermove, single state commit on pointerup).
+ *  - dragging a zone-bound channel never escapes the zone bounds —
+ *    clamp pipeline is `world → zone-relative → world`.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, fireEvent, cleanup } from "@testing-library/react";
 
 import { HueChannelOverlay, pinnedZoneEdges } from "../HueChannelOverlay";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
+import type { SnapResult } from "../../model/snapGeometry";
+import type { CubeFootprint } from "../../model/zoneRect";
 
 beforeEach(() => {
   cleanup();
@@ -47,6 +49,57 @@ const CHANNEL_IN_ZONE: HueChannelPlacement = {
   zoneRelativePosition: { x: 0.33, y: 0.33, z: 0 },
 };
 
+describe("HueChannelOverlay — overhead lights", () => {
+  it("rings a light that hangs overhead and says so, and leaves a standing one plain", () => {
+    const { container } = render(
+      <HueChannelOverlay
+        channels={[
+          { channelIndex: 0, x: 0, y: 0, z: 1 },
+          { channelIndex: 1, x: 0.5, y: 0.5, z: -1 },
+        ]}
+        overhead={new Set([0])}
+        pxPerMeter={80}
+        roomWidthM={5}
+        roomDepthM={4}
+        roomHeightM={2.5}
+        selectedId={null}
+        onSelect={() => {}}
+        onChange={() => {}}
+      />,
+    );
+    const [hung, standing] = Array.from(container.querySelectorAll<HTMLElement>("[data-object-id]"));
+    expect(hung.querySelector('[data-testid="hue-overhead"]')).not.toBeNull();
+    expect(hung.querySelector('[role="button"]')?.getAttribute("aria-label")).toBe("roomMap:hueChannel.overheadLabel");
+    expect(standing.querySelector('[data-testid="hue-overhead"]')).toBeNull();
+  });
+});
+
+describe("HueChannelOverlay — names", () => {
+  it("shows the selected light's name at the plan's zoom, the others' only on hover or focus", () => {
+    const { container } = render(
+      <HueChannelOverlay
+        channels={[
+          { channelIndex: 0, x: 0, y: 0, z: 0 },
+          { channelIndex: 1, x: 0.5, y: 0.5, z: 0 },
+        ]}
+        pxPerMeter={80}
+        roomWidthM={5}
+        roomDepthM={4}
+        roomHeightM={2.5}
+        zoom={2}
+        selectedId="hue-0"
+        onSelect={() => {}}
+        onChange={() => {}}
+      />,
+    );
+    const [picked, other] = Array.from(container.querySelectorAll<HTMLElement>('[data-testid="hue-name"]'));
+    expect(picked).toHaveAttribute("data-shown");
+    expect(other).not.toHaveAttribute("data-shown");
+    expect(picked!.style.getPropertyValue("--lm-hue-name-scale")).toBe("0.5");
+    expect(container.querySelector('[role="button"]')).not.toHaveAttribute("title");
+  });
+});
+
 describe("HueChannelOverlay — bug #52(a) drag-time zone clamp", () => {
   it("never lets a zone-bound channel drag past the zone bounds", () => {
     const onChange = vi.fn();
@@ -56,6 +109,7 @@ describe("HueChannelOverlay — bug #52(a) drag-time zone clamp", () => {
         pxPerMeter={80}
         roomWidthM={5}
         roomDepthM={4}
+        roomHeightM={2.5}
         zoom={1}
         selectedId={null}
         onSelect={() => {}}
@@ -108,6 +162,7 @@ describe("HueChannelOverlay — a drag starts where the dot is drawn", () => {
         pxPerMeter={80}
         roomWidthM={5}
         roomDepthM={4}
+        roomHeightM={2.5}
         zoom={1}
         selectedId={null}
         onSelect={() => {}}
@@ -127,6 +182,51 @@ describe("HueChannelOverlay — a drag starts where the dot is drawn", () => {
     expect(updated.x).toBeCloseTo(0.19, 10);
     expect(updated.y).toBeCloseTo(0, 10);
     expect(updated.zoneRelativePosition?.x).toBeCloseTo(0.19 / 0.3, 10);
+  });
+});
+
+// A click's 1–3 px wobble moved the light and wrote it back to the bridge.
+describe("HueChannelOverlay — a click is not a drag", () => {
+  const renderOne = () => {
+    const onChange = vi.fn<(updated: HueChannelPlacement) => void>();
+    const onSelect = vi.fn<(channelIndex: number) => void>();
+    const { container } = render(
+      <HueChannelOverlay
+        channels={[{ channelIndex: 0, x: 0, y: 0, z: 0 }]}
+        pxPerMeter={80}
+        roomWidthM={5}
+        roomDepthM={4}
+        roomHeightM={2.5}
+        zoom={1}
+        selectedId={null}
+        onSelect={onSelect}
+        onChange={onChange}
+      />,
+    );
+    return { onChange, onSelect, dot: container.querySelector<HTMLDivElement>('[role="button"]')! };
+  };
+
+  it("selects on a press that wobbles a few pixels, and writes nothing", () => {
+    const { onChange, onSelect, dot } = renderOne();
+    fireEvent.pointerDown(dot, { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(dot, { clientX: 103, clientY: 102, pointerId: 1 });
+    fireEvent.pointerUp(dot, { clientX: 103, clientY: 102, pointerId: 1 });
+    expect(onSelect).toHaveBeenCalledWith(0);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("puts the light back on Esc mid-drag and writes nothing", () => {
+    const { onChange, dot } = renderOne();
+    const wrapper = dot.parentElement!;
+    const home = { left: wrapper.style.left, top: wrapper.style.top };
+    fireEvent.pointerDown(dot, { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(dot, { clientX: 160, clientY: 100, pointerId: 1 });
+    expect(wrapper.hasAttribute("data-dragging")).toBe(true);
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.pointerUp(dot, { clientX: 160, clientY: 100, pointerId: 1 });
+    expect(onChange).not.toHaveBeenCalled();
+    expect({ left: wrapper.style.left, top: wrapper.style.top }).toEqual(home);
+    expect(wrapper.hasAttribute("data-dragging")).toBe(false);
   });
 });
 
@@ -151,6 +251,7 @@ describe("HueChannelOverlay — W4-J #3 simultaneous zone visibility", () => {
         pxPerMeter={80}
         roomWidthM={5}
         roomDepthM={4}
+        roomHeightM={2.5}
         zoom={1}
         selectedId={null}
         onSelect={() => {}}
@@ -189,6 +290,7 @@ describe("HueChannelOverlay — W4-J #3 simultaneous zone visibility", () => {
         pxPerMeter={80}
         roomWidthM={5}
         roomDepthM={4}
+        roomHeightM={2.5}
         zoom={1}
         selectedId={null}
         onSelect={() => {}}
@@ -206,6 +308,36 @@ describe("HueChannelOverlay — W4-J #3 simultaneous zone visibility", () => {
   });
 });
 
+describe("HueChannelOverlay — a zone-centre drag the zone does not outlive", () => {
+  const overlay = (zone: HueZone | null, onHueZoneCenterChange = vi.fn<(id: string, x: number, y: number, held?: boolean) => void>()) => (
+    <HueChannelOverlay
+      channels={[]}
+      pxPerMeter={80}
+      roomWidthM={5}
+      roomDepthM={4}
+      roomHeightM={2.5}
+      zoom={1}
+      selectedId={null}
+      onSelect={() => {}}
+      onChange={() => {}}
+      activeHueZone={zone}
+      allHueZones={zone ? [zone] : []}
+      onHueZoneCenterChange={onHueZoneCenterChange}
+    />
+  );
+
+  it("lets go of Escape when the zone goes away mid-drag", () => {
+    const { container, rerender } = render(overlay(ZONE));
+    const marker = container.querySelector(`[data-zone-center-id="${ZONE.id}"]`) as HTMLElement;
+    marker.setPointerCapture = () => {};
+    fireEvent.pointerDown(marker, { clientX: 100, clientY: 100, pointerId: 1 });
+    rerender(overlay(null));
+    const esc = new KeyboardEvent("keydown", { key: "Escape", cancelable: true });
+    window.dispatchEvent(esc);
+    expect(esc.defaultPrevented).toBe(false);
+  });
+});
+
 describe("HueChannelOverlay — bug #50 + #52(b) zone center drag", () => {
   it("tags zone-bound channels with data-zone-channel-id so the center handler can move them", () => {
     const { container } = render(
@@ -214,6 +346,7 @@ describe("HueChannelOverlay — bug #50 + #52(b) zone center drag", () => {
         pxPerMeter={80}
         roomWidthM={5}
         roomDepthM={4}
+        roomHeightM={2.5}
         zoom={1}
         selectedId={null}
         onSelect={() => {}}
@@ -247,6 +380,7 @@ describe("HueChannelOverlay — bug #50 + #52(b) zone center drag", () => {
         pxPerMeter={80}
         roomWidthM={5}
         roomDepthM={4}
+        roomHeightM={2.5}
         zoom={1}
         selectedId={null}
         onSelect={() => {}}
@@ -295,5 +429,280 @@ describe("pinnedZoneEdges", () => {
   it("pins a full-width zone that can only sit centred", () => {
     expect(pinnedZoneEdges({ centerX: 0, centerY: 0 }, { halfScaleX: 1, halfScaleY: 1 }))
       .toBe("top bottom left right");
+  });
+});
+
+describe("HueChannelOverlay — keyboard", () => {
+  const renderWithZone = (
+    zone: HueZone,
+    onEditorKey = vi.fn<() => void>(),
+    onHueZoneCenterChange = vi.fn<(id: string, x: number, y: number) => void>(),
+  ) => {
+    // The editor's key handler sits on an ancestor, as it does in RoomMapEditor.
+    const view = render(
+      <div onKeyDown={onEditorKey}>
+        <HueChannelOverlay
+          channels={[CHANNEL_IN_ZONE, { channelIndex: 1, x: -0.8, y: -0.8, z: 0 }]}
+          pxPerMeter={80}
+          roomWidthM={5}
+          roomDepthM={4}
+          roomHeightM={2.5}
+          zoom={1}
+          selectedId={null}
+          onSelect={() => {}}
+          onChange={() => {}}
+          activeHueZone={zone}
+          onHueZoneCenterChange={onHueZoneCenterChange}
+        />
+      </div>,
+    );
+    const marker = view.getByRole("button", { name: "roomMap:hueZones.centerMarkerAriaLabel" });
+    return { ...view, marker, onHueZoneCenterChange };
+  };
+
+  it("moves the zone centre with the arrow keys, Up toward the TV wall", () => {
+    const { marker, onHueZoneCenterChange } = renderWithZone(ZONE);
+
+    fireEvent.keyDown(marker, { key: "ArrowRight" });
+    expect(onHueZoneCenterChange).toHaveBeenLastCalledWith("zone-1", 0.05, 0, true);
+
+    fireEvent.keyDown(marker, { key: "ArrowUp", shiftKey: true });
+    expect(onHueZoneCenterChange).toHaveBeenLastCalledWith("zone-1", 0, 0.2, true);
+  });
+
+  it("keeps the zone box inside the cube and stops the editor's own arrow handling", () => {
+    const onEditorKey = vi.fn<() => void>();
+    const { marker, onHueZoneCenterChange } = renderWithZone({ ...ZONE, centerX: 0.7 }, onEditorKey);
+
+    fireEvent.keyDown(marker, { key: "ArrowRight" });
+
+    expect(onHueZoneCenterChange).not.toHaveBeenCalled();
+    expect(onEditorKey).not.toHaveBeenCalled();
+  });
+
+  it("keeps a dot dimmed by the active zone out of the tab order", () => {
+    const { getAllByRole } = renderWithZone(ZONE);
+    const dots = getAllByRole("button").filter((el) => el.hasAttribute("aria-pressed"));
+
+    expect(dots.map((dot) => dot.tabIndex)).toEqual([0, -1]);
+    expect(dots[1]).toHaveAttribute("aria-disabled", "true");
+  });
+});
+
+describe("HueChannelOverlay — zone grips", () => {
+  // A 1.5 m cube in a 5 × 4 × 2.5 m room at 100 px a metre: x 1.75–3.25 m, y 1.25–2.75 m.
+  const CUBE: HueZone = { ...ZONE, scaleY: 0.375, scaleZ: 0.6 };
+  function renderGrips(zone: HueZone = CUBE) {
+    const onHueZoneResize = vi.fn<(zoneId: string, footprint: CubeFootprint) => void>();
+    const view = render(
+      <HueChannelOverlay
+        channels={[CHANNEL_IN_ZONE]}
+        pxPerMeter={100}
+        roomWidthM={5}
+        roomDepthM={4}
+        roomHeightM={2.5}
+        selectedId={null}
+        onSelect={() => {}}
+        onChange={() => {}}
+        activeHueZone={zone}
+        allHueZones={[zone]}
+        onHueZoneResize={onHueZoneResize}
+      />,
+    );
+    const grip = (handle: string) => {
+      const el = view.container.querySelector<HTMLElement>(`[data-zone-handle="${handle}"]`)!;
+      el.setPointerCapture = () => {};
+      return el;
+    };
+    const box = view.container.querySelector<HTMLElement>('[data-zone-bounds-id="zone-1"]')!;
+    const light = view.container.querySelector<HTMLElement>('[data-zone-channel-id="zone-1"]')!;
+    return { onHueZoneResize, grip, box, light };
+  }
+
+  it("reshapes the box and its lights while dragged and writes the zone once on release", () => {
+    const { onHueZoneResize, grip, box, light } = renderGrips();
+    const se = grip("se");
+    const lightLeft = parseFloat(light.style.left);
+    fireEvent.pointerDown(se, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
+    fireEvent.pointerMove(se, { clientX: 150, clientY: 60, pointerId: 1 });
+    // Pulled 1.5 m right, it stays square and stops at the ceiling's 2.5 m.
+    expect(parseFloat(box.style.width)).toBeCloseTo(250);
+    expect(parseFloat(box.style.height)).toBeCloseTo(250);
+    // The light keeps its place relative to the zone, which grew right from its west wall.
+    expect(parseFloat(light.style.left)).toBeCloseTo(175 + ((lightLeft - 175) / 150) * 250);
+    expect(onHueZoneResize).not.toHaveBeenCalled();
+    fireEvent.pointerUp(se, { pointerId: 1 });
+    expect(onHueZoneResize).toHaveBeenCalledTimes(1);
+    const [id, footprint] = onHueZoneResize.mock.calls[0]!;
+    expect(id).toBe("zone-1");
+    expect(footprint.edge).toBeCloseTo(2.5);
+    expect(footprint.centerX).toBeCloseTo(0.2);
+    expect(footprint.centerY).toBeCloseTo(-0.25);
+  });
+
+  it("drops the middle grips when the sides are too short to hold three", () => {
+    // A 0.6 m cube: 60 px a side on screen.
+    renderGrips({ ...ZONE, scaleX: 0.12, scaleY: 0.15, scaleZ: 0.24 });
+    const handles = Array.from(document.querySelectorAll<HTMLElement>("[data-zone-handle]")).map((el) => el.dataset.zoneHandle);
+    expect(handles.sort()).toEqual(["ne", "nw", "se", "sw"]);
+  });
+
+  it("puts everything back on Escape and writes nothing", () => {
+    const { onHueZoneResize, grip, box } = renderGrips();
+    const w = grip("w");
+    const before = box.style.cssText;
+    fireEvent.pointerDown(w, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
+    fireEvent.pointerMove(w, { clientX: -80, clientY: 0, pointerId: 1 });
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.pointerUp(w, { pointerId: 1 });
+    expect(box.style.cssText).toBe(before);
+    expect(onHueZoneResize).not.toHaveBeenCalled();
+  });
+
+  it("lets go of Escape when the grips go away mid-drag", () => {
+    const view = render(
+      <HueChannelOverlay
+        channels={[CHANNEL_IN_ZONE]}
+        pxPerMeter={100}
+        roomWidthM={5}
+        roomDepthM={4}
+        roomHeightM={2.5}
+        selectedId={null}
+        onSelect={() => {}}
+        onChange={() => {}}
+        activeHueZone={ZONE}
+        allHueZones={[ZONE]}
+        onHueZoneResize={() => {}}
+      />,
+    );
+    const se = view.container.querySelector<HTMLElement>('[data-zone-handle="se"]')!;
+    se.setPointerCapture = () => {};
+    fireEvent.pointerDown(se, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
+    fireEvent.pointerMove(se, { clientX: 80, clientY: 0, pointerId: 1 });
+    view.unmount();
+    const esc = new KeyboardEvent("keydown", { key: "Escape", cancelable: true });
+    window.dispatchEvent(esc);
+    expect(esc.defaultPrevented).toBe(false);
+  });
+});
+
+describe("HueChannelOverlay — guides", () => {
+  function renderLight(onSnapDragMove: (id: string, x: number, y: number, w: number, h: number) => SnapResult) {
+    const onChange = vi.fn<(ch: HueChannelPlacement) => void>();
+    const onSnapDragEnd = vi.fn<() => void>();
+    const view = render(
+      <HueChannelOverlay
+        channels={[{ channelIndex: 0, x: 0, y: 0, z: 0 }]}
+        pxPerMeter={100}
+        roomWidthM={4}
+        roomDepthM={4}
+        roomHeightM={2.5}
+        selectedId={null}
+        onSelect={() => {}}
+        onChange={onChange}
+        onSnapDragMove={onSnapDragMove}
+        onSnapDragEnd={onSnapDragEnd}
+      />,
+    );
+    const dot = view.container.querySelector<HTMLElement>('[data-object-id="hue-0"] [role="button"]')!;
+    dot.setPointerCapture = () => {};
+    dot.releasePointerCapture = () => {};
+    return { dot, onChange, onSnapDragEnd };
+  }
+
+  it("asks where the light lands in plan metres and holds it on the guide it meets", () => {
+    const onSnapDragMove = vi.fn<(id: string, x: number, y: number, w: number, h: number) => SnapResult>(() => ({ snapX: 3, snapY: null, guides: [] }));
+    const { dot, onChange, onSnapDragEnd } = renderLight(onSnapDragMove);
+    fireEvent.pointerDown(dot, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
+    fireEvent.pointerMove(dot, { clientX: 90, clientY: 50, pointerId: 1 });
+    expect(onSnapDragMove).toHaveBeenLastCalledWith("hue-0", 2.9, 2.5, 0, 0, { free: false });
+    fireEvent.pointerUp(dot, { pointerId: 1 });
+    // x held at 3 m of 4 → 0.5 in the cube; y follows the pointer, 0.5 m toward the back.
+    expect(onChange.mock.calls[0]![0].x).toBeCloseTo(0.5);
+    expect(onChange.mock.calls[0]![0].y).toBeCloseTo(-0.25);
+    expect(onSnapDragEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets ⌥ drag a light past a guide", () => {
+    const { dot, onChange } = renderLight(() => ({ snapX: 3, snapY: null, guides: [] }));
+    fireEvent.pointerDown(dot, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
+    fireEvent.pointerMove(dot, { clientX: 90, clientY: 0, altKey: true, pointerId: 1 });
+    fireEvent.pointerUp(dot, { pointerId: 1 });
+    expect(onChange.mock.calls[0]![0].x).toBeCloseTo(0.45);
+  });
+
+  it("asks from the zone's edge and lets a guide beyond it go", () => {
+    const onSnapDragMove = vi.fn<(id: string, x: number, y: number, w: number, h: number) => SnapResult>(() => ({ snapX: 3, snapY: null, guides: [] }));
+    const onSnapDragEnd = vi.fn<() => void>();
+    const onChange = vi.fn<(ch: HueChannelPlacement) => void>();
+    const view = render(
+      <HueChannelOverlay
+        channels={[CHANNEL_IN_ZONE]}
+        pxPerMeter={100}
+        roomWidthM={4}
+        roomDepthM={4}
+        roomHeightM={2.5}
+        selectedId={null}
+        onSelect={() => {}}
+        onChange={onChange}
+        activeHueZone={ZONE}
+        allHueZones={[ZONE]}
+        onSnapDragMove={onSnapDragMove}
+        onSnapDragEnd={onSnapDragEnd}
+      />,
+    );
+    const dot = view.container.querySelector<HTMLElement>('[data-zone-channel-id="zone-1"] [role="button"]')!;
+    dot.setPointerCapture = () => {};
+    dot.releasePointerCapture = () => {};
+    fireEvent.pointerDown(dot, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
+    fireEvent.pointerMove(dot, { clientX: 400, clientY: 0, pointerId: 1 });
+    // The zone ends at 0.3 in the cube, 2.6 m of 4; the guide at 3 m lies outside it.
+    expect(onSnapDragMove.mock.lastCall![1]).toBeCloseTo(2.6);
+    expect(onSnapDragEnd).toHaveBeenCalled();
+    fireEvent.pointerUp(dot, { pointerId: 1 });
+    expect(onChange.mock.calls[0]![0].x).toBeCloseTo(0.3);
+  });
+});
+
+describe("HueChannelOverlay — lit lights", () => {
+  it("haloes each light in the lights' colour while they are on, and not one the bridge lost", () => {
+    const { container } = render(
+      <HueChannelOverlay
+        channels={[
+          { channelIndex: 0, channelId: 0, x: 0, y: 0, z: 0 },
+          { channelIndex: 1, channelId: 9, x: 0.5, y: 0.5, z: 0 },
+        ]}
+        liveChannelIds={new Set([0])}
+        pxPerMeter={80}
+        roomWidthM={5}
+        roomDepthM={4}
+        roomHeightM={2.5}
+        selectedId={null}
+        onSelect={() => {}}
+        onChange={() => {}}
+        glow={{ colour: "#ff8800", level: 1 }}
+      />,
+    );
+    const lit = container.querySelector<HTMLElement>('[data-object-id="hue-0"]')!;
+    const lost = container.querySelector<HTMLElement>('[data-object-id="hue-1"]')!;
+    expect(lit).toHaveAttribute("data-lit");
+    expect(lit.querySelector<HTMLElement>('[role="button"]')!.style.boxShadow).toContain("#ff8800");
+    expect(lost).not.toHaveAttribute("data-lit");
+  });
+
+  it("draws no halo while the lights are off", () => {
+    const { container } = render(
+      <HueChannelOverlay
+        channels={[{ channelIndex: 0, x: 0, y: 0, z: 0 }]}
+        pxPerMeter={80}
+        roomWidthM={5}
+        roomDepthM={4}
+        roomHeightM={2.5}
+        selectedId={null}
+        onSelect={() => {}}
+        onChange={() => {}}
+      />,
+    );
+    expect(container.querySelector('[data-object-id="hue-0"]')).not.toHaveAttribute("data-lit");
   });
 });

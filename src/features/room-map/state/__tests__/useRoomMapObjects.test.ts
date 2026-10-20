@@ -5,7 +5,7 @@ import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_ROOM_MAP, type RoomMapConfig } from "@/shared/contracts/roomMap";
-import { furnitureObjectId, hueChannelObjectId } from "../../model/objectId";
+import { furnitureObjectId, hueChannelObjectId, TV_ANCHOR_OBJECT_ID, usbStripObjectId } from "../../model/objectId";
 import type { RoomMapPatch } from "../roomMapReducer";
 import { useRoomMapObjects } from "../useRoomMapObjects";
 import type { ApplyOptions } from "../useRoomMapState";
@@ -31,22 +31,23 @@ function renderObjects(
   hueAreaId: string | null = null,
 ) {
   const apply = vi.fn<(patch: RoomMapPatch, options?: ApplyOptions) => void>();
+  const select = vi.fn<(objectId: string | null) => void>();
   const hook = renderHook(() =>
     useRoomMapObjects({
       config,
       hueAreaId,
       apply,
       selectedId,
-      select: vi.fn(),
+      select,
     }),
   );
   /** The config the `index`th apply produces, updater or plain partial alike. */
   const written = (index: number): RoomMapConfig => {
     const patch = apply.mock.calls[index]?.[0];
     if (patch === undefined) throw new Error(`no apply #${index}`);
-    return { ...config, ...(typeof patch === "function" ? patch(config) : patch) };
+    return { ...config, ...(typeof patch === "function" ? patch(config, config) : patch) };
   };
-  return { ...hook, apply, written };
+  return { ...hook, apply, select, written };
 }
 
 function arrowEvent(key: string, repeat = false) {
@@ -205,5 +206,47 @@ describe("useRoomMapObjects — a held arrow is one gesture per object", () => {
     act(() => result.current.handleArrowNudge(arrowEvent("ArrowRight", true)));
     expect(apply.mock.calls[0]?.[1]).toEqual({ gesture: "nudge:furniture-f1", continued: false });
     expect(apply.mock.calls[1]?.[1]).toEqual({ gesture: "nudge:furniture-f1", continued: true });
+  });
+});
+
+describe("useRoomMapObjects — an added object comes selected", () => {
+  it("selects the piece, the TV and the strip it adds, so the inspector opens on it", () => {
+    const { result, select, written } = renderObjects(DEFAULT_ROOM_MAP);
+
+    act(() => result.current.handleAddFurniture("sofa"));
+    const piece = written(0).furniture[0];
+    expect(select).toHaveBeenLastCalledWith(furnitureObjectId(piece!.id));
+
+    act(() => result.current.handleAddTv());
+    expect(select).toHaveBeenLastCalledWith(TV_ANCHOR_OBJECT_ID);
+
+    act(() => result.current.handleAddUsb());
+    const strip = written(2).usbStrips[0];
+    expect(select).toHaveBeenLastCalledWith(usbStripObjectId(strip!.stripId));
+  });
+});
+
+describe("useRoomMapObjects — a new piece lands where nothing stands", () => {
+  const overlaps = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
+    a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
+  // A new plant used to land on the coffee table, over the lights standing on it.
+  it("puts a second piece beside the first instead of on it", () => {
+    const { result, written } = renderObjects(DEFAULT_ROOM_MAP);
+    act(() => result.current.handleAddFurniture("sofa"));
+    const first = written(0).furniture[0]!;
+    const { result: again, written: writtenAgain } = renderObjects({ ...DEFAULT_ROOM_MAP, furniture: [first] });
+    act(() => again.current.handleAddFurniture("plant"));
+    const second = writtenAgain(0).furniture[1]!;
+    expect(overlaps(first, second)).toBe(false);
+  });
+
+  it("lets a rug go under furniture, where it belongs", () => {
+    const { result, written } = renderObjects(DEFAULT_ROOM_MAP);
+    act(() => result.current.handleAddFurniture("sofa"));
+    const sofa = written(0).furniture[0]!;
+    const { result: again, written: writtenAgain } = renderObjects({ ...DEFAULT_ROOM_MAP, furniture: [sofa] });
+    act(() => again.current.handleAddFurniture("rug"));
+    expect(overlaps(sofa, writtenAgain(0).furniture[1]!)).toBe(true);
   });
 });

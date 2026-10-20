@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { BUSY_MIN_MS, useHeldFlag, useHeldValue } from "../useHeldFlag";
+import { BUSY_MIN_MS, useHeldFlag, useHeldValue, useLateFlag } from "../useHeldFlag";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -65,5 +65,25 @@ describe("useHeldValue", () => {
     expect(result.current).toBe("old");
     rerender({ value: "new", hold: false });
     expect(result.current).toBe("new");
+  });
+});
+
+describe("useLateFlag", () => {
+  it("reads true only after the flag has stayed up for the delay, and falls with it", () => {
+    const { result, rerender } = renderHook(({ active }) => useLateFlag(active, 800), { initialProps: { active: true } });
+    act(() => vi.advanceTimersByTime(799));
+    expect(result.current).toBe(false);
+    act(() => vi.advanceTimersByTime(1));
+    expect(result.current).toBe(true);
+    rerender({ active: false });
+    expect(result.current).toBe(false);
+  });
+
+  it("never reads true for a flag that falls before the delay", () => {
+    const { result, rerender } = renderHook(({ active }) => useLateFlag(active, 800), { initialProps: { active: true } });
+    act(() => vi.advanceTimersByTime(500));
+    rerender({ active: false });
+    act(() => vi.advanceTimersByTime(1000));
+    expect(result.current).toBe(false);
   });
 });

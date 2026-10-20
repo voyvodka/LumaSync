@@ -1,0 +1,124 @@
+@layer components {
+  .page {
+    display: grid;
+    grid-template-rows: 32px 32px;
+    gap: 6px;
+    width: 100%;
+    min-width: 0;
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+  }
+  /* Eight lights and more scroll sideways; the edge with more past it fades. */
+  .scroll {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .scroll::-webkit-scrollbar { display: none; }
+  .scroll[data-more="end"] { mask-image: linear-gradient(90deg, black calc(100% - 20px), transparent); }
+  .scroll[data-more="start"] { mask-image: linear-gradient(90deg, transparent, black 20px); }
+  .scroll[data-more="both"] { mask-image: linear-gradient(90deg, transparent, black 20px, black calc(100% - 20px), transparent); }
+
+  .chip {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 6px;
+    min-width: 40px;
+    max-width: 150px;
+    height: 32px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    font: 500 11.5px/1 var(--lm-sans);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
+  }
+  .chip:hover {
+    color: var(--lm-ink);
+    background: rgb(255 255 255 / 4%);
+  }
+  .chip:active { color: var(--lm-amber); }
+  .chip:focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--lm-focus-ring-inset);
+  }
+  .ghost { color: var(--lm-ink-faint); }
+
+  .chip[data-lit] {
+    position: relative;
+    color: var(--lm-ink);
+    background: color-mix(in srgb, var(--chip-glow, var(--lm-amber)) 13%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip-glow, var(--lm-amber)) 22%, transparent);
+  }
+  .chip[data-lit]::after {
+    position: absolute;
+    bottom: 3px;
+    left: 8px;
+    width: calc((100% - 16px) * var(--chip-level, 1));
+    height: 2px;
+    border-radius: 1px;
+    background: var(--chip-glow, var(--lm-amber));
+    box-shadow: 0 0 6px var(--chip-glow, var(--lm-amber));
+    content: "";
+    transition: width var(--lm-dur-quick) var(--lm-ease-out);
+  }
+
+  .mark {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+  }
+  .mark svg { max-width: 16px; max-height: 16px; }
+  .zone {
+    flex-shrink: 0;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+  .name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Between the Hue lights and the house's own, which LumaSync does not drive. */
+  .sep {
+    flex: 0 0 auto;
+    width: 1px;
+    height: 16px;
+    margin: 0 6px;
+    background: var(--lm-line);
+  }
+  .decor .name { color: var(--lm-ink-faint); }
+
+  .hint {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0 8px;
+    overflow: hidden;
+    color: var(--lm-ink-faint);
+    font-size: 11.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  :global(:root[data-reduced-motion]) .chip { transition: none; }
+
+  @media (forced-colors: active) {
+    .scroll[data-more] { mask-image: none; }
+    .sep { background: CanvasText; }
+    .chip:focus-visible { outline: 2px solid Highlight; }
+    .chip[data-lit] { box-shadow: none; border: 1px solid CanvasText; }
+    .chip[data-lit]::after { background: CanvasText; box-shadow: none; }
+    .zone { forced-color-adjust: none; border: 1px solid CanvasText; }
+  }
+}

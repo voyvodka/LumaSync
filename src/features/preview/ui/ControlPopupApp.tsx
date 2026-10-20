@@ -1,155 +1,81 @@
-// ControlPopupApp — root of the `led-control-popup` webview. Reachable only by
-// choosing test mode, so it auto-starts on reveal and applies every selection
-// immediately; `PATTERN_PREVIEW_ONLY` is a success, not an error. The
-// auto-start drives the strip only — see `docs/architecture/hue.md`. Its mode
-// strip is a lighting choice like the main window's: the Rust transaction
-// runs it, on the saved outputs, and saves it.
+// ControlPopupApp — root of the `led-control-popup` webview, the preview
+// session's remote. Opening it changes no light. Its mode strip is a lighting
+// choice like the main window's: the Rust transaction runs it, on the saved
+// outputs, and saves it. Close ends the session; Hide keeps it open.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { shellStore } from "@/features/persistence/shellStore";
-import { showNotification } from "@/features/platform/platformApi";
 import {
   onCurrentWindowMoved,
   readCurrentWindowLogicalCenter,
   type UnlistenFn,
 } from "@/features/shell/windowApi";
-import { parseHex, rgbToHex } from "@/shared/lib/color";
-import { Callout } from "@/shared/ui/Callout/Callout";
-import { HsvColorPicker } from "@/shared/ui/HsvColorPicker/HsvColorPicker";
+import { usePreference } from "@/features/persistence/preferences";
 import { modeKind } from "@/features/mode/model/modeKinds";
+import { ModeStage } from "@/features/mode/ui/ModeStage";
 import { ModeStrip } from "@/features/mode/ui/ModeStrip";
 import { applyOutputs, retuneLighting } from "@/features/mode/modeApi";
 import { isOutputsApplied, needsCalibration } from "@/features/mode/state/modeApplyOutcome";
 import { choiceFailureMessage } from "@/features/shell/notices/choiceFailureMessage";
-import { createRetuneCoalescer } from "@/features/mode/state/retuneCoalescer";
+import { handleDragRegionPress } from "@/features/shell/windowDragApi";
+import { createRetuneCoalescer, tuningOf } from "@/features/mode/state/retuneCoalescer";
 import { useLightingRuntime } from "@/features/mode/state/useLightingRuntime";
-import {
-  DEFAULT_SOLID_COLOR,
-  LIGHTING_MODE_KIND,
-  normalizeSolidColorPayload,
-  type LightingModeKind,
-} from "@/shared/contracts/mode";
+import { LIGHTING_MODE_KIND, type LightingModeConfig, type LightingModeKind } from "@/shared/contracts/mode";
 import { LIGHTING_ORIGIN } from "@/shared/contracts/lightingRuntime";
-import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 import {
-  LED_TEST_STATUS,
-  type LedTestPattern,
-  type LedTestPatternKind,
-  type LedTestPatternResult,
-  type TestPatternSpeed,
+  PREVIEW_STATUS,
+  type PreviewSessionStatusCode,
+  type SceneKind,
 } from "@/shared/contracts/preview";
-import { useSolidColorDraft } from "@/features/settings/sections/control/useSolidColorDraft";
-import { closeLedTwinOverlay, hideLedControlPopup } from "../previewApi";
-import { usePreviewStatusSync } from "../state/usePreviewStatusSync";
+import type { TranslationKey } from "@/features/i18n/catalogue";
+import { IconButton } from "@/shared/ui/IconButton/IconButton";
+import { IconClose, IconEye, IconEyeOff, IconMinus } from "@/shared/ui/icons";
 import {
-  isTestPatternErrorCode,
-  useTestPatternRunner,
-  type TestPatternRunRequest,
-} from "../state/useTestPatternRunner";
-import { isPickerPatternKind, PatternPicker, type PickerPatternKind } from "./PatternPicker";
-
-/** The outputs a pattern-tile test lights: the ones the user last saved. A copy
- * held here goes stale because the webview outlives every hide, so it is
- * re-read before each use. Mode choices need none of it — Rust stamps them. */
-function savedTargetsFrom(targets: HueRuntimeTarget[] | undefined): HueRuntimeTarget[] {
-  return targets && targets.length > 0 ? targets : ["usb"];
-}
-
-
-/** Nobody asked for the reveal, so it never lights Hue: with no strip it runs
- * preview-only. A pattern-tile click is the gesture that reaches saved Hue. */
-const AUTO_START_TARGETS: readonly HueRuntimeTarget[] = ["usb"];
-
-/** Patterns whose payload carries an RGB triple, so they track the colour editor. */
-const COLOR_PATTERNS: ReadonlySet<LedTestPatternKind> = new Set(["solid", "chase"]);
-
-/** Trailing window for `lastLedTestPattern` writes so a colour drag hits disk once. */
-const PERSIST_PATTERN_DEBOUNCE_MS = 600;
+  closePreview,
+  setPreviewPopupHidden,
+  setPreviewSceneBlackBorders,
+  setPreviewSceneBrightness,
+  setPreviewTwinHidden,
+  startPreviewScene,
+  stopPreviewScene,
+} from "../previewApi";
+import { createLatestSender } from "../state/latestSender";
+import { useLatencyResult } from "../state/useLatencyResult";
+import { usePopupStage } from "../state/usePopupStage";
+import { usePreviewSession } from "../state/usePreviewSession";
+import { PopupBlackBarsRow } from "./PopupBlackBarsRow";
+import { PopupBrightnessRow } from "./PopupBrightnessRow";
+import { PopupLatencyRow } from "./PopupLatencyRow";
+import { PopupScenePicker } from "./PopupScenePicker";
+import styles from "./ControlPopupApp.module.css";
 
 /** Trailing window for popup-centre writes so a window drag hits disk once. */
 const PERSIST_CENTER_DEBOUNCE_MS = 400;
 
-interface SolidDraft {
-  r: number;
-  g: number;
-  b: number;
-  brightness: number;
-}
-
-function buildRunRequest(
-  kind: PickerPatternKind,
-  color: SolidDraft,
-  speed: TestPatternSpeed,
-  targets: HueRuntimeTarget[],
-): TestPatternRunRequest {
-  const pattern: LedTestPattern = COLOR_PATTERNS.has(kind)
-    ? ({ kind, r: color.r, g: color.g, b: color.b } as LedTestPattern)
-    : ({ kind } as LedTestPattern);
-  return { pattern, brightness: color.brightness, speed, targets };
-}
+/** What a scene start or stop that did not happen says. */
+const SCENE_FAILURES: Partial<Record<PreviewSessionStatusCode, TranslationKey>> = {
+  [PREVIEW_STATUS.SCENE_NO_OUTPUT]: "preview:status.PREVIEW_SCENE_NO_OUTPUT",
+  [PREVIEW_STATUS.SCENE_CAPTURE_DENIED]: "preview:status.PREVIEW_SCENE_CAPTURE_DENIED",
+  [PREVIEW_STATUS.SCENE_START_FAILED]: "preview:status.PREVIEW_SCENE_START_FAILED",
+  [PREVIEW_STATUS.SCENE_TEST_PATTERN_ACTIVE]: "preview:status.PREVIEW_SCENE_TEST_PATTERN_ACTIVE",
+  [PREVIEW_STATUS.DISPLAY_NOT_FOUND]: "preview:status.PREVIEW_DISPLAY_NOT_FOUND",
+  [PREVIEW_STATUS.RESTORE_FAILED]: "preview:status.PREVIEW_RESTORE_FAILED",
+};
 
 export function ControlPopupApp() {
   const { t } = useTranslation();
   const { snapshot, adopt } = useLightingRuntime();
+  const session = usePreviewSession();
   const mode = snapshot?.mode ?? null;
-  const preview = usePreviewStatusSync();
   const retunes = useMemo(() => createRetuneCoalescer((tuning) => retuneLighting(tuning)), []);
-
-  const savedTargetsRef = useRef<HueRuntimeTarget[]>(["usb"]);
-  // Targets of the run in progress. A colour or speed change retunes that run,
-  // so it must not widen an auto-started strip-only test onto Hue.
-  const runTargetsRef = useRef<HueRuntimeTarget[]>([...AUTO_START_TARGETS]);
-  const [patternKind, setPatternKind] = useState<PickerPatternKind>("gamut");
-  const [speed, setSpeed] = useState<TestPatternSpeed>("med");
+  const sendSceneBrightness = useMemo(() => createLatestSender(setPreviewSceneBrightness), []);
+  const sendSceneBlackBorders = useMemo(() => createLatestSender(setPreviewSceneBlackBorders), []);
   const [runError, setRunError] = useState<string | null>(null);
-  // FE-3: PREVIEW_ONLY is a success, not an error — surfaced as a distinct
-  // non-error info note rather than via `runError`.
-  const [previewOnly, setPreviewOnly] = useState(false);
-  // The running test left out a Hue target the user has saved (auto-start only).
-  const [hueLeftOut, setHueLeftOut] = useState(false);
-  // User intent that the synthetic test — not the mode strip — owns the light.
-  // Set by auto-start and by picking a pattern; cleared by Stop / a mode click.
-  const [testDesired, setTestDesired] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-
-  // Re-read before each use, not once: the webview is kept alive across hides,
-  // so a mount-time snapshot misses every settings change made since.
-  const refreshStamps = useCallback(async () => {
-    try {
-      savedTargetsRef.current = savedTargetsFrom((await shellStore.load()).lastOutputTargets);
-    } catch (error) {
-      console.error("[LumaSync] ControlPopupApp stamp refresh failed:", error);
-    }
-  }, []);
-
-  // ── Load persisted stamps + last test pattern once on mount ──────────────
-  useEffect(() => {
-    let alive = true;
-    void shellStore
-      .load()
-      .then((state) => {
-        if (!alive) return;
-        savedTargetsRef.current = savedTargetsFrom(state.lastOutputTargets);
-        const lastKind = state.lastLedTestPattern?.kind;
-        if (lastKind && isPickerPatternKind(lastKind)) {
-          setPatternKind(lastKind);
-        }
-      })
-      .catch((error) => {
-        console.error("[LumaSync] ControlPopupApp stamp load failed:", error);
-      })
-      .finally(() => {
-        // Auto-start waits on this either way — a failed load still has a
-        // usable default pattern, and a popup that lights nothing is the exact
-        // dead end this window is meant to avoid.
-        if (alive) setHydrated(true);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
+  const [sceneBusy, setSceneBusy] = useState(false);
+  const playing = session?.state === "scene" ? session : null;
+  const latency = useLatencyResult(playing?.scene === "latency");
 
   // ── Persist the popup centre so it reopens where the user left it ────────
   useEffect(() => {
@@ -195,134 +121,23 @@ export function ControlPopupApp() {
   }, []);
 
   const kind = mode?.kind ?? LIGHTING_MODE_KIND.OFF;
-  const isSolid = kind === LIGHTING_MODE_KIND.SOLID;
-  const testActive = preview?.testActive ?? false;
-  const popupVisible = preview?.popupVisible ?? false;
-  const testEngaged = testDesired || testActive;
-  const showColorPicker = testEngaged ? COLOR_PATTERNS.has(patternKind) : isSolid;
-  const showBrightness = testEngaged || isSolid;
+  const stage = usePopupStage(snapshot);
+  useEffect(() => {
+    retunes.observe(tuningOf(stage.mode));
+  }, [retunes, stage.mode]);
+  const lastLit = usePreference("lastLitKind");
 
-  // ── Solid color draft (shared HSV picker + throttled brightness) ─────────
-  const incomingSolid = useMemo(
-    () => ({
-      r: mode?.solid?.r ?? DEFAULT_SOLID_COLOR.r,
-      g: mode?.solid?.g ?? DEFAULT_SOLID_COLOR.g,
-      b: mode?.solid?.b ?? DEFAULT_SOLID_COLOR.b,
-      brightness: mode?.solid?.brightness ?? DEFAULT_SOLID_COLOR.brightness,
-    }),
-    [mode?.solid?.r, mode?.solid?.g, mode?.solid?.b, mode?.solid?.brightness],
-  );
-
-  // ── Test pattern runner ──────────────────────────────────────────────────
-  const persistTimerRef = useRef<number | null>(null);
-  const persistPatternRef = useRef<LedTestPattern | null>(null);
-
-  const queuePersistPattern = useCallback((pattern: LedTestPattern) => {
-    persistPatternRef.current = pattern;
-    if (persistTimerRef.current !== null) return;
-    persistTimerRef.current = window.setTimeout(() => {
-      persistTimerRef.current = null;
-      const latest = persistPatternRef.current;
-      if (!latest) return;
-      void shellStore.save({ lastLedTestPattern: latest }).catch((error) => {
-        console.error("[LumaSync] ControlPopupApp persist lastLedTestPattern failed:", error);
-      });
-    }, PERSIST_PATTERN_DEBOUNCE_MS);
-  }, []);
-
-  useEffect(
-    () => () => {
-      if (persistTimerRef.current !== null) window.clearTimeout(persistTimerRef.current);
-    },
-    [],
-  );
-
-  const handleRunResult = useCallback(
-    (result: LedTestPatternResult, request: TestPatternRunRequest) => {
-      const code = result.status.code;
-      if (isTestPatternErrorCode(code)) {
-        setRunError(t(`preview:status.${code}`));
-        setPreviewOnly(false);
-        setHueLeftOut(false);
-        return;
-      }
-      setRunError(null);
-      setPreviewOnly(code === LED_TEST_STATUS.PATTERN_PREVIEW_ONLY || result.previewOnly === true);
-      setHueLeftOut(
-        !request.targets?.includes("hue") && savedTargetsRef.current.includes("hue"),
-      );
-      queuePersistPattern(request.pattern);
-    },
-    [queuePersistPattern, t],
-  );
-
-  const runner = useTestPatternRunner({ onResult: handleRunResult });
-
-  const handleSolidCommit = useCallback(
-    (next: SolidDraft) => {
-      // While the test owns the light, a colour/brightness move must refresh
-      // the pattern — a lighting retune would not reach it.
-      if (testEngaged) {
-        runner.refresh(buildRunRequest(patternKind, next, speed, runTargetsRef.current));
-        return;
-      }
-      if (!isSolid) return;
-      retunes.push({ solid: normalizeSolidColorPayload(next) });
-    },
-    [isSolid, patternKind, retunes, runner, speed, testEngaged],
-  );
-
-  const { draft, setColor, setBrightness } = useSolidColorDraft({
-    incoming: incomingSolid,
-    onCommit: handleSolidCommit,
-  });
-
-  // ── Test pattern selection — every change applies immediately ────────────
-  const handleSelectKind = useCallback(
-    (next: PickerPatternKind) => {
-      setPatternKind(next);
-      setTestDesired(true);
-      runTargetsRef.current = savedTargetsRef.current;
-      runner.apply(buildRunRequest(next, draft, speed, runTargetsRef.current));
-    },
-    [draft, runner, speed],
-  );
-
-  const handleSpeedChange = useCallback(
-    (next: TestPatternSpeed) => {
-      setSpeed(next);
-      if (!testEngaged) return;
-      runner.apply(buildRunRequest(patternKind, draft, next, runTargetsRef.current));
-    },
-    [draft, patternKind, runner, testEngaged],
-  );
-
-  const handleAutoStart = useCallback(() => {
-    setTestDesired(true);
-    runTargetsRef.current = [...AUTO_START_TARGETS];
-    runner.apply(buildRunRequest(patternKind, draft, speed, runTargetsRef.current));
-  }, [draft, patternKind, runner, speed]);
-
-  // ── Mode strip handlers ──────────────────────────────────────────────────
+  // ── Mode strip ───────────────────────────────────────────────────────────
   const handleModeClick = useCallback(
     (next: LightingModeKind) => {
-      setTestDesired(false);
       setRunError(null);
-      setPreviewOnly(false);
-      setHueLeftOut(false);
       void (async () => {
         try {
-          // Drop queued refreshes and let any in-flight start land first, so a
-          // pattern restart cannot resolve on top of the mode the user just chose.
-          runner.cancel();
-          await runner.settled();
           retunes.reset();
-          // The kind alone for Off and Ambilight: Rust keeps the last Ambilight
-          // settings. Solid carries the colour on screen.
+          // The kind alone: Rust keeps each mode's last settings. The colour
+          // itself is chosen on Lights.
           const result = await applyOutputs({
-            mode: modeKind(next).config({
-              solid: { r: draft.r, g: draft.g, b: draft.b, brightness: draft.brightness },
-            }),
+            mode: modeKind(next).config({}),
             origin: LIGHTING_ORIGIN.POPUP,
           });
           adopt(result.snapshot);
@@ -345,228 +160,135 @@ export function ControlPopupApp() {
         }
       })();
     },
-    [adopt, retunes, runner, t, draft.r, draft.g, draft.b, draft.brightness],
+    [adopt, retunes, t],
   );
 
-  // ── Auto-start ───────────────────────────────────────────────────────────
-  // Keep the latest selection reachable from the reveal effect without making
-  // that effect depend on (and therefore re-fire on) every draft keystroke.
-  const startSelectedRef = useRef<() => void>(() => {});
-  useEffect(() => {
-    startSelectedRef.current = handleAutoStart;
-  });
+  // ── The stage: the compact window's settings, retunes of the running mode ─
+  // The stage only edits the mode that runs (dimmed and out of reach under Off), so every change is
+  // a retune, coalesced like a drag on Lights.
+  const handleStageChange = (next: LightingModeConfig) => {
+    if (next.kind !== kind) return;
+    const tuning = tuningOf(next);
+    if (tuning) retunes.push(tuning);
+  };
 
-  const autoStartRef = useRef({ armed: true, wasVisible: false });
-  useEffect(() => {
-    if (!hydrated) return;
-    const gate = autoStartRef.current;
-    const revealed = popupVisible && !gate.wasVisible;
-    gate.wasVisible = popupVisible;
-    // Not suppressed when the mode strip reads Off: testing a strip with the
-    // room lighting off is the normal case, and closing restores the prior mode.
-    if (!gate.armed && !revealed) return;
-    if (gate.armed) {
-      gate.armed = false;
-      startSelectedRef.current();
-      return;
-    }
-    // A re-reveal of the kept-alive webview: refresh before the start reads targets.
-    void refreshStamps().then(() => startSelectedRef.current());
-  }, [hydrated, popupVisible, refreshStamps]);
+  // ── Scenes: a press plays one; the playing one's press stops it ──────────
+  const handleScene = (scene: SceneKind) => {
+    setRunError(null);
+    setSceneBusy(true);
+    const request = playing?.scene === scene ? stopPreviewScene() : startPreviewScene(scene);
+    void request
+      .then((result) => {
+        const failure = SCENE_FAILURES[result.status.code];
+        if (failure !== undefined) {
+          setRunError(t(failure));
+          console.warn(`[LumaSync] ControlPopupApp scene ${scene}: ${result.status.code}`, result.status.details ?? "");
+        }
+      })
+      .finally(() => setSceneBusy(false));
+  };
 
-  // ── Close + first-close reopen hint ──────────────────────────────────────
-  // `hide_led_control_popup` keeps the webview alive only for a cheap re-show;
-  // every user-visible effect here is a real close.
+  // ── Twin, hide and close ─────────────────────────────────────────────────
+  const live = session?.state === "live" || session?.state === "scene" ? session : null;
+  const twinHidden = live?.twinHidden ?? false;
+  // Switched on but off screen: the capture holds it where nothing can keep it out of the frame.
+  const twinHeld = !twinHidden && (live?.twinHeldForCapture ?? false);
+  const twinLabel = twinHidden ? t("preview:control.twinShow") : t("preview:control.twinHide");
+  const handleTwin = () => {
+    void setPreviewTwinHidden(!twinHidden);
+  };
+
+  // Close ends the session in Rust, which hides this window and the twin for
+  // the next session; only a failure leaves anything here to show.
   const handleClose = useCallback(() => {
-    setTestDesired(false);
-    void (async () => {
-      // Capture the hint flag BEFORE we flip popup visibility.
-      let hintAlreadyShown = true;
-      try {
-        const state = await shellStore.load();
-        hintAlreadyShown = state.ledPreviewHintShown === true;
-      } catch (error) {
-        console.error("[LumaSync] ControlPopupApp hint flag read failed:", error);
+    void closePreview().then((result) => {
+      if (result.status.code === PREVIEW_STATUS.CLOSE_FAILED) {
+        setRunError(t("preview:status.PREVIEW_CLOSE_FAILED"));
       }
+    });
+  }, [t]);
 
-      if (testEngaged) {
-        await runner.stop();
-      } else {
-        // `stop_led_test_pattern` restores the captured prior mode, and a
-        // mode-strip click already consumed it — stopping a test that is not
-        // running would restore `Off` and kill the user's lighting.
-        runner.cancel();
-        await runner.settled();
-      }
-      setRunError(null);
-      setPreviewOnly(false);
-      setHueLeftOut(false);
+  const handleHide = useCallback(() => {
+    void setPreviewPopupHidden(true);
+  }, []);
 
-      // The twin is click-through with no decorations, taskbar entry or tray
-      // item, so dropping the popup without it would strand an undismissable
-      // layer over the whole display.
-      await closeLedTwinOverlay();
-      await hideLedControlPopup();
-
-      try {
-        await shellStore.save({ ledPreviewPopupVisible: false, ledTwinEnabledTest: false });
-      } catch (error) {
-        console.error("[LumaSync] ControlPopupApp persist popup-closed failed:", error);
-      }
-
-      if (!hintAlreadyShown) {
-        try {
-          await showNotification({
-            title: t("preview:title"),
-            body: t("preview:control.reopenHint"),
-            kind: "info",
-          });
-        } catch (error) {
-          console.warn("[LumaSync] ControlPopupApp reopen-hint notification failed:", error);
-        }
-        try {
-          await shellStore.save({ ledPreviewHintShown: true });
-        } catch (error) {
-          console.error("[LumaSync] ControlPopupApp persist hint-shown failed:", error);
-        }
-      }
-    })();
-  }, [runner, t, testEngaged]);
-
-  // ── Status chip ──────────────────────────────────────────────────────────
-  const chip = testActive
-    ? { cls: "is-test", label: t("preview:status.test") }
-    : preview?.source === "live"
-      ? { cls: "is-live", label: t("preview:status.live") }
-      : null;
-
-  const hexColor = rgbToHex(draft);
-  const brightnessPct = Math.round(draft.brightness * 100);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented) handleClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [handleClose]);
 
   return (
-    <div className="lm-control-root">
-      {/* Header — draggable region */}
-      <header className="lm-control-header" data-tauri-drag-region>
-        <span className="lm-control-title" data-tauri-drag-region>
+    <div className={styles.root}>
+      <header className={styles.header} data-tauri-drag-region onMouseDown={handleDragRegionPress}>
+        <span className={styles.title} data-tauri-drag-region>
           {t("preview:title")}
         </span>
-        {chip && (
-          <span className={`lm-control-chip ${chip.cls}`} role="status">
-            <span className="dot" aria-hidden="true" />
-            {chip.label}
-          </span>
-        )}
+        <IconButton
+          className={styles.headerButton}
+          label={twinLabel}
+          icon={twinHidden || twinHeld ? <IconEyeOff /> : <IconEye />}
+          onClick={handleTwin}
+          data-testid="popup-twin"
+        />
+        <IconButton
+          className={styles.headerButton}
+          label={t("preview:control.hide")}
+          title={t("preview:control.hideHint")}
+          icon={<IconMinus />}
+          onClick={handleHide}
+        />
+        <IconButton
+          className={styles.headerButton}
+          label={t("preview:control.close")}
+          title={t("preview:control.closeHint")}
+          icon={<IconClose />}
+          onClick={handleClose}
+        />
       </header>
 
-      <div className="lm-control-body">
-        {/* Mode strip */}
-        <div>
-          <div className="lm-control-section-title">{t("common:mode.title")}</div>
-          <ModeStrip
-            variant="popup"
-            value={testActive ? null : kind}
-            onSelect={handleModeClick}
-          />
-        </div>
-
-        {/* Colour editor — drives Solid mode, or the running solid/chase test */}
-        {showBrightness && (
-          <div>
-            <div className="lm-control-section-title flex items-center justify-between">
-              <span>{showColorPicker ? t("common:mode.solidColor") : t("common:mode.brightness")}</span>
-              <span className="font-mono text-[10px] text-ink-dim">
-                {showColorPicker ? `${hexColor.toUpperCase()} · ` : ""}
-                <span className="lm-control-readout-num">{brightnessPct}%</span>
-              </span>
-            </div>
-            <div className="flex flex-col items-center gap-3">
-              {showColorPicker && (
-                <HsvColorPicker
-                  value={hexColor}
-                  onChange={(hex) => {
-                    const rgb = parseHex(hex);
-                    if (rgb) setColor(rgb);
-                  }}
-                  ariaLabel={t("common:mode.solidColor")}
-                  compact
-                />
-              )}
-              <label className="w-full">
-                <span className="sr-only">{t("common:mode.brightness")}</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={1}
-                  value={brightnessPct}
-                  aria-label={t("common:mode.brightness")}
-                  className="h-2 w-full cursor-pointer appearance-none rounded-full"
-                  style={{
-                    accentColor: "var(--lm-amber)",
-                    background: `linear-gradient(to right, var(--lm-amber) 0%, var(--lm-amber) ${brightnessPct}%, var(--lm-line-2) ${brightnessPct}%, var(--lm-line-2) 100%)`,
-                  }}
-                  onChange={(e) => setBrightness(Number.parseInt(e.currentTarget.value, 10) / 100)}
-                />
-              </label>
-            </div>
+      <div className={styles.body}>
+        {twinHeld && (
+          <p className={styles.held} role="status" data-testid="popup-twin-held">
+            {t("preview:control.twinHeld")}
+          </p>
+        )}
+        <PopupScenePicker playing={playing?.scene ?? null} busy={sceneBusy} onPick={handleScene} />
+        {/* The scene has the lights, so no mode is marked; any press is a choice, and it ends the scene. */}
+        <ModeStrip variant="popup" value={playing ? null : kind} onSelect={handleModeClick} />
+        {/* A scene's brightness is its own and never saved; the mode's settings wait until it stops. */}
+        {/* A scene's rows sit under the strip, in the card the mode's settings use: above it, the
+            latency readout pushed the strip down as the scene began. */}
+        {playing ? (
+          <div className={styles.sceneCard}>
+            <PopupBrightnessRow brightness={playing.sceneBrightness} onChange={sendSceneBrightness} />
+            {playing.scene === "letterbox" && (
+              <PopupBlackBarsRow enabled={playing.sceneBlackBorders} onChange={sendSceneBlackBorders} />
+            )}
+            {playing.scene === "latency" && <PopupLatencyRow result={latency} />}
+          </div>
+        ) : (
+          <div data-lights className={styles.stage}>
+            <ModeStage
+              dense
+              mode={stage.mode}
+              disabled={false}
+              brightnessLocked={stage.brightnessLocked}
+              brightnessTitle={stage.brightnessTitle}
+              onModeChange={handleStageChange}
+              lastLit={lastLit}
+              onTurnOn={() => handleModeClick(lastLit)}
+            />
           </div>
         )}
-
-        {/* Pattern picker — selecting applies immediately, no confirmation step */}
-        <div>
-          <PatternPicker
-            selectedKind={patternKind}
-            speed={speed}
-            running={testActive}
-            onSelectKind={handleSelectKind}
-            onSpeedChange={handleSpeedChange}
-          />
-          {runError && (
-            <p className="mt-2 font-mono text-[10px] leading-snug text-red" role="alert">
-              {runError}
-            </p>
-          )}
-          {!runError && hueLeftOut && (
-            <Callout tone="info" className="mt-2">
-              {previewOnly
-                ? t("preview:control.autoStart.noStrip")
-                : t("preview:control.autoStart.stripOnly")}
-            </Callout>
-          )}
-          {!runError && !hueLeftOut && previewOnly && (
-            <Callout tone="info" className="mt-2">
-              {t("preview:status.LED_TEST_PATTERN_PREVIEW_ONLY")}
-            </Callout>
-          )}
-        </div>
-
-        <p className="lm-control-drag-hint">{t("preview:control.dragHint")}</p>
-      </div>
-
-      {/* Test footer — status readout plus the window's only exit. Starting is
-          owned by the pattern tiles, so there is no separate Run control. */}
-      <footer className={`lm-test-footer ${testActive ? "" : "is-idle"}`}>
-        {testActive ? (
-          <span className="lm-test-pulse" aria-hidden="true" />
-        ) : (
-          <span className="lm-test-dot" aria-hidden="true" />
+        {runError && (
+          <p className={styles.error} role="alert">
+            {runError}
+          </p>
         )}
-        <span className="lm-test-footer-text">
-          {!testActive
-            ? t("preview:test.idle")
-            : preview?.activePattern
-              ? `${t("preview:test.running")} · ${t(`preview:pattern.${preview.activePattern.kind}`)}`
-              : t("preview:test.running")}
-        </span>
-        <button
-          type="button"
-          className="lm-control-close"
-          onClick={handleClose}
-          title={t("preview:control.closeHint")}
-        >
-          {t("preview:control.close")}
-        </button>
-      </footer>
+      </div>
     </div>
   );
 }

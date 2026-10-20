@@ -1,6 +1,7 @@
 import { LED_CALIBRATION_MAX_TOTAL_LEDS } from "@/shared/contracts/calibration";
+import { clamp } from "@/shared/lib/math";
 
-import type { LedSegmentCounts, LedSegmentKey } from "./contracts";
+import { sumSegmentCounts, type LedSegmentCounts, type LedSegmentKey } from "./contracts";
 
 export type LinkedPair = "tb" | "lr";
 /** What one number on the canvas edits: an edge, a linked pair, or the stand gap. */
@@ -42,10 +43,6 @@ const PARTNER: Record<LedSegmentKey, LedSegmentKey> = { top: "bottom", bottom: "
 
 const isOn = (counts: LedSegmentCounts, edge: LedSegmentKey) => counts[edge] > 0;
 
-export function sumCounts(counts: LedSegmentCounts): number {
-  return counts.top + counts.right + counts.bottom + counts.left;
-}
-
 function hasStand(draft: Pick<LayoutDraft, "counts" | "gap">): boolean {
   return draft.gap > 0 && isOn(draft.counts, "bottom");
 }
@@ -76,8 +73,9 @@ export function keyForEdge(draft: LayoutDraft, edge: LedSegmentKey): CountKey {
   return edge;
 }
 
-function aspectOf(display: DisplayAspect): DisplayAspect {
-  return display.width > 0 && display.height > 0 ? display : { width: 16, height: 9 };
+/** `display`, or 16:9 when it is missing or has no area. */
+export function aspectOf(display: DisplayAspect | undefined): DisplayAspect {
+  return display && display.width > 0 && display.height > 0 ? display : { width: 16, height: 9 };
 }
 
 /** Most LEDs an edge of `display`'s shape can carry (see MAX_LEDS_PER_M). */
@@ -114,7 +112,7 @@ export function countOf(draft: LayoutDraft, key: CountKey): number {
 
 export function setCount(draft: LayoutDraft, key: CountKey, value: number, display: DisplayAspect): LayoutDraft {
   const { min, max } = countBounds(draft, key, display);
-  const v = Math.max(min, Math.min(max, Math.floor(value)));
+  const v = clamp(Math.floor(value), min, max);
   const counts = { ...draft.counts };
   let gap = draft.gap;
   if (key === "tb") counts.top = counts.bottom = v;
@@ -157,7 +155,7 @@ export function toggleEdge(draft: LayoutDraft, edge: LedSegmentKey, lit: boolean
     counts[edge] = 0;
   } else {
     const partner = PARTNER[edge];
-    counts[edge] = memo[edge] || counts[partner] || lengthShare(edge, sumCounts(counts), display);
+    counts[edge] = memo[edge] || counts[partner] || lengthShare(edge, sumSegmentCounts(counts), display);
   }
   const gap = isOn(counts, "bottom") ? draft.gap : 0;
   return { ...draft, counts, gap, memo, links: deriveLinks(counts) };
@@ -217,7 +215,7 @@ export function distribute(draft: LayoutDraft, total: number, display: DisplayAs
   if (tb) e.top = e.bottom = Math.min(e.top, e.bottom);
   if (lr) e.left = e.right = Math.min(e.left, e.right);
 
-  let rest = T - sumCounts(e);
+  let rest = T - sumSegmentCounts(e);
   // Minimums can overshoot a small total: take back from the biggest group that can give.
   while (rest < 0) {
     const giver = groups

@@ -2,12 +2,13 @@
 // (RoomMapEditor shows a placeholder while the map loads), so the observer must
 // attach when the element appears — yet the fit stays one-shot and first-render.
 import { useState } from "react";
-import { render, act } from "@testing-library/react";
+import { render, renderHook, act } from "@testing-library/react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { Mock } from "vitest";
 import type { RoomDimensions } from "@/shared/contracts/roomMap";
 
 import {
+  __resetSessionViewForTests,
   useRoomMapViewport,
   ROOM_MAP_PX_PER_METER,
   PAN_STEP_PX,
@@ -63,6 +64,7 @@ describe("useRoomMapViewport", () => {
   let realResizeObserver: typeof globalThis.ResizeObserver;
 
   beforeEach(() => {
+    __resetSessionViewForTests();
     StubResizeObserver.instances = [];
     realResizeObserver = globalThis.ResizeObserver;
     globalThis.ResizeObserver = StubResizeObserver as unknown as typeof globalThis.ResizeObserver;
@@ -116,6 +118,35 @@ describe("useRoomMapViewport", () => {
     expect(viewport.canvasSize).toEqual({ w: 1000, h: 900 });
     expect(viewport.zoom).toBe(2);
     expect(viewport.panOffset).toEqual({ x: 10, y: 10 });
+  });
+
+  // Switching to the 3D view and back framed the plan afresh, losing where the user had looked.
+  it("reopens where the plan was left for the same room, and fits a resized one", () => {
+    const first = render(<Harness loading={false} dimensions={ROOM_5X4} />);
+    act(() => {
+      for (const ro of StubResizeObserver.instances) ro.emit(800, 600);
+    });
+    act(() => {
+      viewport.setZoom(2.5);
+      viewport.setPanOffset({ x: -40, y: 12 });
+    });
+    first.unmount();
+
+    StubResizeObserver.instances = [];
+    const again = render(<Harness loading={false} dimensions={ROOM_5X4} />);
+    act(() => {
+      for (const ro of StubResizeObserver.instances) ro.emit(800, 600);
+    });
+    expect(viewport.zoom).toBe(2.5);
+    expect(viewport.panOffset).toEqual({ x: -40, y: 12 });
+    again.unmount();
+
+    StubResizeObserver.instances = [];
+    render(<Harness loading={false} dimensions={{ ...ROOM_5X4, widthMeters: 6 }} />);
+    act(() => {
+      for (const ro of StubResizeObserver.instances) ro.emit(800, 600);
+    });
+    expect(viewport.zoom).not.toBe(2.5);
   });
 
   it("fits the room that finished loading, not the placeholder it opened with", () => {
@@ -265,5 +296,19 @@ describe("useRoomMapViewport — arrow-key panning", () => {
     expect(consumed).toBe(false);
     expect(e.preventDefault).not.toHaveBeenCalled();
     expect(viewport.panOffset).toEqual(start);
+  });
+});
+
+describe("useRoomMapViewport — space held", () => {
+  it("lets go of pan mode when the window loses focus mid-press", () => {
+    const { result } = renderHook(() => useRoomMapViewport({ widthMeters: 4, depthMeters: 4, heightMeters: 2.6 }));
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: " " }));
+    });
+    expect(result.current.spaceHeld).toBe(true);
+    act(() => {
+      window.dispatchEvent(new Event("blur"));
+    });
+    expect(result.current.spaceHeld).toBe(false);
   });
 });

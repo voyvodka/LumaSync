@@ -48,20 +48,20 @@ describe("usePreviewOpenNotice", () => {
     await flush();
 
     const { result } = renderHook(() => usePreviewOpenNotice());
-    act(() => result.current.report("CONTROL_POPUP_FAILED"));
+    act(() => result.current.report("PREVIEW_OPEN_FAILED"));
     await flush();
 
     act(() => {
       vi.advanceTimersByTime(PREVIEW_OPEN_NOTICE_MS * 3);
     });
-    expect(result.current.notice).toBe("CONTROL_POPUP_FAILED");
+    expect(result.current.notice).toBe("PREVIEW_OPEN_FAILED");
 
     // Shown again: now it gets its full time, and then goes.
     act(() => pushWindowVisibility?.({ visible: true }));
     act(() => {
       vi.advanceTimersByTime(PREVIEW_OPEN_NOTICE_MS - 1);
     });
-    expect(result.current.notice).toBe("CONTROL_POPUP_FAILED");
+    expect(result.current.notice).toBe("PREVIEW_OPEN_FAILED");
     act(() => {
       vi.advanceTimersByTime(1);
     });
@@ -71,7 +71,7 @@ describe("usePreviewOpenNotice", () => {
 
   it("stops its countdown when the window goes to the tray mid-way", async () => {
     const { result } = renderHook(() => usePreviewOpenNotice());
-    act(() => result.current.report("CONTROL_POPUP_FAILED"));
+    act(() => result.current.report("PREVIEW_OPEN_FAILED"));
     await flush();
 
     act(() => {
@@ -81,12 +81,12 @@ describe("usePreviewOpenNotice", () => {
     act(() => {
       vi.advanceTimersByTime(PREVIEW_OPEN_NOTICE_MS * 2);
     });
-    expect(result.current.notice).toBe("CONTROL_POPUP_FAILED");
+    expect(result.current.notice).toBe("PREVIEW_OPEN_FAILED");
   });
 
   it("still runs out on screen", async () => {
     const { result } = renderHook(() => usePreviewOpenNotice());
-    act(() => result.current.report("CONTROL_POPUP_FAILED"));
+    act(() => result.current.report("PREVIEW_OPEN_FAILED"));
     await flush();
 
     act(() => {

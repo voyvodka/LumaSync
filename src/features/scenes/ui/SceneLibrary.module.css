@@ -1,0 +1,140 @@
+@layer components {
+  /* The library: two short lists in the popover; the second scrolls when the first is long. */
+  /* Scrolls edge to edge: it reaches over the popover's padding and gives it back inside, so the
+     scrollbar runs along the popover's border rather than floating in from it. */
+  .library {
+    display: flex;
+    flex-direction: column;
+    max-height: min(420px, 58vh);
+    margin: -8px;
+    padding: 8px;
+    overflow-y: auto;
+    border-radius: 11px;
+    outline: none;
+    scrollbar-width: thin;
+    scrollbar-color: var(--lm-line-2) transparent;
+  }
+  .heading {
+    margin: 6px 6px 4px;
+    color: var(--lm-ink-dim);
+    font-size: 11.5px;
+    font-weight: 500;
+  }
+  .heading:not(:first-child) { margin-top: 12px; }
+  .empty { margin: 2px 6px 4px; color: var(--lm-ink-faint); font-size: 12.5px; }
+  .list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+  .row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 36px;
+    padding: 0 2px 0 6px;
+    border-radius: 8px;
+    transition: background var(--lm-dur-quick);
+  }
+  /* A suggestion on its way up to the user's list passes over the rows it crosses. */
+  .row[data-flip-travelling] {
+    z-index: 1;
+    background: var(--lm-panel);
+    box-shadow: 0 6px 16px rgb(0 0 0 / 40%);
+  }
+  .row:hover, .row:focus-within { background: var(--lm-panel); }
+  .row[data-unavailable] .name { color: var(--lm-ink-faint); }
+
+  /* Sorting: the held row follows the pointer above the rest, which step aside to make its room. */
+  .list[data-dragging] { cursor: grabbing; user-select: none; }
+  .list[data-dragging] .row { transition: transform var(--lm-dur-base) var(--lm-ease-out); }
+  .list[data-dragging] .row[data-dragged] {
+    z-index: 1;
+    background: var(--lm-panel);
+    box-shadow: 0 8px 20px rgb(0 0 0 / 45%), inset 0 0 0 1px var(--lm-line-2);
+    transition: none;
+  }
+  /* A suggestion has no handle; this holds its place so every swatch lines up. */
+  .handleSpace { flex-shrink: 0; width: 16px; }
+  /* A 32 px target over a narrow glyph: the margins give back the width the row does not have. */
+  .handle {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    margin: 0 -9px 0 -7px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--lm-ink-faint);
+    cursor: grab;
+    touch-action: none;
+    transition: color var(--lm-dur-quick);
+  }
+  .row:hover .handle, .handle:focus-visible { color: var(--lm-ink-dim); }
+  .handle:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+
+  /* A row that arrives fades up in its place; one that goes fades where it stands, and only then do
+     the rows under it close up (useFlip). Neither changes height, so nothing is squeezed. */
+  .row[data-entering] { animation: enter var(--lm-dur-base) var(--lm-ease-out); }
+  .row[data-leaving] { pointer-events: none; animation: leave var(--lm-dur-quick) var(--lm-ease-leave) forwards; }
+  @keyframes enter { from { opacity: 0; transform: scale(0.96); } }
+  @keyframes leave { to { opacity: 0; transform: scale(0.96); } }
+
+  .swatch {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 10%);
+  }
+  .row[data-entering] .swatch { animation: land var(--lm-dur-slow) var(--lm-ease-land) var(--lm-dur-follow) backwards; }
+  @keyframes land { from { transform: scale(0.4); } }
+  .name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--lm-ink);
+    font-size: 12.5px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  /* Present but faint at rest, so showing them on hover shifts nothing. */
+  .actions { display: flex; flex-shrink: 0; opacity: 0; transition: opacity var(--lm-dur-quick); }
+  .row:hover .actions, .row:focus-within .actions, .actions[data-armed] { opacity: 1; }
+  .list[data-dragging] .actions { opacity: 0; }
+  .action {
+    display: inline-grid;
+    place-items: center;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--lm-ink-dim);
+    transition: color var(--lm-dur-quick), background var(--lm-dur-quick), box-shadow var(--lm-dur-base);
+  }
+  .action:hover:not(:disabled) { color: var(--lm-ink); background: var(--lm-panel-2); }
+  .action:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+  .action:disabled { cursor: default; opacity: 0.35; }
+  /* Armed: a check in a red ring, so the second press reads by shape as well as colour. */
+  .action[data-danger], .action[data-danger]:hover:not(:disabled) { color: var(--lm-red); box-shadow: inset 0 0 0 1px var(--lm-red); }
+  .action :global(svg) { display: block; }
+  .note { color: var(--lm-ink-faint); }
+
+  /* Touch has no hover: the actions stay. */
+  @media (hover: none) { .actions { opacity: 1; } }
+
+  :global(:root[data-reduced-motion]) .row,
+  :global(:root[data-reduced-motion]) .list[data-dragging] .row,
+  :global(:root[data-reduced-motion]) .actions,
+  :global(:root[data-reduced-motion]) .action,
+  :global(:root[data-reduced-motion]) .handle { transition: none; }
+  :global(:root[data-reduced-motion]) .row[data-entering],
+  :global(:root[data-reduced-motion]) .row[data-entering] .swatch { animation: none; }
+
+  @media (forced-colors: active) {
+    .action:focus-visible, .handle:focus-visible { outline: 2px solid Highlight; outline-offset: 1px; }
+    .actions { opacity: 1; }
+    .action[data-danger] { outline: 2px solid Mark; outline-offset: -2px; }
+    .list[data-dragging] .row[data-dragged] { outline: 2px solid Highlight; }
+  }
+}

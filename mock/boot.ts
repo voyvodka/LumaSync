@@ -33,26 +33,26 @@ import { restoreWorld, setWorld } from "./state";
  */
 export const MOCK_BUILD_SENTINEL = "LUMASYNC_DEV_MOCK_ACTIVE_DO_NOT_SHIP";
 
-const hasTauriRuntime = MOCK_HAS_REAL_IPC;
+const query = new URLSearchParams(window.location.search);
 
 function requestedScenario(): ScenarioId {
-  const asked = new URLSearchParams(window.location.search).get("scenario");
+  const asked = query.get("scenario");
   return SCENARIO_IDS.includes(asked as ScenarioId) ? (asked as ScenarioId) : DEFAULT_SCENARIO;
 }
 
 const scenario = requestedScenario();
 // A scenario in the query string always wins: it is how the panel applies one.
 // Otherwise a world composed by hand survives the reload.
-const askedExplicitly = new URLSearchParams(window.location.search).has("scenario");
+const askedExplicitly = query.has("scenario");
 const restored = askedExplicitly ? null : restoreWorld();
 setWorld(restored ?? SCENARIOS[scenario].build(), { keepGeneration: restored !== null });
 installLocalOutputsAnnouncer();
 
-if (!hasTauriRuntime) {
+if (!MOCK_HAS_REAL_IPC) {
   // The label picks the branch `main.tsx` takes between the app tree, the LED
   // twin overlay and the control popup — surfaces the WDIO harness cannot reach
   // at all, since only the `main` window handle is exposed there.
-  const label = new URLSearchParams(window.location.search).get("window") ?? "main";
+  const label = query.get("window") ?? "main";
   mockWindows(label);
   // Without a Rust process there is nothing behind passthrough, so anything the
   // fixture table does not answer has to fail here rather than hang.
@@ -80,7 +80,7 @@ if (!hasTauriRuntime) {
 }
 
 console.info(
-  `[LumaSync][mock] ${MOCK_BUILD_SENTINEL} — runtime=${hasTauriRuntime ? "tauri" : "browser"}, scenario=${scenario}, passthrough=${MOCK_HAS_REAL_IPC ? "live" : "unavailable"}`,
+  `[LumaSync][mock] ${MOCK_BUILD_SENTINEL} — runtime=${MOCK_HAS_REAL_IPC ? "tauri" : "browser"}, scenario=${scenario}, passthrough=${MOCK_HAS_REAL_IPC ? "live" : "unavailable"}`,
 );
 
 /**

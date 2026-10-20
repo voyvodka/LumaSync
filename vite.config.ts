@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const { version } = JSON.parse(readFileSync("./package.json", "utf-8")) as { version: string };
+const { entryKb } = JSON.parse(readFileSync("./scripts/verify/chunk-budgets.json", "utf-8")) as { entryKb: number };
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
@@ -86,10 +87,10 @@ export default defineConfig(async ({ command }) => {
     },
 
     build: {
-      // Vite's 500 kB default warns about download cost, which a bundle read off
-      // local disk never pays. Kept just above the largest chunk (the entry every
-      // window parses) so it still ratchets — see docs/architecture/build-and-release.md.
-      chunkSizeWarningLimit: 300,
+      // The gate is scripts/verify/chunk-budget.mjs (per chunk class, in check:all);
+      // this only keeps Vite's own warning quiet below the entry's budget there —
+      // see docs/architecture/build-and-release.md.
+      chunkSizeWarningLimit: entryKb,
     },
 
     clearScreen: false,

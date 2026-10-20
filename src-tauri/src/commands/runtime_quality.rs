@@ -19,12 +19,6 @@ impl Default for RuntimeQualityConfig {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct RuntimeTimingSample {
-    pub capture_cost_ms: f32,
-    pub send_cost_ms: f32,
-}
-
 #[derive(Debug)]
 pub struct RuntimeQualityController {
     config: RuntimeQualityConfig,
@@ -42,11 +36,7 @@ impl RuntimeQualityController {
     }
 
     pub fn observe_timing(&mut self, capture_ms: f32, send_ms: f32) {
-        let sample = RuntimeTimingSample {
-            capture_cost_ms: capture_ms,
-            send_cost_ms: send_ms,
-        };
-        let sample_cost = (sample.capture_cost_ms + sample.send_cost_ms).max(0.0);
+        let sample_cost = (capture_ms + send_ms).max(0.0);
         let ewma_alpha = self.config.pressure_ewma_alpha.clamp(0.0, 1.0);
 
         self.observed_cost_ewma_ms = Some(match self.observed_cost_ewma_ms {

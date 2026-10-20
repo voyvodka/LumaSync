@@ -388,7 +388,7 @@ describe("App lighting", () => {
 
       // A link budget moves the Lights note, not the shell's stall notice.
       act(() => {
-        env.pushHealth?.({ captureFailureCode: null, linkConstrained: true, linkMaxFps: 23 });
+        env.pushHealth?.({ captureFailureCode: null, linkConstrained: true, linkMaxFps: 23, outputFailureCode: null, workerStopped: false });
       });
 
       expect(env.statusBarRenders).toBe(appBefore);
@@ -417,12 +417,14 @@ describe("App lighting", () => {
           captureFailureCode: "AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND",
           linkConstrained: false,
           linkMaxFps: 0,
+          outputFailureCode: null,
+          workerStopped: false,
         });
       });
       await waitFor(() => expect(stallQueue()).toContain("capture-stalled"));
 
       act(() => {
-        env.pushHealth?.({ captureFailureCode: null, linkConstrained: false, linkMaxFps: 0 });
+        env.pushHealth?.({ captureFailureCode: null, linkConstrained: false, linkMaxFps: 0, outputFailureCode: null, workerStopped: false });
       });
       await waitFor(() => expect(stallQueue()).not.toContain("capture-stalled"));
 

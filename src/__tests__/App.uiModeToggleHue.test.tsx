@@ -62,6 +62,11 @@ vi.mock("../features/shell/windowLifecycle", () => ({
     shellState = { ...shellState, ...structuredClone(patch) };
     return Promise.resolve();
   },
+  updateShellState: (update: (current: ShellState) => Partial<ShellState> | null) => {
+    const patch = update(structuredClone(shellState) as ShellState);
+    if (patch !== null) shellState = { ...shellState, ...structuredClone(patch) };
+    return Promise.resolve(structuredClone(shellState));
+  },
   initWindowLifecycle: () => Promise.resolve(),
   onShellStateSaved: () => () => {},
   resizeToMode: (...args: unknown[]) => resizeToModeMock(...args),

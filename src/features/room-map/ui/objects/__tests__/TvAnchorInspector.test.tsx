@@ -1,11 +1,11 @@
 // Mount height is optional on purpose: absent ⇒ the worker resolves 40% of the
 // room height at runtime, so a room-height edit moves it. The field must never
 // write that default into storage, only an explicit value or `undefined`.
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, it, expect, vi, beforeEach } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { TvAnchorInspector } from "../TvAnchorInspector";
-import type { TvAnchorPlacement } from "@/shared/contracts/roomMap";
+import type { TvAnchorPlacement, UsbStripPlacement } from "@/shared/contracts/roomMap";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -16,18 +16,33 @@ vi.mock("react-i18next", () => ({
 
 const baseTv: TvAnchorPlacement = { x: 1.5, y: 0, width: 1.2, height: 0.1 };
 
-function renderInspector(tv: TvAnchorPlacement = baseTv, roomHeightMeters = 2.5) {
-  const onUpdate = vi.fn();
+function renderInspector(
+  tv: TvAnchorPlacement = baseTv,
+  roomHeightMeters = 2.5,
+  sizeUnit: "inch" | "cm" = "inch",
+  modelChoices = true,
+  strips: readonly UsbStripPlacement[] = [],
+) {
+  const onUpdate = vi.fn<(patch: Partial<TvAnchorPlacement>) => void>();
+  const onDelete = vi.fn<() => void>();
+  const onSizeUnitChange = vi.fn<(unit: "inch" | "cm") => void>();
   render(
     <TvAnchorInspector
       tv={tv}
       roomHeightMeters={roomHeightMeters}
+      autoKind="tv"
+      modelChoices={modelChoices}
+      strips={strips}
+      sizeUnit={sizeUnit}
+      onSizeUnitChange={onSizeUnitChange}
       onUpdate={onUpdate}
-      onToggleLock={vi.fn()}
+      onToggleLock={vi.fn<() => void>()}
+      onDelete={onDelete}
+      onClose={vi.fn<() => void>()}
     />,
   );
   const mount = screen.getByLabelText("roomMap:inspector.tvMountHeightLabel") as HTMLInputElement;
-  return { onUpdate, mount };
+  return { onUpdate, onDelete, onSizeUnitChange, mount };
 }
 
 function commit(input: HTMLInputElement, value: string) {
@@ -45,12 +60,11 @@ describe("TvAnchorInspector mount height", () => {
     expect(mount.placeholder).toBe("1.00");
   });
 
-  it("recomputes the placeholder from the room height", () => {
+  it("recomputes the placeholder from the room height, and says so behind its ⓘ", () => {
     const { mount } = renderInspector(baseTv, 3);
     expect(mount.placeholder).toBe("1.20");
-    expect(
-      screen.getByText(/roomMap:inspector\.tvMountHeightHint/),
-    ).toHaveTextContent('"metres":"1.20"');
+    fireEvent.click(screen.getByRole("button", { name: /^common:hintFor .*tvMountHeightLabel/ }));
+    expect(screen.getByText(/roomMap:inspector\.tvMountHeightHint/)).toHaveTextContent('"metres":"1.20"');
   });
 
   it("writes an explicit mount height on commit", () => {
@@ -74,18 +88,25 @@ describe("TvAnchorInspector mount height", () => {
     expect(onUpdate).toHaveBeenCalledWith({ mountHeightMeters: undefined });
   });
 
-  it("clamps to the room height", () => {
+  // Out of range puts the old value back rather than writing the nearest bound (design-language.md).
+  it("puts the old value back for a height above the room", () => {
     const { onUpdate, mount } = renderInspector(baseTv, 2.5);
     commit(mount, "4");
-    expect(onUpdate).toHaveBeenCalledWith({ mountHeightMeters: 2.5 });
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect((mount as HTMLInputElement).value).toBe("");
   });
 
-  it("clamps above zero", () => {
-    const { onUpdate, mount } = renderInspector(baseTv, 2.5);
+  it("puts the old value back for a height at or below the floor", () => {
+    const { onUpdate, mount } = renderInspector({ ...baseTv, mountHeightMeters: 1.1 }, 2.5);
     commit(mount, "-1");
-    const written = onUpdate.mock.calls[0][0].mountHeightMeters as number;
-    expect(written).toBeGreaterThan(0);
-    expect(written).toBeLessThanOrEqual(2.5);
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect((mount as HTMLInputElement).value).toBe("1.10");
+  });
+
+  it("takes the top of the range as typed", () => {
+    const { onUpdate, mount } = renderInspector(baseTv, 2.5);
+    commit(mount, "2,5");
+    expect(onUpdate).toHaveBeenCalledWith({ mountHeightMeters: 2.5 });
   });
 
   it("does not rewrite an unchanged explicit value", () => {
@@ -95,14 +116,174 @@ describe("TvAnchorInspector mount height", () => {
     expect(onUpdate).not.toHaveBeenCalled();
   });
 
-  it("warns when a room-height edit left the mount above the ceiling", () => {
+  it("warns in a word when a room-height edit left the mount above the ceiling, the reason as its tooltip", () => {
     renderInspector({ ...baseTv, mountHeightMeters: 2.8 }, 2.5);
-    expect(screen.getByText("roomMap:inspector.tvMountHeightAboveCeiling")).toBeInTheDocument();
+    const note = screen.getByText("roomMap:inspector.tvAboveCeilingShort");
+    expect(note.closest("[title]")).toHaveAttribute("title", "roomMap:inspector.tvMountHeightAboveCeiling");
   });
 
-  it("labels the footprint field as depth, not height", () => {
+  it("deletes from the row's end, but not while the TV is locked", () => {
+    const { onDelete } = renderInspector();
+    fireEvent.click(screen.getByRole("button", { name: "roomMap:objectPanel.delete" }));
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    cleanup();
+    renderInspector({ ...baseTv, locked: true });
+    expect(screen.getByRole("button", { name: "roomMap:objectPanel.delete" })).toBeDisabled();
+  });
+
+});
+
+describe("TvAnchorInspector — screen size", () => {
+  beforeEach(() => {
+    cleanup();
+    vi.useFakeTimers();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const size = () => screen.getByTestId("tv-size") as HTMLInputElement;
+
+  // The footprint's depth moved the screen off its wall and read as the screen's size.
+  it("asks for the diagonal, not the footprint", () => {
     renderInspector();
-    expect(screen.getByLabelText("roomMap:inspector.tvDepthLabel")).toBeInTheDocument();
-    expect(screen.queryByLabelText("roomMap:inspector.heightLabel")).toBeNull();
+    expect(size().value).toBe("54");
+    expect(size()).toHaveAccessibleName('roomMap:inspector.screenSizeLabel {"width":"1.20","height":"0.68"}');
+    expect(screen.getAllByRole("spinbutton")).toHaveLength(4);
+  });
+
+  it("writes the width a typed diagonal makes, keeping the screen's centre", () => {
+    const { onUpdate } = renderInspector();
+    commit(size(), "65");
+    const patch = onUpdate.mock.lastCall![0];
+    expect(patch.width).toBeCloseTo(1.439, 3);
+    expect(patch.x! + patch.width! / 2).toBeCloseTo(baseTv.x + baseTv.width / 2, 6);
+  });
+
+  it("shows centimetres where they were chosen, and its unit switches between the two", () => {
+    const { onSizeUnitChange } = renderInspector(baseTv, 2.5, "cm");
+    expect(size().value).toBe("138");
+    const unit = screen.getByRole("button", { name: "roomMap:inspector.screenSizeToInch" });
+    fireEvent.pointerDown(unit, { button: 0 });
+    fireEvent.pointerUp(unit, { button: 0 });
+    fireEvent.click(unit);
+    expect(onSizeUnitChange).toHaveBeenCalledWith("inch");
+    expect(size()).not.toHaveFocus();
+  });
+
+  it("switches the unit of a locked screen too, a view choice that writes nothing", () => {
+    const { onUpdate, onSizeUnitChange } = renderInspector({ ...baseTv, locked: true });
+    fireEvent.click(screen.getByRole("button", { name: "roomMap:inspector.screenSizeToCm" }));
+    expect(onSizeUnitChange).toHaveBeenCalledWith("cm");
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  it("offers a shape only where the 3D room draws it", () => {
+    renderInspector(baseTv, 2.5, "inch", false);
+    expect(screen.queryByRole("button", { name: /^roomMap:inspector\.screenAspectLabel: / })).toBeNull();
+  });
+
+  it("keeps the diagonal across a new shape, and stores 16:9 as nothing", () => {
+    const { onUpdate } = renderInspector();
+    fireEvent.click(screen.getByRole("button", { name: /^roomMap:inspector\.screenAspectLabel: / }));
+    fireEvent.click(screen.getByRole("option", { name: "21:9" }));
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    const patch = onUpdate.mock.lastCall![0];
+    expect(patch.screenAspect).toBe("21:9");
+    expect(patch.width! * Math.hypot(1, 9 / 21)).toBeCloseTo(baseTv.width * Math.hypot(1, 9 / 16), 3);
+    expect(patch.x! + patch.width! / 2).toBeCloseTo(baseTv.x + baseTv.width / 2, 6);
+    cleanup();
+    const again = renderInspector({ ...baseTv, screenAspect: "21:9" });
+    fireEvent.click(screen.getByRole("button", { name: /^roomMap:inspector\.screenAspectLabel: / }));
+    fireEvent.click(screen.getByRole("option", { name: "16:9" }));
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(again.onUpdate.mock.lastCall![0]).toHaveProperty("screenAspect", undefined);
+  });
+});
+
+describe("TvAnchorInspector — screen kind", () => {
+  beforeEach(() => {
+    cleanup();
+    vi.useFakeTimers();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const picker = () => screen.getByRole("button", { name: /^roomMap:inspector\.screenKindLabel: / });
+  /** A pick lands after the list's short exit. */
+  const choose = (name: string | RegExp) => {
+    fireEvent.click(picker());
+    fireEvent.click(screen.getByRole("option", { name }));
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+  };
+
+  it("names what Auto reads as and stores a pick", () => {
+    const { onUpdate } = renderInspector();
+    expect(picker().textContent).toContain("roomMap:inspector.screenKind.tv");
+    choose("roomMap:inspector.screenKind.monitor");
+    expect(onUpdate).toHaveBeenLastCalledWith({ screenKind: "monitor" });
+  });
+
+  it("clears the pick back to Auto", () => {
+    const { onUpdate } = renderInspector({ ...baseTv, screenKind: "monitor" });
+    choose(/roomMap:inspector\.screenKindAuto/);
+    expect(onUpdate).toHaveBeenLastCalledWith({ screenKind: undefined });
+  });
+});
+
+describe("TvAnchorInspector — backlight", () => {
+  beforeEach(() => {
+    cleanup();
+    vi.useFakeTimers();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  // Behind the screen (its middle within a metre of the screen's), and one across the room.
+  const behind: UsbStripPlacement = { stripId: "bl", startX: 1.5, startY: 0.1, endX: 2.7, endY: 0.1, ledCount: 40, portName: "COM3" };
+  const across: UsbStripPlacement = { stripId: "far", startX: 0, startY: 3, endX: 1, endY: 3, ledCount: 60 };
+  const picker = () => screen.getByTestId("tv-backlight");
+  const choose = (name: string | RegExp) => {
+    fireEvent.click(picker());
+    fireEvent.click(screen.getByRole("option", { name }));
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+  };
+
+  it("names the strip Auto picks, by its LEDs and port, and binds another", () => {
+    const { onUpdate } = renderInspector(baseTv, 2.5, "inch", true, [behind, across]);
+    expect(picker().textContent).toContain('roomMap:inspector.backlightAuto {"name":"roomMap:objectPanel.ledLabel {\\"count\\":\\"40\\"} · COM3"}');
+    choose('roomMap:objectPanel.ledLabel {"count":"60"}');
+    expect(onUpdate).toHaveBeenLastCalledWith({ backlightStripId: "far" });
+  });
+
+  it("stores None as null and Auto as no binding", () => {
+    const { onUpdate } = renderInspector({ ...baseTv, backlightStripId: "far" }, 2.5, "inch", true, [behind, across]);
+    choose("roomMap:inspector.backlightNone");
+    expect(onUpdate).toHaveBeenLastCalledWith({ backlightStripId: null });
+    choose(/roomMap:inspector\.backlightAuto/);
+    expect(onUpdate).toHaveBeenLastCalledWith({ backlightStripId: undefined });
+  });
+
+  it("names a port by its device, and counts the strips Auto takes when there are several", () => {
+    const usb = { ...behind, portName: "/dev/cu.usbserial-110" };
+    const beside = { ...behind, stripId: "bl2", portName: undefined };
+    renderInspector(baseTv, 2.5, "inch", true, [usb, beside]);
+    fireEvent.click(picker());
+    expect(screen.getByRole("option", { name: 'roomMap:objectPanel.ledLabel {"count":"40"} · cu.usbserial-110' })).toBeTruthy();
+    expect(screen.getByRole("option", { name: 'roomMap:inspector.backlightAutoMany {"count":2}' })).toBeTruthy();
+  });
+
+  it("reads a binding to a strip that is gone as Auto", () => {
+    renderInspector({ ...baseTv, backlightStripId: "deleted" }, 2.5, "inch", true, [behind, across]);
+    expect(picker().textContent).toContain("roomMap:inspector.backlightAuto");
+  });
+
+  it("is not offered in a room with no strips", () => {
+    renderInspector();
+    expect(screen.queryByTestId("tv-backlight")).toBeNull();
   });
 });
