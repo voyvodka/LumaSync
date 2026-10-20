@@ -89,6 +89,18 @@ describe("buildSelectionMark", () => {
       expect(floorY([rug, chairAt(0)], "furniture-rug")).toBeGreaterThan(0.02);
     });
 
+    // A chair carried onto a rug kept the height it was picked at, under the rug.
+    it("raises a carried chair's outline onto a rug, and lowers it off again", () => {
+      const mark = buildSelectionMark([rug, chairAt(3)]);
+      mark.select("furniture-chair");
+      const frame = () => mark.group.children.find((o) => o instanceof Mesh && !(o.geometry instanceof RingGeometry) && o.visible)!;
+      expect(frame().position.y).toBeLessThan(0.01);
+      mark.shift(-3, 0);
+      expect(frame().position.y).toBeGreaterThan(0.02);
+      mark.shift(0, 0);
+      expect(frame().position.y).toBeLessThan(0.01);
+    });
+
     it("keeps a chair's outline at the floor away from any rug", () => {
       expect(floorY([rug, chairAt(3)], "furniture-chair")).toBeLessThan(0.01);
     });

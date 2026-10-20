@@ -64,7 +64,7 @@ import { PALETTE } from "./scene/palette";
 import { block, mergeParts } from "./scene/parts";
 import { type Morph, startMorph } from "./scene/morph";
 import { type Plumb, PLUMB_FROM, plumbGuide } from "./scene/plumb";
-import { floorBand } from "./scene/selection";
+import { floorBand, floorLift } from "./scene/selection";
 import styles from "./RoomView3D.module.css";
 
 /** What a measuring run varies; absent fields take the defaults below. */
@@ -1163,7 +1163,7 @@ function openRoomView(
     };
 
     // A held library card: built once per card, then only moved.
-    let dropGhost: { key: string; group: Group; mesh: Mesh | null } | null = null;
+    let dropGhost: { key: string; group: Group; mesh: Mesh | null; floors: Mesh[] } | null = null;
     let settleFrame = 0;
     const dropMaterial = finishMaterial("matte", { lambert: options.lambert ?? false }) as MeshStandardMaterial;
     dropMaterial.emissiveIntensity = DROP_TINT_INTENSITY;
@@ -1224,16 +1224,18 @@ function openRoomView(
           mesh.position.y = DROP_FLOAT_M;
           group.add(mesh);
         }
-        for (const floor of [new Mesh(floorBand(piece.width, piece.height), bandMaterial), new Mesh(new PlaneGeometry(piece.width, piece.height), fillMaterial)]) {
+        const floors = [new Mesh(floorBand(piece.width, piece.height), bandMaterial), new Mesh(new PlaneGeometry(piece.width, piece.height), fillMaterial)];
+        for (const floor of floors) {
           floor.rotation.x = -Math.PI / 2;
-          floor.position.y = 0.006;
           group.add(floor);
         }
         room.scene.add(group);
-        dropGhost = { key, group, mesh };
+        dropGhost = { key, group, mesh, floors };
       }
       const centre = roomToScene(piece.x + piece.width / 2, piece.y + piece.height / 2, 0, dims);
       dropGhost.group.position.set(centre.x, 0, centre.z);
+      const lift = floorLift(room.pickables, null, centre.x, centre.z, Math.hypot(piece.width, piece.height) / 2);
+      for (const floor of dropGhost.floors) floor.position.y = lift;
       const colour = ghost.valid ? CARRY_COLOUR : REFUSED_COLOUR;
       bandMaterial.color.setHex(colour);
       fillMaterial.color.setHex(colour);

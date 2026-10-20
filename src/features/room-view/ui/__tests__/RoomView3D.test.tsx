@@ -1,5 +1,5 @@
 import { act, cleanup, render } from "@testing-library/react";
-import { type Camera, type Mesh, type Object3D, Vector3 } from "three";
+import { type Camera, Mesh, type Object3D, Vector3 } from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { planMetresToHue } from "@/features/room-map/model/hueChannelPosition";
@@ -308,6 +308,28 @@ describe("RoomView3D", () => {
       expect(scene.children).toHaveLength(before);
       unmount();
       expect(dropRef.current).toBeNull();
+    });
+
+    // The held card's outline lay at the floor, under the rug it was carried over.
+    it("draws a held card's outline over a rug under it, and at the floor away from one", async () => {
+      const dropRef: { current: RoomDropTarget | null } = { current: null };
+      const rug = { id: "rug", type: "rug" as const, x: 0.5, y: 0.5, width: 1.4, height: 1.4 };
+      const { rerender, unmount, view } = await open({ dropRef });
+      rerender(view({ ...room(1), furniture: [{ ...sofa, x: 2.5, y: 3 }, rug] }));
+      await rest();
+      const scene = builds.scene!;
+      const outlineY = (x: number, y: number) => {
+        dropRef.current!.preview({ piece: { id: "library-drop", type: "chair", x, y, width: 0.5, height: 0.5 }, model: { kind: "box" }, valid: true });
+        let at = Number.NaN;
+        scene.children[scene.children.length - 1]!.traverse((o) => {
+          if (o instanceof Mesh && o.geometry.name === "floorBand") at = o.position.y;
+        });
+        return at;
+      };
+      expect(outlineY(0.95, 0.95)).toBeGreaterThan(0.02);
+      expect(outlineY(3, 0.5)).toBeLessThan(0.01);
+      dropRef.current!.preview(null);
+      unmount();
     });
 
     it("plays a template out piece by piece in the room it builds at once, and settles into it", async () => {

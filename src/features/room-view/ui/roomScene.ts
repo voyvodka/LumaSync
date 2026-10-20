@@ -642,9 +642,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
       if (withRiders && tv && screen?.deskId != null && furnitureObjectId(screen.deskId) === objectId) riders.set(TV_ANCHOR_OBJECT_ID, tv);
       return liftPiece(scene, piece, riders);
     },
-    shiftMark(dx, dz) {
-      mark.group.position.set(dx, 0, dz);
-    },
+    shiftMark: mark.shift,
     setMood,
     target: new Vector3(0, H * 0.3, 0),
     radius: Math.hypot(W, D, H) / 2,

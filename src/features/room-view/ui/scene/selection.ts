@@ -54,7 +54,7 @@ export function floorBand(w: number, d: number, margin = MARGIN, line = LINE): B
 }
 
 /** Over any rug it reaches: a rug buried a mark drawn at the floor. */
-function floorLift(pickables: readonly Pickable[], self: string, x: number, z: number, reach: number): number {
+export function floorLift(pickables: readonly Pickable[], self: string | null, x: number, z: number, reach: number): number {
   let lift = FLOOR_LIFT;
   for (const p of pickables) {
     if (p.kind !== "furniture" || p.id === self) continue;
@@ -73,6 +73,8 @@ export interface SelectionMark {
   setPixelsPerMetre(ppm: number): void;
   /** Turns a light's ring to face the camera, so it reads as a circle from any side. */
   orient(cameraQuaternion: Quaternion): void;
+  /** Carries the mark by `dx`, `dz` off its piece, onto or off a rug on the way. */
+  shift(dx: number, dz: number): void;
 }
 
 export function buildSelectionMark(pickables: readonly Pickable[]): SelectionMark {
@@ -104,6 +106,7 @@ export function buildSelectionMark(pickables: readonly Pickable[]): SelectionMar
   group.add(halo, haloThrough);
 
   let current: string | null = null;
+  let liftAt: ((dx: number, dz: number) => number) | null = null;
   let haloRadius = 0;
   let pixelsPerMetre = 0;
   const scaleHalo = () => {
@@ -118,6 +121,10 @@ export function buildSelectionMark(pickables: readonly Pickable[]): SelectionMar
       pixelsPerMetre = ppm;
       scaleHalo();
     },
+    shift(dx, dz) {
+      group.position.set(dx, 0, dz);
+      if (floor && liftAt) floor.position.y = liftAt(dx, dz);
+    },
     orient(q) {
       halo.quaternion.copy(q);
       haloThrough.quaternion.copy(q);
@@ -127,6 +134,7 @@ export function buildSelectionMark(pickables: readonly Pickable[]): SelectionMar
       const next = item ? item.id : null;
       if (next === current) return false;
       current = next;
+      liftAt = null;
       plumb.group.visible = false;
       if (floor) {
         group.remove(floor);
@@ -166,7 +174,8 @@ export function buildSelectionMark(pickables: readonly Pickable[]): SelectionMar
         scaleHalo();
         floor = new Mesh(floorBand(radius * 2 - MARGIN * 2, radius * 2 - MARGIN * 2), material);
         floor.rotation.set(-Math.PI / 2, 0, 0);
-        floor.position.set(item.centre.x, floorLift(pickables, item.id, item.centre.x, item.centre.z, radius), item.centre.z);
+        liftAt = (dx, dz) => floorLift(pickables, item.id, item.centre.x + dx, item.centre.z + dz, radius);
+        floor.position.set(item.centre.x, liftAt(group.position.x, group.position.z), item.centre.z);
         // A light high on a wall or the ceiling is shown its floor by a plumb line instead.
         const bottom = item.centre.y - hy;
         floor.visible = bottom < PLUMB_FROM;
@@ -186,8 +195,9 @@ export function buildSelectionMark(pickables: readonly Pickable[]): SelectionMar
           floor = new Mesh(floorBand(hx * 2, hz * 2), material);
           floor.rotation.set(-Math.PI / 2, -item.angle, 0, "YXZ");
           const top = item.centre.y + hy;
-          const lift = top <= FLAT_TOP ? top + FLOOR_LIFT / 2 : floorLift(pickables, item.id, item.centre.x, item.centre.z, Math.hypot(hx, hz) + MARGIN);
-          floor.position.set(item.centre.x, lift, item.centre.z);
+          const reach = Math.hypot(hx, hz) + MARGIN;
+          liftAt = top <= FLAT_TOP ? () => top + FLOOR_LIFT / 2 : (dx, dz) => floorLift(pickables, item.id, item.centre.x + dx, item.centre.z + dz, reach);
+          floor.position.set(item.centre.x, liftAt(group.position.x, group.position.z), item.centre.z);
         }
       }
       group.add(floor);
