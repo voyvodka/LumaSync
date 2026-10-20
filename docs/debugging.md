@@ -19,8 +19,11 @@ echo $!                                               # keep this PID to stop th
 Stop only processes you started, by their own PID or port listener. A broad `pkill -f` is not used
 here because it matches every process's full command line, including unrelated ones.
 
-A killed instance leaves the single-instance socket behind, and the next launch hands off to a
-process that no longer exists instead of starting.
+What breaks a dev relaunch is a leftover process: Vite holds port 1420 with `strictPort`, so the
+next `tauri dev` fails instead of moving ports. The single-instance plugin is release-only
+(`#[cfg(not(debug_assertions))]` in `src-tauri/src/lib.rs`), so a debug build never reads the
+socket; removing it keeps the next release launch from handing off to a process that no longer
+exists.
 
 ## One log file holds everything
 
