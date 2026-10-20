@@ -69,6 +69,30 @@ describe("buildSelectionMark", () => {
     expect(floorShown).toBe(true);
     expect(plumb.visible).toBe(false);
   });
+
+  // The rug's 2 cm covered a chair's outline drawn at the floor, wholly so from above.
+  describe("over a rug", () => {
+    const rug: Pickable = { id: "furniture-rug", kind: "furniture", centre: { x: 0, y: 0.01, z: 0 }, half: [0.7, 0.01, 0.7], angle: 0 };
+    const chairAt = (x: number): Pickable => ({ id: "furniture-chair", kind: "furniture", centre: { x, y: 0.5, z: 0 }, half: [0.33, 0.5, 0.33], angle: 0 });
+    const floorY = (pickables: Pickable[], id: string) => {
+      const mark = buildSelectionMark(pickables);
+      mark.select(id);
+      const frame = mark.group.children.find((o) => o instanceof Mesh && !(o.geometry instanceof RingGeometry) && o.visible)!;
+      return frame.position.y;
+    };
+
+    it("draws a chair's outline over the rug it stands on", () => {
+      expect(floorY([rug, chairAt(0)], "furniture-chair")).toBeGreaterThan(0.02);
+    });
+
+    it("draws the rug's own outline over it", () => {
+      expect(floorY([rug, chairAt(0)], "furniture-rug")).toBeGreaterThan(0.02);
+    });
+
+    it("keeps a chair's outline at the floor away from any rug", () => {
+      expect(floorY([rug, chairAt(3)], "furniture-chair")).toBeLessThan(0.01);
+    });
+  });
 });
 
 describe("floorBand", () => {

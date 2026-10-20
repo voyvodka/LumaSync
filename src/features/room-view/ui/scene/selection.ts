@@ -13,6 +13,8 @@ const MARGIN = 0.07;
 const LINE = 0.03;
 /** Just over the floor and its decals, under everything standing on it. */
 const FLOOR_LIFT = 0.006;
+/** A piece no taller than this lies on the floor (a rug), and a mark beside it is drawn over it. */
+const FLAT_TOP = 0.03;
 /** A light's ring never shrinks below this radius on screen, however far the view zooms out. */
 const HALO_MIN_PX = 20;
 
@@ -49,6 +51,18 @@ export function floorBand(w: number, d: number, margin = MARGIN, line = LINE): B
   geometry.setIndex(index);
   geometry.name = "floorBand";
   return geometry;
+}
+
+/** The floor mark's height at a spot: over any rug it reaches, which buried a mark drawn at the floor. */
+function floorLift(pickables: readonly Pickable[], self: string, x: number, z: number, reach: number): number {
+  let lift = FLOOR_LIFT;
+  for (const p of pickables) {
+    if (p.kind !== "furniture" || p.id === self) continue;
+    const top = p.centre.y + p.half[1];
+    if (top > FLAT_TOP) continue;
+    if (Math.hypot(p.centre.x - x, p.centre.z - z) < Math.hypot(p.half[0], p.half[2]) + reach) lift = Math.max(lift, top + FLOOR_LIFT / 2);
+  }
+  return lift;
 }
 
 export interface SelectionMark {
@@ -152,7 +166,7 @@ export function buildSelectionMark(pickables: readonly Pickable[]): SelectionMar
         scaleHalo();
         floor = new Mesh(floorBand(radius * 2 - MARGIN * 2, radius * 2 - MARGIN * 2), material);
         floor.rotation.set(-Math.PI / 2, 0, 0);
-        floor.position.set(item.centre.x, FLOOR_LIFT, item.centre.z);
+        floor.position.set(item.centre.x, floorLift(pickables, item.id, item.centre.x, item.centre.z, radius), item.centre.z);
         // A light high on a wall or the ceiling is shown its floor by a plumb line instead.
         const bottom = item.centre.y - hy;
         floor.visible = bottom < PLUMB_FROM;
@@ -171,7 +185,9 @@ export function buildSelectionMark(pickables: readonly Pickable[]): SelectionMar
         } else {
           floor = new Mesh(floorBand(hx * 2, hz * 2), material);
           floor.rotation.set(-Math.PI / 2, -item.angle, 0, "YXZ");
-          floor.position.set(item.centre.x, FLOOR_LIFT, item.centre.z);
+          const top = item.centre.y + hy;
+          const lift = top <= FLAT_TOP ? top + FLOOR_LIFT / 2 : floorLift(pickables, item.id, item.centre.x, item.centre.z, Math.hypot(hx, hz) + MARGIN);
+          floor.position.set(item.centre.x, lift, item.centre.z);
         }
       }
       group.add(floor);
