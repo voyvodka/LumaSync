@@ -54,7 +54,7 @@ const FAMILY_OF: Readonly<Record<string, LampFamily>> = {
 export const CEILING_MOUNT_M = 0.1;
 
 /** Fixtures that light one side only, so the room turns them to a wall or to the stored facing. */
-export const ONE_SIDED: ReadonlySet<LampFamily> = new Set<LampFamily>(["playBar", "signe", "iris", "bloom"]);
+export const ONE_SIDED: ReadonlySet<LampFamily> = new Set<LampFamily>(["playBar", "signe", "iris", "bloom", "spot", "wall"]);
 
 /** Every fixture in the order a picker lists them: standing, on surfaces, overhead, strips, bulbs. */
 export const FIXTURE_ORDER: readonly LampFamily[] = [

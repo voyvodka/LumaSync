@@ -315,6 +315,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
       shape: fixture.glow.shape,
       rotation: fixture.glow.rotation,
       beam: fixture.beam,
+      back: fixture.back,
       color: lampColour(i),
       outside,
     };
@@ -343,6 +344,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
       shape: fixture.glow.shape,
       rotation: fixture.glow.rotation,
       beam: fixture.beam,
+      back: fixture.back,
       color: light.colour,
       own: true,
       outside,

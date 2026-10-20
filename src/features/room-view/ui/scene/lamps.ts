@@ -3,6 +3,7 @@
 // the one bulb mesh, so a live colour later recolours an instance instead of rebuilding the room.
 import { Matrix4, Quaternion, Vector3 } from "three";
 
+import { FIXTURE_LIGHT } from "../../model/fixtureLight";
 import { CEILING_MOUNT_M, type LampFamily, ONE_SIDED } from "../../model/lampFamily";
 import type { ScenePoint } from "../../model/roomSpace";
 import { PALETTE } from "./palette";
@@ -24,6 +25,8 @@ export interface LampFixture {
   glow: LampGlow;
   /** A one-sided fixture's throw, a unit vector, and its half-angle in radians; absent ⇒ all round. */
   beam?: { aim: Vector3; spread: number };
+  /** A second throw the other way, as a wall washer's down light: drawn, never lit by a real light. */
+  back?: { aim: Vector3; spread: number };
 }
 
 
@@ -31,24 +34,24 @@ export interface LampFixture {
 const CANOPY = 0xefe9df;
 const BAR = 0x1d1e21;
 const BULB_RADIUS = 0.055;
+/** A spot's head higher than this over what is under it hangs from the ceiling instead of standing. */
+const SPOT_STAND_M = 0.6;
 /** A bulb in a ceiling socket hangs this far below on its cord. */
 const BULB_DROP = 0.32;
-/** Half-angles of the light thrown straight down: a downlight's narrow cone, a pendant's wide one. */
-const DOWNLIGHT_SPREAD = 0.42;
-const PENDANT_SPREAD = 1.05;
 
 /** The fixture for one light at `at`, standing on a surface at `surface` (the floor or the top of
  *  the piece under it), in a room `ceiling` high. The light's own point stays where the bridge or
  *  the map put it; the body is drawn around it. */
 export function lampFixture(family: LampFamily, at: ScenePoint, surface: number, ceiling: number, facing = 0): LampFixture {
-  if (ONE_SIDED.has(family)) return oneSided(family, at, surface, facing);
+  const recessed = family === "spot" && at.y >= ceiling - CEILING_MOUNT_M;
+  if (ONE_SIDED.has(family) && !recessed) return oneSided(family, at, surface, ceiling, facing);
   const { x, z } = at;
   const y = Math.max(at.y, surface + 0.05);
   switch (family) {
     case "lightstrip":
-      return { body: [], glow: { at: { x, y, z }, radii: [0.32, 0.012, 0.012], shape: "bar" } };
+      return { body: [], glow: { at: { x, y, z }, radii: [half("lightstrip"), 0.012, 0.012], shape: "bar" } };
     case "tube":
-      return { body: [], glow: { at: { x, y, z }, radii: [0.3, 0.02, 0.02], shape: "bar" } };
+      return { body: [], glow: { at: { x, y, z }, radii: [half("tube"), 0.02, 0.02], shape: "bar" } };
     case "floorLamp": {
       const shadeY = Math.max(y, 0.6);
       return {
@@ -70,47 +73,42 @@ export function lampFixture(family: LampFamily, at: ScenePoint, surface: number,
     case "pendant": {
       // Hung at least to head height: placed on the floor, its cord ran the room's height.
       const shadeY = Math.min(Math.max(y, 1.2), ceiling - 0.3);
+      // Lit all over though a Cher's dish is opaque: from the camera above, a dark dish read as off.
+      const r = radiusOf("pendant");
       return {
         body: overhead([
-          rod(0.004, 0.004, Math.max(ceiling - shadeY - 0.06, 0.02), x, shadeY + 0.06, z, BAR, 6),
+          rod(0.004, 0.004, Math.max(ceiling - shadeY - 0.1, 0.02), x, shadeY + 0.1, z, BAR, 6),
           rod(0.06, 0.06, 0.02, x, ceiling - 0.02, z, CANOPY, 16),
         ]),
-        glow: { at: { x, y: shadeY, z }, radii: [0.18, 0.09, 0.18], shape: "flare" },
-        beam: { aim: DOWN.clone(), spread: PENDANT_SPREAD },
+        glow: { at: { x, y: shadeY + 0.05, z }, radii: [r, 0.05, r], shape: "flare" },
+        beam: { aim: DOWN.clone(), spread: spreadOf("pendant") },
       };
     }
-    case "ceiling":
+    case "ceiling": {
       // The diffuser stands proud of its rim: under a plate, the camera from above saw a grey disc.
+      const r = radiusOf("ceiling");
       return {
-        body: overhead([ring(0.17, 0.2, 0.012, x, ceiling - 0.012, z, CANOPY)]),
-        glow: { at: { x, y: ceiling - 0.01, z }, radii: [0.18, 0.012, 0.18], shape: "drum" },
+        body: overhead([ring(r - 0.02, r, 0.012, x, ceiling - 0.012, z, CANOPY)]),
+        glow: { at: { x, y: ceiling - 0.01, z }, radii: [r - 0.01, 0.012, r - 0.01], shape: "drum" },
+        beam: { aim: DOWN.clone(), spread: spreadOf("ceiling") },
       };
+    }
     case "go": {
       // A Go is a pebble on its cradle: wider than tall, lit all over.
       const domeY = surface + 0.06;
       return {
         body: [rod(0.085, 0.09, 0.012, x, surface, z, CANOPY, 24)],
-        glow: { at: { x, y: domeY, z }, radii: [0.085, 0.05, 0.085], shape: "globe" },
+        glow: { at: { x, y: domeY, z }, radii: [radiusOf("go"), 0.05, radiusOf("go")], shape: "globe" },
       };
     }
-    case "spot": {
-      if (y >= ceiling - CEILING_MOUNT_M) {
-        // Set in the ceiling: a trim ring round a lens that throws its light down. The lens stands
-        // proud of the trim, since the camera only ever sees the ceiling from above.
-        return {
-          body: overhead([ring(0.045, 0.065, 0.01, x, ceiling - 0.01, z, CANOPY)]),
-          glow: { at: { x, y: ceiling - 0.004, z }, radii: [0.05, 0.008, 0.05], shape: "drum" },
-          beam: { aim: DOWN.clone(), spread: DOWNLIGHT_SPREAD },
-        };
-      }
-      const headY = Math.max(y, surface + 0.12);
+    case "spot":
+      // Set in the ceiling: a trim ring round a lens that throws its light down. The lens stands
+      // proud of the trim, since the camera only ever sees the ceiling from above.
       return {
-        body: [rod(0.04, 0.045, 0.02, x, surface, z, BAR, 12), rod(0.01, 0.01, Math.max(headY - surface - 0.06, 0.02), x, surface + 0.02, z, BAR, 6)],
-        glow: { at: { x, y: headY, z }, radii: [0.045, 0.045, 0.045], shape: "globe" },
+        body: overhead([ring(0.045, 0.065, 0.01, x, ceiling - 0.01, z, CANOPY)]),
+        glow: { at: { x, y: ceiling - 0.004, z }, radii: [0.05, 0.008, 0.05], shape: "drum" },
+        beam: { aim: DOWN.clone(), spread: spreadOf("downlight") },
       };
-    }
-    case "wall":
-      return { body: [], glow: { at: { x, y, z }, radii: [0.1, 0.14, 0.06], shape: "drum" } };
     default: {
       if (y < ceiling - CEILING_MOUNT_M) {
         return { body: [], glow: { at: { x, y, z }, radii: [BULB_RADIUS, BULB_RADIUS, BULB_RADIUS], shape: "globe" } };
@@ -131,7 +129,7 @@ export function lampFixture(family: LampFamily, at: ScenePoint, surface: number,
 }
 
 /** Turned to face the throw: the lit side of the fixture's local frame looks down -z. */
-function oneSided(family: LampFamily, at: ScenePoint, surface: number, facing: number): LampFixture {
+function oneSided(family: LampFamily, at: ScenePoint, surface: number, ceiling: number, facing: number): LampFixture {
   const place = new Matrix4().makeTranslation(at.x, 0, at.z).multiply(new Matrix4().makeRotationY(-facing));
   const turn = new Quaternion().setFromAxisAngle(UP, -facing);
   const local = (x: number, y: number, z: number): ScenePoint => {
@@ -147,44 +145,82 @@ function oneSided(family: LampFamily, at: ScenePoint, surface: number, facing: n
     case "playBar": {
       // A Play bar stands about 25 cm tall on its foot and lights the wall behind it, its front dark;
       // one placed higher hangs on the wall.
-      const half = 0.125;
+      const half = (FIXTURE_LIGHT.playBar.length ?? 0.25) / 2;
       const y = Math.max(at.y, surface + 0.05);
       const bottom = Math.max(surface, y - half);
       body.push(block(0.04, half * 2, 0.036, 0, bottom, 0, BAR, 0.008));
       if (bottom - surface < 0.03) body.push(block(0.07, 0.012, 0.06, 0, surface, 0, BAR, 0.004));
-      glow = { at: local(0, bottom + half, -0.021), radii: [0.017, half * 0.92, 0.004], shape: "bar", rotation: turn };
-      beam = { aim: throwAt(0.12), spread: 1.05 };
+      glow = { at: local(0, bottom + half, -0.021), radii: [0.017, half * 0.96, 0.004], shape: "bar", rotation: turn };
+      beam = throwOf("playBar", throwAt);
       break;
     }
     case "signe": {
       // Signe's light is its back: a lit spine up a dark pole, washing the wall it leans to.
       const height = 1.45;
       body.push(rod(0.12, 0.13, 0.015, 0, surface, 0, PALETTE.metal, 20), block(0.03, height, 0.03, 0, surface + 0.015, 0, BAR, 0.006));
-      glow = { at: local(0, surface + 0.015 + height / 2, -0.017), radii: [0.012, height * 0.47, 0.004], shape: "bar", rotation: turn };
-      beam = { aim: throwAt(0.35), spread: 1.1 };
+      glow = { at: local(0, surface + 0.015 + height / 2, -0.017), radii: [0.012, half("signe"), 0.004], shape: "bar", rotation: turn };
+      beam = throwOf("signe", throwAt);
       break;
     }
     case "iris": {
       // Iris: a round glass shade held tilted back in a ring on a low base, its light thrown up and out.
-      const tilt = 0.6;
+      const { tilt } = FIXTURE_LIGHT.iris.throw!;
+      const r = radiusOf("iris");
       const centreY = surface + 0.11;
       body.push(rod(0.055, 0.06, 0.018, 0, surface, 0, CANOPY, 20), block(0.018, centreY - surface, 0.018, 0, surface, 0.035, CANOPY, 0.006));
-      glow = { at: local(0, centreY, 0), radii: [0.085, 0.03, 0.085], shape: "drum", rotation: tilted(tilt) };
-      beam = { aim: throwAt(tilt), spread: 0.8 };
+      glow = { at: local(0, centreY, 0), radii: [r, 0.03, r], shape: "drum", rotation: tilted(tilt) };
+      beam = throwOf("iris", throwAt);
       break;
+    }
+    case "spot": {
+      const headY = Math.max(at.y, surface + 0.12);
+      glow = { at: local(0, headY, 0), radii: [0.045, 0.045, 0.045], shape: "globe" };
+      if (headY - surface <= SPOT_STAND_M) {
+        body.push(rod(0.04, 0.045, 0.02, 0, surface, 0, BAR, 12), rod(0.01, 0.01, Math.max(headY - surface - 0.06, 0.02), 0, surface + 0.02, 0, BAR, 6));
+        beam = throwOf("spot", throwAt);
+        break;
+      }
+      // Stood on the desk below, a spot at head height grew a two-metre pole.
+      body.push(
+        ...overhead([
+          rod(0.008, 0.008, Math.max(ceiling - headY - 0.04, 0.02), 0, headY + 0.04, 0, BAR, 6),
+          rod(0.035, 0.035, 0.015, 0, ceiling - 0.015, 0, CANOPY, 16),
+        ]),
+      );
+      beam = throwOf("hungSpot", throwAt);
+      break;
+    }
+    case "wall": {
+      const y = Math.max(at.y, surface + 0.15);
+      const { height = 0.24 } = FIXTURE_LIGHT.wall;
+      glow = { at: local(0, y, 0), radii: [radiusOf("wall"), height / 2, 0.042], shape: "drum", rotation: turn };
+      beam = throwOf("wall", throwAt);
+      const { back } = FIXTURE_LIGHT.wall;
+      transformParts(body, place);
+      return { body, glow, beam, back: back && { aim: throwAt(back.tilt), spread: back.spread } };
     }
     default: {
       // Bloom: a small bowl tipped on its foot, a wash thrown up the wall in front of it.
-      const tilt = 0.75;
+      const { tilt } = FIXTURE_LIGHT.bloom.throw!;
+      const r = radiusOf("bloom");
       const centreY = surface + 0.08;
       body.push(rod(0.05, 0.055, 0.02, 0, surface, 0, CANOPY, 20));
-      glow = { at: local(0, centreY, 0), radii: [0.065, 0.05, 0.065], shape: "flare", rotation: tilted(tilt) };
-      beam = { aim: throwAt(tilt), spread: 0.75 };
+      glow = { at: local(0, centreY, 0), radii: [r, 0.05, r], shape: "flare", rotation: tilted(tilt) };
+      beam = throwOf("bloom", throwAt);
       break;
     }
   }
   transformParts(body, place);
   return { body, glow, beam };
+}
+
+const half = (family: LampFamily) => (FIXTURE_LIGHT[family].length ?? 0) / 2;
+const radiusOf = (family: LampFamily) => (FIXTURE_LIGHT[family].diameter ?? 0) / 2;
+const spreadOf = (family: LampFamily | "downlight") => FIXTURE_LIGHT[family].throw?.spread ?? 1;
+
+function throwOf(family: LampFamily | "hungSpot", throwAt: (tilt: number) => Vector3): LampFixture["beam"] {
+  const light = FIXTURE_LIGHT[family].throw;
+  return light && { aim: throwAt(light.tilt), spread: light.spread };
 }
 
 function overhead(parts: Part[]): Part[] {
