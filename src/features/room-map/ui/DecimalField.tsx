@@ -9,6 +9,8 @@ import styles from "./DecimalField.module.css";
 interface CommonProps {
   /** The field's name: read out, and its tooltip, since the box itself shows only `prefix`. */
   label: string;
+  /** What the field means, in its tooltip after the name. */
+  tip?: string;
   /** A short mark inside the box — an axis letter or a glyph. */
   prefix?: ReactNode;
   /** Places shown and stored: a value is kept as it reads. */
@@ -74,6 +76,7 @@ export function parseDecimal(text: string): number | null {
 export function DecimalField(props: DecimalFieldProps) {
   const {
     label,
+    tip,
     prefix,
     decimals = 2,
     step = 0.05,
@@ -206,7 +209,7 @@ export function DecimalField(props: DecimalFieldProps) {
         disabled && styles.disabled,
         className,
       )}
-      title={label}
+      title={tip ? `${label} · ${tip}` : label}
       onPointerDown={startScrub}
       onPointerMove={moveScrub}
       onPointerUp={endScrub}

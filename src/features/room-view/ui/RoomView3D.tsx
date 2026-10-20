@@ -36,7 +36,7 @@ import {
 } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-import type { FurniturePlacement, HueChannelPlacement, HueZone, RoomMapConfig } from "@/shared/contracts/roomMap";
+import { type FurniturePlacement, type HueChannelPlacement, type HueZone, type RoomMapConfig, resolveHueFacing } from "@/shared/contracts/roomMap";
 
 import { LAMP_COLOURS } from "../model/lampColours";
 import type { LampFamily } from "../model/lampFamily";
@@ -1288,7 +1288,7 @@ function openRoomView(
         if (!room || !builtConfig) return;
         const { zones, dimensions, tvAnchor } = builtConfig;
         const at = channel && hueChannelScenePoint(channel, zones, dimensions, tvMountHeight(tvAnchor, dimensions));
-        if (room.holdLight(hueChannelObjectId(channelIndex), at)) request();
+        if (room.holdLight(hueChannelObjectId(channelIndex), at, channel ? resolveHueFacing(channel) : undefined)) request();
       },
       setMood(mood) {
         const same = (m: RoomMood | null) =>

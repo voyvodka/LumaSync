@@ -24,6 +24,8 @@ interface PickerListProps<T> {
   onPick: (index: number) => void;
   /** A long list scrolls past this height instead of running off a small window. */
   maxHeight?: number;
+  /** A line under the rows, about the whole list. */
+  footer?: ReactNode;
 }
 
 /**
@@ -45,6 +47,7 @@ export function PickerList<T>({
   isDisabled,
   onPick,
   maxHeight,
+  footer,
 }: PickerListProps<T>) {
   const [picked, setPicked] = useState<number | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -122,6 +125,7 @@ export function PickerList<T>({
           );
         })}
       </div>
+      {footer && <p className={styles.footer}>{footer}</p>}
     </Popover>
   );
 }
