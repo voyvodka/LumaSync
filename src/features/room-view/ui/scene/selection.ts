@@ -13,7 +13,7 @@ const MARGIN = 0.07;
 const LINE = 0.03;
 /** Just over the floor and its decals, under everything standing on it. */
 const FLOOR_LIFT = 0.006;
-/** A piece no taller than this lies on the floor (a rug), and a mark beside it is drawn over it. */
+/** Tallest a rug stands. */
 const FLAT_TOP = 0.03;
 /** A light's ring never shrinks below this radius on screen, however far the view zooms out. */
 const HALO_MIN_PX = 20;
@@ -53,7 +53,7 @@ export function floorBand(w: number, d: number, margin = MARGIN, line = LINE): B
   return geometry;
 }
 
-/** The floor mark's height at a spot: over any rug it reaches, which buried a mark drawn at the floor. */
+/** Over any rug it reaches: a rug buried a mark drawn at the floor. */
 function floorLift(pickables: readonly Pickable[], self: string, x: number, z: number, reach: number): number {
   let lift = FLOOR_LIFT;
   for (const p of pickables) {

@@ -35,8 +35,7 @@ export function pillTexture(px: number, colour: string | null, weight: number): 
       canvas.width = Math.ceil(context.measureText(text).width + inset + r * 0.9);
       canvas.height = height;
       const width = canvas.width;
-      // three allocates a texture's storage once, at its first size: a wider pill uploaded into it
-      // failed with "Offset overflows texture dimensions", so a new size gets new storage.
+      // three sizes a texture's storage once; a wider upload into it fails ("Offset overflows").
       if (width !== drawnWidth && drawnWidth > 0) texture.dispose();
       drawnWidth = width;
       // Nearly solid: a tag on the TV's glow lost its text through a lighter pill.
