@@ -26,7 +26,6 @@ import type { UsbStripConnectionStatus } from "./UsbStripInspector";
 
 const UNASSIGNED = "unassigned";
 const AUTO = "auto";
-/** Held widths, nothing growing: the row reads the same from one light to the next. */
 const HEIGHT_WIDTH = 176;
 const LINKS_WIDTH = 150;
 const wrapDegrees = (degrees: number) => ((degrees % 360) + 360) % 360;

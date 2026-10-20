@@ -247,8 +247,7 @@ export function FieldRow({ fixed = false, children }: { fixed?: boolean; childre
   return <div className={cx(styles.fields, fixed && styles.fixed)}>{children}</div>;
 }
 
-/** A row's text actions in a place of their own width, held when empty, so the row never moves as
- *  they come and go. */
+/** Held when empty, so the row never moves as its links come and go. */
 export function LinkSlot({ width, children }: { width: number; children?: ReactNode }) {
   return (
     <span className={styles.linkSlot} style={{ flexBasis: width }}>
