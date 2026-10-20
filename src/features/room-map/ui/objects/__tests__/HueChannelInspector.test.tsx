@@ -617,6 +617,42 @@ describe("HueChannelInspector — a drag across its fields", () => {
     expect(onHeightChange).toHaveBeenCalledWith(0.6);
   });
 
+  it("turns a light while its facing is dragged and saves the turn once, when let go", () => {
+    const onPreview = vi.fn<(next: HueChannelPlacement | null) => boolean>(() => true);
+    const onUpdate = vi.fn<(patch: Pick<HueChannelPlacement, "facing" | "fixture">) => void>();
+    render(
+      <HueChannelInspector
+        channel={{ ...channel, facing: 0 }}
+        zones={[]}
+        worldZ={0}
+        roomHeightMeters={2.5}
+        world={{ x: 0, y: 0 }}
+        roomWidthMeters={5}
+        roomDepthMeters={4}
+        onMove={vi.fn<(x: number, y: number) => void>()}
+        onHeightChange={vi.fn<(z: number) => void>()}
+        onPreview={onPreview}
+        onRename={vi.fn<(label: string) => void>()}
+        onToggleLock={vi.fn<() => void>()}
+        onClose={vi.fn<() => void>()}
+        modelChoices
+        bridgeFixture="playBar"
+        onUpdate={onUpdate}
+      />,
+    );
+    const box = (screen.getByLabelText("roomMap:inspector.hueFacingLabel") as HTMLInputElement).closest("label")!;
+    fireEvent.pointerDown(box, { button: 0, clientX: 100, pointerId: 1 });
+    fireEvent.pointerMove(box, { clientX: 120, pointerId: 1 });
+    fireEvent.pointerMove(box, { clientX: 140, pointerId: 1 });
+    expect(onPreview).toHaveBeenLastCalledWith(expect.objectContaining({ facing: expect.any(Number) }));
+    const turned = onPreview.mock.lastCall![0]!.facing;
+    expect(turned).toBeGreaterThan(0);
+    expect(onUpdate).not.toHaveBeenCalled();
+    fireEvent.pointerUp(box, { pointerId: 1 });
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onUpdate).toHaveBeenCalledWith({ facing: turned });
+  });
+
   it("writes each step where no room view can show it", () => {
     const { onHeightChange } = renderHeld(() => false);
     fireEvent.change(screen.getByRole("slider"), { target: { value: "0.6" } });

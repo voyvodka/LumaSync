@@ -179,8 +179,9 @@ export interface RoomScene {
   /** A zone carried or resized, as its whole box on the plan rectangle; null sets it down. */
   holdZone(zoneId: string, rect: ZoneRect | null, centerZ?: number): boolean;
   /** A light's dock fields while dragged: its box where they put its stored point, as a carried light
-   *  shows it; null hides it. The lamp moves when the room is built again. */
-  holdLight(objectId: string, at: ScenePoint | null): boolean;
+   *  shows it, turned to `facing` (degrees) when one is held; null hides it. The lamp moves when the
+   *  room is built again. */
+  holdLight(objectId: string, at: ScenePoint | null, facing?: number): boolean;
   /** Turns what faces the camera (the selection's ring, a zone's name) to it; call before each draw. */
   faceCamera(cameraQuaternion: Quaternion, camera?: Camera): void;
   /** `null` keeps each lamp's own colour; a palette gives lamp i stop i mod n. */
@@ -616,7 +617,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
     select: mark.select,
     markZones: zoneBoxes.mark,
     holdZone: zoneBoxes.hold,
-    holdLight(objectId, at) {
+    holdLight(objectId, at, facing) {
       const item = at && pickables.find((p) => p.id === objectId && p.kind === "light");
       if (!at || !item) {
         if (!heldLight.visible) return false;
@@ -627,6 +628,7 @@ export function buildRoomScene(config: RoomMapConfig, options: RoomSceneOptions)
       const from = item.stored ?? item.centre;
       heldLight.scale.set(hx * 2, Math.max(hy * 2, 0.05), hz * 2);
       heldLight.position.set(at.x + item.centre.x - from.x, Math.max(at.y + item.centre.y - from.y, 0.025), at.z + item.centre.z - from.z);
+      heldLight.rotation.y = facing === undefined ? 0 : (-facing * Math.PI) / 180;
       heldLight.visible = true;
       return true;
     },

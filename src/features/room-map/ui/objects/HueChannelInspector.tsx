@@ -135,6 +135,18 @@ export function HueChannelInspector({
     const next = planMetresToHue(x, y, roomWidthMeters, roomDepthMeters);
     if (!held || !hold({ ...at, x: next.x, y: next.y })) onMove(next.x, next.y);
   };
+  // Each step saved rebuilt the room, and turning a light stuttered: held like the position.
+  const [heldFacing, setHeldFacing] = useState<{ value: number | undefined } | null>(null);
+  const turnTo = (facing: number | undefined, held = false) => {
+    if (held && onPreview?.({ ...channel, facing })) return setHeldFacing({ value: facing });
+    onUpdate?.({ facing });
+  };
+  const letGoFacing = () => {
+    if (!heldFacing) return;
+    setHeldFacing(null);
+    if (heldFacing.value === resolveHueFacing(channel)) return void onPreview?.(null);
+    onUpdate?.({ facing: heldFacing.value });
+  };
   const raiseTo = (z: number) => {
     if (!hold({ ...at, z })) onHeightChange(z);
   };
@@ -308,7 +320,7 @@ export function HueChannelInspector({
                 label={t("roomMap:inspector.hueFacingLabel")}
                 tip={oneSided ? t("roomMap:inspector.hueFacingInfo", { degrees: autoFacing }) : t("roomMap:inspector.hueFacingNone")}
                 prefix={<GlyphRotation />}
-                value={oneSided ? resolveHueFacing(channel) : undefined}
+                value={oneSided ? (heldFacing ? heldFacing.value : resolveHueFacing(channel)) : undefined}
                 placeholder={oneSided ? String(autoFacing) : "–"}
                 decimals={0}
                 step={15}
@@ -317,7 +329,8 @@ export function HueChannelInspector({
                 normalize={wrapDegrees}
                 unit="°"
                 disabled={locked || !oneSided}
-                onCommit={(facing) => onUpdate({ facing })}
+                onCommit={turnTo}
+                onScrubEnd={letGoFacing}
               />
             </FieldRow>
           )}
