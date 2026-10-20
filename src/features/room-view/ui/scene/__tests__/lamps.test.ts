@@ -77,6 +77,14 @@ describe("lampFixture", () => {
     expect(beam!.aim.z).toBeLessThan(-0.5);
   });
 
+  it("hangs a spot too high to stand from the ceiling, aimed down the wall it faces", () => {
+    const { body, beam } = lampFixture("spot", { ...at, y: 2.1 }, 0.75, 2.5);
+    expect(bounds(body).min.y).toBeGreaterThan(2);
+    expect(bounds(body).max.y).toBeCloseTo(2.5, 5);
+    expect(beam!.aim.y).toBeLessThan(-0.3);
+    expect(beam!.aim.z).toBeLessThan(-0.5);
+  });
+
   // Each fixture lit from a point at its middle, all round or tilted up where the real one is not.
   describe("lets its light out as the fixture does", () => {
     it("lights a Play bar's and a Signe's whole height, level toward the wall", () => {

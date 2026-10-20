@@ -131,8 +131,8 @@ const LIT_POOL_SHARE = 0.85;
 /** Unit size 2, so a lamp's half-extents are its scale. */
 const SHAPES: ReadonlyArray<{ shape: LampShape; geometry: () => BufferGeometry }> = [
   { shape: "globe", geometry: () => new SphereGeometry(1, 16, 12) },
-  { shape: "drum", geometry: () => new CylinderGeometry(1, 1, 2, 28) },
-  { shape: "flare", geometry: () => new CylinderGeometry(0.4, 1, 2, 28) },
+  { shape: "drum", geometry: () => new CylinderGeometry(1, 1, 2, 48) },
+  { shape: "flare", geometry: () => new CylinderGeometry(0.4, 1, 2, 48) },
   { shape: "bar", geometry: () => new BoxGeometry(2, 2, 2) },
 ];
 const FLAT = new Quaternion().setFromEuler(new Object3D().rotateX(-Math.PI / 2).rotation);

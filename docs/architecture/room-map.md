@@ -654,10 +654,12 @@ Showroom fell from about 60 ms of main-thread work to about 16 ms.
   A light thrown straight down — a pendant, a downlight — reads nearly as well from a point, so the
   cones go to the sideways ones first.
 - **Each fixture lets its light out the way the product does** (`model/fixtureLight.ts`). One table
-  holds, per fixture, the lit part's size and its throw's spread and tilt. Values marked `checked`
-  come from Philips Hue product pages: the sizes, and the 40° of a Centura or Fugato spot. Philips
-  states no angle for its decorative lamps, so the other spreads and tilts are recalled, and the
-  table is where a correction goes. A Play bar and a Signe throw level toward their wall, not
+  holds, per fixture, the lit part's size and its throw's spread and tilt. The sizes come from
+  Philips Hue product pages, as does the 40° of a Centura or Fugato spot. Philips states no angle
+  for its decorative lamps, so the other spreads and tilts are recalled, and the table is where a
+  correction goes. Which is which lives in its comments, not a field: the 3D chunk has no bytes for
+  data nothing reads. A spot whose head is more than 60 cm over what is under it hangs from the
+  ceiling, aimed down the wall it faces; standing on the desk, it grew a two-metre pole. A Play bar and a Signe throw level toward their wall, not
   tilted up. A ceiling light throws down. A spot on a stand is aimed up the wall it faces, and a
   wall light up and down it (`back`, a second throw that is drawn but never gets a real light). A
   strip is 2 m and a tube 1.377 m. A pendant is a Cher's 47.5 cm dish, lit all over though the

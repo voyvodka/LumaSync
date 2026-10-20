@@ -34,6 +34,8 @@ export interface LampFixture {
 const CANOPY = 0xefe9df;
 const BAR = 0x1d1e21;
 const BULB_RADIUS = 0.055;
+/** A spot's head higher than this over what is under it hangs from the ceiling instead of standing. */
+const SPOT_STAND_M = 0.6;
 /** A bulb in a ceiling socket hangs this far below on its cord. */
 const BULB_DROP = 0.32;
 
@@ -42,7 +44,7 @@ const BULB_DROP = 0.32;
  *  the map put it; the body is drawn around it. */
 export function lampFixture(family: LampFamily, at: ScenePoint, surface: number, ceiling: number, facing = 0): LampFixture {
   const recessed = family === "spot" && at.y >= ceiling - CEILING_MOUNT_M;
-  if (ONE_SIDED.has(family) && !recessed) return oneSided(family, at, surface, facing);
+  if (ONE_SIDED.has(family) && !recessed) return oneSided(family, at, surface, ceiling, facing);
   const { x, z } = at;
   const y = Math.max(at.y, surface + 0.05);
   switch (family) {
@@ -127,7 +129,7 @@ export function lampFixture(family: LampFamily, at: ScenePoint, surface: number,
 }
 
 /** Turned to face the throw: the lit side of the fixture's local frame looks down -z. */
-function oneSided(family: LampFamily, at: ScenePoint, surface: number, facing: number): LampFixture {
+function oneSided(family: LampFamily, at: ScenePoint, surface: number, ceiling: number, facing: number): LampFixture {
   const place = new Matrix4().makeTranslation(at.x, 0, at.z).multiply(new Matrix4().makeRotationY(-facing));
   const turn = new Quaternion().setFromAxisAngle(UP, -facing);
   const local = (x: number, y: number, z: number): ScenePoint => {
@@ -172,9 +174,20 @@ function oneSided(family: LampFamily, at: ScenePoint, surface: number, facing: n
     }
     case "spot": {
       const headY = Math.max(at.y, surface + 0.12);
-      body.push(rod(0.04, 0.045, 0.02, 0, surface, 0, BAR, 12), rod(0.01, 0.01, Math.max(headY - surface - 0.06, 0.02), 0, surface + 0.02, 0, BAR, 6));
       glow = { at: local(0, headY, 0), radii: [0.045, 0.045, 0.045], shape: "globe" };
-      beam = throwOf("spot", throwAt);
+      if (headY - surface <= SPOT_STAND_M) {
+        body.push(rod(0.04, 0.045, 0.02, 0, surface, 0, BAR, 12), rod(0.01, 0.01, Math.max(headY - surface - 0.06, 0.02), 0, surface + 0.02, 0, BAR, 6));
+        beam = throwOf("spot", throwAt);
+        break;
+      }
+      // Stood on the desk below, a spot at head height grew a two-metre pole.
+      body.push(
+        ...overhead([
+          rod(0.008, 0.008, Math.max(ceiling - headY - 0.04, 0.02), 0, headY + 0.04, 0, BAR, 6),
+          rod(0.035, 0.035, 0.015, 0, ceiling - 0.015, 0, CANOPY, 16),
+        ]),
+      );
+      beam = throwOf("hungSpot", throwAt);
       break;
     }
     case "wall": {
@@ -205,7 +218,7 @@ const half = (family: LampFamily) => (FIXTURE_LIGHT[family].length ?? 0) / 2;
 const radiusOf = (family: LampFamily) => (FIXTURE_LIGHT[family].diameter ?? 0) / 2;
 const spreadOf = (family: LampFamily | "downlight") => FIXTURE_LIGHT[family].throw?.spread ?? 1;
 
-function throwOf(family: LampFamily, throwAt: (tilt: number) => Vector3): LampFixture["beam"] {
+function throwOf(family: LampFamily | "hungSpot", throwAt: (tilt: number) => Vector3): LampFixture["beam"] {
   const light = FIXTURE_LIGHT[family].throw;
   return light && { aim: throwAt(light.tilt), spread: light.spread };
 }
