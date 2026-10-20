@@ -678,7 +678,8 @@ Showroom fell from about 60 ms of main-thread work to about 16 ms.
   surface itself and was turned down: it does not light the room's Lambert surfaces, casts no
   shadow, and its lookup tables would not fit the 3D chunk's budget. More spots per bar were
   turned down too, since the light count is fixed. The two-way archetypes (`up_and_down*`,
-  `twilight*`, `pendant_long`) keep their one-way drawing until a fixture of their own (#543).
+  `twilight*`, `pendant_long`) keep their one-way drawing until a fixture of their own: a new
+  `HueFixture` value, and with it a room-map contract change.
 - **A light at the ceiling is drawn as one that hangs there** (`scene/lamps.ts`). A spot at the
   ceiling is a downlight — a trim ring round a lens that stands proud of it, since the camera only
   ever sees the ceiling from above — and a bulb there hangs on a short cord from a socket. Both,
