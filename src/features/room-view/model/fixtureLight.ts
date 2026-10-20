@@ -30,13 +30,12 @@ export const FIXTURE_LIGHT: Readonly<Record<LampFamily | "downlight", FixtureLig
   iris: { throw: { spread: 0.8, tilt: 0.6 }, diameter: 0.2, checked: ["diameter"] },
   bloom: { throw: { spread: 0.75, tilt: 0.75 }, diameter: 0.13, checked: ["diameter"] },
   go: { diameter: 0.15, checked: ["diameter"] },
-  // A Cher: a dish shade lit only at its open bottom.
   pendant: { throw: { spread: 1.05, tilt: DOWN }, diameter: 0.475, checked: ["diameter"] },
   ceiling: { throw: { spread: 1.2, tilt: DOWN }, diameter: 0.425, checked: ["diameter"] },
   // Fugato and Runner heads are 40°, as is a Centura set in the ceiling.
   spot: { throw: { spread: 0.35, tilt: 0.5 }, checked: ["spread"] },
   downlight: { throw: { spread: 0.35, tilt: DOWN }, checked: ["spread"] },
-  // An Appear: sharp wedges up and down the wall from a 24 cm box.
+  // An Appear: sharp wedges up and down from a 24 cm box.
   wall: { throw: { spread: 0.35, tilt: 1.4 }, back: { spread: 0.35, tilt: -1.4 }, height: 0.24, diameter: 0.117, checked: ["height", "diameter"] },
   // Stated 120°, but the map does not know which way a strip is stuck, so it lights all round.
   lightstrip: { length: 2, checked: ["length"] },

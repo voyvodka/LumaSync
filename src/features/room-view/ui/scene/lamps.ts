@@ -71,8 +71,7 @@ export function lampFixture(family: LampFamily, at: ScenePoint, surface: number,
     case "pendant": {
       // Hung at least to head height: placed on the floor, its cord ran the room's height.
       const shadeY = Math.min(Math.max(y, 1.2), ceiling - 0.3);
-      // The dish is the lit part though a Cher's is opaque: the camera is above, where a dark shade
-      // over a lit mouth read as a lamp switched off.
+      // Lit all over though a Cher's dish is opaque: from the camera above, a dark dish read as off.
       const r = radiusOf("pendant");
       return {
         body: overhead([
