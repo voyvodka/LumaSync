@@ -1,5 +1,6 @@
 @layer components {
   .slider {
+    position: relative;
     display: flex;
     flex: 1 1 140px;
     align-items: center;
@@ -54,6 +55,20 @@
     font-variant-numeric: tabular-nums;
     text-align: right;
     color: var(--lm-ink);
+  }
+
+  /* Under the track, clear of the thumb: the row is 32 px and the track sits at its middle. */
+  .note {
+    position: absolute;
+    right: 8px;
+    bottom: -1px;
+    left: 28px;
+    overflow: hidden;
+    font: 9.5px/1 var(--lm-mono);
+    color: var(--lm-ink-faint);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    pointer-events: none;
   }
 
   @media (forced-colors: active) {

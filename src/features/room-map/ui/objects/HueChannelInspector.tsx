@@ -9,7 +9,6 @@ import {
   resolveHueFacing,
   resolveHueFixture,
 } from "@/shared/contracts/roomMap";
-import { InfoTip } from "@/shared/ui/InfoTip/InfoTip";
 import { StateWord } from "@/shared/ui/StateWord/StateWord";
 
 import { furnitureName } from "../../model/furnitureName";
@@ -20,13 +19,16 @@ import { getZoneColor } from "../../model/zoneColor";
 import { DecimalField } from "../DecimalField";
 import { DockPicker } from "../dock/DockPicker";
 import { DockSlider } from "../dock/DockSlider";
-import { Actions, Disc, FieldRow, InspectorRows, Mark, Meta, NameField, Note, RowLink, Status } from "../dock/InspectorParts";
+import { Actions, Disc, FieldRow, InspectorRows, LinkSlot, Mark, Meta, NameField, Note, RowLink, Status } from "../dock/InspectorParts";
 import { FAMILY_KEY } from "../view/viewLightLabel";
 import { GlyphHeight, GlyphRotation } from "./fieldGlyphs";
 import type { UsbStripConnectionStatus } from "./UsbStripInspector";
 
 const UNASSIGNED = "unassigned";
 const AUTO = "auto";
+/** Held widths, nothing growing: the row reads the same from one light to the next. */
+const HEIGHT_WIDTH = 176;
+const LINKS_WIDTH = 150;
 const wrapDegrees = (degrees: number) => ((degrees % 360) + 360) % 360;
 const metresToHue = (metres: number, roomHeight: number) => Math.min(Math.max((metres / roomHeight) * 2 - 1, -1), 1);
 /** On the top, give or take a Play bar's middle above it. */
@@ -149,6 +151,7 @@ export function HueChannelInspector({
 
   const fixture = resolveHueFixture(channel);
   const drawnAs = fixture ?? bridgeFixture ?? "bulb";
+  const oneSided = ONE_SIDED.has(drawnAs);
   const shownMetres = hueToMetres(shownZ, roomHeightMeters);
   /** Where `family` hangs in the cube, or null when it stands, is hung already, or its zone stops short. */
   const hangZ = (family: LampFamily): number | null => {
@@ -251,6 +254,7 @@ export function HueChannelInspector({
           <DockSlider
             label={t("roomMap:inspector.hueHeightAriaLabel")}
             prefix={<GlyphHeight />}
+            width={HEIGHT_WIDTH}
             min={minZ}
             max={maxZ}
             step={0.01}
@@ -265,17 +269,21 @@ export function HueChannelInspector({
               label: t(heightBandKey(shownZ)),
             })}
             readout={t("roomMap:inspector.hueHeightReadout", { metres: heightMetres(shownZ) })}
+            note={
+              limitingZone ? t("roomMap:inspector.hueHeightZoneShort", { min: heightMetres(minZ), max: heightMetres(maxZ) }) : undefined
+            }
           />
-          {hangTo !== null && !locked && (
-            <RowLink onClick={() => onHeightChange(hangTo)}>{t("roomMap:inspector.hueHang")}</RowLink>
-          )}
-          {seat && !HANGING_FIXTURES.has(drawnAs) && !standsOn(shownMetres, seat.top) && !locked && (
-            <RowLink onClick={() => onHeightChange(metresToHue(seat.top, roomHeightMeters))}>
-              {t("roomMap:inspector.hueSeatOn", {
-                name: furnitureName(seat.item, t),
-              })}
-            </RowLink>
-          )}
+          {/* Held while empty: a link that came with a new height shrank the slider under the thumb. */}
+          <LinkSlot width={LINKS_WIDTH}>
+            {hangTo !== null && !locked && <RowLink onClick={() => onHeightChange(hangTo)}>{t("roomMap:inspector.hueHang")}</RowLink>}
+            {seat && !HANGING_FIXTURES.has(drawnAs) && !standsOn(shownMetres, seat.top) && !locked && (
+              <RowLink onClick={() => onHeightChange(metresToHue(seat.top, roomHeightMeters))}>
+                {t("roomMap:inspector.hueSeatOn", {
+                  name: furnitureName(seat.item, t),
+                })}
+              </RowLink>
+            )}
+          </LinkSlot>
           {modelChoices && onUpdate && (
             <FieldRow>
               <DockPicker<LampFamily | typeof AUTO>
@@ -283,6 +291,7 @@ export function HueChannelInspector({
                 value={fixture ?? AUTO}
                 width={176}
                 disabled={locked}
+                note={t("roomMap:inspector.hueModelInfo")}
                 options={[
                   {
                     value: AUTO,
@@ -294,39 +303,24 @@ export function HueChannelInspector({
                 ]}
                 onChange={pickFixture}
               />
-              <InfoTip label={t("common:hintFor", { label: t("roomMap:inspector.modelLabel") })}>{t("roomMap:inspector.hueModelInfo")}</InfoTip>
-              {ONE_SIDED.has(drawnAs) && (
-                <>
-                  <DecimalField
-                    optional
-                    label={t("roomMap:inspector.hueFacingLabel")}
-                    prefix={<GlyphRotation />}
-                    value={resolveHueFacing(channel)}
-                    placeholder={String(autoFacing)}
-                    decimals={0}
-                    step={15}
-                    min={0}
-                    max={359}
-                    normalize={wrapDegrees}
-                    unit="°"
-                    disabled={locked}
-                    onCommit={(facing) => onUpdate({ facing })}
-                  />
-                  <InfoTip label={t("common:hintFor", { label: t("roomMap:inspector.hueFacingLabel") })}>
-                    {t("roomMap:inspector.hueFacingInfo", { degrees: autoFacing })}
-                  </InfoTip>
-                </>
-              )}
+              {/* Always in its place, so the row reads the same from one light to the next. */}
+              <DecimalField
+                optional
+                label={t("roomMap:inspector.hueFacingLabel")}
+                tip={oneSided ? t("roomMap:inspector.hueFacingInfo", { degrees: autoFacing }) : t("roomMap:inspector.hueFacingNone")}
+                prefix={<GlyphRotation />}
+                value={oneSided ? resolveHueFacing(channel) : undefined}
+                placeholder={oneSided ? String(autoFacing) : "–"}
+                decimals={0}
+                step={15}
+                min={0}
+                max={359}
+                normalize={wrapDegrees}
+                unit="°"
+                disabled={locked || !oneSided}
+                onCommit={(facing) => onUpdate({ facing })}
+              />
             </FieldRow>
-          )}
-          {limitingZone && (
-            <InfoTip label={t("common:hintFor", { label: t("roomMap:inspector.hueHeightLabel") })}>
-              {t("roomMap:inspector.hueHeightZoneLimit", {
-                name: limitingZone.name,
-                min: heightMetres(minZ),
-                max: heightMetres(maxZ),
-              })}
-            </InfoTip>
           )}
         </>
       }

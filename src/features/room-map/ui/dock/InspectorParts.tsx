@@ -165,6 +165,7 @@ export function RowLink({
       ref={ref}
       type="button"
       className={styles.link}
+      title={typeof children === "string" ? children : undefined}
       aria-haspopup={menu ? "listbox" : undefined}
       aria-expanded={menu?.open}
       aria-controls={menu?.open ? menu.id : undefined}
@@ -244,4 +245,14 @@ export function FieldTip({ children }: { children: ReactNode }) {
  *  fields' own width, so what follows it never moves when another part of the row changes. */
 export function FieldRow({ fixed = false, children }: { fixed?: boolean; children: ReactNode }) {
   return <div className={cx(styles.fields, fixed && styles.fixed)}>{children}</div>;
+}
+
+/** A row's text actions in a place of their own width, held when empty, so the row never moves as
+ *  they come and go. */
+export function LinkSlot({ width, children }: { width: number; children?: ReactNode }) {
+  return (
+    <span className={styles.linkSlot} style={{ flexBasis: width }}>
+      {children}
+    </span>
+  );
 }

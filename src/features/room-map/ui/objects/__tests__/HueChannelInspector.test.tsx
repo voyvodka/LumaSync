@@ -7,14 +7,13 @@ import { HueChannelInspector } from "../HueChannelInspector";
 import type { HueChannelPlacement } from "@/shared/contracts/roomMap";
 
 const FIXTURE_LOCALES: Record<string, string> = {
-  "roomMap:inspector.hueHeightLabel": "Height",
   "roomMap:inspector.hueHeightAriaLabel": "Channel height, floor to ceiling",
   "roomMap:inspector.hueHeightFloor": "floor level",
   "roomMap:inspector.hueHeightEye": "eye level",
   "roomMap:inspector.hueHeightCeiling": "ceiling level",
   "roomMap:inspector.hueHeightValueText": "{{metres}} m — {{label}}",
   "roomMap:inspector.hueHeightReadout": "{{metres}} m",
-  "roomMap:inspector.hueHeightZoneLimit": "{{name}}: {{min}}–{{max}} m",
+  "roomMap:inspector.hueHeightZoneShort": "zone: {{min}}–{{max}} m",
 };
 
 vi.mock("react-i18next", () => ({
@@ -205,8 +204,7 @@ describe("HueChannelInspector height inside a zone", () => {
     const slider = screen.getByRole("slider");
     expect(slider.getAttribute("aria-valuemin")).toBe("-0.5");
     expect(slider.getAttribute("aria-valuemax")).toBe("0.5");
-    fireEvent.click(screen.getByRole("button", { name: "common:hintFor" }));
-    expect(screen.getByText("Sofa: 0.63–1.88 m")).toBeInTheDocument();
+    expect(screen.getByText("zone: 0.63–1.88 m")).toBeInTheDocument();
   });
 
   it("shows no limit for a zone as tall as the room", () => {
@@ -227,7 +225,7 @@ describe("HueChannelInspector height inside a zone", () => {
         onClose={vi.fn<() => void>()}
       />,
     );
-    expect(screen.queryByRole("button", { name: "common:hintFor" })).toBeNull();
+    expect(screen.queryByText(/^zone:/)).toBeNull();
   });
 });
 
@@ -405,12 +403,20 @@ describe("HueChannelInspector model and facing", () => {
     expect(onUpdate).toHaveBeenCalledWith({ facing: 90 });
   });
 
-  it("asks no facing of a light that lights all round, unless its model is set to a one-sided one", () => {
+  // Hidden for a light that lights all round, the field took the row's next parts with it.
+  it("holds the facing in its place but off for a light that lights all round, unless its model is one-sided", () => {
     renderModel({}, "floorLamp");
-    expect(screen.queryByLabelText("roomMap:inspector.hueFacingLabel")).toBeNull();
+    expect((screen.getByLabelText("roomMap:inspector.hueFacingLabel") as HTMLInputElement).disabled).toBe(true);
     cleanup();
     renderModel({ fixture: "iris" }, "floorLamp");
-    expect(screen.getByLabelText("roomMap:inspector.hueFacingLabel")).toBeTruthy();
+    expect((screen.getByLabelText("roomMap:inspector.hueFacingLabel") as HTMLInputElement).disabled).toBe(false);
+  });
+
+  it("says what Auto means under the model list, with no separate ⓘ", () => {
+    renderModel({}, "playBar");
+    expect(screen.queryByRole("button", { name: "common:hintFor" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^roomMap:inspector.modelLabel/ }));
+    expect(screen.getByText("roomMap:inspector.hueModelInfo")).toBeInTheDocument();
   });
 });
 
@@ -533,6 +539,22 @@ describe("HueChannelInspector standing on a piece", () => {
   it("offers no ceiling to a bulb on a piece, which is a lamp's", () => {
     renderSeat(-1);
     expect(screen.queryByText("roomMap:inspector.hueHang")).toBeNull();
+  });
+
+  // A link that came with a new height shrank the slider, and the thumb jumped under the pointer.
+  it("keeps the slider's place whether a link is offered or not", () => {
+    const parts = () => {
+      const slider = screen.getByRole("slider").closest("label")!;
+      const row = slider.parentElement!;
+      return { index: [...row.children].indexOf(slider), count: row.children.length, flex: slider.style.flex };
+    };
+    renderSeat(-1);
+    expect(screen.getByText("roomMap:inspector.hueSeatOn")).toBeInTheDocument();
+    const offered = parts();
+    cleanup();
+    renderSeat(0.8 / 2.5 * 2 - 1);
+    expect(parts()).toEqual(offered);
+    expect(offered.flex).toBe("0 1 176px");
   });
 
   it("offers no piece to stand a pendant or a ceiling light on", () => {

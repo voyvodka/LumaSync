@@ -183,6 +183,18 @@
     cursor: pointer;
     transition: color var(--lm-dur-quick), background var(--lm-dur-quick);
   }
+  .linkSlot {
+    display: flex;
+    flex: 0 1 auto;
+    align-items: center;
+    min-width: 0;
+  }
+  .linkSlot > .link {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .link:hover:not(:disabled) { color: var(--lm-ink); background: rgb(255 255 255 / 4%); }
   .link:focus-visible {
     outline: 2px solid transparent;
