@@ -23,6 +23,9 @@ const HALO_MIN_PX = 20;
 const STRIP_MARGIN = 0.025;
 const STRIP_LINE = 0.012;
 const CORNER_STEPS = 6;
+/** A light this long and this much longer than thick is framed along it: a Signe's ring by its height was a 1.6 m disc. */
+const LONG_LIGHT_M = 0.1;
+const LONG_RATIO = 2;
 
 /** Stitched by hand: `ShapeGeometry` pulled three's whole curve family into the chunk. */
 export function floorBand(w: number, d: number, margin = MARGIN, line = LINE): BufferGeometry {
@@ -149,7 +152,9 @@ export function buildSelectionMark(pickables: readonly Pickable[]): SelectionMar
       }
       group.visible = true;
       const [hx, hy, hz] = item.half;
-      if (item.line) {
+      const sorted = [...item.half].sort((a, b) => b - a);
+      const long = item.kind === "light" && sorted[0]! >= LONG_LIGHT_M && sorted[0]! >= LONG_RATIO * sorted[1]!;
+      if (item.line || long) {
         // A ring sized to a strip's length circled half the room. A bent strip is framed leg by leg.
         halo.visible = false;
         haloThrough.visible = false;
