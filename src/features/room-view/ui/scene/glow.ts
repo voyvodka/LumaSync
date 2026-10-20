@@ -35,6 +35,8 @@ export interface Lamp {
   rotation?: Quaternion;
   /** A one-sided fixture's cone. */
   beam?: { aim: Vector3; spread: number };
+  /** Its second throw, drawn only. */
+  back?: { aim: Vector3; spread: number };
   color: number;
   /** One of the house's own lights: its own white at its own level, whatever mode runs. */
   own?: boolean;
@@ -62,6 +64,18 @@ export interface WallPlane {
 /** How near a wall a lamp must be to wash it. */
 const WASH_REACH = 1.6;
 const WASH_SIZE = 2.4;
+/** A lit part this long is a line source: its wash is a stripe along it, kept under a real light too. */
+const LINE_SOURCE_M = 0.2;
+/** A line source's wash across it, as a share of a round lamp's. */
+const LINE_ACROSS = 0.45;
+/** A line source under a real light keeps its stripe this bright: the light alone leaves a round spot. */
+const LIT_WASH_SHARE = 0.6;
+
+/** Half the lit part's extent along `axis`: its box seen from that side. */
+export function extent(lamp: Lamp, axis: Vector3): number {
+  const turn = lamp.rotation ?? new Quaternion();
+  return [new Vector3(1, 0, 0), new Vector3(0, 1, 0), new Vector3(0, 0, 1)].reduce((sum, unit, i) => sum + Math.abs(unit.applyQuaternion(turn).dot(axis)) * lamp.radii[i]!, 0);
+}
 
 /** Data, never a drawn gradient: WebKit's straight-alpha upload wrapped dithered channels to ~0. */
 function alphaTexture(size: number, alphaAt: (u: number, v: number) => number): CanvasTexture {
@@ -205,9 +219,11 @@ export function buildGlow(
   const washes: Array<{ wall: number; matrix: Matrix4 }> = [];
   const washLamps: Array<{ lamp: number; fade: number }> = [];
   const p = new Vector3();
+  const vertical = new Vector3(0, 1, 0);
   lamps.forEach((lamp, lampIndex) => {
+    const line = Math.max(...lamp.radii) * 2 >= LINE_SOURCE_M;
     // A light thrown straight down lights the floor, not the wall beside it: washed, a downlight read as a sconce.
-    if (lamp.outside || lamp.litByLight || (lamp.beam && lamp.beam.aim.y < -0.9)) return;
+    if (lamp.outside || (lamp.litByLight && !line) || (lamp.beam && lamp.beam.aim.y < -0.9)) return;
     p.set(lamp.at.x, lamp.at.y, lamp.at.z);
     walls.forEach((wall, wallIndex) => {
       const distance = wall.offset + p.dot(wall.normal);
@@ -218,15 +234,20 @@ export function buildGlow(
       if (Math.abs(along - wall.centre) > wall.halfLength) return;
       const fade = 1 - distance / WASH_REACH;
       const size = WASH_SIZE * (0.6 + 0.4 * fade);
+      // Shaped like what lights it: a Signe's stripe up the wall, a tube's band along it, a bulb's round pool.
+      const alongWall = new Vector3(Math.abs(wall.normal.z), 0, Math.abs(wall.normal.x));
+      const base = line ? size * LINE_ACROSS : size;
+      const wide = base + 2 * extent(lamp, alongWall);
+      const tall = base + 2 * extent(lamp, vertical);
       const onWall = p.clone().addScaledVector(wall.normal, -distance + 0.004);
-      onWall.y = Math.min(Math.max(lamp.at.y, size * 0.35), wallTop - size * 0.35);
+      onWall.y = Math.min(Math.max(lamp.at.y, tall * 0.35), wallTop - tall * 0.35);
       // Kept off the wall's ends, so a lamp in a corner does not wash the air outside the room.
-      const reach = Math.max(wall.halfLength - size / 2, 0);
+      const reach = Math.max(wall.halfLength - wide / 2, 0);
       if (wall.normal.z !== 0) onWall.x = Math.min(Math.max(onWall.x, wall.centre - reach), wall.centre + reach);
       else onWall.z = Math.min(Math.max(onWall.z, wall.centre - reach), wall.centre + reach);
       const facing = new Quaternion().setFromUnitVectors(new Vector3(0, 0, 1), wall.normal);
-      washes.push({ wall: wallIndex, matrix: new Matrix4().compose(onWall, facing, new Vector3(size, size, 1)) });
-      washLamps.push({ lamp: lampIndex, fade });
+      washes.push({ wall: wallIndex, matrix: new Matrix4().compose(onWall, facing, new Vector3(wide, tall, 1)) });
+      washLamps.push({ lamp: lampIndex, fade: fade * (lamp.litByLight ? LIT_WASH_SHARE : 1) });
     });
   });
   const washMesh = washes.length > 0 ? new InstancedMesh(new PlaneGeometry(1, 1), additive(surface, 0.55), washes.length) : null;

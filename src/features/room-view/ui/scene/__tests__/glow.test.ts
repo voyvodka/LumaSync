@@ -1,4 +1,4 @@
-import { Color, type InstancedMesh, Matrix4, Texture, Vector3 } from "three";
+import { Color, type InstancedMesh, Matrix4, Quaternion, Texture, Vector3 } from "three";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { buildGlow, poolTexture, type WallPlane } from "../glow";
@@ -80,6 +80,39 @@ describe("buildGlow — by a wall and the house's own lights", () => {
       buildGlow([{ ...lamp(-1.5), beam }], [wall], 2.5, new Texture())!.objects.filter((mesh) => mesh.geometry.type === "PlaneGeometry").length;
     expect(planes()).toBe(2);
     expect(planes({ aim: new Vector3(0, -1, 0), spread: 0.5 })).toBe(1);
+  });
+
+  // Every lamp washed the wall with the same round pool, a Signe's 1.4 m spine as a bulb's.
+  describe("a wall wash shaped like what lights it", () => {
+    const side: WallPlane = { normal: new Vector3(1, 0, 0), offset: 2, centre: 0, halfLength: 2 };
+    const back: WallPlane = { normal: new Vector3(0, 0, 1), offset: 2, centre: 0, halfLength: 2.5 };
+    const washOf = (radii: [number, number, number], wall: WallPlane, litByLight = false) => {
+      const at = wall === side ? { x: -1.5, y: 1, z: 0 } : { x: 0, y: 1, z: -1.5 };
+      const planes = buildGlow([{ at, radii, color: 0xffaa00, litByLight }], [wall], 2.5, new Texture())!.objects.filter((mesh) => mesh.geometry.type === "PlaneGeometry");
+      if (planes.length < 2) return null;
+      const m = new Matrix4();
+      planes[1]!.getMatrixAt(0, m);
+      const scale = new Vector3();
+      m.decompose(new Vector3(), new Quaternion(), scale);
+      return { wide: Math.abs(scale.x), tall: Math.abs(scale.y) };
+    };
+
+    it("is round for a bulb", () => {
+      const { wide, tall } = washOf([0.05, 0.05, 0.05], side)!;
+      expect(wide).toBeCloseTo(tall);
+    });
+
+    it("is a stripe up the wall for a Signe and a band along it for a tube", () => {
+      const signe = washOf([0.012, 0.685, 0.004], side)!;
+      expect(signe.tall).toBeGreaterThan(signe.wide * 2);
+      const tube = washOf([0.625, 0.02, 0.02], back)!;
+      expect(tube.wide).toBeGreaterThan(tube.tall * 1.5);
+    });
+
+    it("keeps a line source's stripe under a real light, and no round wash", () => {
+      expect(washOf([0.012, 0.685, 0.004], side, true)).not.toBeNull();
+      expect(washOf([0.05, 0.05, 0.05], side, true)).toBeNull();
+    });
   });
 
   it("burns a house light in its own colour at its own level, whatever the mode paints", () => {
