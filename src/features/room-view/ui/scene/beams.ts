@@ -1,6 +1,5 @@
-// While the room is edited, a one-sided light's throw is drawn as a soft fan opening from its whole
-// lit part — a Play bar's 25 cm, a Signe's height — so which way it shines reads without lighting the
-// room. An all-round bulb already reads by its glow.
+// While the room is edited, a one-sided light's throw is drawn as a soft fan from its lit part, so
+// which way it shines reads without lighting the room. An all-round bulb already reads by its glow.
 import { AdditiveBlending, BufferGeometry, Color, DoubleSide, Float32BufferAttribute, Group, Mesh, MeshBasicMaterial, Quaternion, Vector3 } from "three";
 
 import { paletteColour } from "../../model/roomMood";
@@ -31,7 +30,7 @@ function toRoomEdge(at: Vector3, aim: Vector3, room: { w: number; d: number; h: 
   return Math.min(exit(at.x, aim.x, -room.w / 2, room.w / 2), exit(at.y, aim.y, 0, room.h), exit(at.z, aim.z, -room.d / 2, room.d / 2));
 }
 
-/** A cone with the lit part for its tip: from the lit face (`a` by `b` across) to the mouth, opening along -y. */
+/** Opens along -y from the lit face, `a` by `b` across, not a point: a cone tip read as lit from the middle. */
 function fan(a: number, b: number, mouth: number, reach: number): BufferGeometry {
   const position: number[] = [];
   const alpha: number[] = [];
@@ -40,7 +39,7 @@ function fan(a: number, b: number, mouth: number, reach: number): BufferGeometry
     for (let s = 0; s <= SIDES; s++) {
       const angle = (s / SIDES) * Math.PI * 2;
       position.push(Math.cos(angle) * (a + t * mouth), -t * reach, Math.sin(angle) * (b + t * mouth));
-      // Bright at the lit part and gone by the mouth; eight rings make the fall-off a curve, not steps.
+      // Eight rings, so the fall-off along it is a curve and not four steps.
       alpha.push(1, 1, 1, (1 - t) ** 2);
     }
   }

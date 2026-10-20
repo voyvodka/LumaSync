@@ -167,7 +167,6 @@ function oneSided(family: LampFamily, at: ScenePoint, surface: number, facing: n
       break;
     }
     case "spot": {
-      // A spot on its stand, aimed up the wall it faces.
       const headY = Math.max(at.y, surface + 0.12);
       body.push(rod(0.04, 0.045, 0.02, 0, surface, 0, BAR, 12), rod(0.01, 0.01, Math.max(headY - surface - 0.06, 0.02), 0, surface + 0.02, 0, BAR, 6));
       glow = { at: local(0, headY, 0), radii: [0.045, 0.045, 0.045], shape: "globe" };
@@ -175,7 +174,6 @@ function oneSided(family: LampFamily, at: ScenePoint, surface: number, facing: n
       break;
     }
     case "wall": {
-      // A sconce on the wall it faces, lighting up and down it.
       const y = Math.max(at.y, surface + 0.15);
       glow = { at: local(0, y, 0), radii: [0.1, 0.14, 0.06], shape: "drum", rotation: turn };
       beam = throwOf("wall", throwAt);
