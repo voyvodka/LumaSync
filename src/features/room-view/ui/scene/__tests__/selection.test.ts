@@ -64,6 +64,14 @@ describe("buildSelectionMark", () => {
     expect((box.min.x + box.max.x) / 2).toBeCloseTo(0.4, 3);
   });
 
+  // A Signe's ring was sized by its height: a 1.6 m disc round the middle of its pole.
+  it("frames a tall light along its height instead of ringing it", () => {
+    const { haloShown, box } = frameOf({ id: "hue-2", kind: "light", centre: { x: 0, y: 0.75, z: 0 }, half: [0.012, 0.685, 0.004], angle: 0 });
+    expect(haloShown).toBe(false);
+    expect(box.max.y - box.min.y).toBeCloseTo(1.42, 1);
+    expect(box.max.x - box.min.x).toBeLessThan(0.1);
+  });
+
   it("keeps the floor outline and no line for a light within reach of the floor", () => {
     const { plumb, floorShown } = frameOf({ id: "hue-1", kind: "light", centre: { x: 0, y: 0.8, z: 0 }, half: [0.1, 0.1, 0.1], angle: 0 });
     expect(floorShown).toBe(true);

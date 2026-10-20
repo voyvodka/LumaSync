@@ -65,6 +65,8 @@ const WASH_REACH = 1.6;
 const WASH_SIZE = 2.4;
 const LINE_SOURCE_M = 0.2;
 const LINE_ACROSS = 0.45;
+const LINE_SPREAD = 1.6;
+const LINE_MIN_M = 0.35;
 /** A line source under a real light keeps its stripe this bright: the light alone leaves a round spot. */
 const LIT_WASH_SHARE = 0.6;
 
@@ -232,8 +234,12 @@ export function buildGlow(
       const size = WASH_SIZE * (0.6 + 0.4 * fade);
       const alongWall = new Vector3(Math.abs(wall.normal.z), 0, Math.abs(wall.normal.x));
       const base = line ? size * LINE_ACROSS : size;
-      const wide = base + 2 * extent(lamp, alongWall);
-      const tall = base + 2 * extent(lamp, vertical);
+      const halfWide = extent(lamp, alongWall);
+      const halfTall = extent(lamp, vertical);
+      // Across a line source, as narrow as it is long allows: a Play bar's wash from the same base read round.
+      const across = Math.min(Math.max(LINE_SPREAD * 2 * Math.max(halfWide, halfTall), LINE_MIN_M), base);
+      const wide = line && halfWide < halfTall ? across : base + 2 * halfWide;
+      const tall = line && halfTall <= halfWide ? across : base + 2 * halfTall;
       const onWall = p.clone().addScaledVector(wall.normal, -distance + 0.004);
       onWall.y = Math.min(Math.max(lamp.at.y, tall * 0.35), wallTop - tall * 0.35);
       // Kept off the wall's ends, so a lamp in a corner does not wash the air outside the room.

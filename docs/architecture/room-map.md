@@ -665,7 +665,10 @@ Showroom fell from about 60 ms of main-thread work to about 16 ms.
   The wall wash is stretched to the lit part as the wall sees it (`extent` in `scene/glow.ts`): a
   stripe up the wall for a Play bar or a Signe, a band along it for a tube, round for a bulb. A
   line source (20 cm or longer) keeps its stripe at 60% even when it has a real light, since one
-  `SpotLight` from its middle leaves only a round spot. A `RectAreaLight` would light from the
+  `SpotLight` from its middle leaves only a round spot, and its wash across the line is held to
+  1.6 times its length (35 cm at least), or a Play bar's read round. A light at least 10 cm long and
+  twice as long as it is thick is selected by a frame along it, as a strip is (`scene/selection.ts`):
+  a ring sized by a Signe's height drew a 1.6 m disc round the middle of its pole. A `RectAreaLight` would light from the
   surface itself and was turned down: it does not light the room's Lambert surfaces, casts no
   shadow, and its lookup tables would not fit the 3D chunk's budget. More spots per bar were
   turned down too, since the light count is fixed. The two-way archetypes (`up_and_down*`,

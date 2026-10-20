@@ -109,6 +109,11 @@ describe("buildGlow — by a wall and the house's own lights", () => {
       expect(tube.wide).toBeGreaterThan(tube.tall * 1.5);
     });
 
+    it("is a narrow stripe for a Play bar too, not a round pool", () => {
+      const play = washOf([0.017, 0.121, 0.004], side)!;
+      expect(play.tall).toBeGreaterThan(play.wide * 2);
+    });
+
     it("keeps a line source's stripe under a real light, and no round wash", () => {
       expect(washOf([0.012, 0.685, 0.004], side, true)).not.toBeNull();
       expect(washOf([0.05, 0.05, 0.05], side, true)).toBeNull();
