@@ -34,6 +34,13 @@ describe("lampFixture", () => {
     expect(bounds(body).max.y).toBeCloseTo(2.6, 5);
   });
 
+  it("draws a pendant as a wide, flat dish", () => {
+    const { glow } = lampFixture("pendant", { ...at, y: 1.8 }, 0, 2.5);
+    expect(glow.shape).toBe("flare");
+    expect(glow.radii[0] * 2).toBeCloseTo(0.475);
+    expect(glow.radii[1]).toBeLessThan(glow.radii[0] / 4);
+  });
+
   it("throws a pendant's light down", () => {
     expect(lampFixture("pendant", { ...at, y: 1.8 }, 0, 2.5).beam?.aim.y).toBe(-1);
   });
@@ -82,7 +89,7 @@ describe("lampFixture", () => {
 
     it("draws a strip and a tube at their real length", () => {
       expect(lampFixture("lightstrip", at, 0, 2.5).glow.radii[0] * 2).toBeCloseTo(2);
-      expect(lampFixture("tube", at, 0, 2.5).glow.radii[0] * 2).toBeCloseTo(1.25);
+      expect(lampFixture("tube", at, 0, 2.5).glow.radii[0] * 2).toBeCloseTo(1.377);
     });
 
     it("throws a ceiling light down, not all round", () => {

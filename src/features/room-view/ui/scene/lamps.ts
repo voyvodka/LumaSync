@@ -71,22 +71,27 @@ export function lampFixture(family: LampFamily, at: ScenePoint, surface: number,
     case "pendant": {
       // Hung at least to head height: placed on the floor, its cord ran the room's height.
       const shadeY = Math.min(Math.max(y, 1.2), ceiling - 0.3);
+      // The dish is the lit part though a Cher's is opaque: the camera is above, where a dark shade
+      // over a lit mouth read as a lamp switched off.
+      const r = radiusOf("pendant");
       return {
         body: overhead([
-          rod(0.004, 0.004, Math.max(ceiling - shadeY - 0.06, 0.02), x, shadeY + 0.06, z, BAR, 6),
+          rod(0.004, 0.004, Math.max(ceiling - shadeY - 0.1, 0.02), x, shadeY + 0.1, z, BAR, 6),
           rod(0.06, 0.06, 0.02, x, ceiling - 0.02, z, CANOPY, 16),
         ]),
-        glow: { at: { x, y: shadeY, z }, radii: [0.18, 0.09, 0.18], shape: "flare" },
+        glow: { at: { x, y: shadeY + 0.05, z }, radii: [r, 0.05, r], shape: "flare" },
         beam: { aim: DOWN.clone(), spread: spreadOf("pendant") },
       };
     }
-    case "ceiling":
+    case "ceiling": {
       // The diffuser stands proud of its rim: under a plate, the camera from above saw a grey disc.
+      const r = radiusOf("ceiling");
       return {
-        body: overhead([ring(0.17, 0.2, 0.012, x, ceiling - 0.012, z, CANOPY)]),
-        glow: { at: { x, y: ceiling - 0.01, z }, radii: [0.18, 0.012, 0.18], shape: "drum" },
+        body: overhead([ring(r - 0.02, r, 0.012, x, ceiling - 0.012, z, CANOPY)]),
+        glow: { at: { x, y: ceiling - 0.01, z }, radii: [r - 0.01, 0.012, r - 0.01], shape: "drum" },
         beam: { aim: DOWN.clone(), spread: spreadOf("ceiling") },
       };
+    }
     case "go": {
       // A Go is a pebble on its cradle: wider than tall, lit all over.
       const domeY = surface + 0.06;
@@ -175,7 +180,8 @@ function oneSided(family: LampFamily, at: ScenePoint, surface: number, facing: n
     }
     case "wall": {
       const y = Math.max(at.y, surface + 0.15);
-      glow = { at: local(0, y, 0), radii: [0.1, 0.14, 0.06], shape: "drum", rotation: turn };
+      const { height = 0.24 } = FIXTURE_LIGHT.wall;
+      glow = { at: local(0, y, 0), radii: [radiusOf("wall"), height / 2, 0.042], shape: "drum", rotation: turn };
       beam = throwOf("wall", throwAt);
       const { back } = FIXTURE_LIGHT.wall;
       transformParts(body, place);

@@ -1,4 +1,4 @@
-// Sizes in metres. Every spread and tilt is recalled, not read off a spec sheet: correct them here.
+// Sizes in metres. A value not listed in `checked` is recalled, not read off a spec sheet: correct it here.
 
 import type { LampFamily } from "./lampFamily";
 
@@ -15,8 +15,10 @@ export interface FixtureLight {
   back?: FixtureThrow;
   length?: number;
   diameter?: number;
+  /** The lit part's height, where it differs from its width. */
+  height?: number;
   /** Read off a Philips Hue product page or retailer listing (2026-10-20). */
-  checked: readonly ("length" | "diameter")[];
+  checked: readonly ("length" | "diameter" | "height" | "spread")[];
 }
 
 const DOWN = -Math.PI / 2;
@@ -28,14 +30,18 @@ export const FIXTURE_LIGHT: Readonly<Record<LampFamily | "downlight", FixtureLig
   iris: { throw: { spread: 0.8, tilt: 0.6 }, diameter: 0.2, checked: ["diameter"] },
   bloom: { throw: { spread: 0.75, tilt: 0.75 }, diameter: 0.13, checked: ["diameter"] },
   go: { diameter: 0.15, checked: ["diameter"] },
-  pendant: { throw: { spread: 1.05, tilt: DOWN }, checked: [] },
-  ceiling: { throw: { spread: 1.2, tilt: DOWN }, checked: [] },
-  spot: { throw: { spread: 0.35, tilt: 0.5 }, checked: [] },
-  downlight: { throw: { spread: 0.42, tilt: DOWN }, checked: [] },
-  wall: { throw: { spread: 0.7, tilt: 1.4 }, back: { spread: 0.7, tilt: -1.4 }, checked: [] },
-  lightstrip: { length: 2, checked: [] },
-  // The large tube; the compact one is about 75 cm.
-  tube: { length: 1.25, checked: ["length"] },
+  // A Cher: a dish shade lit only at its open bottom.
+  pendant: { throw: { spread: 1.05, tilt: DOWN }, diameter: 0.475, checked: ["diameter"] },
+  ceiling: { throw: { spread: 1.2, tilt: DOWN }, diameter: 0.425, checked: ["diameter"] },
+  // Fugato and Runner heads are 40°, as is a Centura set in the ceiling.
+  spot: { throw: { spread: 0.35, tilt: 0.5 }, checked: ["spread"] },
+  downlight: { throw: { spread: 0.35, tilt: DOWN }, checked: ["spread"] },
+  // An Appear: sharp wedges up and down the wall from a 24 cm box.
+  wall: { throw: { spread: 0.35, tilt: 1.4 }, back: { spread: 0.35, tilt: -1.4 }, height: 0.24, diameter: 0.117, checked: ["height", "diameter"] },
+  // Stated 120°, but the map does not know which way a strip is stuck, so it lights all round.
+  lightstrip: { length: 2, checked: ["length"] },
+  // The large tube; the compact one is 87.7 cm.
+  tube: { length: 1.377, checked: ["length"] },
   floorLamp: { checked: [] },
   tableLamp: { checked: [] },
   bulb: { checked: [] },
