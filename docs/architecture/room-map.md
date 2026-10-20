@@ -646,13 +646,30 @@ Showroom fell from about 60 ms of main-thread work to about 16 ms.
   no painted wash and most of its pool — at the lights' strength the real light alone left dark
   wood an even brown with no pool under the lamp; one past the six keeps both. Their
   placeholder colour is one warm white — one rainbow colour per lamp read as a party, not a home.
-  A one-sided fixture — a Play bar, a Signe, an Iris, a Bloom (`ONE_SIDED` in `scene/lamps.ts`) —
+  A one-sided fixture — a Play bar, a Signe, an Iris, a Bloom, a standing spot, a wall light (`ONE_SIDED` in `model/lampFamily.ts`) —
   lights only the side it faces, so it takes one of three `SpotLight`s instead and is drawn turned:
   its lit face, its body and its cone. With no facing stored it turns to the wall it stands nearest
   (`nearestWallFacing`), which is how these lights are set up in a room; a fourth falls back to a
   point light. Go, Iris and Bloom are three archetypes and three models, not one portable lamp.
   A light thrown straight down — a pendant, a downlight — reads nearly as well from a point, so the
   cones go to the sideways ones first.
+- **Each fixture lets its light out the way the product does** (`model/fixtureLight.ts`). One table
+  holds, per fixture, the lit part's size and its throw's spread and tilt. Sizes marked `checked`
+  come from product listings; every spread and tilt is recalled, not read off a spec sheet, so the
+  table is where a correction goes. A Play bar and a Signe throw level toward their wall, not
+  tilted up. A ceiling light throws down. A spot on a stand is aimed up the wall it faces, and a
+  wall light up and down it (`back`, a second throw that is drawn but never gets a real light). A
+  strip is 2 m and a tube 1.25 m. Spot and wall are one-sided now, so the map turns them too.
+  The light is the lit part's shape, not a point at its middle. In Edit the throw is a fan opening
+  from the lit part's whole face (`fan` in `scene/beams.ts`): a Play bar's 25 cm, a Signe's 1.37 m.
+  The wall wash is stretched to the lit part as the wall sees it (`extent` in `scene/glow.ts`): a
+  stripe up the wall for a Play bar or a Signe, a band along it for a tube, round for a bulb. A
+  line source (20 cm or longer) keeps its stripe at 60% even when it has a real light, since one
+  `SpotLight` from its middle leaves only a round spot. A `RectAreaLight` would light from the
+  surface itself and was turned down: it does not light the room's Lambert surfaces, casts no
+  shadow, and its lookup tables would not fit the 3D chunk's budget. More spots per bar were
+  turned down too, since the light count is fixed. The two-way archetypes (`up_and_down*`,
+  `twilight*`, `pendant_long`) keep their one-way drawing until a fixture of their own (#543).
 - **A light at the ceiling is drawn as one that hangs there** (`scene/lamps.ts`). A spot at the
   ceiling is a downlight — a trim ring round a lens that stands proud of it, since the camera only
   ever sees the ceiling from above — and a bulb there hangs on a short cord from a socket. Both,
