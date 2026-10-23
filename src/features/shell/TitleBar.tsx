@@ -211,7 +211,7 @@ function SectionTabs({
       const tab = list.querySelector<HTMLElement>('[aria-selected="true"]');
       if (!tab) return;
       const width = markWidth(tab);
-      // Sized by scaleX from the widest tab's width, so the scale stays at or under 1.
+      // Based on the widest tab so scaleX stays ≤ 1: a layer scaled up past its raster blurs.
       const base = Math.max(...[...list.querySelectorAll<HTMLElement>('[role="tab"]')].map(markWidth));
       mark.style.width = `${base}px`;
       mark.style.transform = `translateX(${tab.offsetLeft + (tab.offsetWidth - width) / 2}px) scaleX(${width / base})`;
