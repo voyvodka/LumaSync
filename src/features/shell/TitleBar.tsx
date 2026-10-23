@@ -205,13 +205,16 @@ function SectionTabs({
     const list = listRef.current;
     const mark = markRef.current;
     if (!list || !mark) return undefined;
+    // As wide as the word, but never a stub under a short one ("Oda").
+    const markWidth = (tab: HTMLElement) => Math.max(tab.offsetWidth - TAB_PADDING * 2, MARK_MIN_WIDTH);
     const place = () => {
       const tab = list.querySelector<HTMLElement>('[aria-selected="true"]');
       if (!tab) return;
-      // As wide as the word, but never a stub under a short one ("Oda").
-      const width = Math.max(tab.offsetWidth - TAB_PADDING * 2, MARK_MIN_WIDTH);
-      mark.style.width = `${width}px`;
-      mark.style.transform = `translateX(${tab.offsetLeft + (tab.offsetWidth - width) / 2}px)`;
+      const width = markWidth(tab);
+      // Sized by scaleX from the widest tab's width, so the scale stays at or under 1.
+      const base = Math.max(...[...list.querySelectorAll<HTMLElement>('[role="tab"]')].map(markWidth));
+      mark.style.width = `${base}px`;
+      mark.style.transform = `translateX(${tab.offsetLeft + (tab.offsetWidth - width) / 2}px) scaleX(${width / base})`;
     };
     place();
     const frame = requestAnimationFrame(() => {

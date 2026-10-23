@@ -50,7 +50,9 @@
   .tab:focus-visible { outline: none; box-shadow: var(--lm-focus-ring-inset); border-radius: 6px; }
 
   /* One mark under the open tab that slides to the next one, as the Rail's tint does. Placed
-     without motion the first time, so the window does not open on a slide. */
+     without motion the first time, so the window does not open on a slide. Its width is a scaleX,
+     not `width`: a width transition waits for the main thread, and behind a page mount it trailed
+     the slide by ~40 % of its travel. */
   .indicator {
     position: absolute;
     bottom: -1px;
@@ -59,7 +61,8 @@
     border-radius: 2px;
     background: var(--lm-amber);
     pointer-events: none;
-    transition: transform var(--lm-dur-base) var(--lm-ease-out), width var(--lm-dur-base) var(--lm-ease-out);
+    transform-origin: left;
+    transition: transform var(--lm-dur-base) var(--lm-ease-out);
   }
   .indicator:not([data-placed]) { transition: none; }
 

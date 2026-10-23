@@ -98,6 +98,10 @@ rebuilding LED Setup; apply it to every new screen:
   `filter`, `backdrop-filter` or `will-change` held at rest on a window-sized surface: each is
   redrawn on every frame of a resize (the title bar's blur and the shell's resting `blur(0px)` made
   the zoom stutter). Apply them only while the motion that needs them runs.
+- **Motion runs on `transform` and `opacity`**, which keep moving while the main thread is busy;
+  `width`, `height`, `left`/`right` and a colour's alpha freeze behind a long task and then jump (in
+  this webview, a third of the travel in one frame behind 150 ms), so they animate only where the
+  layout itself has to move.
 - **Something that opens does not push.** A question or a list that appears from a control floats
   over the page (`Popover`) rather than opening a panel that moves the rows below it; the beta
   channel's confirmation started inline and moved to a popover for that reason. Pressing the
