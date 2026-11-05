@@ -6,6 +6,9 @@ import { PickerList } from "@/shared/ui/PickerList/PickerList";
 import { IconChevronUp } from "./dockIcons";
 import styles from "./DockPicker.module.css";
 
+/** Wide enough that a note under the list reads as a sentence, not a column of words. */
+const NOTE_LIST_WIDTH = 220;
+
 export interface DockOption<T extends string> {
   value: T;
   label: string;
@@ -25,6 +28,7 @@ export function DockPicker<T extends string>({
   disabled = false,
   width,
   buttonMark = true,
+  note,
   className,
   testId,
 }: {
@@ -38,6 +42,8 @@ export function DockPicker<T extends string>({
   width?: number;
   /** Off where the button has no room for the option's mark; the list still shows it. */
   buttonMark?: boolean;
+  /** What the choice means, under the list rather than behind a separate ⓘ. */
+  note?: string;
   className?: string;
   testId?: string;
 }) {
@@ -75,7 +81,8 @@ export function DockPicker<T extends string>({
         side="above"
         id={listId}
         label={label}
-        width="fit"
+        width={note ? NOTE_LIST_WIDTH : "fit"}
+        footer={note}
         items={options}
         itemKey={(option) => option.value}
         selectedIndex={options.findIndex((option) => option.value === value)}

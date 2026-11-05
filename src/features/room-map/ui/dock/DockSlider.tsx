@@ -17,6 +17,8 @@ export function DockSlider({
   readout,
   ariaValueText,
   disabled = false,
+  width,
+  note,
   className,
   testId,
 }: {
@@ -34,12 +36,20 @@ export function DockSlider({
   /** What a screen reader says for the value when the raw number names nothing. */
   ariaValueText?: string;
   disabled?: boolean;
+  /** A fixed width, so the track never grows or shrinks with what shares its row. */
+  width?: number;
+  /** A short line under the track, as a limit on its range. */
+  note?: string;
   className?: string;
   testId?: string;
 }) {
   const fill = max > min ? ((value - min) / (max - min)) * 100 : 0;
   return (
-    <label className={cx(styles.slider, disabled && styles.disabled, className)} title={label}>
+    <label
+      className={cx(styles.slider, disabled && styles.disabled, className)}
+      style={width ? { flex: `0 1 ${width}px` } : undefined}
+      title={note ? `${label} · ${note}` : label}
+    >
       {prefix !== undefined && (
         <span className={styles.prefix} aria-hidden="true">
           {prefix}
@@ -69,6 +79,11 @@ export function DockSlider({
       <span className={styles.readout} aria-hidden="true">
         {readout}
       </span>
+      {note && (
+        <span className={styles.note} aria-hidden="true">
+          {note}
+        </span>
+      )}
     </label>
   );
 }

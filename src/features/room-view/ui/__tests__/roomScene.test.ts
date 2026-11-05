@@ -538,3 +538,20 @@ describe("buildRoomScene — lifting a carried piece", () => {
     disposeScene(room.scene);
   });
 });
+
+describe("a light held by its dock fields", () => {
+  it("turns its box to the facing being dragged, so the turn shows before the room is built", () => {
+    const room = buildRoomScene(furnished, { ...OPTIONS, lampFamilies: new Map([[0, "playBar"]]) });
+    const hidden = new Set<Object3D>();
+    room.scene.traverse((o) => {
+      if (!o.visible) hidden.add(o);
+    });
+    const at = roomToScene(2, 1, 1, furnished.dimensions);
+    expect(room.holdLight(hueChannelObjectId(0), at, 90)).toBe(true);
+    const held = [...hidden].find((o) => o.visible)!;
+    expect(held.rotation.y).toBeCloseTo(-Math.PI / 2, 5);
+    room.holdLight(hueChannelObjectId(0), at);
+    expect(held.rotation.y).toBe(0);
+    disposeScene(room.scene);
+  });
+});
